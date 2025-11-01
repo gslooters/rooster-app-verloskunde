@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { v4 as uuidv4 } from 'uuid';
 
 // Types
 type Roster = {
@@ -12,7 +11,12 @@ type Roster = {
   created_at: string;   // ISO
 };
 
-// Storage API (lokaal) – eenvoudige helpers
+// Kleine ID-generator (zonder extra dependency)
+function genId() {
+  return 'r_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+}
+
+// Helpers
 function toDate(iso: string) { return new Date(iso + 'T00:00:00'); }
 function addDaysISO(iso: string, n: number) {
   const d = toDate(iso);
@@ -56,12 +60,10 @@ export default function Wizard() {
   const [weeks, setWeeks] = useState<number>(5);
 
   function createRoster() {
-    // Validatie: weeks minimaal 1
     const w = Math.max(1, weeks);
     const end = addDaysISO(start, (w * 7) - 1);
-    const id = uuidv4();
+    const id = genId();
 
-    // Typefix: status is literal 'draft' en het object is getypt als Roster
     const roster: Roster = {
       id,
       start_date: start,
