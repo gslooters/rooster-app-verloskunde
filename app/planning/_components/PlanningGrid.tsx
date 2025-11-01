@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { getRosters } from '@/lib/planning/storage';
-import { isDutchHoliday } from '@/lib/planning/holidays';
-import { isAvailable } from '@/lib/planning/availability';
+// Gebruik RELATIEVE imports om case-sensitivity issues op Vercel te voorkomen
+import { getRosters } from '../../lib/planning/storage';
+import { isDutchHoliday } from '../../lib/planning/holidays';
+import { isAvailable } from '../../lib/planning/availability';
 import AvailabilityPopup from './AvailabilityPopup';
-import '@/styles/planning.css';
+import '../../styles/planning.css';
 
 // Utils
 function toDate(iso: string) { return new Date(iso + 'T00:00:00'); }
@@ -154,6 +155,7 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
                           <option value="">—</option>
                           {SERVICES.map(s => (<option key={s.code} value={s.code}>{s.code}</option>))}
                         </select>
+
                         <button
                           type="button"
                           title={locked ? 'Ontgrendel' : 'Vergrendel'}
