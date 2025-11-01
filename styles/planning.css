@@ -1,0 +1,7 @@
+/* Rood-wit geblokt voor niet-beschikbaar cellen (later te gebruiken) */
+.unavailable {
+  background-image: repeating-linear-gradient(45deg, #ffffff 0 6px, #ef4444 6px 12px);
+}
+
+/* Sticky hulp (soms handig bij lange tabellen) */
+th.sticky, td.sticky { position: sticky; }
