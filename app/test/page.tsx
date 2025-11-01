@@ -2,10 +2,18 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 
+interface Employee {
+  id: string
+  naam: string
+  initialen: string
+  actief: boolean
+  created_at: string
+}
+
 export default function DatabaseTest() {
-  const [employees, setEmployees] = useState([])
+  const [employees, setEmployees] = useState<Employee[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     testDatabase()
@@ -19,7 +27,7 @@ export default function DatabaseTest() {
       
       if (error) throw error
       setEmployees(data || [])
-    } catch (err) {
+    } catch (err: any) {
       setError(err.message)
     } finally {
       setLoading(false)
