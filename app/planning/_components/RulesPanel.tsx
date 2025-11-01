@@ -27,8 +27,8 @@ export default function RulesPanel() {
 
   const byDay = useMemo(() => {
     const map = new Map<DayOfWeek, PlanRules>();
-    DAYS.forEach(d => map.set(d.key, []));
-    rules.forEach((r) => {
+    DAYS.forEach((d): void => { map.set(d.key, []); });
+    rules.forEach((r: PlanRules[number]): void => {
       const list = map.get(r.day_of_week);
       if (list) list.push(r);
     });
@@ -36,11 +36,11 @@ export default function RulesPanel() {
   }, [rules]);
 
   function updateRule(day: DayOfWeek, code: ServiceCode, patch: RulePatch) {
-    setRules((prev: PlanRules) => {
-      const next: PlanRules = prev.map((r): typeof r =>
+    setRules((prev: PlanRules): PlanRules => {
+      const next: PlanRules = prev.map((r: PlanRules[number]): PlanRules[number] =>
         (r.day_of_week === day && r.service_code === code) ? { ...r, ...patch } : r
       );
-      const has = next.some((r): boolean => r.day_of_week === day && r.service_code === code);
+      const has: boolean = next.some((r: PlanRules[number]): boolean => r.day_of_week === day && r.service_code === code);
       if (!has && (patch.min_count !== undefined || patch.max_count !== undefined || patch.required !== undefined)) {
         next.push({
           day_of_week: day,
@@ -62,16 +62,16 @@ export default function RulesPanel() {
           <thead>
             <tr>
               <th className="border px-2 py-1 sticky left-0 bg-gray-50">Dag</th>
-              {SERVICES.map(s => (
+              {SERVICES.map((s): JSX.Element => (
                 <th key={s.code} className="border px-2 py-1 text-xs">{s.label}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {DAYS.map(d => (
+            {DAYS.map((d): JSX.Element => (
               <tr key={d.key}>
                 <td className="border px-2 py-1 sticky left-0 bg-white font-medium">{d.label}</td>
-                {SERVICES.map(s => {
+                {SERVICES.map((s): JSX.Element => {
                   const r = getRuleFor(rules, d.key, s.code);
                   return (
                     <td key={s.code} className="border p-1">
@@ -80,20 +80,20 @@ export default function RulesPanel() {
                           type="number"
                           className="w-14 border rounded px-1 py-[2px]"
                           defaultValue={r?.min_count ?? 0}
-                          onChange={e => updateRule(d.key, s.code, { min_count: Number(e.target.value) })}
+                          onChange={(e): void => updateRule(d.key, s.code, { min_count: Number(e.target.value) })}
                         />
                         <span>-</span>
                         <input
                           type="number"
                           className="w-14 border rounded px-1 py-[2px]"
                           defaultValue={r?.max_count ?? 0}
-                          onChange={e => updateRule(d.key, s.code, { max_count: Number(e.target.value) })}
+                          onChange={(e): void => updateRule(d.key, s.code, { max_count: Number(e.target.value) })}
                         />
                         <label className="ml-2 text-xs flex items-center gap-1">
                           <input
                             type="checkbox"
                             defaultChecked={r?.required ?? false}
-                            onChange={e => updateRule(d.key, s.code, { required: e.target.checked })}
+                            onChange={(e): void => updateRule(d.key, s.code, { required: e.target.checked })}
                           />
                           vereist
                         </label>
