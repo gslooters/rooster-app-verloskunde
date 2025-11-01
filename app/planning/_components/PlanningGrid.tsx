@@ -1,27 +1,33 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { addDaysYYYYMMDD, displayDate } from '@/lib/planning/dates';
 import { getRosters } from '@/lib/planning/storage';
+import { isDutchHoliday } from '@/lib/planning/holidays';
 import '@/styles/planning.css';
 
-type Roster = {
-  id: string;
-  start_date: string;
-  end_date: string;
-  status: 'draft' | 'final';
-  created_at: string;
-};
+// Utils
+function toDate(iso: string) { return new Date(iso + 'T00:00:00'); }
+function addDaysISO(iso: string, n: number) { const d = toDate(iso); d.setDate(d.getDate()+n); const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${day}`; }
+function formatPeriodDDMM(isoStart: string, daysCount=35){ const d0=toDate(isoStart), de=toDate(addDaysISO(isoStart, daysCount-1)); const f=(d:Date)=>`${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${d.getFullYear()}`; return `${f(d0)} t/m ${f(de)}`;}
+function formatDDMM(iso:string){ const d=toDate(iso); return `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}`;}
+function isoWeekNumber(iso:string){ const d=toDate(iso); const target=new Date(d.valueOf()); const dayNr=(d.getDay()+6)%7; target.setDate(target.getDate()-dayNr+3); const firstThursday=new Date(target.getFullYear(),0,4); const ftDay=(firstThursday.getDay()+6)%7; firstThursday.setDate(firstThursday.getDate()-ftDay+3); return 1+Math.round((target.getTime()-firstThursday.getTime())/(7*24*3600*1000));}
+function dayShort(iso:string){ const map=['ZO','MA','DI','WO','DO','VR','ZA'] as const; return map[toDate(iso).getDay()]; }
+function isWeekend(iso:string){ const s=dayShort(iso); return s==='ZA'||s==='ZO'; }
 
+// Types
+type Roster = { id: string; start_date: string; end_date: string; status: 'draft'|'final'; created_at: string; };
+type Cell = { service: string | null; locked: boolean; unavailable?: boolean };
+
+// Voornaam-only
 const EMPLOYEES = [
-  { id: 'emp1', name: 'Anna de Vries' },
-  { id: 'emp2', name: 'Bram Peters' },
-  { id: 'emp3', name: 'Carla Jansen' },
-  { id: 'emp4', name: 'Daan Bakker' },
-  { id: 'emp5', name: 'Eva Smit' },
-  { id: 'emp6', name: 'Frank Visser' },
-  { id: 'emp7', name: 'Greta Mulder' },
-  { id: 'emp8', name: 'Hans de Groot' },
+  { id: 'emp1', name: 'Anna' },
+  { id: 'emp2', name: 'Bram' },
+  { id: 'emp3', name: 'Carla' },
+  { id: 'emp4', name: 'Daan' },
+  { id: 'emp5', name: 'Eva' },
+  { id: 'emp6', name: 'Frank' },
+  { id: 'emp7', name: 'Greta' },
+  { id: 'emp8', name: 'Hans' },
 ];
 
 const SERVICES = [
@@ -33,24 +39,28 @@ const SERVICES = [
   { code: '-', label: '—', color: '#FFFFFF' },
 ];
 
-type Cell = { service: string | null; locked: boolean; unavailable?: boolean };
-
 export default function PlanningGrid({ rosterId }: { rosterId: string }) {
   const rosters = getRosters() as Roster[];
   const roster = rosters.find(r => r.id === rosterId);
-
-  if (!roster) {
-    return <div className="p-6 text-red-600">Rooster niet gevonden.</div>;
-  }
+  if (!roster) return <div className="p-6 text-red-600">Rooster niet gevonden.</div>;
 
   const start = roster.start_date;
-  const days = useMemo<string[]>(
-    () => Array.from({ length: 35 }, (_, i) => addDaysYYYYMMDD(start, i)),
-    [start]
-  );
+  const days = useMemo<string[]>(() => Array.from({ length: 35 }, (_, i) => addDaysISO(start, i)), [start]);
+
+  const weekGroups = useMemo(() => {
+    const groups: { week: number; startIndex: number; span: number }[] = [];
+    let i = 0;
+    while (i < days.length) {
+      const w = isoWeekNumber(days[i]);
+      let j = i + 1;
+      while (j < days.length && isoWeekNumber(days[j]) === w) j++;
+      groups.push({ week: w, startIndex: i, span: j - i });
+      i = j;
+    }
+    return groups;
+  }, [days]);
 
   const [cells, setCells] = useState<Record<string, Record<string, Cell>>>({});
-
   useEffect(() => {
     const init: Record<string, Record<string, Cell>> = {};
     days.forEach(d => {
@@ -61,63 +71,65 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
   }, [days]);
 
   function setService(date: string, empId: string, service: string) {
-    setCells(prev => ({
-      ...prev,
-      [date]: {
-        ...prev[date],
-        [empId]: { ...prev[date][empId], service }
-      }
-    }));
+    setCells(prev => ({ ...prev, [date]: { ...prev[date], [empId]: { ...prev[date][empId], service } } }));
   }
-
   function toggleLock(date: string, empId: string) {
-    setCells(prev => ({
-      ...prev,
-      [date]: {
-        ...prev[date],
-        [empId]: { ...prev[date][empId], locked: !prev[date][empId].locked }
-      }
-    }));
+    setCells(prev => ({ ...prev, [date]: { ...prev[date], [empId]: { ...prev[date][empId], locked: !prev[date][empId].locked } } }));
   }
 
   return (
     <main className="p-4">
       <nav className="text-sm text-gray-500 mb-3">Dashboard &gt; Rooster Planning &gt; Rooster</nav>
-      <h1 className="text-xl font-semibold mb-3">
-        Periode: {displayDate(start)} t/m {displayDate(days[days.length - 1])}
-      </h1>
+      <h1 className="text-xl font-semibold mb-3">Periode: {formatPeriodDDMM(start)}</h1>
 
       <div className="overflow-auto max-h-[80vh] border rounded">
-        <table className="min-w-[1200px] border-separate border-spacing-0">
+        <table className="min-w-[1200px] border-separate border-spacing-0 text-[12px]">
           <thead>
+            {/* Rij 1: Weekstroken; eerste cel 1x, beslaat beide rijen */}
             <tr>
-              <th className="sticky left-0 top-0 z-30 bg-gray-50 border px-3 py-2">Medewerker</th>
-              {days.map((d, idx) => (
-                <th key={d} className="sticky top-0 z-20 bg-gray-50 border px-3 py-2 text-xs">
-                  Week {Math.floor(idx / 7) + 1}<br />{displayDate(d)}
+              <th className="sticky left-0 top-0 z-30 bg-gray-50 border px-2 py-1 align-top w-[130px]" rowSpan={2}>Medewerker</th>
+              {weekGroups.map(g => (
+                <th key={`w-${g.week}-${g.startIndex}`} className="sticky top-0 z-20 bg-gray-100 border px-2 py-1 text-[11px] text-gray-800" colSpan={g.span}>
+                  Week {g.week}
                 </th>
               ))}
             </tr>
+            {/* Rij 2: Dagsoort + datum */}
+            <tr>
+              {days.map(d => {
+                const short = dayShort(d); // MA..ZO
+                const weekend = isWeekend(d);
+                const holiday = isDutchHoliday(d);
+                const colorClass = holiday ? 'text-red-700 font-semibold' : weekend ? 'text-red-600' : 'text-gray-800';
+                return (
+                  <th key={`d-${d}`} className="sticky top-8 z-20 bg-gray-50 border px-2 py-1 text-[11px]">
+                    <div className={`flex flex-col items-start ${colorClass}`}>
+                      <span className="uppercase leading-3">{short}</span>
+                      <span className="leading-3">{formatDDMM(d)}</span>
+                    </div>
+                  </th>
+                );
+              })}
+            </tr>
           </thead>
+
           <tbody>
             {EMPLOYEES.map(emp => (
               <tr key={emp.id}>
-                <td className="sticky left-0 z-10 bg-white border px-3 py-2 font-medium">{emp.name}</td>
+                <td className="sticky left-0 z-10 bg-white border px-2 py-1 font-medium w-[130px]">{emp.name}</td>
                 {days.map(d => {
                   const cell = cells[d]?.[emp.id];
                   const code = cell?.service ?? '';
-                  const color = SERVICES.find(s => s.code === code)?.color;
-                  const style = code === 'vrij'
-                    ? { backgroundColor: '#FEF3C7' }
-                    : code ? { backgroundColor: color } : {};
+                  const svc = SERVICES.find(s => s.code === code);
+                  const bg = code === 'vrij' ? '#FEF3C7' : svc?.color ?? undefined;
                   return (
-                    <td key={d} className="border p-1">
+                    <td key={d} className="border p-[4px]">
                       <div className="flex items-center gap-1">
                         <select
                           value={code}
                           onChange={(e) => setService(d, emp.id, e.target.value)}
-                          className="text-xs border rounded px-1 py-1"
-                          style={style as React.CSSProperties}
+                          className="text-[11px] border rounded px-1 py-[2px] h-[24px] min-w-[38px]"
+                          style={bg ? { backgroundColor: bg } as React.CSSProperties : undefined}
                         >
                           <option value="">—</option>
                           {SERVICES.map(s => (
@@ -128,7 +140,7 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
                           type="button"
                           title="Lock"
                           onClick={() => toggleLock(d, emp.id)}
-                          className={`text-xs px-1 rounded border ${cell?.locked ? 'bg-gray-800 text-white' : 'bg-white'}`}
+                          className={`text-[11px] px-1 rounded border h-[24px] ${cell?.locked ? 'bg-gray-800 text-white' : 'bg-white'}`}
                         >
                           🔒
                         </button>
