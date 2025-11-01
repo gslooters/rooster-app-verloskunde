@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 
 // Types
 interface Employee {
@@ -64,7 +64,7 @@ export default function EmployeesPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all')
   
-  const [newEmployee, setNewEmployee] = useState<Omit<Employee, 'id'>>{
+  const [newEmployee, setNewEmployee] = useState<Omit<Employee, 'id'>>({
     name: '',
     email: '',
     phone: '',
