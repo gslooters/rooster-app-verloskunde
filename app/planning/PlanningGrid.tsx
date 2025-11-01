@@ -1,14 +1,10 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-// Gebruik RELATIEVE imports om case-sensitivity issues op Vercel te voorkomen
-import { getRosters } from '../../lib/planning/storage';
-import { isDutchHoliday } from '../../lib/planning/holidays';
-import { isAvailable } from '../../lib/planning/availability';
-import AvailabilityPopup from './AvailabilityPopup';
-import '../../styles/planning.css';
+import { getRosters, isDutchHoliday, isAvailable } from './libAliases';
+import AvailabilityPopup from './_components/AvailabilityPopup';
+import '@/styles/planning.css';
 
-// Utils
 function toDate(iso: string) { return new Date(iso + 'T00:00:00'); }
 function addDaysISO(iso: string, n: number) {
   const d = toDate(iso); d.setDate(d.getDate() + n);
@@ -27,11 +23,9 @@ function isoWeekNumber(iso:string){ const d=toDate(iso); const target=new Date(d
 function dayShort(iso:string){ const map=['ZO','MA','DI','WO','DO','VR','ZA'] as const; return map[toDate(iso).getDay()]; }
 function isWeekend(iso:string){ const s=dayShort(iso); return s==='ZA'||s==='ZO'; }
 
-// Types
 type Roster = { id: string; start_date: string; end_date: string; status: 'draft'|'final'; created_at: string; };
 type Cell = { service: string | null; locked: boolean; unavailable?: boolean };
 
-// Voornaam-only
 const EMPLOYEES = [
   { id: 'emp1', name: 'Anna' },
   { id: 'emp2', name: 'Bram' },
