@@ -1,73 +1,113 @@
 'use client';
-import { useState } from 'react';
-import { ensureMondayYYYYMMDD, addDaysYYYYMMDD, displayDate } from '@/lib/planning/dates';
-import { upsertRoster } from '@/lib/planning/storage';
 
-const DEFAULT_START = '2025-11-24';
+import React, { useMemo, useState } from 'react';
+import { v4 as uuidv4 } from 'uuid';
+
+// Types
+type Roster = {
+  id: string;
+  start_date: string;   // YYYY-MM-DD
+  end_date: string;     // YYYY-MM-DD
+  status: 'draft' | 'final';
+  created_at: string;   // ISO
+};
+
+// Storage API (lokaal) – eenvoudige helpers
+function toDate(iso: string) { return new Date(iso + 'T00:00:00'); }
+function addDaysISO(iso: string, n: number) {
+  const d = toDate(iso);
+  d.setDate(d.getDate() + n);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+const RKEY = 'verloskunde_rosters';
+
+function readRosters(): Roster[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    return JSON.parse(localStorage.getItem(RKEY) || '[]') as Roster[];
+  } catch {
+    return [];
+  }
+}
+function writeRosters(list: Roster[]) {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(RKEY, JSON.stringify(list));
+}
+function upsertRoster(r: Roster) {
+  const list = readRosters().filter(x => x.id !== r.id);
+  list.push(r);
+  writeRosters(list);
+}
 
 export default function Wizard() {
-  const [step, setStep] = useState(1);
-  const [start, setStart] = useState(DEFAULT_START);
-  const [error, setError] = useState<string|null>(null);
+  const todayISO = useMemo(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }, []);
 
-  function next() {
-    try {
-      setError(null);
-      if (step === 1) ensureMondayYYYYMMDD(start);
-      setStep(s => s + 1);
-    } catch (e: any) {
-      setError(e.message);
-    }
-  }
+  const [start, setStart] = useState<string>(todayISO);
+  const [weeks, setWeeks] = useState<number>(5);
 
   function createRoster() {
-    const end = addDaysYYYYMMDD(start, 34); // 35 dagen inclusief startdag
-    const roster = {
-      id: crypto.randomUUID(),
+    // Validatie: weeks minimaal 1
+    const w = Math.max(1, weeks);
+    const end = addDaysISO(start, (w * 7) - 1);
+    const id = uuidv4();
+
+    // Typefix: status is literal 'draft' en het object is getypt als Roster
+    const roster: Roster = {
+      id,
       start_date: start,
       end_date: end,
       status: 'draft',
       created_at: new Date().toISOString(),
     };
+
     upsertRoster(roster);
     window.location.href = `/planning/${roster.id}`;
   }
 
   return (
-    <main className="p-6 max-w-3xl">
-      <nav className="text-sm text-gray-500 mb-4">Dashboard &gt; Rooster Planning &gt; Nieuw</nav>
-      <h1 className="text-2xl font-semibold mb-4">Nieuw 5-weken rooster</h1>
+    <section className="p-4 border rounded bg-white">
+      <h2 className="text-lg font-semibold mb-3">Nieuw rooster</h2>
+      <div className="flex flex-col gap-3 max-w-md">
+        <label className="flex items-center justify-between gap-3">
+          <span>Startdatum</span>
+          <input
+            type="date"
+            value={start}
+            onChange={(e) => setStart(e.target.value)}
+            className="border rounded px-2 py-1"
+          />
+        </label>
 
-      {step === 1 && (
-        <section className="space-y-4">
-          <label className="block">
-            <span className="text-sm text-gray-700">Startdatum (maandag)</span>
-            <input type="date" value={start} onChange={e => setStart(e.target.value)} className="mt-1 border rounded px-3 py-2" />
-          </label>
-          {error && <p className="text-red-600 text-sm">{error}</p>}
-          <p className="text-sm text-gray-600">Periode: {displayDate(start)} t/m {displayDate(addDaysYYYYMMDD(start, 34))}</p>
-        </section>
-      )}
+        <label className="flex items-center justify-between gap-3">
+          <span>Aantal weken</span>
+          <input
+            type="number"
+            min={1}
+            max={12}
+            value={weeks}
+            onChange={(e) => setWeeks(Number(e.target.value))}
+            className="border rounded px-2 py-1 w-24"
+          />
+        </label>
 
-      {step === 2 && (
-        <section>
-          <h2 className="font-medium mb-2">Medewerkers & targets</h2>
-          <p className="text-sm text-gray-600">Gebruik standaard targets; later koppelen aan employees tabel.</p>
-        </section>
-      )}
-
-      {step === 3 && (
-        <section>
-          <h2 className="font-medium mb-2">Bevestiging</h2>
-          <p className="text-sm">Start: {displayDate(start)} – Einde: {displayDate(addDaysYYYYMMDD(start, 34))}</p>
-        </section>
-      )}
-
-      <div className="mt-6 flex gap-3">
-        {step > 1 && <button className="px-4 py-2 border rounded" onClick={() => setStep(s => s - 1)}>Terug</button>}
-        {step < 3 && <button className="px-4 py-2 bg-blue-600 text-white rounded" onClick={next}>Volgende</button>}
-        {step === 3 && <button className="px-4 py-2 bg-green-600 text-white rounded" onClick={createRoster}>Creëer rooster</button>}
+        <button
+          type="button"
+          onClick={createRoster}
+          className="px-3 py-2 border rounded bg-gray-900 text-white w-fit"
+        >
+          Creëer rooster
+        </button>
       </div>
-    </main>
+    </section>
   );
 }
