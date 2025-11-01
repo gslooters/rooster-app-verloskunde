@@ -33,9 +33,15 @@ export default function RulesPanel() {
     return map;
   }, [rules]);
 
-  function updateRule(day: DayOfWeek, code: ServiceCode, patch: Partial<{ min_count: number; max_count: number; required: boolean }>) {
-    setRules(prev => {
-      const next = prev.map(r => (r.day_of_week === day && r.service_code === code) ? { ...r, ...patch } : r);
+  function updateRule(
+    day: DayOfWeek,
+    code: ServiceCode,
+    patch: Partial<{ min_count: number; max_count: number; required: boolean }>
+  ) {
+    setRules((prev: PlanRules) => {
+      const next = prev.map(r =>
+        (r.day_of_week === day && r.service_code === code) ? { ...r, ...patch } : r
+      );
       // als er geen bestaande regel is en patch waarden bevat, voeg toe
       const has = next.some(r => r.day_of_week === day && r.service_code === code);
       if (!has && (patch.min_count !== undefined || patch.max_count !== undefined || patch.required !== undefined)) {
@@ -106,4 +112,3 @@ export default function RulesPanel() {
     </section>
   );
 }
-
