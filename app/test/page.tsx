@@ -2,16 +2,8 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 
-interface Employee {
-  id: string
-  naam: string
-  initialen: string
-  actief: boolean
-  created_at: string
-}
-
 export default function DatabaseTest() {
-  const [employees, setEmployees] = useState<Employee[]>([])
+  const [employees, setEmployees] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -38,7 +30,7 @@ export default function DatabaseTest() {
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-4xl mx-auto">
         <div className="bg-white rounded-lg shadow p-6">
-          <h1 className="text-3xl font-bold mb-6">🧪 Database Connection Test</h1>
+          <h1 className="text-3xl font-bold mb-6">Database Connection Test</h1>
           
           {loading && (
             <div className="bg-blue-50 border-l-4 border-blue-400 p-4">
@@ -62,7 +54,7 @@ export default function DatabaseTest() {
           
           <div className="grid gap-4 mt-6">
             <h2 className="text-xl font-semibold">Employee Data:</h2>
-            {employees.map((emp) => (
+            {employees.map((emp: any) => (
               <div key={emp.id} className="border rounded-lg p-4 bg-gray-50">
                 <h3 className="font-semibold text-lg">{emp.naam}</h3>
                 <p className="text-gray-600">Initialen: {emp.initialen}</p>
