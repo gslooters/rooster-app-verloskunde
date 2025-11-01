@@ -2,6 +2,8 @@
 import React, { useMemo, useState } from 'react';
 import { defaultPlanRules, getRuleFor, type PlanRules, type ServiceCode, type DayOfWeek } from '@/lib/planning/rules.alias';
 
+type RulePatch = Partial<{ min_count: number; max_count: number; required: boolean }>;
+
 const DAYS: { key: DayOfWeek; label: string }[] = [
   { key: 1, label: 'Maandag' },
   { key: 2, label: 'Dinsdag' },
@@ -25,25 +27,20 @@ export default function RulesPanel() {
 
   const byDay = useMemo(() => {
     const map = new Map<DayOfWeek, PlanRules>();
-    for (const d of DAYS.map(x => x.key)) map.set(d, []);
-    for (const r of rules) {
+    DAYS.forEach(d => map.set(d.key, []));
+    rules.forEach((r) => {
       const list = map.get(r.day_of_week);
       if (list) list.push(r);
-    }
+    });
     return map;
   }, [rules]);
 
-  function updateRule(
-    day: DayOfWeek,
-    code: ServiceCode,
-    patch: Partial<{ min_count: number; max_count: number; required: boolean }>
-  ) {
+  function updateRule(day: DayOfWeek, code: ServiceCode, patch: RulePatch) {
     setRules((prev: PlanRules) => {
-      const next = prev.map(r =>
+      const next: PlanRules = prev.map((r): typeof r =>
         (r.day_of_week === day && r.service_code === code) ? { ...r, ...patch } : r
       );
-      // als er geen bestaande regel is en patch waarden bevat, voeg toe
-      const has = next.some(r => r.day_of_week === day && r.service_code === code);
+      const has = next.some((r): boolean => r.day_of_week === day && r.service_code === code);
       if (!has && (patch.min_count !== undefined || patch.max_count !== undefined || patch.required !== undefined)) {
         next.push({
           day_of_week: day,
