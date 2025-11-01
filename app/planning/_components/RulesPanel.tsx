@@ -1,6 +1,6 @@
 'use client';
+import { defaultPlanRules, getRuleFor, PlanRules, ServiceCode, DayOfWeek } from '@/lib/planning/rules.alias';
 import React, { useMemo, useState } from 'react';
-import { defaultPlanRules, getRuleFor, PlanRules, ServiceCode, DayOfWeek } from '@/lib/planning/rules';
 
 const DAYS: { key: DayOfWeek; label: string }[] = [
   { key: 1, label: 'Maandag' },
