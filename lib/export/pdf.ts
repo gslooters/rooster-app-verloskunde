@@ -1,4 +1,4 @@
-// PDF Export Utility using jsPDF + autoTable (iteration 2b: TS fixes)
+// PDF Export Utility using jsPDF + autoTable (iteration 3: header readability, single service render, NB hatch wired)
 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -6,16 +6,9 @@ import { ExportRoster, ExportEmployee } from './types';
 
 const COLORS = {
   text: [33, 37, 41] as [number, number, number],
-  header: [236, 245, 243] as [number, number, number],
+  headerBg: [236, 245, 243] as [number, number, number],
+  headerText: [0, 0, 0] as [number, number, number],
   danger: [230, 57, 70] as [number, number, number],
-};
-
-const SERVICE_COLORS: Record<string, [number, number, number]> = {
-  s: [139, 92, 246],
-  d: [59, 130, 246],
-  sp: [5, 150, 105],
-  echo: [234, 88, 12],
-  vrij: [180, 140, 20],
 };
 
 function dayParts(iso: string) {
@@ -25,10 +18,6 @@ function dayParts(iso: string) {
   const mm = String(d.getMonth()+1).padStart(2,'0');
   return { dow: map[d.getDay()], dd, mm };
 }
-
-function label1(iso: string) { return dayParts(iso).dow; }
-function label2(iso: string) { return dayParts(iso).dd; }
-function label3(iso: string) { return dayParts(iso).mm; }
 
 function getWeekNumber(iso: string): number {
   const date = new Date(iso + 'T00:00:00');
@@ -53,12 +42,10 @@ function footerTimestamp(doc: jsPDF) {
   const yyyy = now.getFullYear(); const hh = String(now.getHours()).padStart(2,'0'); const mi = String(now.getMinutes()).padStart(2,'0');
   const text = `Geexporteerd: ${dd}-${mm}-${yyyy} ${hh}:${mi}`;
   const w = doc.internal.pageSize.getWidth(); const h = doc.internal.pageSize.getHeight();
-  doc.setFontSize(8); doc.text(text, w - 10, h - 6, { align: 'right' as any });
+  doc.setFontSize(8); doc.setTextColor(...COLORS.text); doc.text(text, w - 10, h - 6, { align: 'right' as any });
 }
 
-function setBold(doc: jsPDF, bold: boolean) {
-  try { doc.setFont(undefined as any, bold ? 'bold' : 'normal'); } catch { /* noop */ }
-}
+function setBold(doc: jsPDF, bold: boolean) { try { doc.setFont(undefined as any, bold ? 'bold' : 'normal'); } catch {} }
 
 // TOTAL ROSTER
 export function exportRosterToPDF(roster: ExportRoster): void {
@@ -66,30 +53,47 @@ export function exportRosterToPDF(roster: ExportRoster): void {
   doc.setFontSize(14); doc.text('Verloskunde Rooster', 12, 12);
   doc.setFontSize(10); doc.text(`Periode: ${roster.period}`, 12, 18);
 
-  const head = [[ 'Medewerker', ...roster.days.map(d => label1(d)) ], [ '', ...roster.days.map(d => label2(d)) ], [ '', ...roster.days.map(d => label3(d)) ]];
+  // Build compact 3-line headers (black/bold on light bg)
+  const header1 = ['Medewerker', ...roster.days.map(d => dayParts(d).dow)];
+  const header2 = ['', ...roster.days.map(d => dayParts(d).dd)];
+  const header3 = ['', ...roster.days.map(d => dayParts(d).mm)];
 
+  // Body values: single-render service (full code), black+bold, small font
   const body = roster.employees.map(emp => (
-    [emp.name, ...roster.days.map(d => { const cell = roster.cells[d]?.[emp.id]; const svc = cell?.service && cell.service !== '-' ? (cell.service.length>3?cell.service.slice(0,3):cell.service) : ''; return svc; })]
+    [emp.name, ...roster.days.map(d => {
+      const cell = roster.cells[d]?.[emp.id];
+      const svc = cell?.service && cell.service !== '-' ? cell.service : '';
+      return svc;
+    })]
   ));
 
   autoTable(doc, {
-    head, body, startY: 24,
-    styles: { fontSize: 7, cellPadding: 1.4 }, headStyles: { fillColor: COLORS.header as any, fontStyle: 'bold' }, columnStyles: { 0: { cellWidth: 28, fontStyle: 'bold' } },
+    head: [header1, header2, header3],
+    body,
+    startY: 24,
+    styles: { fontSize: 7, cellPadding: 1.0, textColor: COLORS.text as any },
+    headStyles: { fillColor: COLORS.headerBg as any, textColor: COLORS.headerText as any, fontStyle: 'bold' },
+    columnStyles: { 0: { cellWidth: 28, fontStyle: 'bold' } },
     didDrawCell: (data) => {
       if (data.section === 'body' && data.column.index > 0) {
         const day = roster.days[data.column.index - 1]; const emp = roster.employees[data.row.index]; const cell = roster.cells[day]?.[emp.id]; if (!cell) return;
-        const { x, y, width, height } = data.cell; if (cell.unavailable) drawNBCell(doc, x, y, width, height);
-        const code = cell.service && cell.service !== '-' ? (cell.service.length>3?cell.service.slice(0,3):cell.service) : '';
-        if (code) { const rgb = SERVICE_COLORS[code as keyof typeof SERVICE_COLORS] || SERVICE_COLORS.d; setBold(doc, true); doc.setTextColor(rgb[0], rgb[1], rgb[2]); doc.text(code, x + 1.2, y + height - 1.2); doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]); setBold(doc, false); }
+        const { x, y, width, height } = data.cell;
+        if (cell.unavailable) drawNBCell(doc, x, y, width, height);
+        // Ensure text is black+bold for readability
+        const value = data.cell.text?.[0] as string | undefined;
+        if (value) { setBold(doc, true); doc.setTextColor(0,0,0); doc.text(value, x + 1.2, y + height - 1.2); setBold(doc, false); }
       }
     },
     margin: { left: 10, right: 10 },
   });
 
-  let i = 0; let cursorX = 10 + 28; doc.setFontSize(8); const last = (doc as any).lastAutoTable; const colWidth = last?.columnStyles?.[1]?.cellWidth || 7;
+  // Week labels
+  let i = 0; let cursorX = 10 + 28; doc.setFontSize(8);
+  const last = (doc as any).lastAutoTable; const colWidth = last?.columnStyles?.[1]?.cellWidth || 7;
   while (i < roster.days.length) { const w = getWeekNumber(roster.days[i]); let j = i + 1; while (j < roster.days.length && getWeekNumber(roster.days[j]) === w) j++; const span = j - i; const centerX = cursorX + (span * colWidth) / 2; doc.text(`Week ${w}`, centerX, 22, { align: 'center' as any }); cursorX += span * colWidth; i = j; }
 
-  footerTimestamp(doc); const filename = `Rooster_${roster.period.replace(/[^\w\s-]/g, '_')}.pdf`; doc.save(filename);
+  footerTimestamp(doc);
+  doc.save(`Rooster_${roster.period.replace(/[^\w\s-]/g, '_')}.pdf`);
 }
 
 // EMPLOYEE ROSTER
@@ -98,17 +102,20 @@ export function exportEmployeeToPDF(roster: ExportRoster, employee: ExportEmploy
   doc.setFontSize(14); doc.text(`Rooster: ${employee.name}`, 12, 12); doc.setFontSize(10); doc.text(`Periode: ${roster.period}`, 12, 18);
 
   const weeks: { week: number; rows: { label: string; svc: string; unavailable?: boolean }[] }[] = [];
-  roster.days.forEach(d => { const w = getWeekNumber(d); const p = dayParts(d); const label = `${p.dow} ${p.dd}-${p.mm}`; const cell = roster.cells[d]?.[employee.id]; const svc = cell?.service && cell.service !== '-' ? (cell.service.length>3?cell.service.slice(0,3):cell.service) : ''; let group = weeks.find(x => x.week === w); if (!group) { group = { week: w, rows: [] }; weeks.push(group); } group.rows.push({ label, svc, unavailable: cell?.unavailable }); });
+  roster.days.forEach(d => { const w = getWeekNumber(d); const p = dayParts(d); const label = `${p.dow} ${p.dd}-${p.mm}`; const cell = roster.cells[d]?.[employee.id]; const svc = cell?.service && cell.service !== '-' ? cell.service : ''; let group = weeks.find(x => x.week === w); if (!group) { group = { week: w, rows: [] }; weeks.push(group); } group.rows.push({ label, svc, unavailable: cell?.unavailable }); });
 
-  const head = [weeks.map(w => `Week ${w.week}`)]; const maxRows = Math.max(...weeks.map(w => w.rows.length)); const body: string[][] = [];
+  const head = [weeks.map(w => `Week ${w.week}`)];
+  const maxRows = Math.max(...weeks.map(w => w.rows.length)); const body: string[][] = [];
   for (let r = 0; r < maxRows; r++) { const row: string[] = []; weeks.forEach(w => { const it = w.rows[r]; row.push(it ? `${it.label}${it.svc? '  '+it.svc : ''}` : ''); }); body.push(row); }
 
   autoTable(doc, {
-    head, body, startY: 24, styles: { fontSize: 9, cellPadding: 2 }, headStyles: { fillColor: COLORS.header as any, fontStyle: 'bold' }, margin: { left: 10, right: 10 },
+    head, body, startY: 24,
+    styles: { fontSize: 9, cellPadding: 1.2, textColor: COLORS.text as any }, headStyles: { fillColor: COLORS.headerBg as any, textColor: COLORS.headerText as any, fontStyle: 'bold' }, margin: { left: 10, right: 10 },
     didDrawCell: (data) => {
-      if (data.section === 'body') { const weekIndex = data.column.index; const rowIndex = data.row.index; const it = weeks[weekIndex]?.rows[rowIndex]; if (!it) return; const { x, y, width, height } = data.cell; if (it.unavailable) drawNBCell(doc, x, y, width, height); if (it.svc) { const rgb = SERVICE_COLORS[it.svc as keyof typeof SERVICE_COLORS] || SERVICE_COLORS.d; setBold(doc, true); doc.setTextColor(rgb[0], rgb[1], rgb[2]); doc.text(it.svc, x + width - 2, y + height - 1.5, { align: 'right' as any }); doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]); setBold(doc, false); } }
+      if (data.section === 'body') { const weekIndex = data.column.index; const rowIndex = data.row.index; const it = weeks[weekIndex]?.rows[rowIndex]; if (!it) return; const { x, y, width, height } = data.cell; if (it.unavailable) drawNBCell(doc, x, y, width, height); if (it.svc) { setBold(doc, true); doc.setTextColor(0,0,0); doc.text(it.svc, x + width - 2, y + height - 1.2, { align: 'right' as any }); setBold(doc, false); doc.setTextColor(...COLORS.text); } }
     }
   });
 
-  footerTimestamp(doc); const filename = `Rooster_${employee.name}_${roster.period.replace(/[^\w\s-]/g, '_')}.pdf`; doc.save(filename);
+  footerTimestamp(doc);
+  doc.save(`Rooster_${employee.name}_${roster.period.replace(/[^\w\s-]/g, '_')}.pdf`);
 }
