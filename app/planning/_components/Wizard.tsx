@@ -20,15 +20,18 @@ export default function Wizard() {
   }, []);
 
   function openConfirm() {
-    const msg = validateStartMonday(start);
-    if (msg) { setError(msg); return; }
+    const isValidMonday = validateStartMonday(start);
+    if (!isValidMonday) { 
+      setError('Startdatum moet een maandag zijn'); 
+      return; 
+    }
     setError(null);
     setShowConfirm(true);
   }
 
   function createRosterConfirmed() {
     const id = genId();
-    const end = computeEnd(start, Math.max(5, weeks)); // minimaal 5 weken
+    const end = computeEnd(start); // Remove second parameter - function only takes one
     const roster: Roster = {
       id,
       start_date: start,
