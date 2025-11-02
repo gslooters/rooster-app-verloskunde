@@ -6,11 +6,11 @@ import { ExportRoster, ExportEmployee } from './types';
 
 // Colors (aligned to softer healthcare palette)
 const COLORS = {
-  text: [33, 37, 41],
-  grayLight: [245, 247, 250],
-  header: [236, 245, 243], // soft teal tint
-  line: [220, 226, 230],
-  danger: [230, 57, 70],
+  text: [33, 37, 41] as [number, number, number],
+  grayLight: [245, 247, 250] as [number, number, number],
+  header: [236, 245, 243] as [number, number, number], // soft teal tint
+  line: [220, 226, 230] as [number, number, number],
+  danger: [230, 57, 70] as [number, number, number],
 };
 
 const SERVICE_COLORS: Record<string, [number, number, number]> = {
@@ -18,12 +18,12 @@ const SERVICE_COLORS: Record<string, [number, number, number]> = {
   d: [59, 130, 246], // blauw
   sp: [5, 150, 105], // groen
   echo: [234, 88, 12], // oranje
-  vrij: [254, 243, 199].map((v:any)=>v as number) as any, // lichtgeel achtergrond
+  vrij: [254, 243, 199], // lichtgeel achtergrond (we gebruiken alleen textkleur hier)
 };
 
 function dayLabel(iso: string) {
   const d = new Date(iso + 'T00:00:00');
-  const map = ['zo','ma','di','wo','do','vr','za'];
+  const map = ['zo','ma','di','wo','do','vr','za'] as const;
   const dd = String(d.getDate()).padStart(2,'0');
   const mm = String(d.getMonth()+1).padStart(2,'0');
   return `${map[d.getDay()]} ${dd}-${mm}`; // ma 24-11
@@ -42,7 +42,8 @@ function getWeekNumber(iso: string): number {
 
 // Draw NB diagonal hatch for unavailable
 function drawNBCell(doc: jsPDF, x: number, y: number, w: number, h: number) {
-  doc.setDrawColor(...COLORS.danger);
+  const [r, g, b] = COLORS.danger;
+  doc.setDrawColor(r, g, b);
   for (let i = -h; i < w + h; i += 5) {
     doc.line(x + i, y, x + i + h, y + h);
   }
@@ -97,9 +98,9 @@ export function exportRosterToPDF(roster: ExportRoster): void {
         const code = cell.service || '';
         const rgb = SERVICE_COLORS[code as keyof typeof SERVICE_COLORS];
         if (rgb) {
-          doc.setTextColor(...rgb);
+          doc.setTextColor(rgb[0], rgb[1], rgb[2]);
           doc.text(code, x + 1.5, y + height - 1.5);
-          doc.setTextColor(...COLORS.text);
+          doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]);
         }
       }
     },
@@ -110,12 +111,14 @@ export function exportRosterToPDF(roster: ExportRoster): void {
   let x = 10 + 28; // start after first column
   let i = 0;
   doc.setFontSize(8);
+  // Estimate column width from autoTable state (fallback 7)
+  const last = (doc as any).lastAutoTable;
+  const colWidth = last?.columnStyles?.[1]?.cellWidth || 7;
   while (i < roster.days.length) {
     const w = getWeekNumber(roster.days[i]);
     let j = i + 1;
     while (j < roster.days.length && getWeekNumber(roster.days[j]) === w) j++;
     const span = j - i;
-    const colWidth = (doc as any).lastAutoTable.finalCell?.width || 7; // fallback
     const centerX = x + (span * colWidth) / 2;
     doc.text(`Week ${w}`, centerX, 22, { align: 'center' });
     x += span * colWidth; i = j;
@@ -186,7 +189,7 @@ export function exportEmployeeToPDF(roster: ExportRoster, employee: ExportEmploy
         }
         if (isSvcRow && it.svc) {
           const rgb = SERVICE_COLORS[it.svc as keyof typeof SERVICE_COLORS];
-          if (rgb) { doc.setTextColor(...rgb); doc.text(it.svc, x + 1.5, y + height - 1.5); doc.setTextColor(...COLORS.text); }
+          if (rgb) { doc.setTextColor(rgb[0], rgb[1], rgb[2]); doc.text(it.svc, x + 1.5, y + height - 1.5); doc.setTextColor(COLORS.text[0], COLORS.text[1], COLORS.text[2]); }
         }
       }
     }
