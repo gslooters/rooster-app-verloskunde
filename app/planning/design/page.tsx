@@ -16,6 +16,7 @@ export default function RoosterOntwerpenPage() {
 
   useEffect(() => {
     // Simulate loading draft rosters from localStorage or API
+    // Set to empty array to test empty state, or add many items to test scrolling
     const mockDrafts: DraftRoster[] = [
       {
         id: '1',
@@ -32,6 +33,30 @@ export default function RoosterOntwerpenPage() {
         status: 'draft',
         lastEdited: '1 week geleden',
         weekNumbers: 'Week 50-52'
+      },
+      {
+        id: '3',
+        title: 'Rooster Week 53-04 (Ontwerp)',
+        period: '19-01-2026 t/m 22-02-2026',
+        status: 'ready-for-review',
+        lastEdited: '3 dagen geleden',
+        weekNumbers: 'Week 53-04'
+      },
+      {
+        id: '4',
+        title: 'Rooster Week 05-09 (Ontwerp)',
+        period: '23-02-2026 t/m 29-03-2026',
+        status: 'draft',
+        lastEdited: '5 dagen geleden',
+        weekNumbers: 'Week 05-09'
+      },
+      {
+        id: '5',
+        title: 'Rooster Week 10-14 (Ontwerp)',
+        period: '30-03-2026 t/m 03-05-2026',
+        status: 'in-progress',
+        lastEdited: '1 dag geleden',
+        weekNumbers: 'Week 10-14'
       }
     ];
     
@@ -94,9 +119,16 @@ export default function RoosterOntwerpenPage() {
             </p>
           </div>
 
-          {/* Draft Rosters Section */}
+          {/* Draft Rosters Section with Scrolling */}
           <div className="mb-8">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Roosters in ontwerp</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-900">Roosters in ontwerp</h2>
+              {draftRosters.length > 0 && (
+                <span className="text-sm text-gray-500">
+                  {draftRosters.length} in ontwerp
+                </span>
+              )}
+            </div>
             
             {draftRosters.length === 0 ? (
               <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-8 text-center">
@@ -116,44 +148,49 @@ export default function RoosterOntwerpenPage() {
                 </a>
               </div>
             ) : (
-              <div className="space-y-4">
-                {draftRosters.map((roster) => (
-                  <div 
-                    key={roster.id}
-                    className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-md transition-shadow"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <h3 className="text-lg font-semibold text-gray-900">
-                            {roster.title}
-                          </h3>
-                          {getStatusBadge(roster.status)}
+              <div 
+                className="max-h-[60vh] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-400 pr-2"
+                style={{ scrollBehavior: 'smooth' }}
+              >
+                <div className="space-y-4">
+                  {draftRosters.map((roster) => (
+                    <div 
+                      key={roster.id}
+                      className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-md transition-shadow"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <h3 className="text-lg font-semibold text-gray-900">
+                              {roster.title}
+                            </h3>
+                            {getStatusBadge(roster.status)}
+                          </div>
+                          
+                          <div className="text-sm text-gray-600 space-y-1">
+                            <p><span className="font-medium">Periode:</span> {roster.period}</p>
+                            <p><span className="font-medium">Laatst bewerkt:</span> {roster.lastEdited}</p>
+                          </div>
                         </div>
                         
-                        <div className="text-sm text-gray-600 space-y-1">
-                          <p><span className="font-medium">Periode:</span> {roster.period}</p>
-                          <p><span className="font-medium">Laatst bewerkt:</span> {roster.lastEdited}</p>
+                        <div className="ml-4">
+                          <a
+                            href={`/planning/${roster.id}`}
+                            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                          >
+                            Bewerken
+                            <span className="ml-2">→</span>
+                          </a>
                         </div>
                       </div>
-                      
-                      <div className="ml-4">
-                        <a
-                          href={`/planning/${roster.id}`}
-                          className="inline-flex items-center px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
-                        >
-                          Bewerken
-                          <span className="ml-2">→</span>
-                        </a>
-                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             )}
           </div>
 
-          {/* New Roster Section */}
+          {/* New Roster Section - Always Visible */}
           <div className="border-t border-gray-200 pt-8">
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200">
               <div className="flex items-center justify-between">
