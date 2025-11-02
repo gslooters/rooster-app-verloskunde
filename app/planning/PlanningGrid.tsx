@@ -4,6 +4,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { getRosters, isDutchHoliday, isAvailable } from './libAliases';
 import AvailabilityPopup from './_components/AvailabilityPopup';
 import '@/styles/planning.css';
+import '@/styles/toolbar.css';
+
+import { prepareRosterForExport, exportToExcel, exportToCSV, exportRosterToPDF, exportEmployeeToPDF } from '@/lib/export';
 
 function toDate(iso: string) { return new Date(iso + 'T00:00:00'); }
 function addDaysISO(iso: string, n: number) {
@@ -82,10 +85,42 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
     setCells(prev => ({ ...prev, [date]: { ...prev[date], [empId]: { ...prev[date][empId], locked: !prev[date][empId].locked } } }));
   }
 
+  // Export helpers
+  const exportable = useMemo(() => prepareRosterForExport(
+    roster,
+    EMPLOYEES,
+    days,
+    cells as any
+  ), [roster, days, cells]);
+
+  function onExportExcel() {
+    exportToExcel(exportable);
+  }
+  function onExportCSV() { exportToCSV(exportable); }
+  function onExportPDF() { exportRosterToPDF(exportable); }
+
+  const [selectedEmp, setSelectedEmp] = useState<string>('emp1');
+  function onExportEmployeePDF() {
+    const emp = EMPLOYEES.find(e => e.id === selectedEmp);
+    if (emp) exportEmployeeToPDF(exportable, emp);
+  }
+
   return (
     <main className="p-4">
       <nav className="text-sm text-gray-500 mb-3">Dashboard &gt; Rooster Planning &gt; Rooster</nav>
-      <h1 className="text-xl font-semibold mb-3">Periode: {formatPeriodDDMM(start)}</h1>
+      <h1 className="text-xl font-semibold mb-1">Periode: {formatPeriodDDMM(start)}</h1>
+
+      {/* Toolbar */}
+      <div className="toolbar">
+        <button className="btn" onClick={onExportCSV}>Export CSV</button>
+        <button className="btn" onClick={onExportExcel}>Export Excel</button>
+        <button className="btn primary" onClick={onExportPDF}>Export PDF (Totaal)</button>
+        <span style={{ marginLeft: 12 }} />
+        <select className="select" value={selectedEmp} onChange={e => setSelectedEmp(e.target.value)}>
+          {EMPLOYEES.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+        </select>
+        <button className="btn" onClick={onExportEmployeePDF}>Export PDF (Medewerker)</button>
+      </div>
 
       <div className="overflow-auto max-h-[80vh] border rounded">
         <table className="min-w-[1200px] border-separate border-spacing-0 text-[12px]">
