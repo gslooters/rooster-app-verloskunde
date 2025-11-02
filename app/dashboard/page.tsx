@@ -1,21 +1,14 @@
 'use client';
+import { PRAKTIJK_LOGO_BASE64 } from '../_components/logoBase64';
 
 export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-4 md:p-8">
       <div className="max-w-6xl mx-auto">
         <div className="bg-white rounded-xl shadow-lg p-6 md:p-8">
-          {/* Header with Logo */}
+          {/* Header with real Logo */}
           <div className="mb-6 flex items-center">
-            {/* Praktijk Logo */}
-            <div className="w-16 h-16 mr-4 bg-gradient-to-br from-teal-100 to-green-100 rounded-full flex items-center justify-center">
-              <svg viewBox="0 0 100 100" className="w-10 h-10 text-teal-600">
-                <circle cx="50" cy="35" r="15" fill="none" stroke="currentColor" strokeWidth="3"/>
-                <path d="M35 50 Q50 65 65 50" fill="none" stroke="currentColor" strokeWidth="3"/>
-                <circle cx="35" cy="70" r="8" fill="none" stroke="currentColor" strokeWidth="2"/>
-                <circle cx="65" cy="70" r="8" fill="none" stroke="currentColor" strokeWidth="2"/>
-              </svg>
-            </div>
+            <img src={PRAKTIJK_LOGO_BASE64} alt="Praktijklogo" className="w-16 h-16 mr-4 rounded-full object-contain"/>
             <h1 className="text-3xl md:text-4xl font-bold text-gray-900">
               Rooster Dashboard Verloskundigen Arnhem
             </h1>
@@ -38,93 +31,42 @@ export default function DashboardPage() {
             </a>
           </div>
 
-          {/* Main Navigation Grid - Correcte Indeling */}
+          {/* Main Navigation Grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-            
-            {/* Rij 1 */}
-            {/* Rooster Bewerken - Links Boven */}
-            <a 
-              href="/planning/edit" 
-              className="bg-indigo-50 p-6 rounded-xl hover:bg-indigo-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md"
-            >
-              <div className="flex items-center mb-3">
-                <span className="text-2xl mr-3">📝</span>
-                <h3 className="font-bold text-indigo-900 text-lg">Rooster Bewerken</h3>
-              </div>
+            {/* Rooster Bewerken */}
+            <a href="/planning/edit" className="bg-indigo-50 p-6 rounded-xl hover:bg-indigo-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md">
+              <div className="flex items-center mb-3"><span className="text-2xl mr-3">📝</span><h3 className="font-bold text-indigo-900 text-lg">Rooster Bewerken</h3></div>
               <p className="text-indigo-700 font-medium">Bestaande aanpassen</p>
             </a>
-
-            {/* Rooster Ontwerpen - Midden Boven */}
-            <a 
-              href="/planning/design" 
-              className="bg-blue-50 p-6 rounded-xl hover:bg-blue-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md"
-            >
-              <div className="flex items-center mb-3">
-                <span className="text-2xl mr-3">📋</span>
-                <h3 className="font-bold text-blue-900 text-lg">Rooster Ontwerpen</h3>
-              </div>
+            {/* Rooster Ontwerpen */}
+            <a href="/planning/design" className="bg-blue-50 p-6 rounded-xl hover:bg-blue-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md">
+              <div className="flex items-center mb-3"><span className="text-2xl mr-3">📋</span><h3 className="font-bold text-blue-900 text-lg">Rooster Ontwerpen</h3></div>
               <p className="text-blue-700 font-medium">Nieuwe planning starten</p>
             </a>
-            
-            {/* Medewerkers Beheer - Rechts Boven */}
-            <a 
-              href="/employees" 
-              className="bg-green-50 p-6 rounded-xl hover:bg-green-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md"
-            >
-              <div className="flex items-center mb-3">
-                <span className="text-2xl mr-3">👥</span>
-                <h3 className="font-bold text-green-900 text-lg">Medewerkers Beheer</h3>
-              </div>
+            {/* Medewerkers Beheer */}
+            <a href="/employees" className="bg-green-50 p-6 rounded-xl hover:bg-green-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md">
+              <div className="flex items-center mb-3"><span className="text-2xl mr-3">👥</span><h3 className="font-bold text-green-900 text-lg">Medewerkers Beheer</h3></div>
               <p className="text-green-700 font-medium">Personeel + diensten</p>
             </a>
-
-            {/* Rij 2 */}
-            {/* Rooster Rapporten - Links Onder */}
-            <a 
-              href="/reports" 
-              className="bg-orange-50 p-6 rounded-xl hover:bg-orange-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md"
-            >
-              <div className="flex items-center mb-3">
-                <span className="text-2xl mr-3">📊</span>
-                <h3 className="font-bold text-orange-900 text-lg">Rooster Rapporten</h3>
-              </div>
+            {/* Rooster Rapporten */}
+            <a href="/reports" className="bg-orange-50 p-6 rounded-xl hover:bg-orange-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md">
+              <div className="flex items-center mb-3"><span className="text-2xl mr-3">📊</span><h3 className="font-bold text-orange-900 text-lg">Rooster Rapporten</h3></div>
               <p className="text-orange-700 font-medium">Statistieken</p>
             </a>
-
-            {/* Archief Raadplegen - Midden Onder */}
-            <a 
-              href="/archived" 
-              className="bg-gray-50 p-6 rounded-xl hover:bg-gray-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md"
-            >
-              <div className="flex items-center mb-3">
-                <span className="text-2xl mr-3">🔒</span>
-                <h3 className="font-bold text-gray-900 text-lg">Archief Raadplegen</h3>
-              </div>
+            {/* Archief */}
+            <a href="/archived" className="bg-gray-50 p-6 rounded-xl hover:bg-gray-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md">
+              <div className="flex items-center mb-3"><span className="text-2xl mr-3">🔒</span><h3 className="font-bold text-gray-900 text-lg">Archief Raadplegen</h3></div>
               <p className="text-gray-700 font-medium">Afgesloten roosters</p>
             </a>
-
-            {/* Diensten Bewerken - Rechts Onder */}
-            <a 
-              href="/services" 
-              className="bg-purple-50 p-6 rounded-xl hover:bg-purple-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md"
-            >
-              <div className="flex items-center mb-3">
-                <span className="text-2xl mr-3">⚙️</span>
-                <h3 className="font-bold text-purple-900 text-lg">Diensten Bewerken</h3>
-              </div>
-              <p className="text-purple-700 font-medium">Dienst configuratie</p>
+            {/* Diensten Beheren (icoon 💼, geen ondertitel) */}
+            <a href="/services" className="bg-purple-50 p-6 rounded-xl hover:bg-purple-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md">
+              <div className="flex items-center mb-1"><span className="text-2xl mr-3">💼</span><h3 className="font-bold text-purple-900 text-lg">Diensten Beheren</h3></div>
             </a>
           </div>
 
-          {/* Footer met Instellingen */}
+          {/* Footer */}
           <div className="flex justify-end pt-4 border-t border-gray-200">
-            <a 
-              href="/settings" 
-              className="text-gray-600 hover:text-gray-800 text-sm flex items-center"
-            >
-              <span className="mr-1">⚙️</span>
-              Instellingen
-            </a>
+            <a href="/settings" className="text-gray-600 hover:text-gray-800 text-sm flex items-center"><span className="mr-1">⚙️</span>Instellingen</a>
           </div>
         </div>
       </div>
