@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { getRosters, isDutchHoliday, isAvailable } from './libAliases';
 import AvailabilityPopup from './_components/AvailabilityPopup';
 import '@/styles/planning.css';
+import '@/styles/compact-service.css';
 import '../toolbar.css';
 
 import { prepareRosterForExport, exportToExcel, exportToCSV, exportRosterToPDF, exportEmployeeToPDF } from '@/lib/export';
@@ -53,12 +54,10 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
   useEffect(() => {
     try {
       const allServices = getAllServices();
-      // Only show active services in dropdown
       const activeServices = allServices.filter(s => s.actief);
       setServices(activeServices);
     } catch (err) {
       console.error('Error loading services:', err);
-      // Fallback to empty array
       setServices([]);
     }
   }, []);
@@ -94,23 +93,13 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
     setCells(prev => ({ ...prev, [date]: { ...prev[date], [empId]: { ...prev[date][empId], locked: !prev[date][empId].locked } } }));
   }
 
-  // Helper to get service info (color, display name)
   function getServiceInfo(serviceCode: string) {
     if (!serviceCode) return { color: '#FFFFFF', displayName: '—' };
-    
     const service = services.find(s => s.code === serviceCode);
-    if (service) {
-      return { 
-        color: service.kleur, 
-        displayName: `${service.code} - ${service.naam}` 
-      };
-    }
-    
-    // Fallback for unknown services
+    if (service) return { color: service.kleur, displayName: `${service.code} - ${service.naam}` };
     return { color: '#E5E7EB', displayName: serviceCode };
   }
 
-  // Export helpers
   const exportable = useMemo(() => prepareRosterForExport(
     roster,
     EMPLOYEES,
@@ -133,7 +122,6 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
       <nav className="text-sm text-gray-500 mb-3">Dashboard &gt; Rooster Planning &gt; Rooster</nav>
       <h1 className="text-xl font-semibold mb-1">Periode: {formatPeriodDDMM(start)}</h1>
 
-      {/* Toolbar */}
       <div className="toolbar">
         <button className="btn" onClick={onExportCSV}>Export CSV</button>
         <button className="btn" onClick={onExportExcel}>Export Excel</button>
@@ -199,7 +187,7 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
                         <select
                           value={code}
                           onChange={(e) => setService(d, emp.id, e.target.value)}
-                          className="text-[11px] border rounded px-1 py-[1px] h-[20px] min-w-[50px]"
+                          className="text-[11px] border rounded px-1 py-[1px] h-[20px] min-w-[34px] select compact-service"
                           style={{ backgroundColor: serviceInfo.color, color: serviceInfo.color === '#FFFFFF' || serviceInfo.color === '#FEF3C7' ? '#000000' : '#FFFFFF' } as React.CSSProperties}
                           disabled={!available || !isDraft || locked}
                           title={code ? serviceInfo.displayName : 'Geen dienst'}
