@@ -5,10 +5,19 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-4 md:p-8">
       <div className="max-w-6xl mx-auto">
         <div className="bg-white rounded-xl shadow-lg p-6 md:p-8">
-          {/* Header */}
-          <div className="mb-6">
-            <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-1">
-              🏥 Rooster Dashboard Verloskundigen Arnhem
+          {/* Header with Logo */}
+          <div className="mb-6 flex items-center">
+            {/* Praktijk Logo */}
+            <div className="w-16 h-16 mr-4 bg-gradient-to-br from-teal-100 to-green-100 rounded-full flex items-center justify-center">
+              <svg viewBox="0 0 100 100" className="w-10 h-10 text-teal-600">
+                <circle cx="50" cy="35" r="15" fill="none" stroke="currentColor" strokeWidth="3"/>
+                <path d="M35 50 Q50 65 65 50" fill="none" stroke="currentColor" strokeWidth="3"/>
+                <circle cx="35" cy="70" r="8" fill="none" stroke="currentColor" strokeWidth="2"/>
+                <circle cx="65" cy="70" r="8" fill="none" stroke="currentColor" strokeWidth="2"/>
+              </svg>
+            </div>
+            <h1 className="text-3xl md:text-4xl font-bold text-gray-900">
+              Rooster Dashboard Verloskundigen Arnhem
             </h1>
           </div>
           
@@ -29,79 +38,81 @@ export default function DashboardPage() {
             </a>
           </div>
 
-          {/* Main Navigation Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+          {/* Main Navigation Grid - Correcte Indeling */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
             
-            {/* Roosters Ontwerpen */}
-            <a 
-              href="/planning/design" 
-              className="bg-blue-50 p-6 rounded-xl hover:bg-blue-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md"
-            >
-              <div className="flex items-center mb-3">
-                <span className="text-2xl mr-3">📋</span>
-                <h3 className="font-bold text-blue-900 text-lg">Roosters Ontwerpen</h3>
-              </div>
-              <p className="text-blue-700 font-medium">Nieuwe planning starten</p>
-            </a>
-
-            {/* Roosters Bewerken */}
+            {/* Rij 1 */}
+            {/* Rooster Bewerken - Links Boven */}
             <a 
               href="/planning/edit" 
               className="bg-indigo-50 p-6 rounded-xl hover:bg-indigo-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md"
             >
               <div className="flex items-center mb-3">
                 <span className="text-2xl mr-3">📝</span>
-                <h3 className="font-bold text-indigo-900 text-lg">Roosters Bewerken</h3>
+                <h3 className="font-bold text-indigo-900 text-lg">Rooster Bewerken</h3>
               </div>
               <p className="text-indigo-700 font-medium">Bestaande aanpassen</p>
             </a>
+
+            {/* Rooster Ontwerpen - Midden Boven */}
+            <a 
+              href="/planning/design" 
+              className="bg-blue-50 p-6 rounded-xl hover:bg-blue-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md"
+            >
+              <div className="flex items-center mb-3">
+                <span className="text-2xl mr-3">📋</span>
+                <h3 className="font-bold text-blue-900 text-lg">Rooster Ontwerpen</h3>
+              </div>
+              <p className="text-blue-700 font-medium">Nieuwe planning starten</p>
+            </a>
             
-            {/* Medewerkers */}
+            {/* Medewerkers Beheer - Rechts Boven */}
             <a 
               href="/employees" 
               className="bg-green-50 p-6 rounded-xl hover:bg-green-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md"
             >
               <div className="flex items-center mb-3">
                 <span className="text-2xl mr-3">👥</span>
-                <h3 className="font-bold text-green-900 text-lg">Medewerkers</h3>
+                <h3 className="font-bold text-green-900 text-lg">Medewerkers Beheer</h3>
               </div>
               <p className="text-green-700 font-medium">Personeel + diensten</p>
             </a>
 
-            {/* Diensten */}
-            <a 
-              href="/services" 
-              className="bg-purple-50 p-6 rounded-xl hover:bg-purple-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md"
-            >
-              <div className="flex items-center mb-3">
-                <span className="text-2xl mr-3">⚙️</span>
-                <h3 className="font-bold text-purple-900 text-lg">Diensten</h3>
-              </div>
-              <p className="text-purple-700 font-medium">Dienst configuratie</p>
-            </a>
-
-            {/* Rapporten */}
+            {/* Rij 2 */}
+            {/* Rooster Rapporten - Links Onder */}
             <a 
               href="/reports" 
               className="bg-orange-50 p-6 rounded-xl hover:bg-orange-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md"
             >
               <div className="flex items-center mb-3">
                 <span className="text-2xl mr-3">📊</span>
-                <h3 className="font-bold text-orange-900 text-lg">Rapporten</h3>
+                <h3 className="font-bold text-orange-900 text-lg">Rooster Rapporten</h3>
               </div>
               <p className="text-orange-700 font-medium">Statistieken</p>
             </a>
 
-            {/* Afgesloten */}
+            {/* Archief Raadplegen - Midden Onder */}
             <a 
               href="/archived" 
               className="bg-gray-50 p-6 rounded-xl hover:bg-gray-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md"
             >
               <div className="flex items-center mb-3">
                 <span className="text-2xl mr-3">🔒</span>
-                <h3 className="font-bold text-gray-900 text-lg">Afgesloten</h3>
+                <h3 className="font-bold text-gray-900 text-lg">Archief Raadplegen</h3>
               </div>
-              <p className="text-gray-700 font-medium">Archief raadplegen</p>
+              <p className="text-gray-700 font-medium">Afgesloten roosters</p>
+            </a>
+
+            {/* Diensten Bewerken - Rechts Onder */}
+            <a 
+              href="/services" 
+              className="bg-purple-50 p-6 rounded-xl hover:bg-purple-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md"
+            >
+              <div className="flex items-center mb-3">
+                <span className="text-2xl mr-3">⚙️</span>
+                <h3 className="font-bold text-purple-900 text-lg">Diensten Bewerken</h3>
+              </div>
+              <p className="text-purple-700 font-medium">Dienst configuratie</p>
             </a>
           </div>
 
