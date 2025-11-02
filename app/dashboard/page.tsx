@@ -1,14 +1,15 @@
 'use client';
-import { PRAKTIJK_LOGO_BASE64 } from '../_components/logoBase64';
 
 export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-4 md:p-8">
       <div className="max-w-6xl mx-auto">
         <div className="bg-white rounded-xl shadow-lg p-6 md:p-8">
-          {/* Header with real Logo */}
+          {/* Header with emoji logo matching site look&feel (teal/green) */}
           <div className="mb-6 flex items-center">
-            <img src={PRAKTIJK_LOGO_BASE64} alt="Praktijklogo" className="w-16 h-16 mr-4 rounded-full object-contain"/>
+            <div className="w-16 h-16 mr-4 rounded-full bg-gradient-to-br from-emerald-100 to-teal-100 flex items-center justify-center ring-1 ring-emerald-200">
+              <span className="text-2xl">✨</span>
+            </div>
             <h1 className="text-3xl md:text-4xl font-bold text-gray-900">
               Rooster Dashboard Verloskundigen Arnhem
             </h1>
@@ -16,10 +17,7 @@ export default function DashboardPage() {
           
           {/* Snelkoppeling Boven */}
           <div className="bg-gradient-to-r from-red-100 to-orange-100 rounded-lg p-4 mb-6 border border-red-200">
-            <a 
-              href="/current-roster" 
-              className="flex items-center justify-between hover:bg-red-50 rounded-lg p-2 transition-colors"
-            >
+            <a href="/current-roster" className="flex items-center justify-between hover:bg-red-50 rounded-lg p-2 transition-colors">
               <div className="flex items-center">
                 <span className="text-2xl mr-3">🔥</span>
                 <div>
@@ -33,41 +31,15 @@ export default function DashboardPage() {
 
           {/* Main Navigation Grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-            {/* Rooster Bewerken */}
-            <a href="/planning/edit" className="bg-indigo-50 p-6 rounded-xl hover:bg-indigo-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md">
-              <div className="flex items-center mb-3"><span className="text-2xl mr-3">📝</span><h3 className="font-bold text-indigo-900 text-lg">Rooster Bewerken</h3></div>
-              <p className="text-indigo-700 font-medium">Bestaande aanpassen</p>
-            </a>
-            {/* Rooster Ontwerpen */}
-            <a href="/planning/design" className="bg-blue-50 p-6 rounded-xl hover:bg-blue-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md">
-              <div className="flex items-center mb-3"><span className="text-2xl mr-3">📋</span><h3 className="font-bold text-blue-900 text-lg">Rooster Ontwerpen</h3></div>
-              <p className="text-blue-700 font-medium">Nieuwe planning starten</p>
-            </a>
-            {/* Medewerkers Beheer */}
-            <a href="/employees" className="bg-green-50 p-6 rounded-xl hover:bg-green-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md">
-              <div className="flex items-center mb-3"><span className="text-2xl mr-3">👥</span><h3 className="font-bold text-green-900 text-lg">Medewerkers Beheer</h3></div>
-              <p className="text-green-700 font-medium">Personeel + diensten</p>
-            </a>
-            {/* Rooster Rapporten */}
-            <a href="/reports" className="bg-orange-50 p-6 rounded-xl hover:bg-orange-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md">
-              <div className="flex items-center mb-3"><span className="text-2xl mr-3">📊</span><h3 className="font-bold text-orange-900 text-lg">Rooster Rapporten</h3></div>
-              <p className="text-orange-700 font-medium">Statistieken</p>
-            </a>
-            {/* Archief */}
-            <a href="/archived" className="bg-gray-50 p-6 rounded-xl hover:bg-gray-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md">
-              <div className="flex items-center mb-3"><span className="text-2xl mr-3">🔒</span><h3 className="font-bold text-gray-900 text-lg">Archief Raadplegen</h3></div>
-              <p className="text-gray-700 font-medium">Afgesloten roosters</p>
-            </a>
-            {/* Diensten Beheren (icoon 💼, geen ondertitel) */}
-            <a href="/services" className="bg-purple-50 p-6 rounded-xl hover:bg-purple-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md">
-              <div className="flex items-center mb-1"><span className="text-2xl mr-3">💼</span><h3 className="font-bold text-purple-900 text-lg">Diensten Beheren</h3></div>
-            </a>
+            <a href="/planning/edit" className="bg-indigo-50 p-6 rounded-xl hover:bg-indigo-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md"><div className="flex items-center mb-3"><span className="text-2xl mr-3">📝</span><h3 className="font-bold text-indigo-900 text-lg">Rooster Bewerken</h3></div><p className="text-indigo-700 font-medium">Bestaande aanpassen</p></a>
+            <a href="/planning/design" className="bg-blue-50 p-6 rounded-xl hover:bg-blue-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md"><div className="flex items-center mb-3"><span className="text-2xl mr-3">📋</span><h3 className="font-bold text-blue-900 text-lg">Rooster Ontwerpen</h3></div><p className="text-blue-700 font-medium">Nieuwe planning starten</p></a>
+            <a href="/employees" className="bg-green-50 p-6 rounded-xl hover:bg-green-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md"><div className="flex items-center mb-3"><span className="text-2xl mr-3">👥</span><h3 className="font-bold text-green-900 text-lg">Medewerkers Beheer</h3></div><p className="text-green-700 font-medium">Personeel + diensten</p></a>
+            <a href="/reports" className="bg-orange-50 p-6 rounded-xl hover:bg-orange-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md"><div className="flex items-center mb-3"><span className="text-2xl mr-3">📊</span><h3 className="font-bold text-orange-900 text-lg">Rooster Rapporten</h3></div><p className="text-orange-700 font-medium">Statistieken</p></a>
+            <a href="/archived" className="bg-gray-50 p-6 rounded-xl hover:bg-gray-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md"><div className="flex items-center mb-3"><span className="text-2xl mr-3">🔒</span><h3 className="font-bold text-gray-900 text-lg">Archief Raadplegen</h3></div><p className="text-gray-700 font-medium">Afgesloten roosters</p></a>
+            <a href="/services" className="bg-purple-50 p-6 rounded-xl hover:bg-purple-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md"><div className="flex items-center mb-1"><span className="text-2xl mr-3">💼</span><h3 className="font-bold text-purple-900 text-lg">Diensten Beheren</h3></div></a>
           </div>
 
-          {/* Footer */}
-          <div className="flex justify-end pt-4 border-t border-gray-200">
-            <a href="/settings" className="text-gray-600 hover:text-gray-800 text-sm flex items-center"><span className="mr-1">⚙️</span>Instellingen</a>
-          </div>
+          <div className="flex justify-end pt-4 border-t border-gray-200"><a href="/settings" className="text-gray-600 hover:text-gray-800 text-sm flex items-center"><span className="mr-1">⚙️</span>Instellingen</a></div>
         </div>
       </div>
     </div>
