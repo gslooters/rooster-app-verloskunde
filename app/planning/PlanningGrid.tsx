@@ -7,6 +7,8 @@ import '@/styles/planning.css';
 import '../toolbar.css';
 
 import { prepareRosterForExport, exportToExcel, exportToCSV, exportRosterToPDF, exportEmployeeToPDF } from '@/lib/export';
+import { getAllServices } from '@/lib/services/diensten-storage';
+import { Dienst } from '@/lib/types/dienst';
 
 function toDate(iso: string) { return new Date(iso + 'T00:00:00'); }
 function addDaysISO(iso: string, n: number) {
@@ -40,19 +42,26 @@ const EMPLOYEES = [
   { id: 'emp8', name: 'Hans' },
 ];
 
-const SERVICES = [
-  { code: 's', label: 'Shift (24u)', color: '#8B5CF6' },
-  { code: 'd', label: 'Dag', color: '#3B82F6' },
-  { code: 'sp', label: 'Spreekuur', color: '#059669' },
-  { code: 'echo', label: 'Echoscopie', color: '#EA580C' },
-  { code: 'vrij', label: 'Vrij', color: '#FEF3C7' },
-  { code: '-', label: '—', color: '#FFFFFF' },
-];
-
 export default function PlanningGrid({ rosterId }: { rosterId: string }) {
   const rosters = getRosters() as Roster[];
   const roster = rosters.find(r => r.id === rosterId);
   if (!roster) return <div className="p-6 text-red-600">Rooster niet gevonden.</div>;
+
+  // Load services from diensten storage
+  const [services, setServices] = useState<Dienst[]>([]);
+  
+  useEffect(() => {
+    try {
+      const allServices = getAllServices();
+      // Only show active services in dropdown
+      const activeServices = allServices.filter(s => s.actief);
+      setServices(activeServices);
+    } catch (err) {
+      console.error('Error loading services:', err);
+      // Fallback to empty array
+      setServices([]);
+    }
+  }, []);
 
   const start = roster.start_date;
   const isDraft = roster.status === 'draft';
@@ -83,6 +92,22 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
   }
   function toggleLock(date: string, empId: string) {
     setCells(prev => ({ ...prev, [date]: { ...prev[date], [empId]: { ...prev[date][empId], locked: !prev[date][empId].locked } } }));
+  }
+
+  // Helper to get service info (color, display name)
+  function getServiceInfo(serviceCode: string) {
+    if (!serviceCode) return { color: '#FFFFFF', displayName: '—' };
+    
+    const service = services.find(s => s.code === serviceCode);
+    if (service) {
+      return { 
+        color: service.kleur, 
+        displayName: `${service.code} - ${service.naam}` 
+      };
+    }
+    
+    // Fallback for unknown services
+    return { color: '#E5E7EB', displayName: serviceCode };
   }
 
   // Export helpers
@@ -165,8 +190,7 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
                   const available = isAvailable(roster.id, emp.id, d);
                   const cell = cells[d]?.[emp.id];
                   const code = cell?.service ?? '';
-                  const svc = SERVICES.find(s => s.code === code);
-                  const bg = code === 'vrij' ? '#FEF3C7' : svc?.color ?? undefined;
+                  const serviceInfo = getServiceInfo(code);
                   const locked = !!cell?.locked;
 
                   return (
@@ -175,12 +199,21 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
                         <select
                           value={code}
                           onChange={(e) => setService(d, emp.id, e.target.value)}
-                          className="text-[11px] border rounded px-1 py-[1px] h-[20px] min-w-[34px]"
-                          style={bg ? ({ backgroundColor: bg } as React.CSSProperties) : undefined}
+                          className="text-[11px] border rounded px-1 py-[1px] h-[20px] min-w-[50px]"
+                          style={{ backgroundColor: serviceInfo.color, color: serviceInfo.color === '#FFFFFF' || serviceInfo.color === '#FEF3C7' ? '#000000' : '#FFFFFF' } as React.CSSProperties}
                           disabled={!available || !isDraft || locked}
+                          title={code ? serviceInfo.displayName : 'Geen dienst'}
                         >
-                          <option value="">—</option>
-                          {SERVICES.map(s => (<option key={s.code} value={s.code}>{s.code}</option>))}
+                          <option value="" style={{ backgroundColor: '#FFFFFF', color: '#000000' }}>—</option>
+                          {services.map(s => (
+                            <option 
+                              key={s.code} 
+                              value={s.code}
+                              style={{ backgroundColor: s.kleur, color: s.kleur === '#FFFFFF' || s.kleur === '#FEF3C7' ? '#000000' : '#FFFFFF' }}
+                            >
+                              {s.code} - {s.naam}
+                            </option>
+                          ))}
                         </select>
 
                         <button
