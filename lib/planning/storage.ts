@@ -72,12 +72,39 @@ export function computeDefaultStart(): string {
 }
 
 export function validateStartMonday(dateStr: string): boolean {
-  const date = new Date(dateStr);
-  return date.getDay() === 1; // Monday = 1
+  // More robust date parsing to avoid timezone issues
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return false;
+  
+  const year = parseInt(parts[0]);
+  const month = parseInt(parts[1]) - 1; // JavaScript months are 0-based
+  const day = parseInt(parts[2]);
+  
+  const date = new Date(year, month, day);
+  const dayOfWeek = date.getDay();
+  
+  // Debug info (will be removed in production)
+  if (typeof window !== 'undefined') {
+    console.log('validateStartMonday debug:', {
+      input: dateStr,
+      parsed: { year, month: month + 1, day },
+      date: date.toISOString(),
+      dayOfWeek,
+      isMonday: dayOfWeek === 1
+    });
+  }
+  
+  return dayOfWeek === 1; // Monday = 1
 }
 
 export function computeEnd(startDate: string): string {
-  const start = new Date(startDate);
+  // Use same robust parsing
+  const parts = startDate.split('-');
+  const year = parseInt(parts[0]);
+  const month = parseInt(parts[1]) - 1;
+  const day = parseInt(parts[2]);
+  
+  const start = new Date(year, month, day);
   // 5 weeks = 35 days - 1 (to end on Sunday)
   const end = new Date(start);
   end.setDate(start.getDate() + 34);
