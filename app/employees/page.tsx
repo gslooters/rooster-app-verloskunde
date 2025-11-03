@@ -1,434 +1,213 @@
-'use client'
+'use client';
+import { useState, useEffect } from 'react';
+import { getAllServices } from '@/lib/services/diensten-storage';
+import { getServicesForEmployee, setServicesForEmployee, getAllEmployeeServiceMappings } from '@/lib/services/medewerker-diensten-storage';
+import { getAllEmployees, createEmployee, updateEmployee, canDeleteEmployee, removeEmployee } from '@/lib/services/employees-storage';
+import { Dienst } from '@/lib/types/dienst';
+import { Employee } from '@/lib/types/employee';
 
-import { useState } from 'react'
+export default function MedewerkersPage() {
+  const [services, setServices] = useState<Dienst[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [mappings, setMappings] = useState<Record<string, string[]>>({});
+  const [expandedEmployee, setExpandedEmployee] = useState<string | null>(null);
+  const [showEmployeeModal, setShowEmployeeModal] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [employeeFormData, setEmployeeFormData] = useState({ name: '', actief: true });
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
-// Types
-interface Employee {
-  id: string
-  name: string
-  email: string
-  phone: string
-  position: string
-  department: string
-  status: 'active' | 'inactive'
-  competencies: string[]
-  startDate: string
-  avatar?: string
-}
+  useEffect(() => { loadData(); }, []);
 
-const MOCK_EMPLOYEES: Employee[] = [
-  {
-    id: '1',
-    name: 'Dr. Sarah van der Berg',
-    email: 'sarah@verloskunde.nl',
-    phone: '+31 6 1234 5678',
-    position: 'Verloskundige',
-    department: 'Verloskunde',
-    status: 'active',
-    competencies: ['Echoscopie', 'Kraamzorg', 'Bevalling'],
-    startDate: '2020-03-15'
-  },
-  {
-    id: '2',
-    name: 'Lisa de Jong',
-    email: 'lisa@verloskunde.nl',
-    phone: '+31 6 2345 6789',
-    position: 'Kraamverzorgster',
-    department: 'Kraamzorg',
-    status: 'active',
-    competencies: ['Kraamzorg', 'Borstvoeding'],
-    startDate: '2021-01-10'
-  },
-  {
-    id: '3',
-    name: 'Emma Bakker',
-    email: 'emma@verloskunde.nl',
-    phone: '+31 6 3456 7890',
-    position: 'Verloskundige',
-    department: 'Verloskunde',
-    status: 'inactive',
-    competencies: ['Bevalling', 'Prenatale zorg'],
-    startDate: '2019-09-01'
-  }
-]
+  const loadData = () => {
+    try {
+      const allServices = getAllServices();
+      const allEmployees = getAllEmployees();
+      const allMappings = getAllEmployeeServiceMappings();
+      setServices(allServices);
+      setEmployees(allEmployees);
+      setMappings(allMappings);
+    } catch (err) { console.error('Error loading data:', err); }
+    finally { setIsLoading(false); }
+  };
 
-const COMPETENCIES_LIST = [
-  'Echoscopie', 'Kraamzorg', 'Bevalling', 'Prenatale zorg', 
-  'Postnatale zorg', 'Borstvoeding', 'Neonatologie', 'Pijnbestrijding'
-]
+  const openEmployeeModal = (employee?: Employee) => {
+    if (employee) { setEditingEmployee(employee); setEmployeeFormData({ name: employee.name, actief: employee.actief }); }
+    else { setEditingEmployee(null); setEmployeeFormData({ name: '', actief: true }); }
+    setError(''); setShowEmployeeModal(true);
+  };
+  const closeEmployeeModal = () => { setShowEmployeeModal(false); setEditingEmployee(null); setError(''); };
 
-export default function EmployeesPage() {
-  const [employees, setEmployees] = useState<Employee[]>(MOCK_EMPLOYEES)
-  const [showAddForm, setShowAddForm] = useState(false)
-  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all')
-  
-  const [newEmployee, setNewEmployee] = useState<Omit<Employee, 'id'>>({
-    name: '',
-    email: '',
-    phone: '',
-    position: 'Verloskundige',
-    department: 'Verloskunde',
-    status: 'active',
-    competencies: [],
-    startDate: new Date().toISOString().split('T')[0]
-  })
+  const handleEmployeeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault(); setError('');
+    try { editingEmployee ? updateEmployee(editingEmployee.id, employeeFormData) : createEmployee(employeeFormData); loadData(); closeEmployeeModal(); }
+    catch (err: any) { setError(err.message || 'Er is een fout opgetreden'); }
+  };
 
-  // Filter employees
-  const filteredEmployees = employees.filter(emp => {
-    const matchesSearch = emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         emp.email.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = filterStatus === 'all' || emp.status === filterStatus
-    return matchesSearch && matchesStatus
-  })
+  const handleEmployeeDelete = async (employee: Employee) => {
+    if (!confirm(`Weet je zeker dat je medewerker "${employee.name}" wilt verwijderen?`)) return;
+    try { const check = canDeleteEmployee(employee.id); if (!check.canDelete) { alert(`Kan deze medewerker niet verwijderen. ${check.reason}`); return; } removeEmployee(employee.id); loadData(); }
+    catch (err: any) { alert(err.message || 'Er is een fout opgetreden bij het verwijderen'); }
+  };
 
-  // Add new employee
-  const handleAddEmployee = () => {
-    if (!newEmployee.name || !newEmployee.email) {
-      alert('Naam en email zijn verplicht')
-      return
-    }
-    
-    const employee: Employee = {
-      ...newEmployee,
-      id: Date.now().toString()
-    }
-    
-    setEmployees([...employees, employee])
-    setNewEmployee({
-      name: '',
-      email: '',
-      phone: '',
-      position: 'Verloskundige',
-      department: 'Verloskunde',
-      status: 'active',
-      competencies: [],
-      startDate: new Date().toISOString().split('T')[0]
-    })
-    setShowAddForm(false)
-  }
+  const handleServiceToggle = (employeeId: string, serviceCode: string) => {
+    const currentServices = mappings[employeeId] || [];
+    const newServices = currentServices.includes(serviceCode)
+      ? currentServices.filter(code => code !== serviceCode)
+      : [...currentServices, serviceCode];
+    setServicesForEmployee(employeeId, newServices);
+    setMappings(prev => ({ ...prev, [employeeId]: newServices }));
+  };
 
-  // Toggle employee status
-  const toggleEmployeeStatus = (id: string) => {
-    setEmployees(employees.map(emp => 
-      emp.id === id 
-        ? { ...emp, status: emp.status === 'active' ? 'inactive' : 'active' }
-        : emp
-    ))
-  }
+  const getServiceStats = (serviceCode: string) => Object.keys(mappings).filter(empId => mappings[empId]?.includes(serviceCode)).length;
 
-  // Delete employee
-  const deleteEmployee = (id: string) => {
-    if (confirm('Weet je zeker dat je deze medewerker wilt verwijderen?')) {
-      setEmployees(employees.filter(emp => emp.id !== id))
-    }
-  }
-
-  // Toggle competency
-  const toggleCompetency = (competency: string) => {
-    const current = editingEmployee || newEmployee
-    const competencies = current.competencies.includes(competency)
-      ? current.competencies.filter(c => c !== competency)
-      : [...current.competencies, competency]
-    
-    if (editingEmployee) {
-      setEditingEmployee({ ...editingEmployee, competencies })
-    } else {
-      setNewEmployee({ ...newEmployee, competencies })
-    }
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Medewerkers laden...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 flex items-center">
-                <span className="mr-3">👥</span>
-                Medewerkers Beheer
-              </h1>
-              <p className="text-gray-600 mt-1">
-                Beheer personeelsgegevens en competenties
-              </p>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-4 md:p-8">
+      <div className="max-w-6xl mx-auto space-y-8">
+        <div className="bg-white rounded-xl shadow-lg p-6 md:p-8">
+          <div className="mb-8">
+            <div className="flex items-center mb-4">
+              <a href="/dashboard" className="text-blue-600 hover:text-blue-800 flex items-center mr-4"><span className="mr-1">←</span>Dashboard</a>
             </div>
-            <button
-              onClick={() => setShowAddForm(true)}
-              className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center"
-            >
-              <span className="mr-2">+</span>
-              Nieuwe Medewerker
-            </button>
-          </div>
-        </div>
-
-        {/* Filters */}
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Zoeken
-              </label>
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Zoek op naam of email..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Status Filter
-              </label>
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value as any)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              >
-                <option value="all">Alle medewerkers</option>
-                <option value="active">Alleen actief</option>
-                <option value="inactive">Alleen inactief</option>
-              </select>
-            </div>
-            <div className="flex items-end">
-              <div className="text-sm text-gray-600">
-                <strong>{filteredEmployees.length}</strong> van <strong>{employees.length}</strong> medewerkers
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2 flex items-center"><span className="text-2xl mr-3">👥</span>Medewerkers Beheren</h1>
+                <p className="text-gray-600">Beheer medewerkers en configureer welke diensten zij kunnen uitvoeren.</p>
               </div>
+              <button onClick={() => openEmployeeModal()} className="inline-flex items-center px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-md hover:shadow-lg"><span className="mr-2">+</span>Nieuwe Medewerker</button>
             </div>
           </div>
-        </div>
 
-        {/* Employee Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredEmployees.map((employee) => (
-            <div key={employee.id} className="bg-white rounded-lg shadow hover:shadow-md transition-shadow">
-              <div className="p-6">
-                {/* Header */}
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex items-center">
-                    <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mr-3">
-                      <span className="text-green-600 font-semibold text-lg">
-                        {employee.name.split(' ').map(n => n[0]).join('').substring(0, 2)}
-                      </span>
-                    </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {employees.map((employee) => (
+              <div key={employee.id} className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md transition-shadow">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center"><span className="text-blue-600 font-semibold text-lg">{employee.name.charAt(0).toUpperCase()}</span></div>
                     <div>
-                      <h3 className="font-semibold text-gray-900">{employee.name}</h3>
-                      <p className="text-sm text-gray-600">{employee.position}</p>
+                      <h3 className="text-lg font-semibold text-gray-900">{employee.name}</h3>
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${employee.actief ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-gray-100 text-gray-700 border border-gray-200'}`}>{employee.actief ? 'Actief' : 'Inactief'}</span>
                     </div>
                   </div>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    employee.status === 'active' 
-                      ? 'bg-green-100 text-green-800' 
-                      : 'bg-red-100 text-red-800'
-                  }`}>
-                    {employee.status === 'active' ? 'Actief' : 'Inactief'}
-                  </span>
                 </div>
-
-                {/* Contact Info */}
-                <div className="space-y-2 mb-4">
-                  <div className="flex items-center text-sm text-gray-600">
-                    <span className="mr-2">📧</span>
-                    {employee.email}
-                  </div>
-                  <div className="flex items-center text-sm text-gray-600">
-                    <span className="mr-2">📱</span>
-                    {employee.phone}
-                  </div>
-                  <div className="flex items-center text-sm text-gray-600">
-                    <span className="mr-2">🏢</span>
-                    {employee.department}
-                  </div>
-                </div>
-
-                {/* Competencies */}
-                <div className="mb-4">
-                  <p className="text-sm font-medium text-gray-700 mb-2">Competenties:</p>
-                  <div className="flex flex-wrap gap-1">
-                    {employee.competencies.map((comp, index) => (
-                      <span 
-                        key={index}
-                        className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full"
-                      >
-                        {comp}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Actions */}
                 <div className="flex gap-2">
-                  <button
-                    onClick={() => toggleEmployeeStatus(employee.id)}
-                    className={`flex-1 px-3 py-2 rounded text-sm font-medium transition-colors ${
-                      employee.status === 'active'
-                        ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                        : 'bg-green-100 text-green-700 hover:bg-green-200'
-                    }`}
-                  >
-                    {employee.status === 'active' ? 'Deactiveren' : 'Activeren'}
-                  </button>
-                  <button
-                    onClick={() => deleteEmployee(employee.id)}
-                    className="px-3 py-2 bg-gray-100 text-gray-700 rounded text-sm font-medium hover:bg-gray-200 transition-colors"
-                  >
-                    🗑️
-                  </button>
+                  <button onClick={() => openEmployeeModal(employee)} className="flex-1 px-3 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors text-sm font-medium">Bewerken</button>
+                  <button onClick={() => handleEmployeeDelete(employee)} className="flex-1 px-3 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 transition-colors text-sm font-medium">Verwijderen</button>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
 
-        {/* Add Employee Modal */}
-        {showAddForm && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="p-6">
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-2xl font-bold text-gray-900">Nieuwe Medewerker Toevoegen</h2>
-                  <button
-                    onClick={() => setShowAddForm(false)}
-                    className="text-gray-500 hover:text-gray-700"
-                  >
-                    ✕
-                  </button>
-                </div>
+        <div className="bg-white rounded-xl shadow-lg p-6 md:p-8">
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold text-gray-900 mb-2 flex items-center"><span className="text-xl mr-3">🛠️</span>Diensten Toewijzing</h2>
+            <p className="text-gray-600">Configureer welke diensten elke medewerker kan uitvoeren voor gerichte roosterplanning.</p>
+          </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Naam *
-                    </label>
-                    <input
-                      type="text"
-                      value={newEmployee.name}
-                      onChange={(e) => setNewEmployee({...newEmployee, name: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                      placeholder="Volledige naam"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Email *
-                    </label>
-                    <input
-                      type="email"
-                      value={newEmployee.email}
-                      onChange={(e) => setNewEmployee({...newEmployee, email: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                      placeholder="email@verloskunde.nl"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Telefoon
-                    </label>
-                    <input
-                      type="tel"
-                      value={newEmployee.phone}
-                      onChange={(e) => setNewEmployee({...newEmployee, phone: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                      placeholder="+31 6 1234 5678"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Positie
-                    </label>
-                    <select
-                      value={newEmployee.position}
-                      onChange={(e) => setNewEmployee({...newEmployee, position: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                    >
-                      <option value="Verloskundige">Verloskundige</option>
-                      <option value="Kraamverzorgster">Kraamverzorgster</option>
-                      <option value="Echoscopist">Echoscopist</option>
-                      <option value="Administratief">Administratief</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Afdeling
-                    </label>
-                    <select
-                      value={newEmployee.department}
-                      onChange={(e) => setNewEmployee({...newEmployee, department: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                    >
-                      <option value="Verloskunde">Verloskunde</option>
-                      <option value="Kraamzorg">Kraamzorg</option>
-                      <option value="Echoscopie">Echoscopie</option>
-                      <option value="Administratie">Administratie</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Startdatum
-                    </label>
-                    <input
-                      type="date"
-                      value={newEmployee.startDate}
-                      onChange={(e) => setNewEmployee({...newEmployee, startDate: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                    />
-                  </div>
+          <div className="mb-8 bg-gray-50 rounded-lg p-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">Diensten Overzicht</h3>
+            <div className="flex flex-wrap gap-2">
+              {services.filter(s => s.actief).map(service => (
+                <div key={service.id} className="flex items-center gap-2 bg-white px-3 py-2 rounded border">
+                  <div className="w-4 h-4 rounded-full" style={{ backgroundColor: service.kleur }}></div>
+                  <span className="text-sm font-medium">{service.code} - {service.naam}</span>
+                  <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">{getServiceStats(service.code)} medewerkers</span>
                 </div>
+              ))}
+            </div>
+          </div>
 
-                {/* Competencies */}
-                <div className="mb-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Competenties
-                  </label>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    {COMPETENCIES_LIST.map((comp) => (
-                      <label key={comp} className="flex items-center">
-                        <input
-                          type="checkbox"
-                          checked={newEmployee.competencies.includes(comp)}
-                          onChange={() => toggleCompetency(comp)}
-                          className="mr-2 rounded border-gray-300 text-green-600 focus:ring-green-500"
-                        />
-                        <span className="text-sm text-gray-700">{comp}</span>
-                      </label>
-                    ))}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-gray-900">Diensten per Medewerker</h3>
+            {employees.filter(emp => emp.actief).map((employee) => {
+              const employeeServices = mappings[employee.id] || [];
+              const isExpanded = expandedEmployee === employee.id;
+              return (
+                <div key={employee.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                  <div className="p-4 cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => setExpandedEmployee(isExpanded ? null : employee.id)}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center"><span className="text-blue-600 font-semibold">{employee.name.charAt(0)}</span></div>
+                        <div>
+                          <h4 className="text-lg font-semibold text-gray-900">{employee.name}</h4>
+                          <p className="text-sm text-gray-600">{employeeServices.length} diensten beschikbaar</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex gap-1">
+                          {employeeServices.slice(0, 4).map(code => {
+                            const service = services.find(s => s.code === code);
+                            return service ? (<div key={code} className="w-6 h-6 rounded text-xs font-bold text-white flex items-center justify-center" style={{ backgroundColor: service.kleur }} title={`${service.code} - ${service.naam}`}>{service.code.toUpperCase()}</div>) : null;
+                          })}
+                          {employeeServices.length > 4 && (<div className="w-6 h-6 rounded text-xs bg-gray-300 text-gray-700 flex items-center justify-center">+{employeeServices.length - 4}</div>)}
+                        </div>
+                        <span className={`transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}>▼</span>
+                      </div>
+                    </div>
                   </div>
+                  {isExpanded && (
+                    <div className="border-t border-gray-200 p-4 bg-gray-50">
+                      <h4 className="font-medium text-gray-900 mb-3">Beschikbare diensten configureren:</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        {services.filter(s => s.actief).map(service => (
+                          <label key={service.id} className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
+                            <input type="checkbox" checked={employeeServices.includes(service.code)} onChange={() => handleServiceToggle(employee.id, service.code)} className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                            <div className="flex items-center gap-2">
+                              <div className="w-5 h-5 rounded text-xs font-bold text-white flex items-center justify-center" style={{ backgroundColor: service.kleur }}>{service.code.toUpperCase()}</div>
+                              <div><div className="text-sm font-medium text-gray-900">{service.naam}</div><div className="text-xs text-gray-500">{service.beschrijving}</div></div>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                      <div className="mt-4 p-3 bg-blue-50 rounded-lg"><p className="text-sm text-blue-700"><strong>Info:</strong> In roosters ziet {employee.name} alleen de aangevinkte diensten in de dropdown.</p></div>
+                    </div>
+                  )}
                 </div>
+              );
+            })}
+          </div>
+        </div>
 
-                {/* Actions */}
-                <div className="flex gap-4 justify-end">
-                  <button
-                    onClick={() => setShowAddForm(false)}
-                    className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    Annuleren
-                  </button>
-                  <button
-                    onClick={handleAddEmployee}
-                    className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                  >
-                    Medewerker Toevoegen
-                  </button>
-                </div>
+        {showEmployeeModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-semibold text-gray-900">{editingEmployee ? 'Medewerker Bewerken' : 'Nieuwe Medewerker'}</h2>
+                <button onClick={closeEmployeeModal} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
               </div>
+              <form onSubmit={handleEmployeeSubmit}>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Naam</label>
+                    <input type="text" value={employeeFormData.name} onChange={(e) => setEmployeeFormData({ ...employeeFormData, name: e.target.value })} className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Voornaam Achternaam" required />
+                  </div>
+                  <div className="flex items-center">
+                    <input type="checkbox" id="actief" checked={employeeFormData.actief} onChange={(e) => setEmployeeFormData({ ...employeeFormData, actief: e.target.checked })} className="mr-2" />
+                    <label htmlFor="actief" className="text-sm font-medium text-gray-700">Actief (beschikbaar voor roostering)</label>
+                  </div>
+                </div>
+                {error && (<div className="mt-4 p-3 bg-red-100 border border-red-200 text-red-700 rounded-lg text-sm">{error}</div>)}
+                <div className="flex gap-3 mt-6">
+                  <button type="button" onClick={closeEmployeeModal} className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">Annuleren</button>
+                  <button type="submit" className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">{editingEmployee ? 'Bijwerken' : 'Aanmaken'}</button>
+                </div>
+              </form>
             </div>
           </div>
         )}
-
-        {/* Navigation */}
-        <div className="mt-8 text-center">
-          <a 
-            href="/dashboard" 
-            className="text-blue-600 hover:text-blue-800 underline flex items-center justify-center"
-          >
-            <span className="mr-1">←</span>
-            Terug naar Dashboard
-          </a>
-        </div>
       </div>
     </div>
-  )
+  );
 }
