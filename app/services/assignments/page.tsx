@@ -1,38 +1,45 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { getAllServices } from '@/lib/services/diensten-storage';
+import { getServicesForEmployee, setServicesForEmployee, getAllEmployeeServiceMappings } from '@/lib/services/medewerker-diensten-storage';
 import { getAllEmployees } from '@/lib/services/employees-storage';
-import { getServicesForEmployee, setServicesForEmployee } from '@/lib/services/medewerker-diensten-storage';
 import { Dienst } from '@/lib/types/dienst';
 import { Employee, getFullName } from '@/lib/types/employee';
 
 export default function ServiceAssignmentsPage() {
-  const [diensten, setDiensten] = useState<Dienst[]>([]);
+  const [services, setServices] = useState<Dienst[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [mappings, setMappings] = useState<Record<string, string[]>>({});
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [expandedEmployee, setExpandedEmployee] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    try {
-      const ds = getAllServices().filter(s => s.actief);
-      const emps = getAllEmployees().filter(e => e.actief);
-      setDiensten(ds);
-      setEmployees(emps);
-      const map: Record<string, string[]> = {};
-      emps.forEach(e => { map[e.id] = getServicesForEmployee(e.id) || []; });
-      setMappings(map);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
-  function toggleService(empId: string, code: string) {
-    const cur = mappings[empId] || [];
-    const next = cur.includes(code) ? cur.filter(c => c !== code) : [...cur, code];
-    setServicesForEmployee(empId, next);
-    setMappings(prev => ({ ...prev, [empId]: next }));
-  }
+  const loadData = () => {
+    try {
+      const allServices = getAllServices();
+      const allEmployees = getAllEmployees();
+      const allMappings = getAllEmployeeServiceMappings();
+      setServices(allServices);
+      setEmployees(allEmployees);
+      setMappings(allMappings);
+    } catch (err) { 
+      console.error('Error loading data:', err); 
+    } finally { 
+      setIsLoading(false); 
+    }
+  };
+
+  const handleServiceToggle = (employeeId: string, serviceCode: string) => {
+    const currentServices = mappings[employeeId] || [];
+    const newServices = currentServices.includes(serviceCode)
+      ? currentServices.filter(code => code !== serviceCode)
+      : [...currentServices, serviceCode];
+    setServicesForEmployee(employeeId, newServices);
+    setMappings(prev => ({ ...prev, [employeeId]: newServices }));
+  };
+
+  const getServiceStats = (serviceCode: string) => Object.keys(mappings).filter(empId => mappings[empId]?.includes(serviceCode)).length;
 
   if (isLoading) {
     return (
@@ -60,54 +67,95 @@ export default function ServiceAssignmentsPage() {
               <span className="text-2xl mr-3">🧩</span>
               Diensten Toewijzing
             </h1>
-            <p className="text-gray-600">Koppel voor elke medewerker welke diensten toegestaan zijn. Dit bepaalt de keuzes in het rooster.</p>
+            <p className="text-gray-600">Configureer welke diensten elke medewerker kan uitvoeren voor gerichte roosterplanning.</p>
           </div>
 
-          {/* Overzicht diensten */}
-          <div className="mb-6 bg-gray-50 rounded-lg p-4">
+          {/* Diensten Overzicht */}
+          <div className="mb-8 bg-gray-50 rounded-lg p-4">
             <h3 className="text-lg font-semibold text-gray-900 mb-3">Diensten Overzicht</h3>
             <div className="flex flex-wrap gap-2">
-              {diensten.map(s => (
-                <div key={s.id} className="flex items-center gap-2 bg-white px-3 py-2 rounded border">
-                  <div className="w-4 h-4 rounded-full" style={{ backgroundColor: s.kleur }}></div>
-                  <span className="text-sm font-medium">{s.code} - {s.naam}</span>
+              {services.filter(s => s.actief).map(service => (
+                <div key={service.id} className="flex items-center gap-2 bg-white px-3 py-2 rounded border">
+                  <div className="w-4 h-4 rounded-full" style={{ backgroundColor: service.kleur }}></div>
+                  <span className="text-sm font-medium">{service.code} - {service.naam}</span>
+                  <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">{getServiceStats(service.code)} medewerkers</span>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Lijst medewerkers */}
+          {/* Diensten per Medewerker */}
           <div className="space-y-4">
-            {employees.map(emp => {
-              const list = mappings[emp.id] || [];
-              const isExp = expanded === emp.id;
+            <h3 className="text-lg font-semibold text-gray-900">Diensten per Medewerker</h3>
+            {employees.filter(emp => emp.actief).map((employee) => {
+              const employeeServices = mappings[employee.id] || [];
+              const isExpanded = expandedEmployee === employee.id;
               return (
-                <div key={emp.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-                  <div className="p-4 cursor-pointer hover:bg-gray-50 flex items-center justify-between" onClick={() => setExpanded(isExp ? null : emp.id)}>
-                    <div>
-                      <div className="text-lg font-semibold text-gray-900">{getFullName(emp)}</div>
-                      <div className="text-sm text-gray-500">{list.length} diensten gekoppeld</div>
+                <div key={employee.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                  <div className="p-4 cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => setExpandedEmployee(isExpanded ? null : employee.id)}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                          <span className="text-blue-600 font-semibold">{employee.voornaam.charAt(0)}</span>
+                        </div>
+                        <div>
+                          <h4 className="text-lg font-semibold text-gray-900">{getFullName(employee)}</h4>
+                          <p className="text-sm text-gray-600">{employeeServices.length} diensten beschikbaar</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex gap-1">
+                          {employeeServices.slice(0, 4).map(code => {
+                            const service = services.find(s => s.code === code);
+                            return service ? (
+                              <div 
+                                key={code} 
+                                className="w-6 h-6 rounded text-xs font-bold text-white flex items-center justify-center" 
+                                style={{ backgroundColor: service.kleur }} 
+                                title={`${service.code} - ${service.naam}`}
+                              >
+                                {service.code.toUpperCase()}
+                              </div>
+                            ) : null;
+                          })}
+                          {employeeServices.length > 4 && (
+                            <div className="w-6 h-6 rounded text-xs bg-gray-300 text-gray-700 flex items-center justify-center">
+                              +{employeeServices.length - 4}
+                            </div>
+                          )}
+                        </div>
+                        <span className={`transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}>▼</span>
+                      </div>
                     </div>
-                    <span className={`transform transition-transform ${isExp ? 'rotate-180' : ''}`}>▼</span>
                   </div>
-                  {isExp && (
+                  {isExpanded && (
                     <div className="border-t border-gray-200 p-4 bg-gray-50">
+                      <h4 className="font-medium text-gray-900 mb-3">Beschikbare diensten configureren:</h4>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                        {diensten.map(s => (
-                          <label key={s.id} className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
-                            <input type="checkbox" checked={list.includes(s.code)} onChange={() => toggleService(emp.id, s.code)} className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                        {services.filter(s => s.actief).map(service => (
+                          <label key={service.id} className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
+                            <input 
+                              type="checkbox" 
+                              checked={employeeServices.includes(service.code)} 
+                              onChange={() => handleServiceToggle(employee.id, service.code)} 
+                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" 
+                            />
                             <div className="flex items-center gap-2">
-                              <div className="w-5 h-5 rounded text-xs font-bold text-white flex items-center justify-center" style={{ backgroundColor: s.kleur }}>{s.code.toUpperCase()}</div>
+                              <div className="w-5 h-5 rounded text-xs font-bold text-white flex items-center justify-center" style={{ backgroundColor: service.kleur }}>
+                                {service.code.toUpperCase()}
+                              </div>
                               <div>
-                                <div className="text-sm font-medium text-gray-900">{s.naam}</div>
-                                <div className="text-xs text-gray-500">{s.beschrijving}</div>
+                                <div className="text-sm font-medium text-gray-900">{service.naam}</div>
+                                <div className="text-xs text-gray-500">{service.beschrijving}</div>
                               </div>
                             </div>
                           </label>
                         ))}
                       </div>
-                      <div className="mt-4 p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
-                        De geselecteerde diensten verschijnen als keuzes voor {emp.voornaam} in het rooster.
+                      <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                        <p className="text-sm text-blue-700">
+                          <strong>Info:</strong> In roosters ziet {employee.voornaam} alleen de aangevinkte diensten in de dropdown.
+                        </p>
                       </div>
                     </div>
                   )}
