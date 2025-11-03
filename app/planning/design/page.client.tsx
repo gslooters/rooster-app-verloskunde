@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { loadRosterDesignData, updateEmployeeMaxShifts, toggleEmployeeUnavailable, saveRosterDesignData } from '@/lib/planning/rosterDesign';
+import { loadRosterDesignData, updateEmployeeMaxShifts, toggleUnavailability } from '@/lib/planning/rosterDesign';
 import type { RosterDesignData, RosterEmployee } from '@/lib/types/roster';
 
 export default function DesignPageClient() {
@@ -37,7 +37,7 @@ export default function DesignPageClient() {
     setLoading(false);
   }, [rosterId]);
 
-  function updateMaxShifts(empId: string, maxShifts: number) {
+  function updateMaxShiftsHandler(empId: string, maxShifts: number) {
     if (!rosterId || !designData) return;
     updateEmployeeMaxShifts(rosterId, empId, maxShifts);
     const updated = loadRosterDesignData(rosterId);
@@ -46,7 +46,7 @@ export default function DesignPageClient() {
 
   function toggleUnavailable(empId: string, date: string) {
     if (!rosterId || !designData) return;
-    toggleEmployeeUnavailable(rosterId, empId, date);
+    toggleUnavailability(rosterId, empId, date);
     const updated = loadRosterDesignData(rosterId);
     if (updated) { setDesignData(updated); setEmployees(updated.employees); }
   }
@@ -188,7 +188,7 @@ export default function DesignPageClient() {
                       min="0"
                       max="35"
                       value={emp.maxShifts}
-                      onChange={(e) => updateMaxShifts(emp.id, parseInt(e.target.value) || 0)}
+                      onChange={(e) => updateMaxShiftsHandler(emp.id, parseInt(e.target.value) || 0)}
                       className="w-20 px-2 py-1 border border-gray-300 rounded text-center focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                     {(emp.maxShifts < 0 || emp.maxShifts > 35) && (
@@ -197,7 +197,7 @@ export default function DesignPageClient() {
                   </td>
                   {weeks.map(week =>
                     week.dates.map(date => {
-                      const isUnavailable = designData.unavailability?.[emp.id]?.[date] || false;
+                      const isUnavailable = designData.unavailabilityData?.[emp.id]?.[date] || false;
                       return (
                         <td key={date} className="border-b p-1 text-center">
                           <button
