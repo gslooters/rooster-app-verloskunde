@@ -41,7 +41,7 @@ export default function ServicesHubPage() {
                 <span className="text-2xl mr-3">📅</span>
                 <h3 className="font-bold text-blue-900 text-lg">Diensten per dagsoort</h3>
               </div>
-              <p className="text-blue-700">In ontwikkeling — later invullen.</p>
+              <p className="text-blue-700">Stel minimum/maximum bezetting per dag in voor roosterplanning.</p>
             </a>
           </div>
         </div>
