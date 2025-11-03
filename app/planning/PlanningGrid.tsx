@@ -9,6 +9,7 @@ import '../toolbar.css';
 
 import { prepareRosterForExport, exportToExcel, exportToCSV, exportRosterToPDF, exportEmployeeToPDF } from '@/lib/export';
 import { getAllServices } from '@/lib/services/diensten-storage';
+import { getServicesForEmployee } from '@/lib/services/medewerker-diensten-storage';
 import { Dienst } from '@/lib/types/dienst';
 
 function toDate(iso: string) { return new Date(iso + 'T00:00:00'); }
@@ -48,17 +49,27 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
   const roster = rosters.find(r => r.id === rosterId);
   if (!roster) return <div className="p-6 text-red-600">Rooster niet gevonden.</div>;
 
-  // Load services from diensten storage
-  const [services, setServices] = useState<Dienst[]>([]);
+  const [allServices, setAllServices] = useState<Dienst[]>([]);
+  const [employeeServiceMappings, setEmployeeServiceMappings] = useState<Record<string, Dienst[]>>({});
   
   useEffect(() => {
     try {
-      const allServices = getAllServices();
-      const activeServices = allServices.filter(s => s.actief);
-      setServices(activeServices);
+      const services = getAllServices();
+      setAllServices(services);
+      
+      // Load employee-specific services
+      const mappings: Record<string, Dienst[]> = {};
+      EMPLOYEES.forEach(emp => {
+        const serviceCodes = getServicesForEmployee(emp.id);
+        mappings[emp.id] = serviceCodes
+          .map(code => services.find(s => s.code === code))
+          .filter(Boolean) as Dienst[];
+      });
+      setEmployeeServiceMappings(mappings);
     } catch (err) {
       console.error('Error loading services:', err);
-      setServices([]);
+      setAllServices([]);
+      setEmployeeServiceMappings({});
     }
   }, []);
 
@@ -95,9 +106,14 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
 
   function getServiceInfo(serviceCode: string) {
     if (!serviceCode) return { color: '#FFFFFF', displayName: '—' };
-    const service = services.find(s => s.code === serviceCode);
+    const service = allServices.find(s => s.code === serviceCode);
     if (service) return { color: service.kleur, displayName: `${service.code} - ${service.naam}` };
     return { color: '#E5E7EB', displayName: serviceCode };
+  }
+
+  // Get services available to specific employee
+  function getEmployeeServices(employeeId: string): Dienst[] {
+    return employeeServiceMappings[employeeId] || [];
   }
 
   const exportable = useMemo(() => prepareRosterForExport(
@@ -151,10 +167,10 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
                 const holiday = isDutchHoliday(d);
                 const colorClass = holiday ? 'text-red-700 font-semibold' : weekend ? 'text-red-600' : 'text-gray-800';
                 return (
-                  <th key={`d-${d}`} className="sticky top-8 z-20 bg-gray-50 border px-1.5 py-1 text-[11px]">
+                  <th key={`d-${d}`} className="sticky top-8 z-20 bg-gray-50 border px-2 py-1 text-[12px]">
                     <div className={`flex flex-col items-start ${colorClass}`}>
-                      <span className="uppercase leading-3">{short}</span>
-                      <span className="leading-3">{formatDDMM(d)}</span>
+                      <span className="uppercase leading-4">{short}</span>
+                      <span className="leading-4">{formatDDMM(d)}</span>
                     </div>
                   </th>
                 );
@@ -163,62 +179,85 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
           </thead>
 
           <tbody>
-            {EMPLOYEES.map(emp => (
-              <tr key={emp.id}>
-                <td className="sticky left-0 z-10 bg-white border px-2 py-1 font-medium w-[120px]">
-                  <button
-                    className={`text-left ${isDraft ? 'underline decoration-dotted' : ''}`}
-                    onClick={() => isDraft && setPopupFor(emp)}
-                    title={isDraft ? 'Klik om beschikbaarheid te bewerken' : 'Alleen-lezen'}
-                  >
-                    {emp.name}
-                  </button>
-                </td>
-                {days.map(d => {
-                  const available = isAvailable(roster.id, emp.id, d);
-                  const cell = cells[d]?.[emp.id];
-                  const code = cell?.service ?? '';
-                  const serviceInfo = getServiceInfo(code);
-                  const locked = !!cell?.locked;
-
-                  return (
-                    <td key={d} className={`border p-[2px] ${available ? '' : 'unavailable'}`} title={available ? '' : 'Niet beschikbaar'}>
-                      <div className="flex items-center gap-[4px]">
-                        <select
-                          value={code}
-                          onChange={(e) => setService(d, emp.id, e.target.value)}
-                          className="text-[11px] border rounded px-1 py-[1px] h-[20px] min-w-[34px] select compact-service"
-                          style={{ backgroundColor: serviceInfo.color, color: serviceInfo.color === '#FFFFFF' || serviceInfo.color === '#FEF3C7' ? '#000000' : '#FFFFFF' } as React.CSSProperties}
-                          disabled={!available || !isDraft || locked}
-                          title={code ? serviceInfo.displayName : 'Geen dienst'}
-                        >
-                          <option value="" style={{ backgroundColor: '#FFFFFF', color: '#000000' }}>—</option>
-                          {services.map(s => (
-                            <option 
-                              key={s.code} 
-                              value={s.code}
-                              style={{ backgroundColor: s.kleur, color: s.kleur === '#FFFFFF' || s.kleur === '#FEF3C7' ? '#000000' : '#FFFFFF' }}
-                            >
-                              {s.code} - {s.naam}
-                            </option>
-                          ))}
-                        </select>
-
-                        <button
-                          type="button"
-                          title={locked ? 'Ontgrendel' : 'Vergrendel'}
-                          onClick={() => isDraft && available && toggleLock(d, emp.id)}
-                          className={`text-[10px] leading-none w-[20px] h-[20px] rounded border flex items-center justify-center ${locked ? 'bg-gray-800 text-white' : 'bg-white'}`}
-                          disabled={!isDraft || !available}
-                        >
-                          🔒
-                        </button>
+            {EMPLOYEES.map(emp => {
+              const availableServices = getEmployeeServices(emp.id);
+              
+              return (
+                <tr key={emp.id} className="tr-row-30">
+                  <td className="sticky left-0 z-10 bg-white border px-2 py-1 font-medium w-[120px]">
+                    <div className="flex items-center justify-between">
+                      <button
+                        className={`text-left ${isDraft ? 'underline decoration-dotted' : ''}`}
+                        onClick={() => isDraft && setPopupFor(emp)}
+                        title={isDraft ? 'Klik om beschikbaarheid te bewerken' : 'Alleen-lezen'}
+                      >
+                        {emp.name}
+                      </button>
+                      <div className="flex gap-0.5">
+                        {availableServices.slice(0, 3).map(s => (
+                          <div 
+                            key={s.code}
+                            className="w-3 h-3 rounded-sm text-[8px] font-bold text-white flex items-center justify-center"
+                            style={{ backgroundColor: s.kleur }}
+                            title={`Kan: ${s.naam}`}
+                          >
+                            {s.code.charAt(0).toUpperCase()}
+                          </div>
+                        ))}
+                        {availableServices.length > 3 && (
+                          <div className="w-3 h-3 rounded-sm text-[7px] bg-gray-400 text-white flex items-center justify-center" title={`+${availableServices.length - 3} meer`}>
+                            +
+                          </div>
+                        )}
                       </div>
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
+                    </div>
+                  </td>
+                  {days.map(d => {
+                    const available = isAvailable(roster.id, emp.id, d);
+                    const cell = cells[d]?.[emp.id];
+                    const code = cell?.service ?? '';
+                    const serviceInfo = getServiceInfo(code);
+                    const locked = !!cell?.locked;
+
+                    return (
+                      <td key={d} className={`border p-[2px] ${available ? '' : 'unavailable'}`} title={available ? '' : 'Niet beschikbaar'}>
+                        <div className="flex items-center gap-[4px]">
+                          <select
+                            value={code}
+                            onChange={(e) => setService(d, emp.id, e.target.value)}
+                            className="text-[12px] border rounded px-1 h-[24px] min-w-[34px] select compact-service"
+                            style={{ backgroundColor: serviceInfo.color, color: serviceInfo.color === '#FFFFFF' || serviceInfo.color === '#FEF3C7' ? '#000000' : '#FFFFFF' } as React.CSSProperties}
+                            disabled={!available || !isDraft || locked}
+                            title={code ? serviceInfo.displayName : 'Geen dienst'}
+                          >
+                            <option value="" style={{ backgroundColor: '#FFFFFF', color: '#000000' }}>—</option>
+                            {availableServices.map(s => (
+                              <option 
+                                key={s.code} 
+                                value={s.code}
+                                style={{ backgroundColor: s.kleur, color: s.kleur === '#FFFFFF' || s.kleur === '#FEF3C7' ? '#000000' : '#FFFFFF' }}
+                              >
+                                {s.code} - {s.naam}
+                              </option>
+                            ))}
+                          </select>
+
+                          <button
+                            type="button"
+                            title={locked ? 'Ontgrendel' : 'Vergrendel'}
+                            onClick={() => isDraft && available && toggleLock(d, emp.id)}
+                            className={`text-[10px] leading-none w-[22px] h-[22px] rounded border flex items-center justify-center ${locked ? 'bg-gray-800 text-white' : 'bg-white'}`}
+                            disabled={!isDraft || !available}
+                          >
+                            🔒
+                          </button>
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
