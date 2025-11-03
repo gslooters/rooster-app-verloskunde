@@ -8,8 +8,7 @@ import DesignPageClient from './page.client';
 
 function sleep(ms: number) { return new Promise(res => setTimeout(res, ms)); }
 
-// Zorg dat PageClientGate expliciet een children prop verwacht
-// type GateProps = { children: ReactNode }; // (alleen documentair, import verzorgt type al)
+// Los de type-eis op door PageClientGate lazy te importeren waarbij children expliciet wordt meegegeven.
 
 export default function RosterDesignPageWrapper(): JSX.Element {
   const searchParams = useSearchParams();
@@ -53,7 +52,7 @@ export default function RosterDesignPageWrapper(): JSX.Element {
 
   if (!ready) return <></>;
 
-  // Gebruik expliciet de children prop zodat TS dit ziet
   const child: ReactNode = <DesignPageClient />;
-  return <PageClientGate>{child}</PageClientGate>;
+  // Forceer herkenning van de children prop via expliciete JSX met children attribuut
+  return (<PageClientGate children={child} />);
 }
