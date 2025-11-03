@@ -40,8 +40,9 @@ export default function Wizard() {
       const end = computeEnd(start);
       const roster: Roster = { id, start_date: start, end_date: end, status: 'draft', created_at: new Date().toISOString() };
       const list = readRosters().filter(x => x.id !== roster.id); list.push(roster); writeRosters(list);
+      // Sprint: sla ook lastRosterId op voor self-heal
+      if (typeof window !== 'undefined') { localStorage.setItem('lastRosterId', id); }
       initializeRosterDesign(roster.id);
-      // Router-fix: gebruik Next router met query object
       router.push(`/planning/design?rosterId=${id}`);
     } catch (err) {
       console.error('Error creating roster:', err);
@@ -64,9 +65,7 @@ export default function Wizard() {
           <div className="border rounded px-2 py-1 w-24 bg-gray-100 text-gray-600 text-center">{FIXED_WEEKS}</div>
         </div>
         <p className="text-sm text-gray-600">Alle roosters worden gemaakt voor {FIXED_WEEKS} weken.</p>
-        <button type="button" onClick={openConfirm} disabled={isCreating} className="px-3 py-2 border rounded bg-gray-900 text-white w-fit disabled:bg-gray-400 disabled:cursor-not-allowed">
-          {isCreating ? 'Rooster wordt aangemaakt...' : 'Creëer rooster'}
-        </button>
+        <button type="button" onClick={openConfirm} disabled={isCreating} className="px-3 py-2 border rounded bg-gray-900 text-white w-fit disabled:bg-gray-400 disabled:cursor-not-allowed">{isCreating ? 'Rooster wordt aangemaakt...' : 'Creëer rooster'}</button>
       </div>
 
       {showConfirm && (
