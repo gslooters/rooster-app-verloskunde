@@ -6,10 +6,14 @@ import { getActiveEmployees, type Employee } from '@/lib/planning/employees';
 
 function genId() { return 'r_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
 
+// Sprint 1.1: Vast aantal weken op 5
+const FIXED_WEEKS = 5;
+
 export default function Wizard() {
   const defaultStart = useMemo(() => computeDefaultStart(), []);
   const [start, setStart] = useState<string>(defaultStart);
-  const [weeks, setWeeks] = useState<number>(5);
+  // Sprint 1.1: Weeks niet meer aanpasbaar
+  const weeks = FIXED_WEEKS;
 
   const [activeEmployees, setActiveEmployees] = useState<Employee[]>([]);
   const [showConfirm, setShowConfirm] = useState<boolean>(false);
@@ -62,17 +66,17 @@ export default function Wizard() {
           />
         </label>
 
-        <label className="flex items-center justify-between gap-3">
+        {/* Sprint 1.1: Toon vast aantal weken, niet meer bewerkbaar */}
+        <div className="flex items-center justify-between gap-3">
           <span>Aantal weken</span>
-          <input
-            type="number"
-            min={5}
-            max={12}
-            value={weeks}
-            onChange={(e) => setWeeks(Number(e.target.value))}
-            className="border rounded px-2 py-1 w-24"
-          />
-        </label>
+          <div className="border rounded px-2 py-1 w-24 bg-gray-100 text-gray-600 text-center">
+            {FIXED_WEEKS}
+          </div>
+        </div>
+        
+        <p className="text-sm text-gray-600">
+          Alle roosters worden gemaakt voor {FIXED_WEEKS} weken.
+        </p>
 
         <button
           type="button"
