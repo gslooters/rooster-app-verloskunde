@@ -11,17 +11,34 @@ export default function RosterDesignPageWrapper() {
   const [checked, setChecked] = useState(false);
 
   useEffect(() => {
-    const id = searchParams.get('rosterId');
-    if (!id) {
-      const rosters = readRosters();
-      if (rosters && rosters.length > 0) {
-        const latest = [...rosters].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
-        router.replace(`/planning/design?rosterId=${latest.id}`);
+    let id = searchParams.get('rosterId');
+
+    // 1) Query param
+    if (id) { setChecked(true); return; }
+
+    // 2) lastRosterId uit localStorage
+    if (typeof window !== 'undefined') {
+      const lastId = localStorage.getItem('lastRosterId');
+      if (lastId && lastId.length > 0) {
+        router.replace(`/planning/design?rosterId=${lastId}`);
+        setChecked(true);
+        return;
       }
-      setChecked(true);
-    } else {
-      setChecked(true);
     }
+
+    // 3) readRosters() -> nieuwste
+    const rosters = readRosters();
+    if (rosters && rosters.length > 0) {
+      const latest = [...rosters].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+      if (typeof window !== 'undefined') { localStorage.setItem('lastRosterId', latest.id); }
+      router.replace(`/planning/design?rosterId=${latest.id}`);
+      setChecked(true);
+      return;
+    }
+
+    // 4) Geen context -> naar wizard met melding
+    router.replace('/planning/new?reason=no-roster');
+    setChecked(true);
   }, [searchParams, router]);
 
   if (!checked) {
