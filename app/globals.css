@@ -153,6 +153,30 @@ html, body {
   overflow-x: hidden;
 }
 
+/* Sprint 1.1: NB styling voor niet-beschikbaar markering */
+.not-available {
+  background: transparent !important;
+  color: #dc2626 !important; /* Rood */
+  font-weight: bold !important;
+  font-size: 14px !important;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none !important;
+}
+
+/* Print styling voor NB */
+@media print {
+  .not-available {
+    color: #dc2626 !important;
+    font-weight: bold !important;
+    background: white !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
 @layer components {
   .btn {
     @apply inline-flex items-center justify-center rounded-lg px-4 py-2 font-medium transition-all duration-200 cursor-pointer border-0;
@@ -184,5 +208,18 @@ html, body {
 
   .card {
     @apply bg-[var(--color-surface)] border border-[var(--color-card-border)] rounded-xl shadow-sm;
+  }
+
+  /* Sprint 1.1: Diensten validatie input styling */
+  .shifts-input {
+    @apply w-16 text-center border rounded px-2 py-1 text-sm;
+  }
+
+  .shifts-input:invalid {
+    @apply border-red-500 bg-red-50;
+  }
+
+  .shifts-input:valid {
+    @apply border-green-500 bg-green-50;
   }
 }
