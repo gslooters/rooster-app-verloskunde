@@ -366,7 +366,7 @@ export default function ServicesByDayTypePage() {
                                 {getBezettingText(rule.minBezetting, rule.maxBezetting)}
                               </div>
                               {hasError && (
-                                <div className="text-xs text-red-600 mt-1 font-medium">Min > Max</div>
+                                <div className="text-xs text-red-600 mt-1 font-medium">Min {'>'} Max</div>
                               )}
                             </td>
                           );
