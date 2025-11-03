@@ -5,40 +5,52 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { readRosters } from '@/lib/planning/storage';
 import DesignPageClient from './page.client';
 
+function sleep(ms: number) { return new Promise(res => setTimeout(res, ms)); }
+
 export default function RosterDesignPageWrapper() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [checked, setChecked] = useState(false);
 
   useEffect(() => {
-    let id = searchParams.get('rosterId');
+    let isActive = true;
 
-    // 1) Query param
-    if (id) { setChecked(true); return; }
+    async function resolveRoute() {
+      // 0) directe query
+      let id = searchParams.get('rosterId');
+      if (id) { if (isActive) setChecked(true); return; }
 
-    // 2) lastRosterId uit localStorage
-    if (typeof window !== 'undefined') {
-      const lastId = localStorage.getItem('lastRosterId');
-      if (lastId && lastId.length > 0) {
-        router.replace(`/planning/design?rosterId=${lastId}`);
-        setChecked(true);
-        return;
+      // micro-retry om storage te laten 'landen'
+      await sleep(120);
+
+      // 1) recentDesignRoute (diep-link)
+      if (typeof window !== 'undefined') {
+        const recent = localStorage.getItem('recentDesignRoute');
+        if (recent) { router.replace(recent); if (isActive) setChecked(true); return; }
       }
+
+      // 2) lastRosterId
+      if (typeof window !== 'undefined') {
+        const lastId = localStorage.getItem('lastRosterId');
+        if (lastId && lastId.length > 0) { router.replace(`/planning/design?rosterId=${lastId}`); if (isActive) setChecked(true); return; }
+      }
+
+      // 3) readRosters() -> nieuwste
+      const rosters = readRosters();
+      if (rosters && rosters.length > 0) {
+        const latest = [...rosters].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+        if (typeof window !== 'undefined') { localStorage.setItem('lastRosterId', latest.id); localStorage.setItem('recentDesignRoute', `/planning/design?rosterId=${latest.id}`); }
+        router.replace(`/planning/design?rosterId=${latest.id}`);
+        if (isActive) setChecked(true); return;
+      }
+
+      // 4) geen context -> wizard
+      router.replace('/planning/new?reason=no-roster');
+      if (isActive) setChecked(true);
     }
 
-    // 3) readRosters() -> nieuwste
-    const rosters = readRosters();
-    if (rosters && rosters.length > 0) {
-      const latest = [...rosters].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
-      if (typeof window !== 'undefined') { localStorage.setItem('lastRosterId', latest.id); }
-      router.replace(`/planning/design?rosterId=${latest.id}`);
-      setChecked(true);
-      return;
-    }
-
-    // 4) Geen context -> naar wizard met melding
-    router.replace('/planning/new?reason=no-roster');
-    setChecked(true);
+    resolveRoute();
+    return () => { isActive = false; };
   }, [searchParams, router]);
 
   if (!checked) {
