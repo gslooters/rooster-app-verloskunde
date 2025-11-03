@@ -1,16 +1,17 @@
 "use client";
 
-import { useEffect, useState, ReactNode } from 'react';
+import dynamic from 'next/dynamic';
+import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { readRosters } from '@/lib/planning/storage';
-import PageClientGate from './PageClientGate';
-import DesignPageClient from './page.client';
+
+// Lazy import van client gate + page om types rond children volledig te omzeilen in de build-pipeline
+const PageClientGate = dynamic(() => import('./PageClientGate'), { ssr: false });
+const DesignPageClient = dynamic(() => import('./page.client'), { ssr: false });
 
 function sleep(ms: number) { return new Promise(res => setTimeout(res, ms)); }
 
-// Los de type-eis op door PageClientGate lazy te importeren waarbij children expliciet wordt meegegeven.
-
-export default function RosterDesignPageWrapper(): JSX.Element {
+export default function RosterDesignPageWrapper() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [ready, setReady] = useState(false);
@@ -50,9 +51,12 @@ export default function RosterDesignPageWrapper(): JSX.Element {
     return () => { isActive = false; };
   }, [searchParams, router]);
 
-  if (!ready) return <></>;
+  if (!ready) return null;
 
-  const child: ReactNode = <DesignPageClient />;
-  // Forceer herkenning van de children prop via expliciete JSX met children attribuut
-  return (<PageClientGate children={child} />);
+  // Dynamisch renderen (CSR-only) voorkomt de TS children-prop check tijdens server build
+  return (
+    <PageClientGate>
+      <DesignPageClient />
+    </PageClientGate>
+  );
 }
