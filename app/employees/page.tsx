@@ -4,7 +4,7 @@ import { getAllServices } from '@/lib/services/diensten-storage';
 import { getServicesForEmployee, setServicesForEmployee, getAllEmployeeServiceMappings } from '@/lib/services/medewerker-diensten-storage';
 import { getAllEmployees, createEmployee, updateEmployee, canDeleteEmployee, removeEmployee } from '@/lib/services/employees-storage';
 import { Dienst } from '@/lib/types/dienst';
-import { Employee } from '@/lib/types/employee';
+import { Employee, getFullName, getRosterDisplayName } from '@/lib/types/employee';
 
 export default function MedewerkersPage() {
   const [services, setServices] = useState<Dienst[]>([]);
@@ -13,7 +13,7 @@ export default function MedewerkersPage() {
   const [expandedEmployee, setExpandedEmployee] = useState<string | null>(null);
   const [showEmployeeModal, setShowEmployeeModal] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
-  const [employeeFormData, setEmployeeFormData] = useState({ name: '', actief: true });
+  const [employeeFormData, setEmployeeFormData] = useState({ voornaam: '', achternaam: '', email: '', telefoon: '', actief: true });
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
@@ -32,8 +32,8 @@ export default function MedewerkersPage() {
   };
 
   const openEmployeeModal = (employee?: Employee) => {
-    if (employee) { setEditingEmployee(employee); setEmployeeFormData({ name: employee.name, actief: employee.actief }); }
-    else { setEditingEmployee(null); setEmployeeFormData({ name: '', actief: true }); }
+    if (employee) { setEditingEmployee(employee); setEmployeeFormData({ voornaam: employee.voornaam, achternaam: employee.achternaam, email: employee.email || '', telefoon: employee.telefoon || '', actief: employee.actief }); }
+    else { setEditingEmployee(null); setEmployeeFormData({ voornaam: '', achternaam: '', email: '', telefoon: '', actief: true }); }
     setError(''); setShowEmployeeModal(true);
   };
   const closeEmployeeModal = () => { setShowEmployeeModal(false); setEditingEmployee(null); setError(''); };
@@ -45,7 +45,7 @@ export default function MedewerkersPage() {
   };
 
   const handleEmployeeDelete = async (employee: Employee) => {
-    if (!confirm(`Weet je zeker dat je medewerker "${employee.name}" wilt verwijderen?`)) return;
+    if (!confirm(`Weet je zeker dat je medewerker "${getFullName(employee)}" wilt verwijderen?`)) return;
     try { const check = canDeleteEmployee(employee.id); if (!check.canDelete) { alert(`Kan deze medewerker niet verwijderen. ${check.reason}`); return; } removeEmployee(employee.id); loadData(); }
     catch (err: any) { alert(err.message || 'Er is een fout opgetreden bij het verwijderen'); }
   };
@@ -94,9 +94,9 @@ export default function MedewerkersPage() {
               <div key={employee.id} className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md transition-shadow">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center"><span className="text-blue-600 font-semibold text-lg">{employee.name.charAt(0).toUpperCase()}</span></div>
+                    <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center"><span className="text-blue-600 font-semibold text-lg">{employee.voornaam.charAt(0).toUpperCase()}</span></div>
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-900">{employee.name}</h3>
+                      <h3 className="text-lg font-semibold text-gray-900">{getFullName(employee)}</h3>
                       <span className={`px-2 py-1 text-xs font-medium rounded-full ${employee.actief ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-gray-100 text-gray-700 border border-gray-200'}`}>{employee.actief ? 'Actief' : 'Inactief'}</span>
                     </div>
                   </div>
@@ -139,9 +139,9 @@ export default function MedewerkersPage() {
                   <div className="p-4 cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => setExpandedEmployee(isExpanded ? null : employee.id)}>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center"><span className="text-blue-600 font-semibold">{employee.name.charAt(0)}</span></div>
+                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center"><span className="text-blue-600 font-semibold">{employee.voornaam.charAt(0)}</span></div>
                         <div>
-                          <h4 className="text-lg font-semibold text-gray-900">{employee.name}</h4>
+                          <h4 className="text-lg font-semibold text-gray-900">{getFullName(employee)}</h4>
                           <p className="text-sm text-gray-600">{employeeServices.length} diensten beschikbaar</p>
                         </div>
                       </div>
@@ -171,7 +171,7 @@ export default function MedewerkersPage() {
                           </label>
                         ))}
                       </div>
-                      <div className="mt-4 p-3 bg-blue-50 rounded-lg"><p className="text-sm text-blue-700"><strong>Info:</strong> In roosters ziet {employee.name} alleen de aangevinkte diensten in de dropdown.</p></div>
+                      <div className="mt-4 p-3 bg-blue-50 rounded-lg"><p className="text-sm text-blue-700"><strong>Info:</strong> In roosters ziet {getRosterDisplayName(employee)} alleen de aangevinkte diensten in de dropdown.</p></div>
                     </div>
                   )}
                 </div>
@@ -189,9 +189,23 @@ export default function MedewerkersPage() {
               </div>
               <form onSubmit={handleEmployeeSubmit}>
                 <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Voornaam *</label>
+                      <input type="text" value={employeeFormData.voornaam} onChange={(e) => setEmployeeFormData({ ...employeeFormData, voornaam: e.target.value })} className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="bijv. Anna" required />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Achternaam *</label>
+                      <input type="text" value={employeeFormData.achternaam} onChange={(e) => setEmployeeFormData({ ...employeeFormData, achternaam: e.target.value })} className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="bijv. van der Berg" required />
+                    </div>
+                  </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Naam</label>
-                    <input type="text" value={employeeFormData.name} onChange={(e) => setEmployeeFormData({ ...employeeFormData, name: e.target.value })} className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Voornaam Achternaam" required />
+                    <label className="block text-sm font-medium text-gray-700 mb-2">E-mailadres</label>
+                    <input type="email" value={employeeFormData.email} onChange={(e) => setEmployeeFormData({ ...employeeFormData, email: e.target.value })} className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="naam@verloskunde-arnhem.nl" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Telefoonnummer</label>
+                    <input type="tel" value={employeeFormData.telefoon} onChange={(e) => setEmployeeFormData({ ...employeeFormData, telefoon: e.target.value })} className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="+31 6 1234 5678" />
                   </div>
                   <div className="flex items-center">
                     <input type="checkbox" id="actief" checked={employeeFormData.actief} onChange={(e) => setEmployeeFormData({ ...employeeFormData, actief: e.target.checked })} className="mr-2" />
