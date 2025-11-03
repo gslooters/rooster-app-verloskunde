@@ -5,8 +5,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { readRosters } from '@/lib/planning/storage';
 
-// Lazy import van client gate + page om types rond children volledig te omzeilen in de build-pipeline
-const PageClientGate = dynamic(() => import('./PageClientGate'), { ssr: false });
+// CSR-only: laadt gate niet meer als component maar inlined render om TS children-prop uit de keten te halen
 const DesignPageClient = dynamic(() => import('./page.client'), { ssr: false });
 
 function sleep(ms: number) { return new Promise(res => setTimeout(res, ms)); }
@@ -15,13 +14,14 @@ export default function RosterDesignPageWrapper() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [ready, setReady] = useState(false);
+  const [hasId, setHasId] = useState(false);
 
   useEffect(() => {
     let isActive = true;
 
     async function resolveRoute() {
       let id = searchParams.get('rosterId');
-      if (id) { if (isActive) setReady(true); return; }
+      if (id) { if (isActive) { setHasId(true); setReady(true); } return; }
 
       await sleep(120);
 
@@ -53,10 +53,19 @@ export default function RosterDesignPageWrapper() {
 
   if (!ready) return null;
 
-  // Dynamisch renderen (CSR-only) voorkomt de TS children-prop check tijdens server build
+  // Inline rendering: geen PageClientGate meer, direct renderen en zelf checken
+  if (!hasId) {
+    const DesignErrorCard = dynamic(() => import('./DesignErrorCard'), { ssr: false });
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 flex items-center justify-center">
+        {/* Fallback kaart met CTA's */}
+        {/* @ts-ignore */}
+        <DesignErrorCard message="Geen roster ID gevonden" />
+      </div>
+    );
+  }
+
   return (
-    <PageClientGate>
-      <DesignPageClient />
-    </PageClientGate>
+    <DesignPageClient />
   );
 }
