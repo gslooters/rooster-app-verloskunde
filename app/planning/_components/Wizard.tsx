@@ -40,12 +40,17 @@ export default function Wizard() {
       const end = computeEnd(start);
       const roster: Roster = { id, start_date: start, end_date: end, status: 'draft', created_at: new Date().toISOString() };
       const list = readRosters().filter(x => x.id !== roster.id); list.push(roster); writeRosters(list);
-      // Sprint: sla ook lastRosterId op voor self-heal
-      if (typeof window !== 'undefined') { localStorage.setItem('lastRosterId', id); }
+
+      // Sleutels voor self-heal en deep link
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('lastRosterId', id);
+        localStorage.setItem('recentDesignRoute', `/planning/design?rosterId=${id}`);
+      }
+
       initializeRosterDesign(roster.id);
       router.push(`/planning/design?rosterId=${id}`);
     } catch (err) {
-      console.error('Error creating roster:', err);
+      console.error('Error creating rooster:', err);
       setError('Er is een fout opgetreden bij het aanmaken van het rooster. Probeer opnieuw.');
       setIsCreating(false);
     }
