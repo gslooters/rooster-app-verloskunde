@@ -82,8 +82,11 @@ export default function DesignPageClient() {
     );
   }
 
-  // Bereken weken voor header
-  const startDate = new Date(designData.roster.start_date + 'T00:00:00');
+  // Bepaal startdatum: in de RosterDesignData hebben we rosterId en geen geneste roster.
+  // Gebruik een default van vandaag als tijdelijk fallback, of haal uit localStorage/andere bron als aanwezig.
+  const startISO = (designData as any).start_date || (designData as any).roster_start || new Date().toISOString().split('T')[0];
+  const startDate = new Date(startISO + 'T00:00:00');
+
   const weeks = Array.from({ length: 5 }, (_, i) => {
     const weekStart = new Date(startDate);
     weekStart.setDate(startDate.getDate() + (i * 7));
@@ -124,7 +127,7 @@ export default function DesignPageClient() {
               Rooster Ontwerp
             </h1>
             <p className="text-gray-600">
-              Periode: {new Date(designData.roster.start_date + 'T00:00:00').toLocaleDateString('nl-NL')} - {new Date(designData.roster.end_date + 'T00:00:00').toLocaleDateString('nl-NL')}
+              Periode: 5 weken vanaf {startISO}
             </p>
           </div>
           
