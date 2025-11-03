@@ -1,25 +1,246 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
-import DesignErrorCard from './DesignErrorCard';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { loadRosterDesignData, updateEmployeeMaxShifts, toggleEmployeeUnavailable, saveRosterDesignData } from '@/lib/planning/rosterDesign';
+import type { RosterDesignData, RosterEmployee } from '@/lib/types/roster';
 
-export default function DesignErrorGate({ children }: { children: React.ReactNode }) {
+export default function DesignPageClient() {
   const searchParams = useSearchParams();
-  const [showError, setShowError] = useState(false);
+  const router = useRouter();
+  const rosterId = searchParams.get('rosterId');
+  
+  const [designData, setDesignData] = useState<RosterDesignData | null>(null);
+  const [employees, setEmployees] = useState<RosterEmployee[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const hasId = !!searchParams.get('rosterId');
-    setShowError(!hasId);
-  }, [searchParams]);
+    if (!rosterId) {
+      setError('Geen roster ID gevonden');
+      setLoading(false);
+      return;
+    }
 
-  if (showError) {
+    try {
+      const data = loadRosterDesignData(rosterId);
+      if (data) {
+        setDesignData(data);
+        setEmployees(data.employees);
+      } else {
+        setError('Geen roster ontwerp data gevonden');
+      }
+    } catch (err) {
+      console.error('Error loading design data:', err);
+      setError('Fout bij laden van ontwerp data');
+    }
+    setLoading(false);
+  }, [rosterId]);
+
+  function updateMaxShifts(empId: string, maxShifts: number) {
+    if (!rosterId || !designData) return;
+    updateEmployeeMaxShifts(rosterId, empId, maxShifts);
+    const updated = loadRosterDesignData(rosterId);
+    if (updated) { setDesignData(updated); setEmployees(updated.employees); }
+  }
+
+  function toggleUnavailable(empId: string, date: string) {
+    if (!rosterId || !designData) return;
+    toggleEmployeeUnavailable(rosterId, empId, date);
+    const updated = loadRosterDesignData(rosterId);
+    if (updated) { setDesignData(updated); setEmployees(updated.employees); }
+  }
+
+  function goToEditing() {
+    if (!rosterId) return;
+    router.push(`/planning/${rosterId}`);
+  }
+
+  if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 flex items-center justify-center">
-        <DesignErrorCard message="Geen roster ID gevonden" />
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Ontwerp wordt geladen...</p>
+        </div>
       </div>
     );
   }
 
-  return <>{children}</>;
+  if (error || !designData) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 flex items-center justify-center">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6 max-w-md text-center">
+          <h2 className="text-lg font-semibold text-red-800 mb-2">Fout</h2>
+          <p className="text-red-600 mb-4">{error || 'Onbekende fout'}</p>
+          <div className="flex items-center justify-center gap-3">
+            <button onClick={() => router.push('/planning')} className="px-4 py-2 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200">Terug naar overzicht</button>
+            <button onClick={() => router.push('/planning/new')} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Nieuw rooster starten</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Bereken weken voor header
+  const startDate = new Date(designData.roster.start_date + 'T00:00:00');
+  const weeks = Array.from({ length: 5 }, (_, i) => {
+    const weekStart = new Date(startDate);
+    weekStart.setDate(startDate.getDate() + (i * 7));
+    const weekNumber = getWeekNumber(weekStart);
+    return { number: weekNumber, dates: Array.from({ length: 7 }, (_, d) => {
+      const date = new Date(weekStart);
+      date.setDate(weekStart.getDate() + d);
+      return date.toISOString().split('T')[0];
+    })};
+  });
+
+  function getWeekNumber(date: Date): number {
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNum = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  }
+
+  function formatDate(dateStr: string): string {
+    const date = new Date(dateStr + 'T00:00:00');
+    const day = ['ZO', 'MA', 'DI', 'WO', 'DO', 'VR', 'ZA'][date.getDay()];
+    const dd = String(date.getDate()).padStart(2, '0');
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    return `${day} ${dd}-${mm}`;
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-4">
+      <div className="max-w-full mx-auto">
+        <nav className="text-sm text-gray-500 mb-3">
+          Dashboard &gt; Rooster Planning &gt; Rooster Ontwerp
+        </nav>
+        
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-1">
+              Rooster Ontwerp
+            </h1>
+            <p className="text-gray-600">
+              Periode: {new Date(designData.roster.start_date + 'T00:00:00').toLocaleDateString('nl-NL')} - {new Date(designData.roster.end_date + 'T00:00:00').toLocaleDateString('nl-NL')}
+            </p>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            <div className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
+              🎨 Ontwerpfase
+            </div>
+            <button 
+              onClick={goToEditing}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
+            >
+              Ga naar Bewerking →
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-blue-50 p-4 rounded-lg mb-6">
+          <p className="text-blue-800">
+            <strong>Instructies:</strong> Stel voor elke medewerker het maximum aantal diensten in (0-35) en markeer niet-beschikbare dagen met de NB-knoppen.
+          </p>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-sm border overflow-x-auto">
+          <table className="min-w-full">
+            <thead>
+              <tr>
+                <th className="sticky left-0 bg-white border-b px-4 py-3 text-left font-semibold text-gray-900 w-48">
+                  Medewerker
+                </th>
+                <th className="border-b px-4 py-3 text-center font-semibold text-gray-900 w-32">
+                  Max Diensten
+                </th>
+                {weeks.map(week => (
+                  <th key={week.number} colSpan={7} className="border-b px-2 py-3 text-center font-semibold text-gray-900 bg-gray-50">
+                    Week {week.number}
+                  </th>
+                ))}
+              </tr>
+              <tr>
+                <th className="sticky left-0 bg-white border-b"></th>
+                <th className="border-b"></th>
+                {weeks.map(week => 
+                  week.dates.map(date => (
+                    <th key={date} className="border-b px-1 py-2 text-xs text-gray-600 bg-gray-50 min-w-[60px]">
+                      {formatDate(date)}
+                    </th>
+                  ))
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {employees.map((emp, empIndex) => (
+                <tr key={emp.id} className={empIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}>
+                  <td className="sticky left-0 bg-inherit border-b px-4 py-3 font-medium text-gray-900">
+                    {emp.name}
+                    <div className="text-xs text-gray-500 mt-1">ID: {emp.id.split('_')[1]}</div>
+                  </td>
+                  <td className="border-b px-4 py-3 text-center">
+                    <input
+                      type="number"
+                      min="0"
+                      max="35"
+                      value={emp.maxShifts}
+                      onChange={(e) => updateMaxShifts(emp.id, parseInt(e.target.value) || 0)}
+                      className="w-20 px-2 py-1 border border-gray-300 rounded text-center focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    {(emp.maxShifts < 0 || emp.maxShifts > 35) && (
+                      <div className="text-xs text-red-600 mt-1">0-35 toegestaan</div>
+                    )}
+                  </td>
+                  {weeks.map(week =>
+                    week.dates.map(date => {
+                      const isUnavailable = designData.unavailability?.[emp.id]?.[date] || false;
+                      return (
+                        <td key={date} className="border-b p-1 text-center">
+                          <button
+                            onClick={() => toggleUnavailable(emp.id, date)}
+                            className={`w-12 h-8 rounded text-xs font-bold transition-colors ${
+                              isUnavailable 
+                                ? 'bg-red-100 text-red-700 border border-red-300 hover:bg-red-200' 
+                                : 'bg-gray-100 text-gray-400 border border-gray-300 hover:bg-gray-200'
+                            }`}
+                            title={isUnavailable ? 'Klik om beschikbaar te maken' : 'Klik om niet-beschikbaar te markeren'}
+                          >
+                            {isUnavailable ? 'NB' : '—'}
+                          </button>
+                        </td>
+                      );
+                    })
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="mt-6 flex items-center justify-between">
+          <button 
+            onClick={() => router.push('/planning')}
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+          >
+            ← Terug naar overzicht
+          </button>
+          
+          <div className="text-sm text-gray-600">
+            Wijzigingen worden automatisch opgeslagen
+          </div>
+          
+          <button 
+            onClick={goToEditing}
+            className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
+          >
+            Gereed - Ga naar Bewerking →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
