@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, ReactNode } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { readRosters } from '@/lib/planning/storage';
 import PageClientGate from './PageClientGate';
 import DesignPageClient from './page.client';
 
 function sleep(ms: number) { return new Promise(res => setTimeout(res, ms)); }
+
+// Zorg dat PageClientGate expliciet een children prop verwacht
+// type GateProps = { children: ReactNode }; // (alleen documentair, import verzorgt type al)
 
 export default function RosterDesignPageWrapper(): JSX.Element {
   const searchParams = useSearchParams();
@@ -18,18 +21,18 @@ export default function RosterDesignPageWrapper(): JSX.Element {
 
     async function resolveRoute() {
       let id = searchParams.get('rosterId');
-      if (id) { if (isActive) { setReady(true); } return; }
+      if (id) { if (isActive) setReady(true); return; }
 
       await sleep(120);
 
       if (typeof window !== 'undefined') {
         const recent = localStorage.getItem('recentDesignRoute');
-        if (recent) { router.replace(recent); if (isActive) { setReady(true); } return; }
+        if (recent) { router.replace(recent); if (isActive) setReady(true); return; }
       }
 
       if (typeof window !== 'undefined') {
         const lastId = localStorage.getItem('lastRosterId');
-        if (lastId && lastId.length > 0) { router.replace(`/planning/design?rosterId=${lastId}`); if (isActive) { setReady(true); } return; }
+        if (lastId && lastId.length > 0) { router.replace(`/planning/design?rosterId=${lastId}`); if (isActive) setReady(true); return; }
       }
 
       const rosters = readRosters();
@@ -37,25 +40,20 @@ export default function RosterDesignPageWrapper(): JSX.Element {
         const latest = [...rosters].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
         if (typeof window !== 'undefined') { localStorage.setItem('lastRosterId', latest.id); localStorage.setItem('recentDesignRoute', `/planning/design?rosterId=${latest.id}`); }
         router.replace(`/planning/design?rosterId=${latest.id}`);
-        if (isActive) { setReady(true); } return;
+        if (isActive) setReady(true); return;
       }
 
       router.replace('/planning/new?reason=no-roster');
-      if (isActive) { setReady(true); }
+      if (isActive) setReady(true);
     }
 
     resolveRoute();
     return () => { isActive = false; };
   }, [searchParams, router]);
 
-  if (!ready) {
-    return <></>;
-  }
+  if (!ready) return <></>;
 
-  // Render expliciet children voor type-satisfactie
-  return (
-    <PageClientGate>
-      <DesignPageClient />
-    </PageClientGate>
-  );
+  // Gebruik expliciet de children prop zodat TS dit ziet
+  const child: ReactNode = <DesignPageClient />;
+  return <PageClientGate>{child}</PageClientGate>;
 }
