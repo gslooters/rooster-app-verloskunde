@@ -1,7 +1,19 @@
-/* Rood-wit geblokt voor niet-beschikbaar cellen (later te gebruiken) */
+/* styles/planning.css */
+
+/* Verwijder oude arcering visueel overal */
 .unavailable {
-  background-image: repeating-linear-gradient(45deg, #ffffff 0 6px, #ef4444 6px 12px);
+  background-image: none !important;
 }
 
-/* Sticky hulp (soms handig bij lange tabellen) */
-th.sticky, td.sticky { position: sticky; }
+/* NB weergave is tekst, geen arcering */
+.not-available {
+  background: transparent !important;
+  color: #dc2626 !important;
+  font-weight: 700 !important;
+}
+
+/* Compactere rijhoogte */
+.tr-row-30 > td { height: 28px; }
+
+/* Sticky kolombreedtes compacter */
+th[role="columnheader"], th { white-space: nowrap; }
