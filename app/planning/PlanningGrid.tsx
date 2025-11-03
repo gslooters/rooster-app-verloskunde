@@ -34,6 +34,11 @@ function isoWeekNumber(iso:string){ const d=toDate(iso); const target=new Date(d
 function dayShort(iso:string){ const map=['ZO','MA','DI','WO','DO','VR','ZA'] as const; return map[toDate(iso).getDay()]; }
 function isWeekend(iso:string){ const s=dayShort(iso); return s==='ZA'||s==='ZO'; }
 
+// Extract first name only
+function getFirstName(fullName: string): string {
+  return fullName.split(' ')[0];
+}
+
 type Roster = { id: string; start_date: string; end_date: string; status: 'draft'|'final'; created_at: string; };
 type Cell = { service: string | null; locked: boolean; unavailable?: boolean };
 
@@ -179,7 +184,7 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
 
   const exportable = useMemo(() => prepareRosterForExport(
     roster,
-    employees.map(emp => ({ id: emp.originalEmployeeId, name: emp.name })), // Convert back for export
+    employees.map(emp => ({ id: emp.originalEmployeeId, name: getFirstName(emp.name) })), // Use first name only for export
     days,
     cells as any
   ), [roster, employees, days, cells]);
@@ -197,7 +202,7 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
   
   function onExportEmployeePDF() {
     const emp = employees.find(e => e.originalEmployeeId === selectedEmp);
-    if (emp) exportEmployeeToPDF(exportable, { id: emp.originalEmployeeId, name: emp.name });
+    if (emp) exportEmployeeToPDF(exportable, { id: emp.originalEmployeeId, name: getFirstName(emp.name) });
   }
 
   return (
@@ -223,7 +228,9 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
         </div>
       )}
 
-      <div className="toolbar">
+      <div className="toolbar mb-4">
+        <button className="btn" onClick={() => window.location.href = '/planning'}>← Dashboard</button>
+        <span style={{ marginLeft: 12 }} />
         <button className="btn" onClick={onExportCSV}>Export CSV</button>
         <button className="btn" onClick={onExportExcel}>Export Excel</button>
         <button className="btn primary" onClick={onExportPDF}>Export PDF (Totaal)</button>
@@ -231,21 +238,21 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
         {employees.length > 0 && (
           <>
             <select className="select" value={selectedEmp} onChange={e => setSelectedEmp(e.target.value)}>
-              {employees.map(e => <option key={e.originalEmployeeId} value={e.originalEmployeeId}>{e.name}</option>)}
+              {employees.map(e => <option key={e.originalEmployeeId} value={e.originalEmployeeId}>{getFirstName(e.name)}</option>)}
             </select>
             <button className="btn" onClick={onExportEmployeePDF}>Export PDF (Medewerker)</button>
           </>
         )}
       </div>
 
-      <div className="overflow-auto max-h-[80vh] border rounded">
+      <div className="overflow-auto max-h-[75vh] border rounded">
         <table className="min-w-[1200px] border-separate border-spacing-0 text-[12px]">
           <thead>
             <tr>
-              <th className="sticky left-0 top-0 z-30 bg-gray-50 border px-2 py-1 align-top w-[140px]" rowSpan={2}>Medewerker</th>
+              <th className="sticky left-0 top-0 z-30 bg-gray-50 border px-2 py-1 align-top w-[100px]" rowSpan={2}>Medewerker</th>
               {/* Sprint 2.2: Diensten kolom header */}
               {designData && (
-                <th className="sticky left-[140px] top-0 z-30 bg-gray-50 border px-2 py-1 align-top w-[60px]" rowSpan={2}>
+                <th className="sticky left-[100px] top-0 z-30 bg-gray-50 border px-2 py-1 align-top w-[50px]" rowSpan={2}>
                   Max<br/>Diensten
                 </th>
               )}
@@ -278,29 +285,29 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
               const availableServices = getEmployeeServices(emp.id);
               
               return (
-                <tr key={emp.id} className="tr-row-30">
-                  <td className="sticky left-0 z-10 bg-white border px-2 py-1 font-medium w-[140px]">
+                <tr key={emp.id} className="h-7"> {/* Compacte rij hoogte */}
+                  <td className="sticky left-0 z-10 bg-white border px-2 py-1 font-medium w-[100px] h-7">
                     <div className="flex items-center justify-between">
                       <button
-                        className={`text-left ${isDraft && !isDesignPhase ? 'underline decoration-dotted' : ''}`}
-                        onClick={() => isDraft && !isDesignPhase && setPopupFor({ id: emp.id, name: emp.name })}
+                        className={`text-left text-sm ${isDraft && !isDesignPhase ? 'underline decoration-dotted' : ''}`}
+                        onClick={() => isDraft && !isDesignPhase && setPopupFor({ id: emp.id, name: getFirstName(emp.name) })}
                         title={isDraft && !isDesignPhase ? 'Klik om beschikbaarheid te bewerken' : 'Alleen-lezen'}
                       >
-                        {emp.name}
+                        {getFirstName(emp.name)}
                       </button>
                       <div className="flex gap-0.5">
-                        {availableServices.slice(0, 3).map(s => (
+                        {availableServices.slice(0, 2).map(s => (
                           <div 
                             key={s.code}
-                            className="w-3 h-3 rounded-sm text-[8px] font-bold text-white flex items-center justify-center"
+                            className="w-2.5 h-2.5 rounded-sm text-[6px] font-bold text-white flex items-center justify-center"
                             style={{ backgroundColor: s.kleur }}
                             title={`Kan: ${s.naam}`}
                           >
                             {s.code.charAt(0).toUpperCase()}
                           </div>
                         ))}
-                        {availableServices.length > 3 && (
-                          <div className="w-3 h-3 rounded-sm text-[7px] bg-gray-400 text-white flex items-center justify-center" title={`+${availableServices.length - 3} meer`}>
+                        {availableServices.length > 2 && (
+                          <div className="w-2.5 h-2.5 rounded-sm text-[6px] bg-gray-400 text-white flex items-center justify-center" title={`+${availableServices.length - 2} meer`}>
                             +
                           </div>
                         )}
@@ -310,35 +317,35 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
                   
                   {/* Sprint 2.2: Max diensten kolom */}
                   {designData && (
-                    <td className="sticky left-[140px] z-10 bg-white border px-2 py-1 text-center w-[60px]">
+                    <td className="sticky left-[100px] z-10 bg-white border px-2 py-1 text-center w-[50px] h-7">
                       <div className="text-sm font-medium">{emp.maxShifts}</div>
                     </td>
                   )}
                   
                   {days.map(d => {
-                    // Sprint 2.2: Check both old availability system and new NB system
+                    // Sprint 2.2: Check beide old availability system en nieuwe NB system
                     const oldAvailable = isAvailable(roster.id, emp.originalEmployeeId, d);
                     const isUnavailable = designData ? isEmployeeUnavailable(rosterId, emp.id, d) : false;
                     const available = oldAvailable && !isUnavailable;
-                    
+
                     const cell = cells[d]?.[emp.id];
                     const code = cell?.service ?? '';
                     const serviceInfo = getServiceInfo(code);
                     const locked = !!cell?.locked;
 
                     return (
-                      <td key={d} className={`border p-[2px] ${available ? '' : 'unavailable'}`} title={available ? '' : 'Niet beschikbaar'}>
+                      <td key={d} className={`border p-[1px] h-7 ${available ? '' : 'unavailable'}`} title={available ? '' : 'Niet beschikbaar'}>
                         {isUnavailable ? (
-                          // Sprint 2.2: Show NB for unavailable days
-                          <div className="not-available h-[24px] flex items-center justify-center">
+                          // Sprint 2.2: Show NB for unavailable days - GEEN ARCERING, alleen tekst
+                          <div className="not-available h-[22px] flex items-center justify-center text-xs font-bold">
                             NB
                           </div>
                         ) : (
-                          <div className="flex items-center gap-[4px]">
+                          <div className="flex items-center gap-[2px]">
                             <select
                               value={code}
                               onChange={(e) => setService(d, emp.id, e.target.value)}
-                              className="text-[12px] border rounded px-1 h-[24px] min-w-[34px] select compact-service"
+                              className="text-[11px] border rounded px-1 h-[22px] min-w-[30px] select compact-service"
                               style={{ backgroundColor: serviceInfo.color, color: serviceInfo.color === '#FFFFFF' || serviceInfo.color === '#FEF3C7' ? '#000000' : '#FFFFFF' } as React.CSSProperties}
                               disabled={!available || !isDraft || locked || isDesignPhase}
                               title={isDesignPhase ? 'Diensten kunnen niet worden ingesteld in ontwerpfase' : code ? serviceInfo.displayName : 'Geen dienst'}
@@ -359,7 +366,7 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
                               type="button"
                               title={locked ? 'Ontgrendel' : 'Vergrendel'}
                               onClick={() => isDraft && available && toggleLock(d, emp.id)}
-                              className={`text-[10px] leading-none w-[22px] h-[22px] rounded border flex items-center justify-center ${
+                              className={`text-[8px] leading-none w-[18px] h-[18px] rounded border flex items-center justify-center ${
                                 locked ? 'bg-gray-800 text-white' : 'bg-white'
                               } ${isDesignPhase ? 'opacity-50 cursor-not-allowed' : ''}`}
                               disabled={!isDraft || !available || isDesignPhase}
