@@ -38,7 +38,7 @@ export default function ServicesHubPage() {
 
             <a href="/services/schedule-rules" className="bg-blue-50 p-6 rounded-xl hover:bg-blue-100 transition shadow-sm hover:shadow-md">
               <div className="flex items-center mb-2">
-                <span className="text-2xl mr-3">📐</span>
+                <span className="text-2xl mr-3">📅</span>
                 <h3 className="font-bold text-blue-900 text-lg">Diensten per dagsoort</h3>
               </div>
               <p className="text-blue-700">In ontwikkeling — later invullen.</p>
