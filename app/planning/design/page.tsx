@@ -1,10 +1,12 @@
 import { Suspense } from 'react';
-import RosterDesignPageWrapper from './wrapper';
+import dynamic from 'next/dynamic';
+
+const Wrapper = dynamic(() => import('./wrapper'), { ssr: false });
 
 export default function Page() {
   return (
     <Suspense>
-      <RosterDesignPageWrapper />
+      <Wrapper />
     </Suspense>
   );
 }
