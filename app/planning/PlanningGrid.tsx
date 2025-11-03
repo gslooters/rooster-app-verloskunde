@@ -10,7 +10,9 @@ import '../toolbar.css';
 import { prepareRosterForExport, exportToExcel, exportToCSV, exportRosterToPDF, exportEmployeeToPDF } from '@/lib/export';
 import { getAllServices } from '@/lib/services/diensten-storage';
 import { getServicesForEmployee } from '@/lib/services/medewerker-diensten-storage';
+import { getAllEmployees } from '@/lib/services/employees-storage';
 import { Dienst } from '@/lib/types/dienst';
+import { Employee, getRosterDisplayName } from '@/lib/types/employee';
 
 function toDate(iso: string) { return new Date(iso + 'T00:00:00'); }
 function addDaysISO(iso: string, n: number) {
@@ -33,33 +35,25 @@ function isWeekend(iso:string){ const s=dayShort(iso); return s==='ZA'||s==='ZO'
 type Roster = { id: string; start_date: string; end_date: string; status: 'draft'|'final'; created_at: string; };
 type Cell = { service: string | null; locked: boolean; unavailable?: boolean };
 
-const EMPLOYEES = [
-  { id: 'emp1', name: 'Anna' },
-  { id: 'emp2', name: 'Bram' },
-  { id: 'emp3', name: 'Carla' },
-  { id: 'emp4', name: 'Daan' },
-  { id: 'emp5', name: 'Eva' },
-  { id: 'emp6', name: 'Frank' },
-  { id: 'emp7', name: 'Greta' },
-  { id: 'emp8', name: 'Hans' },
-];
-
 export default function PlanningGrid({ rosterId }: { rosterId: string }) {
   const rosters = getRosters() as Roster[];
   const roster = rosters.find(r => r.id === rosterId);
   if (!roster) return <div className="p-6 text-red-600">Rooster niet gevonden.</div>;
 
   const [allServices, setAllServices] = useState<Dienst[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [employeeServiceMappings, setEmployeeServiceMappings] = useState<Record<string, Dienst[]>>({});
   
   useEffect(() => {
     try {
       const services = getAllServices();
+      const employeeList = getAllEmployees().filter(emp => emp.actief);
       setAllServices(services);
+      setEmployees(employeeList);
       
       // Load employee-specific services
       const mappings: Record<string, Dienst[]> = {};
-      EMPLOYEES.forEach(emp => {
+      employeeList.forEach(emp => {
         const serviceCodes = getServicesForEmployee(emp.id);
         mappings[emp.id] = serviceCodes
           .map(code => services.find(s => s.code === code))
@@ -69,6 +63,7 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
     } catch (err) {
       console.error('Error loading services:', err);
       setAllServices([]);
+      setEmployees([]);
       setEmployeeServiceMappings({});
     }
   }, []);
@@ -93,9 +88,14 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
 
   useEffect(() => {
     const init: Record<string, Record<string, Cell>> = {};
-    days.forEach(d => { init[d] = {}; EMPLOYEES.forEach(e => { init[d][e.id] = { service: null, locked: false }; }); });
+    days.forEach(d => { 
+      init[d] = {}; 
+      employees.forEach(e => { 
+        init[d][e.id] = { service: null, locked: false }; 
+      }); 
+    });
     setCells(init);
-  }, [days]);
+  }, [days, employees]);
 
   function setService(date: string, empId: string, service: string) {
     setCells(prev => ({ ...prev, [date]: { ...prev[date], [empId]: { ...prev[date][empId], service } } }));
@@ -116,22 +116,40 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
     return employeeServiceMappings[employeeId] || [];
   }
 
-  const exportable = useMemo(() => prepareRosterForExport(
-    roster,
-    EMPLOYEES,
-    days,
-    cells as any
-  ), [roster, days, cells]);
+  const exportable = useMemo(() => {
+    // Convert employees to export format
+    const exportEmployees = employees.map(emp => ({
+      id: emp.id,
+      name: getRosterDisplayName(emp) // Gebruik voornaam voor roosters
+    }));
+    
+    return prepareRosterForExport(
+      roster,
+      exportEmployees,
+      days,
+      cells as any
+    );
+  }, [roster, employees, days, cells]);
 
   function onExportExcel() { exportToExcel(exportable); }
   function onExportCSV() { exportToCSV(exportable); }
   function onExportPDF() { exportRosterToPDF(exportable); }
 
-  const [selectedEmp, setSelectedEmp] = useState<string>('emp1');
+  const [selectedEmp, setSelectedEmp] = useState<string>(employees[0]?.id || '');
   function onExportEmployeePDF() {
-    const emp = EMPLOYEES.find(e => e.id === selectedEmp);
-    if (emp) exportEmployeeToPDF(exportable, emp);
+    const emp = employees.find(e => e.id === selectedEmp);
+    if (emp) {
+      const exportEmp = { id: emp.id, name: getRosterDisplayName(emp) };
+      exportEmployeeToPDF(exportable, exportEmp);
+    }
   }
+
+  // Update selected employee if current selection becomes invalid
+  useEffect(() => {
+    if (employees.length > 0 && !employees.find(e => e.id === selectedEmp)) {
+      setSelectedEmp(employees[0].id);
+    }
+  }, [employees, selectedEmp]);
 
   return (
     <main className="p-4">
@@ -144,7 +162,7 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
         <button className="btn primary" onClick={onExportPDF}>Export PDF (Totaal)</button>
         <span style={{ marginLeft: 12 }} />
         <select className="select" value={selectedEmp} onChange={e => setSelectedEmp(e.target.value)}>
-          {EMPLOYEES.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+          {employees.map(e => <option key={e.id} value={e.id}>{getRosterDisplayName(e)}</option>)}
         </select>
         <button className="btn" onClick={onExportEmployeePDF}>Export PDF (Medewerker)</button>
       </div>
@@ -179,7 +197,7 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
           </thead>
 
           <tbody>
-            {EMPLOYEES.map(emp => {
+            {employees.map(emp => {
               const availableServices = getEmployeeServices(emp.id);
               
               return (
@@ -188,10 +206,10 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
                     <div className="flex items-center justify-between">
                       <button
                         className={`text-left ${isDraft ? 'underline decoration-dotted' : ''}`}
-                        onClick={() => isDraft && setPopupFor(emp)}
+                        onClick={() => isDraft && setPopupFor({ id: emp.id, name: getRosterDisplayName(emp) })}
                         title={isDraft ? 'Klik om beschikbaarheid te bewerken' : 'Alleen-lezen'}
                       >
-                        {emp.name}
+                        {getRosterDisplayName(emp)}
                       </button>
                       <div className="flex gap-0.5">
                         {availableServices.slice(0, 3).map(s => (
