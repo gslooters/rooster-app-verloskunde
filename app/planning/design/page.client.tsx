@@ -56,6 +56,11 @@ export default function DesignPageClient() {
     router.push(`/planning/${rosterId}`);
   }
 
+  // Extract first name only
+  function getFirstName(fullName: string): string {
+    return fullName.split(' ')[0];
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 flex items-center justify-center">
@@ -83,7 +88,6 @@ export default function DesignPageClient() {
   }
 
   // Bepaal startdatum: in de RosterDesignData hebben we rosterId en geen geneste roster.
-  // Gebruik een default van vandaag als tijdelijk fallback, of haal uit localStorage/andere bron als aanwezig.
   const startISO = (designData as any).start_date || (designData as any).roster_start || new Date().toISOString().split('T')[0];
   const startDate = new Date(startISO + 'T00:00:00');
 
@@ -154,14 +158,14 @@ export default function DesignPageClient() {
           <table className="min-w-full">
             <thead>
               <tr>
-                <th className="sticky left-0 bg-white border-b px-4 py-3 text-left font-semibold text-gray-900 w-48">
+                <th className="sticky left-0 bg-white border-b px-3 py-2 text-left font-semibold text-gray-900 w-32">
                   Medewerker
                 </th>
-                <th className="border-b px-4 py-3 text-center font-semibold text-gray-900 w-32">
+                <th className="border-b px-3 py-2 text-center font-semibold text-gray-900 w-24">
                   Max Diensten
                 </th>
                 {weeks.map(week => (
-                  <th key={week.number} colSpan={7} className="border-b px-2 py-3 text-center font-semibold text-gray-900 bg-gray-50">
+                  <th key={week.number} colSpan={7} className="border-b px-2 py-2 text-center font-semibold text-gray-900 bg-gray-50">
                     Week {week.number}
                   </th>
                 ))}
@@ -171,7 +175,7 @@ export default function DesignPageClient() {
                 <th className="border-b"></th>
                 {weeks.map(week => 
                   week.dates.map(date => (
-                    <th key={date} className="border-b px-1 py-2 text-xs text-gray-600 bg-gray-50 min-w-[60px]">
+                    <th key={date} className="border-b px-1 py-1 text-xs text-gray-600 bg-gray-50 min-w-[50px]">
                       {formatDate(date)}
                     </th>
                   ))
@@ -180,32 +184,28 @@ export default function DesignPageClient() {
             </thead>
             <tbody>
               {employees.map((emp, empIndex) => (
-                <tr key={emp.id} className={empIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}>
-                  <td className="sticky left-0 bg-inherit border-b px-4 py-3 font-medium text-gray-900">
-                    {emp.name}
-                    <div className="text-xs text-gray-500 mt-1">ID: {emp.id.split('_')[1]}</div>
+                <tr key={emp.id} className={`${empIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'} h-8`}>
+                  <td className="sticky left-0 bg-inherit border-b px-3 py-1 font-medium text-gray-900 h-8">
+                    {getFirstName(emp.name)}
                   </td>
-                  <td className="border-b px-4 py-3 text-center">
+                  <td className="border-b px-3 py-1 text-center h-8">
                     <input
                       type="number"
                       min="0"
                       max="35"
                       value={emp.maxShifts}
                       onChange={(e) => updateMaxShiftsHandler(emp.id, parseInt(e.target.value) || 0)}
-                      className="w-20 px-2 py-1 border border-gray-300 rounded text-center focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-16 px-1 py-0.5 border border-gray-300 rounded text-center text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
-                    {(emp.maxShifts < 0 || emp.maxShifts > 35) && (
-                      <div className="text-xs text-red-600 mt-1">0-35 toegestaan</div>
-                    )}
                   </td>
                   {weeks.map(week =>
                     week.dates.map(date => {
                       const isUnavailable = designData.unavailabilityData?.[emp.id]?.[date] || false;
                       return (
-                        <td key={date} className="border-b p-1 text-center">
+                        <td key={date} className="border-b p-0.5 text-center h-8">
                           <button
                             onClick={() => toggleUnavailable(emp.id, date)}
-                            className={`w-12 h-8 rounded text-xs font-bold transition-colors ${
+                            className={`w-10 h-6 rounded text-xs font-bold transition-colors ${
                               isUnavailable 
                                 ? 'bg-red-100 text-red-700 border border-red-300 hover:bg-red-200' 
                                 : 'bg-gray-100 text-gray-400 border border-gray-300 hover:bg-gray-200'
@@ -229,7 +229,7 @@ export default function DesignPageClient() {
             onClick={() => router.push('/planning')}
             className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
           >
-            ← Terug naar overzicht
+            ← Terug naar Dashboard
           </button>
           
           <div className="text-sm text-gray-600">
