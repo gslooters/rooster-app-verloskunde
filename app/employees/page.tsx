@@ -84,25 +84,21 @@ export default function MedewerkersPage() {
     setError(''); 
   };
 
-  const handleEmployeeSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); 
+  const handleEmployeeSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault(); 
     setError('');
     
     try {
-      // Client-side validatie
       if (!validateAantalWerkdagen(employeeFormData.aantalWerkdagen)) {
         throw new Error('Aantal werkdagen moet tussen 0 en 35 zijn');
       }
-      
       if (!validateRoostervrijDagen(employeeFormData.roostervrijDagen)) {
         throw new Error('Ongeldige roostervrije dagen geselecteerd');
       }
-      
       const formData = {
         ...employeeFormData,
         roostervrijDagen: normalizeRoostervrijDagen(employeeFormData.roostervrijDagen)
       };
-      
       if (editingEmployee) {
         updateEmployee(editingEmployee.id, formData); 
       } else {
@@ -133,7 +129,6 @@ export default function MedewerkersPage() {
   const handleRoostervrijDagChange = (dagCode: string, checked: boolean) => {
     const current = employeeFormData.roostervrijDagen;
     if (checked) {
-      // Voeg toe als niet al aanwezig
       if (!current.includes(dagCode)) {
         setEmployeeFormData({
           ...employeeFormData,
@@ -141,7 +136,6 @@ export default function MedewerkersPage() {
         });
       }
     } else {
-      // Verwijder uit array
       setEmployeeFormData({
         ...employeeFormData,
         roostervrijDagen: current.filter(d => d !== dagCode)
@@ -203,7 +197,7 @@ export default function MedewerkersPage() {
                       <h3 className="text-lg font-semibold text-gray-900">{getFullName(employee)}</h3>
                       <div className="text-sm text-gray-500">Voor roosters: {getRosterDisplayName(employee)}</div>
                       
-                      {/* Nieuwe badge informatie */}
+                      {/* Badges */}
                       <div className="flex gap-1 mt-1">
                         <span className={`px-2 py-1 text-xs font-medium rounded-full ${
                           employee.team === TeamType.GROEN ? 'bg-green-100 text-green-700' :
@@ -217,11 +211,11 @@ export default function MedewerkersPage() {
                         </span>
                       </div>
                       
-                      <div className="text-xs text-gray-600 mt-1">
-                        {employee.aantalWerkdagen} werkdagen/maand
-                        {employee.roostervrijDagen.length > 0 && (
-                          <div>Vrij: {employee.roostervrijDagen.join(', ')}</div>
-                        )}
+                      <div className="text-xs text-gray-600 mt-1 min-h-[32px]">
+                        <div>{employee.aantalWerkdagen} werkdagen/periode</div>
+                        <div>
+                          Niet Beschikbaar: {employee.roostervrijDagen.length > 0 ? employee.roostervrijDagen.join(', ') : '—'}
+                        </div>
                       </div>
                       
                       {(employee.email || employee.telefoon) && (
@@ -259,7 +253,7 @@ export default function MedewerkersPage() {
             ))}
           </div>
 
-          {/* Redirect naar Diensten Toewijzing */}
+          {/* Redirect */}
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
             <div className="flex items-center justify-between">
               <div>
@@ -285,10 +279,10 @@ export default function MedewerkersPage() {
           </div>
         </div>
 
-        {/* Employee Modal - GEOPTIMALISEERDE LAYOUT */}
+        {/* Employee Modal */}
         {showEmployeeModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl" style={{ maxHeight: '80vh' }}>
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl" style={{ maxHeight: '85vh' }}>
               <div className="flex items-center justify-between p-6 border-b">
                 <h2 className="text-xl font-semibold text-gray-900">
                   {editingEmployee ? 'Medewerker Bewerken' : 'Nieuwe Medewerker'}
@@ -296,11 +290,10 @@ export default function MedewerkersPage() {
                 <button onClick={closeEmployeeModal} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
               </div>
               
-              <div className="overflow-y-auto" style={{ maxHeight: 'calc(80vh - 140px)' }}>
+              <div className="overflow-y-auto" style={{ maxHeight: 'calc(85vh - 140px)' }}>
                 <div className="p-6">
                   <form onSubmit={handleEmployeeSubmit}>
                     <div className="space-y-4">
-                      {/* Basis gegevens - COMPACTER LAYOUT */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Voornaam *</label>
@@ -325,8 +318,7 @@ export default function MedewerkersPage() {
                           />
                         </div>
                       </div>
-                      
-                      {/* Actief checkbox - VERPLAATST NAAR BOVEN */}
+
                       <div className="flex items-center">
                         <input 
                           type="checkbox" 
@@ -339,7 +331,7 @@ export default function MedewerkersPage() {
                           Actief (beschikbaar voor roostering)
                         </label>
                       </div>
-                      
+
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">E-mailadres</label>
                         <input 
@@ -350,8 +342,8 @@ export default function MedewerkersPage() {
                           placeholder="naam@verloskunde-arnhem.nl" 
                         />
                       </div>
-                      
-                      {/* Telefoonnummer - INLINE LAYOUT */}
+
+                      {/* Telefoonnummer */}
                       <div className="flex items-center gap-3">
                         <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Telefoonnummer:</label>
                         <input 
@@ -360,10 +352,10 @@ export default function MedewerkersPage() {
                           onChange={(e) => setEmployeeFormData({ ...employeeFormData, telefoon: e.target.value })} 
                           className="flex-1 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
                           placeholder="+31 6 1234 5678"
-                          maxLength={12}
+                          maxLength={20}
                         />
                       </div>
-                      
+
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Dienstverband *</label>
@@ -392,8 +384,8 @@ export default function MedewerkersPage() {
                           </select>
                         </div>
                       </div>
-                      
-                      {/* Aantal werkdagen - INLINE LAYOUT */}
+
+                      {/* Aantal werkdagen */}
                       <div className="flex items-center gap-3">
                         <label className="text-sm font-medium text-gray-700 flex-1">
                           Basis aantal werkdagen per maand:
@@ -404,14 +396,14 @@ export default function MedewerkersPage() {
                           max="35" 
                           value={employeeFormData.aantalWerkdagen} 
                           onChange={(e) => setEmployeeFormData({ ...employeeFormData, aantalWerkdagen: parseInt(e.target.value) || 0 })} 
-                          className="w-20 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-center" 
+                          className="w-28 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-center" 
                           placeholder="24" 
                           required 
                         />
                         <span className="text-sm text-gray-600">*</span>
                       </div>
-                      
-                      {/* Roostervrije dagen - HORIZONTALE LAYOUT */}
+
+                      {/* Standaard Niet Beschikbaar */}
                       <div className="border-t pt-4">
                         <label className="block text-sm font-medium text-gray-700 mb-3">Standaard Niet Beschikbaar</label>
                         <div className="grid grid-cols-7 gap-2">
@@ -424,7 +416,6 @@ export default function MedewerkersPage() {
                                   id={`dag-${dag.code}`}
                                   checked={employeeFormData.roostervrijDagen.includes(dag.code)}
                                   onChange={(e) => handleRoostervrijDagChange(dag.code, e.target.checked)} 
-                                  className="" 
                                 />
                               </div>
                             </div>
@@ -432,7 +423,7 @@ export default function MedewerkersPage() {
                         </div>
                       </div>
                     </div>
-                    
+
                     {error && (
                       <div className="mt-4 p-3 bg-red-100 border border-red-200 text-red-700 rounded-lg text-sm">
                         {error}
@@ -441,7 +432,7 @@ export default function MedewerkersPage() {
                   </form>
                 </div>
               </div>
-              
+
               <div className="flex gap-3 p-6 border-t bg-gray-50">
                 <button 
                   type="button" 
@@ -452,7 +443,7 @@ export default function MedewerkersPage() {
                 </button>
                 <button 
                   type="submit" 
-                  onClick={handleEmployeeSubmit}
+                  onClick={() => handleEmployeeSubmit()}
                   className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 >
                   {editingEmployee ? 'Bijwerken' : 'Aanmaken'}
