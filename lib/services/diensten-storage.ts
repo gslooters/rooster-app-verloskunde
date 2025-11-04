@@ -3,18 +3,9 @@ import { Dienst, validateDienstwaarde } from "../types/dienst";
 
 const STORAGE_KEY = "rooster_diensten";
 
-// Vaste system-diensten met harde waarden/kleuren
 const SYSTEM_DIENSTEN: Dienst[] = [
-  {
-    id: '=', code: '=', naam: 'Vrij', beschrijving: 'Vrij conform roosterplanning',
-    kleur: '#47F906', dienstwaarde: 0, system: true, actief: true,
-    created_at: new Date().toISOString(), updated_at: new Date().toISOString()
-  },
-  {
-    id: 'NB', code: 'NB', naam: 'Niet beschikbaar', beschrijving: 'Medewerker niet beschikbaar op deze dag',
-    kleur: '#FFF59D', dienstwaarde: 0, system: true, actief: true,
-    created_at: new Date().toISOString(), updated_at: new Date().toISOString()
-  }
+  { id: '=', code: '=', naam: 'Vrij', beschrijving: 'Vrij conform roosterplanning', kleur: '#47F906', dienstwaarde: 0, system: true, actief: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 'NB', code: 'NB', naam: 'Niet beschikbaar', beschrijving: 'Medewerker niet beschikbaar op deze dag', kleur: '#FFF59D', dienstwaarde: 0, system: true, actief: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
 ];
 
 const DEFAULT_DIENSTEN: Dienst[] = [
@@ -36,14 +27,12 @@ function load(): Dienst[] {
   }
   try {
     const list = JSON.parse(raw) as Dienst[];
-    // Zorg dat system-diensten altijd aanwezig en overschreven zijn met vaste waarden
     const filtered = list.filter(d => !SYSTEM_DIENSTEN.some(s => s.code === d.code));
     const merged = [...SYSTEM_DIENSTEN, ...filtered];
-    // Normaliseer ontbrekende nieuwe velden
     return merged.map(d => ({
-      dienstwaarde: d.dienstwaarde ?? 1,
-      system: d.system ?? false,
-      ...d
+      ...d,
+      dienstwaarde: (d as any).dienstwaarde != null ? d.dienstwaarde : 1,
+      system: (d as any).system != null ? d.system : false,
     }));
   } catch {
     return DEFAULT_DIENSTEN;
@@ -52,7 +41,6 @@ function load(): Dienst[] {
 
 function save(list: Dienst[]) {
   if (typeof window === 'undefined') return;
-  // forceer system entries
   const filtered = list.filter(d => !SYSTEM_DIENSTEN.some(s => s.code === d.code));
   localStorage.setItem(STORAGE_KEY, JSON.stringify([...SYSTEM_DIENSTEN, ...filtered]));
 }
@@ -76,25 +64,18 @@ export function updateService(id: string, patch: Partial<Dienst>): Dienst {
   const idx = list.findIndex(d => d.id === id);
   if (idx === -1) throw new Error('Dienst niet gevonden');
   const current = list[idx];
-  // System-diensten beperkte wijziging
   if (current.system) {
-    // alleen actief togglen is toegestaan
     const allowed: Partial<Dienst> = { actief: patch.actief ?? current.actief };
     const updated: Dienst = { ...current, ...allowed, updated_at: new Date().toISOString() };
     list[idx] = updated; save(list); return updated;
   }
   const now = new Date().toISOString();
   const next = { ...current, ...patch, updated_at: now } as Dienst;
-  if (next.code && list.some(d => d.id !== id && d.code.toLowerCase() === next.code.toLowerCase())) {
-    throw new Error('Code moet uniek zijn');
-  }
-  if (next.dienstwaarde != null && !validateDienstwaarde(next.dienstwaarde)) {
-    throw new Error('Dienstwaarde moet tussen 0 en 6 liggen in stappen van 0,5');
-  }
+  if (next.code && list.some(d => d.id !== id && d.code.toLowerCase() === next.code.toLowerCase())) throw new Error('Code moet uniek zijn');
+  if (next.dienstwaarde != null && !validateDienstwaarde(next.dienstwaarde)) throw new Error('Dienstwaarde moet tussen 0 en 6 liggen in stappen van 0,5');
   list[idx] = next; save(list); return next;
 }
 
-// Referentie checks (basic)
 function isServiceUsedInRoosters(dienstCode: string): boolean {
   if (typeof window === 'undefined') return false;
   const raw = localStorage.getItem('roosters') || '[]';
