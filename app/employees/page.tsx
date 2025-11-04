@@ -285,169 +285,179 @@ export default function MedewerkersPage() {
           </div>
         </div>
 
-        {/* Employee Modal */}
+        {/* Employee Modal - GEOPTIMALISEERDE LAYOUT */}
         {showEmployeeModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-6">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl" style={{ maxHeight: '80vh' }}>
+              <div className="flex items-center justify-between p-6 border-b">
                 <h2 className="text-xl font-semibold text-gray-900">
                   {editingEmployee ? 'Medewerker Bewerken' : 'Nieuwe Medewerker'}
                 </h2>
                 <button onClick={closeEmployeeModal} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
               </div>
               
-              <form onSubmit={handleEmployeeSubmit}>
-                <div className="space-y-4">
-                  {/* Basis gegevens */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Voornaam *</label>
-                      <input 
-                        type="text" 
-                        value={employeeFormData.voornaam} 
-                        onChange={(e) => setEmployeeFormData({ ...employeeFormData, voornaam: e.target.value })} 
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
-                        placeholder="bijv. Anna" 
-                        required 
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Achternaam *</label>
-                      <input 
-                        type="text" 
-                        value={employeeFormData.achternaam} 
-                        onChange={(e) => setEmployeeFormData({ ...employeeFormData, achternaam: e.target.value })} 
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
-                        placeholder="bijv. van der Berg" 
-                        required 
-                      />
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">E-mailadres</label>
-                    <input 
-                      type="email" 
-                      value={employeeFormData.email} 
-                      onChange={(e) => setEmployeeFormData({ ...employeeFormData, email: e.target.value })} 
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
-                      placeholder="naam@verloskunde-arnhem.nl" 
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Telefoonnummer</label>
-                    <input 
-                      type="tel" 
-                      value={employeeFormData.telefoon} 
-                      onChange={(e) => setEmployeeFormData({ ...employeeFormData, telefoon: e.target.value })} 
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
-                      placeholder="+31 6 1234 5678" 
-                    />
-                  </div>
-                  
-                  {/* NIEUWE VELDEN */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Dienstverband *</label>
-                      <select 
-                        value={employeeFormData.dienstverband} 
-                        onChange={(e) => setEmployeeFormData({ ...employeeFormData, dienstverband: e.target.value as DienstverbandType })} 
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        required
-                      >
-                        {DIENSTVERBAND_OPTIONS.map(option => (
-                          <option key={option.value} value={option.value}>{option.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Team *</label>
-                      <select 
-                        value={employeeFormData.team} 
-                        onChange={(e) => setEmployeeFormData({ ...employeeFormData, team: e.target.value as TeamType })} 
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        required
-                      >
-                        {TEAM_OPTIONS.map(option => (
-                          <option key={option.value} value={option.value}>{option.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Aantal werkdagen *</label>
-                    <div className="text-sm text-gray-500 mb-2">Basis aantal werkdagen per maand</div>
-                    <input 
-                      type="number" 
-                      min="0" 
-                      max="35" 
-                      value={employeeFormData.aantalWerkdagen} 
-                      onChange={(e) => setEmployeeFormData({ ...employeeFormData, aantalWerkdagen: parseInt(e.target.value) || 0 })} 
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
-                      placeholder="24" 
-                      required 
-                    />
-                  </div>
-                  
-                  <div className="flex items-center">
-                    <input 
-                      type="checkbox" 
-                      id="actief" 
-                      checked={employeeFormData.actief} 
-                      onChange={(e) => setEmployeeFormData({ ...employeeFormData, actief: e.target.checked })} 
-                      className="mr-2" 
-                    />
-                    <label htmlFor="actief" className="text-sm font-medium text-gray-700">
-                      Actief (beschikbaar voor roostering)
-                    </label>
-                  </div>
-                  
-                  {/* Roostervrije dagen - verticaal onderaan */}
-                  <div className="border-t pt-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-3">Standaard vrije dagen</label>
-                    <div className="space-y-2">
-                      {DAGEN_VAN_WEEK.map(dag => (
-                        <div key={dag.code} className="flex items-center">
+              <div className="overflow-y-auto" style={{ maxHeight: 'calc(80vh - 140px)' }}>
+                <div className="p-6">
+                  <form onSubmit={handleEmployeeSubmit}>
+                    <div className="space-y-4">
+                      {/* Basis gegevens - COMPACTER LAYOUT */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Voornaam *</label>
                           <input 
-                            type="checkbox" 
-                            id={`dag-${dag.code}`}
-                            checked={employeeFormData.roostervrijDagen.includes(dag.code)}
-                            onChange={(e) => handleRoostervrijDagChange(dag.code, e.target.checked)} 
-                            className="mr-3" 
+                            type="text" 
+                            value={employeeFormData.voornaam} 
+                            onChange={(e) => setEmployeeFormData({ ...employeeFormData, voornaam: e.target.value })} 
+                            className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                            placeholder="bijv. Anna" 
+                            required 
                           />
-                          <label htmlFor={`dag-${dag.code}`} className="text-sm font-medium text-gray-700">
-                            {dag.naam}
-                          </label>
                         </div>
-                      ))}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Achternaam *</label>
+                          <input 
+                            type="text" 
+                            value={employeeFormData.achternaam} 
+                            onChange={(e) => setEmployeeFormData({ ...employeeFormData, achternaam: e.target.value })} 
+                            className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                            placeholder="bijv. van der Berg" 
+                            required 
+                          />
+                        </div>
+                      </div>
+                      
+                      {/* Actief checkbox - VERPLAATST NAAR BOVEN */}
+                      <div className="flex items-center">
+                        <input 
+                          type="checkbox" 
+                          id="actief" 
+                          checked={employeeFormData.actief} 
+                          onChange={(e) => setEmployeeFormData({ ...employeeFormData, actief: e.target.checked })} 
+                          className="mr-2" 
+                        />
+                        <label htmlFor="actief" className="text-sm font-medium text-gray-700">
+                          Actief (beschikbaar voor roostering)
+                        </label>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">E-mailadres</label>
+                        <input 
+                          type="email" 
+                          value={employeeFormData.email} 
+                          onChange={(e) => setEmployeeFormData({ ...employeeFormData, email: e.target.value })} 
+                          className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                          placeholder="naam@verloskunde-arnhem.nl" 
+                        />
+                      </div>
+                      
+                      {/* Telefoonnummer - INLINE LAYOUT */}
+                      <div className="flex items-center gap-3">
+                        <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Telefoonnummer:</label>
+                        <input 
+                          type="tel" 
+                          value={employeeFormData.telefoon} 
+                          onChange={(e) => setEmployeeFormData({ ...employeeFormData, telefoon: e.target.value })} 
+                          className="flex-1 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                          placeholder="+31 6 1234 5678"
+                          maxLength={12}
+                        />
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Dienstverband *</label>
+                          <select 
+                            value={employeeFormData.dienstverband} 
+                            onChange={(e) => setEmployeeFormData({ ...employeeFormData, dienstverband: e.target.value as DienstverbandType })} 
+                            className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            required
+                          >
+                            {DIENSTVERBAND_OPTIONS.map(option => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Team *</label>
+                          <select 
+                            value={employeeFormData.team} 
+                            onChange={(e) => setEmployeeFormData({ ...employeeFormData, team: e.target.value as TeamType })} 
+                            className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            required
+                          >
+                            {TEAM_OPTIONS.map(option => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      
+                      {/* Aantal werkdagen - INLINE LAYOUT */}
+                      <div className="flex items-center gap-3">
+                        <label className="text-sm font-medium text-gray-700 flex-1">
+                          Basis aantal werkdagen per maand:
+                        </label>
+                        <input 
+                          type="number" 
+                          min="0" 
+                          max="35" 
+                          value={employeeFormData.aantalWerkdagen} 
+                          onChange={(e) => setEmployeeFormData({ ...employeeFormData, aantalWerkdagen: parseInt(e.target.value) || 0 })} 
+                          className="w-20 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-center" 
+                          placeholder="24" 
+                          required 
+                        />
+                        <span className="text-sm text-gray-600">*</span>
+                      </div>
+                      
+                      {/* Roostervrije dagen - HORIZONTALE LAYOUT */}
+                      <div className="border-t pt-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-3">Standaard Niet Beschikbaar</label>
+                        <div className="grid grid-cols-7 gap-2">
+                          {DAGEN_VAN_WEEK.map(dag => (
+                            <div key={dag.code} className="text-center">
+                              <div className="text-xs font-medium text-gray-600 mb-1">{dag.code.toUpperCase()}</div>
+                              <div className="flex justify-center">
+                                <input 
+                                  type="checkbox" 
+                                  id={`dag-${dag.code}`}
+                                  checked={employeeFormData.roostervrijDagen.includes(dag.code)}
+                                  onChange={(e) => handleRoostervrijDagChange(dag.code, e.target.checked)} 
+                                  className="" 
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                    
+                    {error && (
+                      <div className="mt-4 p-3 bg-red-100 border border-red-200 text-red-700 rounded-lg text-sm">
+                        {error}
+                      </div>
+                    )}
+                  </form>
                 </div>
-                
-                {error && (
-                  <div className="mt-4 p-3 bg-red-100 border border-red-200 text-red-700 rounded-lg text-sm">
-                    {error}
-                  </div>
-                )}
-                
-                <div className="flex gap-3 mt-6">
-                  <button 
-                    type="button" 
-                    onClick={closeEmployeeModal} 
-                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    Annuleren
-                  </button>
-                  <button 
-                    type="submit" 
-                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                  >
-                    {editingEmployee ? 'Bijwerken' : 'Aanmaken'}
-                  </button>
-                </div>
-              </form>
+              </div>
+              
+              <div className="flex gap-3 p-6 border-t bg-gray-50">
+                <button 
+                  type="button" 
+                  onClick={closeEmployeeModal} 
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Annuleren
+                </button>
+                <button 
+                  type="submit" 
+                  onClick={handleEmployeeSubmit}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  {editingEmployee ? 'Bijwerken' : 'Aanmaken'}
+                </button>
+              </div>
             </div>
           </div>
         )}
