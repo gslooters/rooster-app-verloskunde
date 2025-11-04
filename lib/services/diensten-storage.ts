@@ -1,15 +1,30 @@
 // lib/services/diensten-storage.ts
-import { Dienst } from "../types/dienst";
+import { Dienst, validateDienstwaarde } from "../types/dienst";
 
 const STORAGE_KEY = "rooster_diensten";
 
+// Vaste system-diensten met harde waarden/kleuren
+const SYSTEM_DIENSTEN: Dienst[] = [
+  {
+    id: '=', code: '=', naam: 'Vrij', beschrijving: 'Vrij conform roosterplanning',
+    kleur: '#47F906', dienstwaarde: 0, system: true, actief: true,
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+  },
+  {
+    id: 'NB', code: 'NB', naam: 'Niet beschikbaar', beschrijving: 'Medewerker niet beschikbaar op deze dag',
+    kleur: '#FFF59D', dienstwaarde: 0, system: true, actief: true,
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+  }
+];
+
 const DEFAULT_DIENSTEN: Dienst[] = [
-  { id: 's', code: 's', naam: 'Shift', beschrijving: 'Reguliere dienst', kleur: '#3B82F6', actief: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'd', code: 'd', naam: 'Dagdienst', beschrijving: 'Dagdienst', kleur: '#10B981', actief: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'sp', code: 'sp', naam: 'Speciaal', beschrijving: 'Speciale dienst', kleur: '#8B5CF6', actief: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'echo', code: 'echo', naam: 'Echo', beschrijving: 'Echo onderzoek', kleur: '#F59E0B', actief: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'nd', code: 'nd', naam: 'Nachtdienst', beschrijving: 'Nachtdienst', kleur: '#1F2937', actief: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'ss', code: 'ss', naam: 'Weekend', beschrijving: 'Weekend dienst', kleur: '#EF4444', actief: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  ...SYSTEM_DIENSTEN,
+  { id: 'd24', code: 'D24', naam: '24-uurs dienst', beschrijving: 'Reguliere dienst', kleur: '#BE185D', dienstwaarde: 1, system: false, actief: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 'd', code: 'D', naam: 'Dagdienst', beschrijving: 'Dagdienst', kleur: '#10B981', dienstwaarde: 1, system: false, actief: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 'sp', code: 'SP', naam: 'Speciaal', beschrijving: 'Speciale dienst', kleur: '#8B5CF6', dienstwaarde: 1, system: false, actief: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 'echo', code: 'ECHO', naam: 'Echo', beschrijving: 'Echo onderzoek', kleur: '#F59E0B', dienstwaarde: 1, system: false, actief: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 'nd', code: 'ND', naam: 'Nachtdienst', beschrijving: 'Nachtdienst', kleur: '#1F2937', dienstwaarde: 1.5, system: false, actief: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 'ss', code: 'SS', naam: 'Weekend', beschrijving: 'Weekend dienst', kleur: '#EF4444', dienstwaarde: 1, system: false, actief: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
 ];
 
 function load(): Dienst[] {
@@ -19,24 +34,40 @@ function load(): Dienst[] {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_DIENSTEN));
     return DEFAULT_DIENSTEN;
   }
-  try { return JSON.parse(raw) as Dienst[]; } catch { return DEFAULT_DIENSTEN; }
+  try {
+    const list = JSON.parse(raw) as Dienst[];
+    // Zorg dat system-diensten altijd aanwezig en overschreven zijn met vaste waarden
+    const filtered = list.filter(d => !SYSTEM_DIENSTEN.some(s => s.code === d.code));
+    const merged = [...SYSTEM_DIENSTEN, ...filtered];
+    // Normaliseer ontbrekende nieuwe velden
+    return merged.map(d => ({
+      dienstwaarde: d.dienstwaarde ?? 1,
+      system: d.system ?? false,
+      ...d
+    }));
+  } catch {
+    return DEFAULT_DIENSTEN;
+  }
 }
 
 function save(list: Dienst[]) {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  // forceer system entries
+  const filtered = list.filter(d => !SYSTEM_DIENSTEN.some(s => s.code === d.code));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify([...SYSTEM_DIENSTEN, ...filtered]));
 }
 
 export function getAllServices(): Dienst[] { return load(); }
 
-export function createService(data: Omit<Dienst, 'id'|'created_at'|'updated_at'> & { id?: string }): Dienst {
+export function createService(data: Omit<Dienst, 'id'|'created_at'|'updated_at'|'system'> & { id?: string; system?: boolean }): Dienst {
   const list = load();
   const now = new Date().toISOString();
   const id = data.id ?? data.code;
   if (!data.code || data.code.length < 1 || data.code.length > 4) throw new Error('Code moet 1-4 tekens zijn');
   if (!data.naam) throw new Error('Naam is verplicht');
+  if (!validateDienstwaarde(data.dienstwaarde)) throw new Error('Dienstwaarde moet tussen 0 en 6 liggen in stappen van 0,5');
   if (list.some(d => d.code.toLowerCase() === data.code.toLowerCase())) throw new Error('Code moet uniek zijn');
-  const nieuw: Dienst = { id, created_at: now, updated_at: now, ...data } as Dienst;
+  const nieuw: Dienst = { id, created_at: now, updated_at: now, system: false, ...data } as Dienst;
   list.push(nieuw); save(list); return nieuw;
 }
 
@@ -44,45 +75,55 @@ export function updateService(id: string, patch: Partial<Dienst>): Dienst {
   const list = load();
   const idx = list.findIndex(d => d.id === id);
   if (idx === -1) throw new Error('Dienst niet gevonden');
-  const now = new Date().toISOString();
   const current = list[idx];
-  const updated = { ...current, ...patch, updated_at: now } as Dienst;
-  // code uniek houden
-  if (updated.code && list.some(d => d.id !== id && d.code.toLowerCase() === updated.code.toLowerCase())) {
+  // System-diensten beperkte wijziging
+  if (current.system) {
+    // alleen actief togglen is toegestaan
+    const allowed: Partial<Dienst> = { actief: patch.actief ?? current.actief };
+    const updated: Dienst = { ...current, ...allowed, updated_at: new Date().toISOString() };
+    list[idx] = updated; save(list); return updated;
+  }
+  const now = new Date().toISOString();
+  const next = { ...current, ...patch, updated_at: now } as Dienst;
+  if (next.code && list.some(d => d.id !== id && d.code.toLowerCase() === next.code.toLowerCase())) {
     throw new Error('Code moet uniek zijn');
   }
-  list[idx] = updated; save(list); return updated;
+  if (next.dienstwaarde != null && !validateDienstwaarde(next.dienstwaarde)) {
+    throw new Error('Dienstwaarde moet tussen 0 en 6 liggen in stappen van 0,5');
+  }
+  list[idx] = next; save(list); return next;
 }
 
-// Mock referentie checks: vervang later met echte lookup in rooster/medewerker stores
-function isServiceUsedInRoosters(dienstId: string): boolean {
+// Referentie checks (basic)
+function isServiceUsedInRoosters(dienstCode: string): boolean {
   if (typeof window === 'undefined') return false;
   const raw = localStorage.getItem('roosters') || '[]';
   try {
     const roosters = JSON.parse(raw) as any[];
-    return roosters.some(r => JSON.stringify(r).includes(`"${dienstId}"`) || JSON.stringify(r).includes(`:${dienstId}`));
+    return roosters.some(r => JSON.stringify(r).includes(`"${dienstCode}"`));
   } catch { return false; }
 }
 
-function isServiceMappedToEmployees(dienstId: string): boolean {
+function isServiceMappedToEmployees(dienstCode: string): boolean {
   if (typeof window === 'undefined') return false;
   const raw = localStorage.getItem('medewerker_diensten') || '{}';
   try {
     const map = JSON.parse(raw) as Record<string,string[]>;
-    return Object.values(map).some(list => list.includes(dienstId));
+    return Object.values(map).some(list => list.includes(dienstCode));
   } catch { return false; }
 }
 
-export function canDeleteService(dienstId: string): { canDelete: boolean; reason?: string } {
-  if (isServiceUsedInRoosters(dienstId)) return { canDelete: false, reason: 'Staat in rooster' };
-  if (isServiceMappedToEmployees(dienstId)) return { canDelete: false, reason: 'Gekoppeld aan medewerker' };
+export function canDeleteService(dienstCode: string): { canDelete: boolean; reason?: string } {
+  if (SYSTEM_DIENSTEN.some(s => s.code === dienstCode)) return { canDelete: false, reason: 'Vaste systeemdienst' };
+  if (isServiceUsedInRoosters(dienstCode)) return { canDelete: false, reason: 'Staat in rooster' };
+  if (isServiceMappedToEmployees(dienstCode)) return { canDelete: false, reason: 'Gekoppeld aan medewerker' };
   return { canDelete: true };
 }
 
-export function removeService(dienstId: string): void {
-  const check = canDeleteService(dienstId);
+export function removeService(dienstCode: string): void {
+  const check = canDeleteService(dienstCode);
   if (!check.canDelete) throw new Error(`Kan deze dienst niet verwijderen. ${check.reason ?? ''}`.trim());
   const list = load();
-  const next = list.filter(d => d.id !== dienstId);
+  const next = list.filter(d => d.code !== dienstCode);
   save(next);
 }
