@@ -1,7 +1,19 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { getAllEmployees, createEmployee, updateEmployee, canDeleteEmployee, removeEmployee } from '@/lib/services/employees-storage';
-import { Employee, getFullName, getRosterDisplayName } from '@/lib/types/employee';
+import { 
+  Employee, 
+  DienstverbandType,
+  TeamType,
+  getFullName, 
+  getRosterDisplayName,
+  DAGEN_VAN_WEEK,
+  DIENSTVERBAND_OPTIONS,
+  TEAM_OPTIONS,
+  validateAantalWerkdagen,
+  validateRoostervrijDagen,
+  normalizeRoostervrijDagen
+} from '@/lib/types/employee';
 
 export default function MedewerkersPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -12,7 +24,11 @@ export default function MedewerkersPage() {
     achternaam: '', 
     email: '', 
     telefoon: '', 
-    actief: true 
+    actief: true,
+    dienstverband: DienstverbandType.LOONDIENST,
+    team: TeamType.OVERIG,
+    aantalWerkdagen: 24,
+    roostervrijDagen: [] as string[]
   });
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -38,11 +54,25 @@ export default function MedewerkersPage() {
         achternaam: employee.achternaam,
         email: employee.email || '',
         telefoon: employee.telefoon || '',
-        actief: employee.actief 
+        actief: employee.actief,
+        dienstverband: employee.dienstverband,
+        team: employee.team,
+        aantalWerkdagen: employee.aantalWerkdagen,
+        roostervrijDagen: [...employee.roostervrijDagen]
       }); 
     } else { 
       setEditingEmployee(null); 
-      setEmployeeFormData({ voornaam: '', achternaam: '', email: '', telefoon: '', actief: true }); 
+      setEmployeeFormData({ 
+        voornaam: '', 
+        achternaam: '', 
+        email: '', 
+        telefoon: '', 
+        actief: true,
+        dienstverband: DienstverbandType.LOONDIENST,
+        team: TeamType.OVERIG,
+        aantalWerkdagen: 24,
+        roostervrijDagen: []
+      }); 
     }
     setError(''); 
     setShowEmployeeModal(true);
@@ -58,11 +88,25 @@ export default function MedewerkersPage() {
     e.preventDefault(); 
     setError('');
     
-    try { 
+    try {
+      // Client-side validatie
+      if (!validateAantalWerkdagen(employeeFormData.aantalWerkdagen)) {
+        throw new Error('Aantal werkdagen moet tussen 0 en 35 zijn');
+      }
+      
+      if (!validateRoostervrijDagen(employeeFormData.roostervrijDagen)) {
+        throw new Error('Ongeldige roostervrije dagen geselecteerd');
+      }
+      
+      const formData = {
+        ...employeeFormData,
+        roostervrijDagen: normalizeRoostervrijDagen(employeeFormData.roostervrijDagen)
+      };
+      
       if (editingEmployee) {
-        updateEmployee(editingEmployee.id, employeeFormData); 
+        updateEmployee(editingEmployee.id, formData); 
       } else {
-        createEmployee(employeeFormData); 
+        createEmployee(formData); 
       }
       loadData(); 
       closeEmployeeModal(); 
@@ -83,6 +127,25 @@ export default function MedewerkersPage() {
       loadData(); 
     } catch (err: any) { 
       alert(err.message || 'Er is een fout opgetreden bij het verwijderen'); 
+    }
+  };
+
+  const handleRoostervrijDagChange = (dagCode: string, checked: boolean) => {
+    const current = employeeFormData.roostervrijDagen;
+    if (checked) {
+      // Voeg toe als niet al aanwezig
+      if (!current.includes(dagCode)) {
+        setEmployeeFormData({
+          ...employeeFormData,
+          roostervrijDagen: [...current, dagCode]
+        });
+      }
+    } else {
+      // Verwijder uit array
+      setEmployeeFormData({
+        ...employeeFormData,
+        roostervrijDagen: current.filter(d => d !== dagCode)
+      });
     }
   };
 
@@ -139,12 +202,35 @@ export default function MedewerkersPage() {
                     <div>
                       <h3 className="text-lg font-semibold text-gray-900">{getFullName(employee)}</h3>
                       <div className="text-sm text-gray-500">Voor roosters: {getRosterDisplayName(employee)}</div>
+                      
+                      {/* Nieuwe badge informatie */}
+                      <div className="flex gap-1 mt-1">
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                          employee.team === TeamType.GROEN ? 'bg-green-100 text-green-700' :
+                          employee.team === TeamType.ORANJE ? 'bg-orange-100 text-orange-700' :
+                          'bg-gray-100 text-gray-700'
+                        }`}>
+                          {employee.team}
+                        </span>
+                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">
+                          {employee.dienstverband}
+                        </span>
+                      </div>
+                      
+                      <div className="text-xs text-gray-600 mt-1">
+                        {employee.aantalWerkdagen} werkdagen/maand
+                        {employee.roostervrijDagen.length > 0 && (
+                          <div>Vrij: {employee.roostervrijDagen.join(', ')}</div>
+                        )}
+                      </div>
+                      
                       {(employee.email || employee.telefoon) && (
                         <div className="text-xs text-gray-600 mt-1">
                           {employee.email && <div>📧 {employee.email}</div>}
                           {employee.telefoon && <div>📱 {employee.telefoon}</div>}
                         </div>
                       )}
+                      
                       <span className={`inline-block mt-2 px-2 py-1 text-xs font-medium rounded-full ${
                         employee.actief 
                           ? 'bg-green-100 text-green-700 border border-green-200' 
@@ -202,7 +288,7 @@ export default function MedewerkersPage() {
         {/* Employee Modal */}
         {showEmployeeModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg">
+            <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-semibold text-gray-900">
                   {editingEmployee ? 'Medewerker Bewerken' : 'Nieuwe Medewerker'}
@@ -212,6 +298,7 @@ export default function MedewerkersPage() {
               
               <form onSubmit={handleEmployeeSubmit}>
                 <div className="space-y-4">
+                  {/* Basis gegevens */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Voornaam *</label>
@@ -259,6 +346,51 @@ export default function MedewerkersPage() {
                     />
                   </div>
                   
+                  {/* NIEUWE VELDEN */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Dienstverband *</label>
+                      <select 
+                        value={employeeFormData.dienstverband} 
+                        onChange={(e) => setEmployeeFormData({ ...employeeFormData, dienstverband: e.target.value as DienstverbandType })} 
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        required
+                      >
+                        {DIENSTVERBAND_OPTIONS.map(option => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Team *</label>
+                      <select 
+                        value={employeeFormData.team} 
+                        onChange={(e) => setEmployeeFormData({ ...employeeFormData, team: e.target.value as TeamType })} 
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        required
+                      >
+                        {TEAM_OPTIONS.map(option => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Aantal werkdagen *</label>
+                    <div className="text-sm text-gray-500 mb-2">Basis aantal werkdagen per maand</div>
+                    <input 
+                      type="number" 
+                      min="0" 
+                      max="35" 
+                      value={employeeFormData.aantalWerkdagen} 
+                      onChange={(e) => setEmployeeFormData({ ...employeeFormData, aantalWerkdagen: parseInt(e.target.value) || 0 })} 
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                      placeholder="24" 
+                      required 
+                    />
+                  </div>
+                  
                   <div className="flex items-center">
                     <input 
                       type="checkbox" 
@@ -270,6 +402,27 @@ export default function MedewerkersPage() {
                     <label htmlFor="actief" className="text-sm font-medium text-gray-700">
                       Actief (beschikbaar voor roostering)
                     </label>
+                  </div>
+                  
+                  {/* Roostervrije dagen - verticaal onderaan */}
+                  <div className="border-t pt-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-3">Standaard vrije dagen</label>
+                    <div className="space-y-2">
+                      {DAGEN_VAN_WEEK.map(dag => (
+                        <div key={dag.code} className="flex items-center">
+                          <input 
+                            type="checkbox" 
+                            id={`dag-${dag.code}`}
+                            checked={employeeFormData.roostervrijDagen.includes(dag.code)}
+                            onChange={(e) => handleRoostervrijDagChange(dag.code, e.target.checked)} 
+                            className="mr-3" 
+                          />
+                          <label htmlFor={`dag-${dag.code}`} className="text-sm font-medium text-gray-700">
+                            {dag.naam}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
                 
