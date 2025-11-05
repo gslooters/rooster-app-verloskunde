@@ -59,7 +59,7 @@ export const TEAM_SCOPE_CONFIG = {
   },
   oranje: { 
     code: 'oranje', 
-    label: 'Org', 
+    label: 'Ora', 
     name: 'Team Oranje', 
     color: 'orange',
     description: 'Alleen Team Oranje'
@@ -94,4 +94,12 @@ export function isTeamScopeExclusive(scope: TeamScope): boolean {
 // Helper to get team scope display text
 export function getTeamScopeDisplayText(scope: TeamScope): string {
   return TEAM_SCOPE_CONFIG[scope].name;
+}
+
+// Helper to get shortened bezetting text for UI
+export function getBezettingText(min: number, max: number): string {
+  if (min === 0 && max === 0) return 'Geen';
+  if (min === max) return `Exact ${min}`;
+  if (max === 9) return `Min ${min}, onbep`; // Shortened from "onbeperkt"
+  return `${min}-${max}`;
 }
