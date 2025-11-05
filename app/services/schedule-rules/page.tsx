@@ -4,20 +4,31 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, Download, FileSpreadsheet, Save, RotateCcw, Upload, AlertTriangle } from 'lucide-react';
 import { Dienst } from '@/lib/types/dienst';
-import { DayTypeStaffing, DayTypeStaffingInput, DAYS_OF_WEEK } from '@/lib/types/daytype-staffing';
+import { 
+  DayTypeStaffing, 
+  DayTypeStaffingInput, 
+  DAYS_OF_WEEK, 
+  TeamScope,
+  getDefaultTeamScope,
+  getTeamScopeDisplayText 
+} from '@/lib/types/daytype-staffing';
 import { getAllServices } from '@/lib/services/diensten-storage';
 import { 
   getAllDayTypeStaffing, 
   upsertStaffingRule, 
   initializeDefaultStaffingRules,
   resetToDefaults,
-  saveAllDayTypeStaffing
+  saveAllDayTypeStaffing,
+  getServiceTeamScope,
+  updateServiceTeamScope
 } from '@/lib/services/daytype-staffing-storage';
 import { downloadCSV, printToPDF } from '@/lib/export/daytype-staffing-export';
+import TeamSelector from '@/app/_components/TeamSelector';
 
 export default function ServicesByDayTypePage() {
   const [services, setServices] = useState<Dienst[]>([]);
   const [staffingRules, setStaffingRules] = useState<DayTypeStaffing[]>([]);
+  const [serviceTeamScopes, setServiceTeamScopes] = useState<{[key: string]: TeamScope}>({});
   const [isLoading, setIsLoading] = useState(true);
   const [hasChanges, setHasChanges] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Set<string>>(new Set());
@@ -33,13 +44,20 @@ export default function ServicesByDayTypePage() {
       const loadedServices = getAllServices().filter(service => service.actief);
       setServices(loadedServices);
 
-      // Beschermende load: eerst proberen te lezen, alleen initialiseren als echt leeg
+      // Load staffing rules with migration support
       let loadedRules = getAllDayTypeStaffing();
       if (!loadedRules || loadedRules.length === 0) {
         loadedRules = initializeDefaultStaffingRules();
       }
-
       setStaffingRules(loadedRules);
+      
+      // Load service team scopes
+      const scopes: {[key: string]: TeamScope} = {};
+      loadedServices.forEach(service => {
+        scopes[service.id] = getServiceTeamScope(service.id);
+      });
+      setServiceTeamScopes(scopes);
+      
       validateRules(loadedRules);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -57,6 +75,7 @@ export default function ServicesByDayTypePage() {
       dagSoort,
       minBezetting: 0,
       maxBezetting: 0,
+      teamScope: getDefaultTeamScope(),
       created_at: '',
       updated_at: ''
     };
@@ -86,6 +105,7 @@ export default function ServicesByDayTypePage() {
         dagSoort,
         minBezetting: newMin,
         maxBezetting: newMax,
+        teamScope: serviceTeamScopes[dienstId] || getDefaultTeamScope(),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       });
@@ -94,6 +114,27 @@ export default function ServicesByDayTypePage() {
     setStaffingRules(updatedRules);
     setHasChanges(true);
     validateRules(updatedRules);
+  };
+  
+  const handleTeamScopeChange = (dienstId: string, newScope: TeamScope) => {
+    // Update service team scope
+    const newServiceTeamScopes = {
+      ...serviceTeamScopes,
+      [dienstId]: newScope
+    };
+    setServiceTeamScopes(newServiceTeamScopes);
+    
+    // Update all staffing rules for this service with new team scope
+    const updatedRules = staffingRules.map(rule => 
+      rule.dienstId === dienstId 
+        ? { ...rule, teamScope: newScope, updated_at: new Date().toISOString() }
+        : rule
+    );
+    setStaffingRules(updatedRules);
+    setHasChanges(true);
+    
+    // Save service team scope immediately
+    updateServiceTeamScope(dienstId, newScope);
   };
 
   const validateRules = (rules: DayTypeStaffing[]) => {
@@ -106,7 +147,6 @@ export default function ServicesByDayTypePage() {
   };
 
   const normalizeForSave = (rules: DayTypeStaffing[]): DayTypeStaffing[] => {
-    // Verwijder temp_ ids door ze leeg te laten; storage zal ids genereren bij upsert (indien ooit gebruikt)
     return rules.map(r => ({ ...r, id: r.id.startsWith('temp_') ? '' : r.id } as any));
   };
 
@@ -117,16 +157,13 @@ export default function ServicesByDayTypePage() {
     }
     setSaveStatus('saving');
     try {
-      // Atomisch: sla de volledige in-memory set op 1-op-1 in localStorage
       const normalized = normalizeForSave(staffingRules);
-      // Genereer eventuele ontbrekende ids
       const withIds = normalized.map(r => ({
         ...r,
         id: r.id && r.id !== '' ? r.id : `${Date.now()}_${r.dienstId}_${r.dagSoort}`
       }));
       saveAllDayTypeStaffing(withIds);
 
-      // Herladen uit storage om de bron van waarheid te zijn
       const updated = getAllDayTypeStaffing();
       setStaffingRules(updated);
       setHasChanges(false);
@@ -143,6 +180,14 @@ export default function ServicesByDayTypePage() {
     if (confirm('Weet je zeker dat je alle regels wilt resetten naar standaardwaarden?')) {
       const defaultRules = initializeDefaultStaffingRules();
       setStaffingRules(defaultRules);
+      
+      // Reset service team scopes to default
+      const defaultScopes: {[key: string]: TeamScope} = {};
+      services.forEach(service => {
+        defaultScopes[service.id] = getDefaultTeamScope();
+      });
+      setServiceTeamScopes(defaultScopes);
+      
       setHasChanges(false);
       validateRules(defaultRules);
     }
@@ -155,6 +200,7 @@ export default function ServicesByDayTypePage() {
     if (max >= 4) return 'bg-yellow-100 text-yellow-800';
     return 'bg-orange-100 text-orange-800';
   };
+  
   const getBezettingText = (min: number, max: number): string => {
     if (min === 0 && max === 0) return 'Geen';
     if (min === max) return `Exact ${min}`;
@@ -205,25 +251,28 @@ export default function ServicesByDayTypePage() {
               </div>
             </div>
             <div>
-              <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2 flex items-center">
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2 flex items-center">
                 <span className="text-2xl mr-3">📅</span>
                 Diensten per Dagsoort
               </h1>
               <p className="text-gray-600">Beheer minimum/maximum bezetting per dienst per dag van de week. Deze regels worden gebruikt bij roosterplanning.</p>
             </div>
           </div>
-          <div className="p-6 bg-blue-50 border-b border-gray-200">
-            <h3 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5" />
+          
+          {/* Compact interpretatie sectie */}
+          <div className="p-4 bg-blue-50 border-b border-gray-200">
+            <h3 className="font-semibold text-blue-900 mb-2 flex items-center gap-2 text-sm">
+              <AlertTriangle className="w-4 h-4" />
               Interpretatie Bezettingsregels
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-sm text-blue-800">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-blue-800">
               <div><strong>Min 0, Max 0:</strong> Geen bezetting</div>
               <div><strong>Min 1, Max 1:</strong> Exact 1 persoon</div>
               <div><strong>Min 1, Max 2:</strong> 1 tot 2 personen</div>
               <div><strong>Min 2, Max 9:</strong> Min 2, onbeperkt max</div>
             </div>
           </div>
+          
           <div className="p-6">
             {services.length === 0 ? (
               <div className="text-center py-12">
@@ -235,11 +284,12 @@ export default function ServicesByDayTypePage() {
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full border border-gray-200 rounded-lg overflow-hidden">
-                  <thead className="bg-gray-50">
+                  <thead className="bg-gray-50 sticky top-0 z-10">
                     <tr>
-                      <th className="text-left p-4 font-semibold text-gray-900 border-r border-gray-200 min-w-[180px]">Dienst</th>
+                      <th className="text-left p-3 font-semibold text-gray-900 border-r border-gray-200 min-w-[160px]">Dienst</th>
+                      <th className="text-center p-3 font-semibold text-gray-900 border-r border-gray-200 min-w-[100px]">Team</th>
                       {DAYS_OF_WEEK.map(day => (
-                        <th key={day.code} className="text-center p-3 font-semibold text-gray-900 border-r border-gray-200 min-w-[100px]">
+                        <th key={day.code} className="text-center p-2 font-semibold text-gray-900 border-r border-gray-200 min-w-[85px]">
                           <div className="text-sm">{day.name}</div>
                           <div className="text-xs text-gray-500 font-normal mt-1">min | max</div>
                         </th>
@@ -249,27 +299,33 @@ export default function ServicesByDayTypePage() {
                   <tbody>
                     {services.map((service, serviceIndex) => (
                       <tr key={service.id} className={serviceIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                        <td className="p-4 border-r border-gray-200">
+                        <td className="p-3 border-r border-gray-200">
                           <div className="flex items-center gap-3">
                             <div className="w-5 h-5 rounded-sm flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: service.kleur }}>{service.code.toUpperCase()}</div>
                             <div>
-                              <div className="font-semibold text-gray-900">{service.naam}</div>
-                              <div className="text-sm text-gray-500">{service.beschrijving}</div>
+                              <div className="font-semibold text-gray-900 text-sm">{service.naam}</div>
+                              <div className="text-xs text-gray-500">{service.beschrijving}</div>
                             </div>
                           </div>
+                        </td>
+                        <td className="p-2 border-r border-gray-200 text-center">
+                          <TeamSelector 
+                            currentScope={serviceTeamScopes[service.id] || getDefaultTeamScope()}
+                            onChange={(scope) => handleTeamScopeChange(service.id, scope)}
+                          />
                         </td>
                         {DAYS_OF_WEEK.map(day => {
                           const rule = getStaffingRule(service.id, day.index);
                           const errorKey = `${service.id}-${day.index}`;
                           const hasError = validationErrors.has(errorKey);
                           return (
-                            <td key={day.code} className="p-2 border-r border-gray-200 text-center">
-                              <div className="flex items-center justify-center gap-1 mb-2">
-                                <input type="number" min="0" max="8" value={rule.minBezetting} onChange={e => updateStaffingRule(service.id, day.index, 'minBezetting', parseInt(e.target.value) || 0)} className={`w-12 h-8 text-center text-sm border rounded focus:ring-2 focus:ring-blue-500 ${hasError ? 'border-red-300 bg-red-50' : 'border-gray-300'}`} />
-                                <span className="text-gray-400 text-sm">|</span>
-                                <input type="number" min="0" max="9" value={rule.maxBezetting} onChange={e => updateStaffingRule(service.id, day.index, 'maxBezetting', parseInt(e.target.value) || 0)} className={`w-12 h-8 text-center text-sm border rounded focus:ring-2 focus:ring-blue-500 ${hasError ? 'border-red-300 bg-red-50' : 'border-gray-300'}`} />
+                            <td key={day.code} className="p-1 border-r border-gray-200 text-center">
+                              <div className="flex items-center justify-center gap-1 mb-1">
+                                <input type="number" min="0" max="8" value={rule.minBezetting} onChange={e => updateStaffingRule(service.id, day.index, 'minBezetting', parseInt(e.target.value) || 0)} className={`w-10 h-7 text-center text-xs border rounded focus:ring-2 focus:ring-blue-500 ${hasError ? 'border-red-300 bg-red-50' : 'border-gray-300'}`} />
+                                <span className="text-gray-400 text-xs">|</span>
+                                <input type="number" min="0" max="9" value={rule.maxBezetting} onChange={e => updateStaffingRule(service.id, day.index, 'maxBezetting', parseInt(e.target.value) || 0)} className={`w-10 h-7 text-center text-xs border rounded focus:ring-2 focus:ring-blue-500 ${hasError ? 'border-red-300 bg-red-50' : 'border-gray-300'}`} />
                               </div>
-                              <div className={`px-2 py-1 rounded text-xs font-medium ${getBezettingColor(rule.minBezetting, rule.maxBezetting)}`}>{getBezettingText(rule.minBezetting, rule.maxBezetting)}</div>
+                              <div className={`px-1 py-0.5 rounded text-xs font-medium ${getBezettingColor(rule.minBezetting, rule.maxBezetting)}`}>{getBezettingText(rule.minBezetting, rule.maxBezetting)}</div>
                               {hasError && (<div className="text-xs text-red-600 mt-1 font-medium">Min {'>'} Max</div>)}
                             </td>
                           );
@@ -281,6 +337,7 @@ export default function ServicesByDayTypePage() {
               </div>
             )}
           </div>
+          
           <div className="p-6 bg-gray-50 border-t border-gray-200">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="bg-white p-4 rounded-lg border"><h3 className="font-semibold text-gray-900 mb-2">Actieve Diensten</h3><div className="text-2xl font-bold text-blue-600">{services.length}</div></div>
