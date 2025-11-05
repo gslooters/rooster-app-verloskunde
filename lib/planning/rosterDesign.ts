@@ -1,12 +1,10 @@
 // lib/planning/rosterDesign.ts
-// Uitbreiding: auto-fill startdatum, medewerkers-snapshot met sortering + team badge info,
-// maxShifts = aantalWerkdagen, en NB auto-fill op basis van roostervrijDagen.
+// Fix: autofill NB met LIVE employees data i.p.v. snapshot data
 
 import { RosterEmployee, RosterStatus, RosterDesignData, validateMaxShifts, createDefaultRosterEmployee, createDefaultRosterStatus } from '@/lib/types/roster';
 import { getAllEmployees } from '@/lib/services/employees-storage';
 import { TeamType, DienstverbandType } from '@/lib/types/employee';
 
-// LocalStorage keys
 const ROSTER_DESIGN_KEY = 'roster_design_data';
 
 // Helper: team/dienstverband sortering
@@ -24,9 +22,7 @@ function sortEmployeesForRoster(list: any[]) {
     });
 }
 
-/**
- * Creëer employee snapshot bij rooster creatie met auto-fill
- */
+/** Creëer employee snapshot bij rooster creatie met auto-fill */
 export function createEmployeeSnapshot(rosterId: string): RosterEmployee[] {
   const activeEmployees = sortEmployeesForRoster(getAllEmployees());
   return activeEmployees.map(emp => {
@@ -71,15 +67,54 @@ export function toggleUnavailability(rosterId: string, employeeId: string, date:
   designData.unavailabilityData[employeeId][date] = !current; return saveRosterDesignData(designData);
 }
 
-/** Batch auto-fill NB op basis van roostervrijDagen en start_date */
+/** Batch auto-fill NB op basis van LIVE roostervrijDagen en start_date */
 export function autofillUnavailability(rosterId: string, start_date: string): boolean {
-  const designData = loadRosterDesignData(rosterId); if (!designData) return false;
+  console.log('🔍 Starting autofill for rosterId:', rosterId, 'start_date:', start_date);
+  
+  const designData = loadRosterDesignData(rosterId); 
+  if (!designData) { console.error('❌ No design data found'); return false; }
+  
+  // Haal LIVE employees data op (niet snapshot)
+  const liveEmployees = getAllEmployees();
+  console.log('📋 Live employees:', liveEmployees.length);
+  
   const start = new Date(start_date + 'T00:00:00');
+  let totalFilledCells = 0;
+  
   for (const emp of designData.employees) {
-    const roostervrij: string[] = (emp as any).roostervrijDagen || [];
-    if (!designData.unavailabilityData[emp.id]) { designData.unavailabilityData[emp.id] = {}; }
-    for (let i=0; i<35; i++) { const d = new Date(start); d.setDate(start.getDate()+i); const dayCode = ['zo','ma','di','wo','do','vr','za'][d.getDay()]; const iso = d.toISOString().split('T')[0]; designData.unavailabilityData[emp.id][iso] = roostervrij.includes(dayCode); }
+    // Match snapshot employee met live employee via originalEmployeeId
+    const liveEmp = liveEmployees.find(le => le.id === emp.originalEmployeeId);
+    if (!liveEmp) {
+      console.warn('⚠️  No live employee found for', emp.name, emp.originalEmployeeId);
+      continue;
+    }
+    
+    const roostervrij: string[] = liveEmp.roostervrijDagen || [];
+    console.log(`👤 ${emp.name}: roostervrijDagen =`, roostervrij);
+    
+    if (!designData.unavailabilityData[emp.id]) { 
+      designData.unavailabilityData[emp.id] = {}; 
+    }
+    
+    let empFilledCells = 0;
+    for (let i = 0; i < 35; i++) {
+      const d = new Date(start); d.setDate(start.getDate() + i);
+      const dayCode = ['zo','ma','di','wo','do','vr','za'][d.getDay()];
+      const iso = d.toISOString().split('T')[0];
+      
+      if (roostervrij.includes(dayCode)) {
+        designData.unavailabilityData[emp.id][iso] = true; // NB
+        empFilledCells++;
+      } else if (designData.unavailabilityData[emp.id][iso] === undefined) {
+        designData.unavailabilityData[emp.id][iso] = false; // beschikbaar
+      }
+    }
+    
+    console.log(`   -> Filled ${empFilledCells} NB cells`);
+    totalFilledCells += empFilledCells;
   }
+  
+  console.log('✅ Autofill completed:', totalFilledCells, 'total NB cells filled');
   return saveRosterDesignData(designData);
 }
 
@@ -95,7 +130,7 @@ export function updateRosterDesignStatus(rosterId: string, updates: Partial<Rost
 
 export function validateDesignComplete(rosterId: string): { isValid: boolean; errors: string[] } {
   const designData = loadRosterDesignData(rosterId); if (!designData) { return { isValid: false, errors: ['Roster ontwerp data niet gevonden'] }; }
-  const errors: string[] = []; const employeesWithoutShifts = designData.employees.filter(emp => emp.maxShifts === 0); if (employeesWithoutShifts.length > 0) { errors.push(`Volgende medewerkers hebben geen aantal diensten ingevuld: ${employeesWithoutShifts.map(e => e.name).join(', ')}`); }
+  const errors: string[] = []; const employeesWithoutShifts = designData.employees.filter(emp => emp.maxShifts === 0); if (employeesWithoutShifts.length > 0) { errors.push(`Volgende medewerkers hebben geen aantal diensten ingevuld: ${employeesWitheeWithoutShifts.map(e => e.name).join(', ')}`); }
   if (designData.status.servicesStatus !== 'vastgesteld') { errors.push('Diensten per dag moeten worden vastgesteld voordat AI kan worden gebruikt'); }
   return { isValid: errors.length === 0, errors };
 }
