@@ -1,9 +1,10 @@
 // lib/planning/rosterDesign.ts
-// Fix: autofill NB met LIVE employees data i.p.v. snapshot data
+// Fix: startdatum bron fixen volgens opdracht
 
 import { RosterEmployee, RosterStatus, RosterDesignData, validateMaxShifts, createDefaultRosterEmployee, createDefaultRosterStatus } from '@/lib/types/roster';
 import { getAllEmployees } from '@/lib/services/employees-storage';
 import { TeamType, DienstverbandType } from '@/lib/types/employee';
+import { readRosters } from './storage';
 
 const ROSTER_DESIGN_KEY = 'roster_design_data';
 
@@ -36,19 +37,56 @@ export function createEmployeeSnapshot(rosterId: string): RosterEmployee[] {
 
 /** Laad roster ontwerp data */
 export function loadRosterDesignData(rosterId: string): RosterDesignData | null {
-  try { const stored = localStorage.getItem(`${ROSTER_DESIGN_KEY}_${rosterId}`); if (!stored) return null; return JSON.parse(stored) as RosterDesignData; } catch (error) { console.error('Fout bij laden roster ontwerp data:', error); return null; }
+  try { 
+    const stored = localStorage.getItem(`${ROSTER_DESIGN_KEY}_${rosterId}`); 
+    if (!stored) return null; 
+    const data = JSON.parse(stored) as RosterDesignData;
+    
+    // Fix: Synchroniseer startdatum als die ontbreekt maar wel in rooster bron staat
+    if (!(data as any).start_date) {
+      const roster = readRosters().find(r => r.id === rosterId);
+      if (roster?.start_date) {
+        (data as any).start_date = roster.start_date;
+        saveRosterDesignData(data); // Schrijf terug naar snapshot
+      }
+    }
+    
+    return data;
+  } catch (error) { 
+    console.error('Fout bij laden roster ontwerp data:', error); 
+    return null; 
+  }
 }
 
 /** Sla roster ontwerp data op */
 export function saveRosterDesignData(data: RosterDesignData): boolean {
-  try { const key = `${ROSTER_DESIGN_KEY}_${data.rosterId}`; data.updated_at = new Date().toISOString(); localStorage.setItem(key, JSON.stringify(data)); return true; } catch (error) { console.error('Fout bij opslaan roster ontwerp data:', error); return false; }
+  try { 
+    const key = `${ROSTER_DESIGN_KEY}_${data.rosterId}`; 
+    data.updated_at = new Date().toISOString(); 
+    localStorage.setItem(key, JSON.stringify(data)); 
+    return true; 
+  } catch (error) { 
+    console.error('Fout bij opslaan roster ontwerp data:', error); 
+    return false; 
+  }
 }
 
-/** Initialiseer nieuw roster ontwerp met auto-fill */
-export function initializeRosterDesign(rosterId: string, start_date?: string): RosterDesignData {
-  const employees = createEmployeeSnapshot(rosterId); const status = createDefaultRosterStatus();
-  const designData: RosterDesignData = { rosterId, employees, status, unavailabilityData: {}, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), ...(start_date ? ({ start_date } as any) : {}) };
-  saveRosterDesignData(designData); return designData;
+/** Initialiseer nieuw roster ontwerp met VERPLICHTE start_date */
+export function initializeRosterDesign(rosterId: string, start_date: string): RosterDesignData {
+  const employees = createEmployeeSnapshot(rosterId); 
+  const status = createDefaultRosterStatus();
+  const designData: RosterDesignData = { 
+    rosterId, 
+    employees, 
+    status, 
+    unavailabilityData: {}, 
+    created_at: new Date().toISOString(), 
+    updated_at: new Date().toISOString(),
+    start_date // Expliciet opslaan in design-snapshot
+  } as RosterDesignData & { start_date: string };
+  
+  saveRosterDesignData(designData); 
+  return designData;
 }
 
 /** Update max shifts voor een medewerker */
