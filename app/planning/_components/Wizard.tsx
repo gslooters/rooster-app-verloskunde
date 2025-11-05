@@ -69,7 +69,9 @@ export default function Wizard({ onClose }: WizardProps = {}) {
         localStorage.setItem('recentDesignRoute', `/planning/design?rosterId=${id}`);
       }
 
-      initializeRosterDesign(roster.id);
+      // Fix: geef start_date expliciet mee aan initializeRosterDesign
+      initializeRosterDesign(roster.id, selectedStart);
+      
       if (onClose) { onClose(); setTimeout(()=>router.push(`/planning/design?rosterId=${id}`), 100); }
       else { router.push(`/planning/design?rosterId=${id}`); }
     } catch (err) {
