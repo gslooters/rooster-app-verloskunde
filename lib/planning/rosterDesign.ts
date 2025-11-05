@@ -1,5 +1,5 @@
 // lib/planning/rosterDesign.ts
-// Fix: startdatum bron fixen volgens opdracht + extended employee data
+// CRITICAL FIX: Use real employee data instead of mock data for team assignments
 
 import { RosterEmployee, RosterStatus, RosterDesignData, validateMaxShifts, createDefaultRosterEmployee, createDefaultRosterStatus } from '@/lib/types/roster';
 import { getAllEmployees } from '@/lib/services/employees-storage';
@@ -8,23 +8,6 @@ import { readRosters } from './storage';
 
 const ROSTER_DESIGN_KEY = 'roster_design_data';
 
-// Mock data voor realistische dummy-medewerkers (12 personen)
-const MOCK_EMPLOYEE_EXTENDED_DATA: Record<string, { team: TeamType, dienstverband: DienstverbandType, roostervrijDagen: string[], availableServices: string[] }> = {
-  'emp1': { team: TeamType.GROEN, dienstverband: DienstverbandType.MAAT, roostervrijDagen: ['zo'], availableServices: ['dagdienst', 'nachtdienst', 'bereikbaarheidsdienst'] },
-  'emp2': { team: TeamType.GROEN, dienstverband: DienstverbandType.MAAT, roostervrijDagen: ['ma', 'za'], availableServices: ['dagdienst', 'nachtdienst', 'bereikbaarheidsdienst'] },
-  'emp3': { team: TeamType.GROEN, dienstverband: DienstverbandType.LOONDIENST, roostervrijDagen: ['wo'], availableServices: ['dagdienst', 'nachtdienst', 'bereikbaarheidsdienst'] },
-  'emp4': { team: TeamType.GROEN, dienstverband: DienstverbandType.LOONDIENST, roostervrijDagen: ['di'], availableServices: ['dagdienst', 'nachtdienst', 'bereikbaarheidsdienst'] },
-  'emp5': { team: TeamType.GROEN, dienstverband: DienstverbandType.LOONDIENST, roostervrijDagen: ['vr', 'zo'], availableServices: ['dagdienst', 'nachtdienst', 'bereikbaarheidsdienst'] },
-  'emp6': { team: TeamType.GROEN, dienstverband: DienstverbandType.ZZP, roostervrijDagen: ['do'], availableServices: ['dagdienst', 'nachtdienst', 'bereikbaarheidsdienst'] },
-  
-  'emp7': { team: TeamType.ORANJE, dienstverband: DienstverbandType.MAAT, roostervrijDagen: ['ma'], availableServices: ['dagdienst', 'nachtdienst', 'bereikbaarheidsdienst'] },
-  'emp8': { team: TeamType.ORANJE, dienstverband: DienstverbandType.MAAT, roostervrijDagen: ['za', 'zo'], availableServices: ['dagdienst', 'nachtdienst', 'bereikbaarheidsdienst'] },
-  'emp9': { team: TeamType.ORANJE, dienstverband: DienstverbandType.LOONDIENST, roostervrijDagen: ['wo'], availableServices: ['dagdienst', 'nachtdienst', 'bereikbaarheidsdienst'] },
-  'emp10': { team: TeamType.ORANJE, dienstverband: DienstverbandType.LOONDIENST, roostervrijDagen: ['di', 'vr'], availableServices: ['dagdienst', 'nachtdienst', 'bereikbaarheidsdienst'] },
-  'emp11': { team: TeamType.ORANJE, dienstverband: DienstverbandType.LOONDIENST, roostervrijDagen: ['do'], availableServices: ['dagdienst', 'nachtdienst', 'bereikbaarheidsdienst'] },
-  'emp12': { team: TeamType.ORANJE, dienstverband: DienstverbandType.ZZP, roostervrijDagen: ['za'], availableServices: ['dagdienst', 'nachtdienst', 'bereikbaarheidsdienst'] },
-};
-
 // Helper: team/dienstverband sortering
 function sortEmployeesForRoster(list: any[]) {
   const teamOrder = [TeamType.GROEN, TeamType.ORANJE, TeamType.OVERIG];
@@ -32,24 +15,28 @@ function sortEmployeesForRoster(list: any[]) {
   return [...list]
     .filter(e => e.actief || e.active) // Support beide formaten
     .sort((a,b) => {
-      // Gebruik mock data voor sortering
-      const aMock = MOCK_EMPLOYEE_EXTENDED_DATA[a.id];
-      const bMock = MOCK_EMPLOYEE_EXTENDED_DATA[b.id];
-      if (aMock && bMock) {
-        const t = teamOrder.indexOf(aMock.team) - teamOrder.indexOf(bMock.team);
-        if (t !== 0) return t;
-        const d = dienstOrder.indexOf(aMock.dienstverband) - dienstOrder.indexOf(bMock.dienstverband);
-        if (d !== 0) return d;
-      }
-      const firstName = (a.voornaam || a.name.split(' ')[0]);
-      const firstNameB = (b.voornaam || b.name.split(' ')[0]);
+      // GEBRUIK ECHTE EMPLOYEE DATA (niet mock)
+      const teamA = a.team || TeamType.OVERIG;
+      const teamB = b.team || TeamType.OVERIG;
+      const dienstA = a.dienstverband || DienstverbandType.LOONDIENST;
+      const dienstB = b.dienstverband || DienstverbandType.LOONDIENST;
+      
+      const t = teamOrder.indexOf(teamA) - teamOrder.indexOf(teamB);
+      if (t !== 0) return t;
+      const d = dienstOrder.indexOf(dienstA) - dienstOrder.indexOf(dienstB);
+      if (d !== 0) return d;
+      
+      const firstName = (a.voornaam || a.name?.split(' ')[0] || '');
+      const firstNameB = (b.voornaam || b.name?.split(' ')[0] || '');
       return firstName.localeCompare(firstNameB, 'nl');
     });
 }
 
-/** Creëer employee snapshot bij rooster creatie met auto-fill */
+/** Creëer employee snapshot bij rooster creatie met ECHTE employee data */
 export function createEmployeeSnapshot(rosterId: string): RosterEmployee[] {
   const employees = sortEmployeesForRoster(getAllEmployees());
+  console.log('🔍 Creating employee snapshot with REAL employee data:', employees.map(e => ({ id: e.id, name: e.voornaam + ' ' + e.achternaam, team: e.team, dienstverband: e.dienstverband })));
+  
   return employees.map(emp => {
     const rosterEmployee = createDefaultRosterEmployee({ 
       id: emp.id, 
@@ -57,25 +44,16 @@ export function createEmployeeSnapshot(rosterId: string): RosterEmployee[] {
       actief: emp.actief || emp.active || true
     });
     
-    // Gebruik mock extended data
-    const mockData = MOCK_EMPLOYEE_EXTENDED_DATA[emp.id];
-    if (mockData) {
-      rosterEmployee.maxShifts = mockData.dienstverband === DienstverbandType.ZZP ? 15 : 
-                                 mockData.dienstverband === DienstverbandType.LOONDIENST ? 20 : 25;
-      rosterEmployee.availableServices = mockData.availableServices;
-      (rosterEmployee as any).team = mockData.team;
-      (rosterEmployee as any).dienstverband = mockData.dienstverband;
-      (rosterEmployee as any).voornaam = emp.voornaam || emp.name.split(' ')[0];
-      (rosterEmployee as any).roostervrijDagen = mockData.roostervrijDagen;
-    } else {
-      // Fallback voor onbekende employees
-      rosterEmployee.maxShifts = 20;
-      rosterEmployee.availableServices = ['dagdienst', 'nachtdienst'];
-      (rosterEmployee as any).team = TeamType.OVERIG;
-      (rosterEmployee as any).dienstverband = DienstverbandType.LOONDIENST;
-      (rosterEmployee as any).voornaam = emp.voornaam || emp.name.split(' ')[0];
-      (rosterEmployee as any).roostervrijDagen = [];
-    }
+    // GEBRUIK ECHTE EMPLOYEE DATA (geen mock meer)
+    rosterEmployee.maxShifts = emp.dienstverband === DienstverbandType.ZZP ? 15 : 
+                               emp.dienstverband === DienstverbandType.LOONDIENST ? 20 : 25;
+    rosterEmployee.availableServices = ['dagdienst', 'nachtdienst', 'bereikbaarheidsdienst'];
+    (rosterEmployee as any).team = emp.team; // ECHTE team uit employee storage
+    (rosterEmployee as any).dienstverband = emp.dienstverband;
+    (rosterEmployee as any).voornaam = emp.voornaam || emp.name?.split(' ')[0] || '';
+    (rosterEmployee as any).roostervrijDagen = emp.roostervrijDagen || [];
+    
+    console.log(`👤 ${emp.voornaam}: team=${emp.team}, dienstverband=${emp.dienstverband}`);
     
     return rosterEmployee;
   });
@@ -151,20 +129,24 @@ export function toggleUnavailability(rosterId: string, employeeId: string, date:
   designData.unavailabilityData[employeeId][date] = !current; return saveRosterDesignData(designData);
 }
 
-/** Batch auto-fill NB op basis van MOCK roostervrijDagen en start_date */
+/** Batch auto-fill NB op basis van ECHTE roostervrijDagen en start_date */
 export function autofillUnavailability(rosterId: string, start_date: string): boolean {
   console.log('🔍 Starting autofill for rosterId:', rosterId, 'start_date:', start_date);
   
   const designData = loadRosterDesignData(rosterId); 
   if (!designData) { console.error('❌ No design data found'); return false; }
   
+  // HAAL ECHTE EMPLOYEE DATA OP
+  const realEmployees = getAllEmployees();
+  const employeeMap = new Map(realEmployees.map(emp => [emp.id, emp]));
+  
   const start = new Date(start_date + 'T00:00:00');
   let totalFilledCells = 0;
   
   for (const emp of designData.employees) {
-    // Gebruik mock data voor roostervrijDagen
-    const mockData = MOCK_EMPLOYEE_EXTENDED_DATA[emp.originalEmployeeId || emp.id];
-    const roostervrij: string[] = mockData?.roostervrijDagen || [];
+    // GEBRUIK ECHTE roostervrijDagen uit employee storage
+    const realEmployee = employeeMap.get(emp.id);
+    const roostervrij: string[] = realEmployee?.roostervrijDagen || [];
     console.log(`👤 ${emp.name}: roostervrijDagen =`, roostervrij);
     
     if (!designData.unavailabilityData[emp.id]) { 
@@ -191,6 +173,45 @@ export function autofillUnavailability(rosterId: string, start_date: string): bo
   
   console.log('✅ Autofill completed:', totalFilledCells, 'total NB cells filled');
   return saveRosterDesignData(designData);
+}
+
+/** Sync functie: Update roster design data met nieuwste employee gegevens */
+export function syncRosterDesignWithEmployeeData(rosterId: string): boolean {
+  console.log('🔄 Syncing roster design with current employee data...');
+  
+  const designData = loadRosterDesignData(rosterId);
+  if (!designData) return false;
+  
+  const currentEmployees = getAllEmployees();
+  const employeeMap = new Map(currentEmployees.map(emp => [emp.id, emp]));
+  
+  // Update bestaande employees met nieuwste team/dienstverband data
+  let updated = false;
+  for (const rosterEmp of designData.employees) {
+    const currentEmp = employeeMap.get(rosterEmp.id);
+    if (currentEmp) {
+      const oldTeam = (rosterEmp as any).team;
+      const newTeam = currentEmp.team;
+      
+      if (oldTeam !== newTeam) {
+        console.log(`🔄 Updating ${currentEmp.voornaam}: ${oldTeam} -> ${newTeam}`);
+        (rosterEmp as any).team = newTeam;
+        updated = true;
+      }
+      
+      // Update andere velden
+      (rosterEmp as any).dienstverband = currentEmp.dienstverband;
+      (rosterEmp as any).voornaam = currentEmp.voornaam;
+      (rosterEmp as any).roostervrijDagen = currentEmp.roostervrijDagen;
+    }
+  }
+  
+  if (updated) {
+    console.log('✅ Roster design data updated with current employee data');
+    return saveRosterDesignData(designData);
+  }
+  
+  return true;
 }
 
 /** Exporteer helper voor andere modules */
