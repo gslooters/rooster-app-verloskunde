@@ -19,6 +19,19 @@ function TeamBadge({ team }: { team: TeamType }) {
   }} />
 }
 
+const MONTH_NAMES = [
+  'januari', 'februari', 'maart', 'april', 'mei', 'juni',
+  'juli', 'augustus', 'september', 'oktober', 'november', 'december'
+];
+
+function formatDutchDate(dateStr: string): string {
+  const date = new Date(dateStr + 'T00:00:00');
+  const day = date.getDate();
+  const month = MONTH_NAMES[date.getMonth()];
+  const year = date.getFullYear();
+  return `${day} ${month} ${year}`;
+}
+
 export default function DesignPageClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -91,6 +104,10 @@ export default function DesignPageClient() {
 
   const startISO = (designData as any).start_date || (designData as any).roster_start || new Date().toISOString().split('T')[0];
   const startDate = new Date(startISO + 'T00:00:00');
+  
+  // Bereken eind datum (4 weken verder)
+  const endDate = new Date(startDate);
+  endDate.setDate(startDate.getDate() + (4 * 7) + 6); // 4 weken + 6 dagen
 
   const weeks = Array.from({ length: 5 }, (_, i) => {
     const weekStart = new Date(startDate); weekStart.setDate(startDate.getDate() + (i * 7));
@@ -105,22 +122,29 @@ export default function DesignPageClient() {
     return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
   }
 
-  function formatDate(dateStr: string): string {
+  function formatDateCell(dateStr: string): { day: string, date: string, month: string } {
     const date = new Date(dateStr + 'T00:00:00');
-    const day = ['ZO', 'MA', 'DI', 'WO', 'DO', 'VR', 'ZA'][date.getDay()];
+    const dayNames = ['ZO', 'MA', 'DI', 'WO', 'DO', 'VR', 'ZA'];
+    const day = dayNames[date.getDay()];
     const dd = String(date.getDate()).padStart(2, '0');
     const mm = String(date.getMonth() + 1).padStart(2, '0');
-    return `${day} ${dd}-${mm}`;
+    return { day, date: dd, month: mm };
   }
+
+  const firstWeek = weeks[0];
+  const lastWeek = weeks[weeks.length - 1];
+  const periodTitle = `Rooster Ontwerp : Periode Week ${firstWeek.number} - Week ${lastWeek.number} ${startDate.getFullYear()}`;
+  const dateSubtitle = `Van ${formatDutchDate(startISO)} tot en met ${formatDutchDate(endDate.toISOString().split('T')[0])}`;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-4">
       <div className="max-w-full mx-auto">
         <nav className="text-sm text-gray-500 mb-3">Dashboard &gt; Rooster Planning &gt; Rooster Ontwerp</nav>
+        
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-1">Rooster Ontwerp</h1>
-            <p className="text-gray-600">Periode: 5 weken vanaf {startISO}</p>
+            <h1 className="text-2xl font-bold text-gray-900 mb-1">{periodTitle}</h1>
+            <p className="text-xs text-gray-500">{dateSubtitle}</p>
           </div>
           <div className="flex items-center gap-3">
             <div className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">🎨 Ontwerpfase</div>
@@ -128,22 +152,58 @@ export default function DesignPageClient() {
           </div>
         </div>
 
-        <div className="bg-blue-50 p-4 rounded-lg mb-6"><p className="text-blue-800"><strong>Instructies:</strong> Stel voor elke medewerker het maximum aantal diensten in (0-35) en markeer niet-beschikbare dagen met de NB-knoppen.</p></div>
+        <div className="bg-blue-50 p-4 rounded-lg mb-6">
+          <p className="text-blue-800"><strong>Instructies:</strong> Stel voor elke medewerker het maximum aantal diensten in (0-35) en markeer niet-beschikbare dagen met de NB-knoppen.</p>
+        </div>
 
         <div className="bg-white rounded-lg shadow-sm border overflow-x-auto">
           <table className="min-w-full">
             <thead>
               <tr>
                 <th className="sticky left-0 bg-white border-b px-3 py-2 text-left font-semibold text-gray-900 w-40">Medewerker</th>
-                <th className="border-b px-3 py-2 text-center font-semibold text-gray-900 w-24">Max Diensten</th>
-                {weeks.map(week => (<th key={week.number} colSpan={7} className="border-b px-2 py-2 text-center font-semibold text-gray-900 bg-gray-50">Week {week.number}</th>))}
+                <th className="border-b px-3 py-2 text-center font-semibold text-gray-900 w-16">Dst</th>
+                {weeks.map(week => (
+                  <th key={week.number} colSpan={7} className="border-b px-2 py-2 text-center font-semibold text-gray-900 bg-yellow-50">Week {week.number}</th>
+                ))}
               </tr>
+              
+              {/* Dag namen rij */}
               <tr>
                 <th className="sticky left-0 bg-white border-b"></th>
                 <th className="border-b"></th>
-                {weeks.map(week => week.dates.map(date => (<th key={date} className="border-b px-1 py-1 text-xs text-gray-600 bg-gray-50 min-w-[50px]">{formatDate(date)}</th>)))}
+                {weeks.map(week => week.dates.map(date => {
+                  const { day } = formatDateCell(date);
+                  return (
+                    <th key={`day-${date}`} className="border-b px-1 py-1 text-xs font-medium text-gray-700 bg-yellow-50 min-w-[50px]">{day}</th>
+                  );
+                }))}
+              </tr>
+              
+              {/* Datum nummers rij */}
+              <tr>
+                <th className="sticky left-0 bg-white border-b"></th>
+                <th className="border-b"></th>
+                {weeks.map(week => week.dates.map(date => {
+                  const { date: dd } = formatDateCell(date);
+                  return (
+                    <th key={`date-${date}`} className="border-b px-1 py-1 text-xs text-gray-600 bg-yellow-50 min-w-[50px]">{dd}</th>
+                  );
+                }))}
+              </tr>
+              
+              {/* Maand nummers rij */}
+              <tr>
+                <th className="sticky left-0 bg-white border-b"></th>
+                <th className="border-b"></th>
+                {weeks.map(week => week.dates.map(date => {
+                  const { month } = formatDateCell(date);
+                  return (
+                    <th key={`month-${date}`} className="border-b px-1 py-1 text-xs text-gray-500 bg-yellow-50 min-w-[50px]">{month}</th>
+                  );
+                }))}
               </tr>
             </thead>
+            
             <tbody>
               {employees.map((emp, empIndex) => {
                 const team = (emp as any).team as TeamType;
@@ -154,7 +214,7 @@ export default function DesignPageClient() {
                       <TeamBadge team={team} />{firstName}
                     </td>
                     <td className="border-b px-3 py-1 text-center h-8">
-                      <input type="number" min="0" max="35" value={emp.maxShifts} onChange={(e) => updateMaxShiftsHandler(emp.id, parseInt(e.target.value) || 0)} className="w-16 px-1 py-0.5 border border-gray-300 rounded text-center text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                      <input type="number" min="0" max="35" value={emp.maxShifts} onChange={(e) => updateMaxShiftsHandler(emp.id, parseInt(e.target.value) || 0)} className="w-12 px-1 py-0.5 border border-gray-300 rounded text-center text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
                     </td>
                     {weeks.map(week => week.dates.map(date => {
                       const isUnavailable = designData.unavailabilityData?.[emp.id]?.[date] || false;
@@ -176,7 +236,6 @@ export default function DesignPageClient() {
         <div className="mt-6 flex items-center justify-between">
           <button onClick={() => router.push('/planning')} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">← Terug naar Dashboard</button>
           <div className="text-sm text-gray-600">Wijzigingen worden automatisch opgeslagen</div>
-          <button onClick={goToEditing} className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium">Gereed - Ga naar Bewerking →</button>
         </div>
       </div>
     </div>
