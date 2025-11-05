@@ -1,8 +1,8 @@
 'use client';
 
 import React from 'react';
-import StaffingManager from '../_components/StaffingManager';
-import { getRosters } from '../libAliases';
+import StaffingManager from '../../_components/StaffingManager';
+import { getRosters } from '../../libAliases';
 
 export default function DesignStaffingPage({ searchParams }: { searchParams: { rosterId?: string; start?: string } }) {
   const rosterId = searchParams.rosterId || '';
