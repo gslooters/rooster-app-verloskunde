@@ -1,18 +1,99 @@
 // lib/services/daytype-staffing-storage.ts
-import { DayTypeStaffing, DayTypeStaffingInput, DAYS_OF_WEEK } from '@/lib/types/daytype-staffing';
+import { 
+  DayTypeStaffing, 
+  DayTypeStaffingInput, 
+  DAYS_OF_WEEK, 
+  TeamScope,
+  ServiceTeamScope,
+  getDefaultTeamScope,
+  isValidTeamScope 
+} from '@/lib/types/daytype-staffing';
 import { getAllServices } from './diensten-storage';
 
 const STORAGE_KEY = 'rooster_daytype_staffing';
+const SERVICE_TEAM_SCOPE_KEY = 'rooster_service_team_scope';
 
 function generateId(): string {
   return Date.now().toString() + Math.random().toString(36).substr(2, 9);
 }
 
+// Migration function for existing data
+function migrateExistingData(rules: any[]): DayTypeStaffing[] {
+  return rules.map(rule => ({
+    ...rule,
+    teamScope: rule.teamScope || getDefaultTeamScope()
+  }));
+}
+
+// Service-level team scope management
+export function getAllServiceTeamScopes(): ServiceTeamScope[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const stored = localStorage.getItem(SERVICE_TEAM_SCOPE_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch (error) {
+    console.error('Error loading service team scopes:', error);
+    return [];
+  }
+}
+
+export function saveAllServiceTeamScopes(scopes: ServiceTeamScope[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(SERVICE_TEAM_SCOPE_KEY, JSON.stringify(scopes));
+  } catch (error) {
+    console.error('Error saving service team scopes:', error);
+    throw new Error('Kon team-scope instellingen niet opslaan');
+  }
+}
+
+export function getServiceTeamScope(dienstId: string): TeamScope {
+  const scopes = getAllServiceTeamScopes();
+  const scope = scopes.find(s => s.dienstId === dienstId);
+  return scope ? scope.teamScope : getDefaultTeamScope();
+}
+
+export function updateServiceTeamScope(dienstId: string, teamScope: TeamScope): void {
+  const scopes = getAllServiceTeamScopes();
+  const existingIndex = scopes.findIndex(s => s.dienstId === dienstId);
+  const now = new Date().toISOString();
+  
+  if (existingIndex >= 0) {
+    scopes[existingIndex] = {
+      dienstId,
+      teamScope,
+      updated_at: now
+    };
+  } else {
+    scopes.push({
+      dienstId,
+      teamScope,
+      updated_at: now
+    });
+  }
+  
+  saveAllServiceTeamScopes(scopes);
+}
+
+// Enhanced daytype staffing functions with migration
 export function getAllDayTypeStaffing(): DayTypeStaffing[] {
   if (typeof window === 'undefined') return [];
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
+    if (!stored) return [];
+    
+    const rules = JSON.parse(stored);
+    // Check if migration is needed
+    const needsMigration = rules.some((rule: any) => !rule.hasOwnProperty('teamScope'));
+    
+    if (needsMigration) {
+      console.log('Migrating existing daytype staffing data...');
+      const migratedRules = migrateExistingData(rules);
+      saveAllDayTypeStaffing(migratedRules);
+      return migratedRules;
+    }
+    
+    return rules;
   } catch (error) {
     console.error('Error loading daytype staffing:', error);
     return [];
@@ -22,7 +103,12 @@ export function getAllDayTypeStaffing(): DayTypeStaffing[] {
 export function saveAllDayTypeStaffing(staffingRules: DayTypeStaffing[]): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(staffingRules));
+    // Ensure all rules have teamScope
+    const validatedRules = staffingRules.map(rule => ({
+      ...rule,
+      teamScope: rule.teamScope || getDefaultTeamScope()
+    }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(validatedRules));
   } catch (error) {
     console.error('Error saving daytype staffing:', error);
     throw new Error('Kon bezettingsregels niet opslaan');
@@ -47,6 +133,9 @@ export function upsertStaffingRule(input: DayTypeStaffingInput): DayTypeStaffing
   if (input.dagSoort < 0 || input.dagSoort > 6) {
     throw new Error('Ongeldige dag van de week');
   }
+  if (input.teamScope && !isValidTeamScope(input.teamScope)) {
+    throw new Error('Ongeldige team scope');
+  }
 
   const allRules = getAllDayTypeStaffing();
   const existingIndex = allRules.findIndex(rule => 
@@ -60,6 +149,7 @@ export function upsertStaffingRule(input: DayTypeStaffingInput): DayTypeStaffing
       ...allRules[existingIndex],
       minBezetting: input.minBezetting,
       maxBezetting: input.maxBezetting,
+      teamScope: input.teamScope || allRules[existingIndex].teamScope || getDefaultTeamScope(),
       updated_at: now
     };
     allRules[existingIndex] = updatedRule;
@@ -72,6 +162,7 @@ export function upsertStaffingRule(input: DayTypeStaffingInput): DayTypeStaffing
       dagSoort: input.dagSoort,
       minBezetting: input.minBezetting,
       maxBezetting: input.maxBezetting,
+      teamScope: input.teamScope || getDefaultTeamScope(),
       created_at: now,
       updated_at: now
     };
@@ -104,6 +195,7 @@ export function initializeDefaultStaffingRules(): DayTypeStaffing[] {
         dagSoort: day.index,
         minBezetting: 0,
         maxBezetting: defaultMax,
+        teamScope: getDefaultTeamScope(),
         created_at: now,
         updated_at: now
       };
@@ -125,33 +217,68 @@ export function deleteStaffingRulesForService(dienstId: string): void {
   const allRules = getAllDayTypeStaffing();
   const filteredRules = allRules.filter(rule => rule.dienstId !== dienstId);
   saveAllDayTypeStaffing(filteredRules);
+  
+  // Also remove service team scope
+  const scopes = getAllServiceTeamScopes();
+  const filteredScopes = scopes.filter(scope => scope.dienstId !== dienstId);
+  saveAllServiceTeamScopes(filteredScopes);
 }
 
 export function resetToDefaults(): DayTypeStaffing[] {
   if (typeof window !== 'undefined') {
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(SERVICE_TEAM_SCOPE_KEY);
   }
   return initializeDefaultStaffingRules();
 }
 
 export function exportStaffingRules(): string {
   const allRules = getAllDayTypeStaffing();
-  return JSON.stringify(allRules, null, 2);
+  const serviceScopes = getAllServiceTeamScopes();
+  
+  return JSON.stringify({
+    staffingRules: allRules,
+    serviceTeamScopes: serviceScopes,
+    exportDate: new Date().toISOString(),
+    version: '2.0' // Version with team scope support
+  }, null, 2);
 }
 
 export function importStaffingRules(jsonData: string): void {
   try {
-    const rules = JSON.parse(jsonData) as DayTypeStaffing[];
-    if (!Array.isArray(rules)) {
-      throw new Error('Import data moet een array zijn');
-    }
-    rules.forEach((rule, index) => {
-      if (!rule.id || !rule.dienstId || typeof rule.dagSoort !== 'number' || 
-          typeof rule.minBezetting !== 'number' || typeof rule.maxBezetting !== 'number') {
-        throw new Error(`Ongeldige regel op index ${index}`);
+    const data = JSON.parse(jsonData);
+    
+    // Check if it's new format with team scopes or legacy format
+    if (data.version && data.staffingRules && data.serviceTeamScopes) {
+      // New format
+      if (!Array.isArray(data.staffingRules)) {
+        throw new Error('staffingRules moet een array zijn');
       }
-    });
-    saveAllDayTypeStaffing(rules);
+      
+      data.staffingRules.forEach((rule: any, index: number) => {
+        if (!rule.id || !rule.dienstId || typeof rule.dagSoort !== 'number' || 
+            typeof rule.minBezetting !== 'number' || typeof rule.maxBezetting !== 'number') {
+          throw new Error(`Ongeldige regel op index ${index}`);
+        }
+      });
+      
+      saveAllDayTypeStaffing(data.staffingRules);
+      saveAllServiceTeamScopes(data.serviceTeamScopes || []);
+    } else {
+      // Legacy format - assume it's just the rules array
+      const rules = Array.isArray(data) ? data : [data];
+      
+      rules.forEach((rule: any, index: number) => {
+        if (!rule.id || !rule.dienstId || typeof rule.dagSoort !== 'number' || 
+            typeof rule.minBezetting !== 'number' || typeof rule.maxBezetting !== 'number') {
+          throw new Error(`Ongeldige regel op index ${index}`);
+        }
+      });
+      
+      // Migrate legacy data
+      const migratedRules = migrateExistingData(rules);
+      saveAllDayTypeStaffing(migratedRules);
+    }
   } catch (error) {
     console.error('Error importing staffing rules:', error);
     throw new Error('Kon bezettingsregels niet importeren: ' + (error as Error).message);
