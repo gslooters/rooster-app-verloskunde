@@ -10,7 +10,8 @@ import {
   DAYS_OF_WEEK, 
   TeamScope,
   getDefaultTeamScope,
-  getTeamScopeDisplayText 
+  getTeamScopeDisplayText,
+  getBezettingText 
 } from '@/lib/types/daytype-staffing';
 import { getAllServices } from '@/lib/services/diensten-storage';
 import { 
@@ -200,13 +201,6 @@ export default function ServicesByDayTypePage() {
     if (max >= 4) return 'bg-yellow-100 text-yellow-800';
     return 'bg-orange-100 text-orange-800';
   };
-  
-  const getBezettingText = (min: number, max: number): string => {
-    if (min === 0 && max === 0) return 'Geen';
-    if (min === max) return `Exact ${min}`;
-    if (max === 9) return `Min ${min}, Onbeperkt`;
-    return `${min}-${max}`;
-  };
 
   if (isLoading) {
     return (
@@ -269,7 +263,7 @@ export default function ServicesByDayTypePage() {
               <div><strong>Min 0, Max 0:</strong> Geen bezetting</div>
               <div><strong>Min 1, Max 1:</strong> Exact 1 persoon</div>
               <div><strong>Min 1, Max 2:</strong> 1 tot 2 personen</div>
-              <div><strong>Min 2, Max 9:</strong> Min 2, onbeperkt max</div>
+              <div><strong>Min 2, Max 9:</strong> Min 2, onbep max</div>
             </div>
           </div>
           
@@ -283,57 +277,59 @@ export default function ServicesByDayTypePage() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full border border-gray-200 rounded-lg overflow-hidden">
-                  <thead className="bg-gray-50 sticky top-0 z-10">
-                    <tr>
-                      <th className="text-left p-3 font-semibold text-gray-900 border-r border-gray-200 min-w-[160px]">Dienst</th>
-                      <th className="text-center p-3 font-semibold text-gray-900 border-r border-gray-200 min-w-[100px]">Team</th>
-                      {DAYS_OF_WEEK.map(day => (
-                        <th key={day.code} className="text-center p-2 font-semibold text-gray-900 border-r border-gray-200 min-w-[85px]">
-                          <div className="text-sm">{day.name}</div>
-                          <div className="text-xs text-gray-500 font-normal mt-1">min | max</div>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {services.map((service, serviceIndex) => (
-                      <tr key={service.id} className={serviceIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                        <td className="p-3 border-r border-gray-200">
-                          <div className="flex items-center gap-3">
-                            <div className="w-5 h-5 rounded-sm flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: service.kleur }}>{service.code.toUpperCase()}</div>
-                            <div>
-                              <div className="font-semibold text-gray-900 text-sm">{service.naam}</div>
-                              <div className="text-xs text-gray-500">{service.beschrijving}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="p-2 border-r border-gray-200 text-center">
-                          <TeamSelector 
-                            currentScope={serviceTeamScopes[service.id] || getDefaultTeamScope()}
-                            onChange={(scope) => handleTeamScopeChange(service.id, scope)}
-                          />
-                        </td>
-                        {DAYS_OF_WEEK.map(day => {
-                          const rule = getStaffingRule(service.id, day.index);
-                          const errorKey = `${service.id}-${day.index}`;
-                          const hasError = validationErrors.has(errorKey);
-                          return (
-                            <td key={day.code} className="p-1 border-r border-gray-200 text-center">
-                              <div className="flex items-center justify-center gap-1 mb-1">
-                                <input type="number" min="0" max="8" value={rule.minBezetting} onChange={e => updateStaffingRule(service.id, day.index, 'minBezetting', parseInt(e.target.value) || 0)} className={`w-10 h-7 text-center text-xs border rounded focus:ring-2 focus:ring-blue-500 ${hasError ? 'border-red-300 bg-red-50' : 'border-gray-300'}`} />
-                                <span className="text-gray-400 text-xs">|</span>
-                                <input type="number" min="0" max="9" value={rule.maxBezetting} onChange={e => updateStaffingRule(service.id, day.index, 'maxBezetting', parseInt(e.target.value) || 0)} className={`w-10 h-7 text-center text-xs border rounded focus:ring-2 focus:ring-blue-500 ${hasError ? 'border-red-300 bg-red-50' : 'border-gray-300'}`} />
-                              </div>
-                              <div className={`px-1 py-0.5 rounded text-xs font-medium ${getBezettingColor(rule.minBezetting, rule.maxBezetting)}`}>{getBezettingText(rule.minBezetting, rule.maxBezetting)}</div>
-                              {hasError && (<div className="text-xs text-red-600 mt-1 font-medium">Min {'>'} Max</div>)}
-                            </td>
-                          );
-                        })}
+                <div className="relative">
+                  <table className="w-full border border-gray-200 rounded-lg overflow-hidden">
+                    <thead className="bg-gray-50 sticky top-0 z-20 shadow-sm">
+                      <tr>
+                        <th className="text-left p-3 font-semibold text-gray-900 border-r border-gray-200 min-w-[160px] bg-gray-50">Dienst</th>
+                        <th className="text-center p-3 font-semibold text-gray-900 border-r border-gray-200 min-w-[100px] bg-gray-50">Team</th>
+                        {DAYS_OF_WEEK.map(day => (
+                          <th key={day.code} className="text-center p-2 font-semibold text-gray-900 border-r border-gray-200 min-w-[85px] bg-gray-50">
+                            <div className="text-sm">{day.name}</div>
+                            <div className="text-xs text-gray-500 font-normal mt-1">min | max</div>
+                          </th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {services.map((service, serviceIndex) => (
+                        <tr key={service.id} className={serviceIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                          <td className="p-3 border-r border-gray-200">
+                            <div className="flex items-center gap-3">
+                              <div className="w-5 h-5 rounded-sm flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: service.kleur }}>{service.code.toUpperCase()}</div>
+                              <div>
+                                <div className="font-semibold text-gray-900 text-sm">{service.naam}</div>
+                                <div className="text-xs text-gray-500">{service.beschrijving}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="p-2 border-r border-gray-200 text-center">
+                            <TeamSelector 
+                              currentScope={serviceTeamScopes[service.id] || getDefaultTeamScope()}
+                              onChange={(scope) => handleTeamScopeChange(service.id, scope)}
+                            />
+                          </td>
+                          {DAYS_OF_WEEK.map(day => {
+                            const rule = getStaffingRule(service.id, day.index);
+                            const errorKey = `${service.id}-${day.index}`;
+                            const hasError = validationErrors.has(errorKey);
+                            return (
+                              <td key={day.code} className="p-1 border-r border-gray-200 text-center">
+                                <div className="flex items-center justify-center gap-1 mb-1">
+                                  <input type="number" min="0" max="8" value={rule.minBezetting} onChange={e => updateStaffingRule(service.id, day.index, 'minBezetting', parseInt(e.target.value) || 0)} className={`w-10 h-7 text-center text-xs border rounded focus:ring-2 focus:ring-blue-500 ${hasError ? 'border-red-300 bg-red-50' : 'border-gray-300'}`} />
+                                  <span className="text-gray-400 text-xs">|</span>
+                                  <input type="number" min="0" max="9" value={rule.maxBezetting} onChange={e => updateStaffingRule(service.id, day.index, 'maxBezetting', parseInt(e.target.value) || 0)} className={`w-10 h-7 text-center text-xs border rounded focus:ring-2 focus:ring-blue-500 ${hasError ? 'border-red-300 bg-red-50' : 'border-gray-300'}`} />
+                                </div>
+                                <div className={`px-1 py-0.5 rounded text-xs font-medium ${getBezettingColor(rule.minBezetting, rule.maxBezetting)}`}>{getBezettingText(rule.minBezetting, rule.maxBezetting)}</div>
+                                {hasError && (<div className="text-xs text-red-600 mt-1 font-medium">Min {'>'} Max</div>)}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </div>
