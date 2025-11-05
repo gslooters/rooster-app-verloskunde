@@ -12,6 +12,7 @@ import {
 import { getAllServices } from '@/lib/services/diensten-storage';
 import { RosterStaffingRuleInput, DateStaffingOverview, getStaffingDisplayText, getDayShort } from '@/lib/types/roster-staffing';
 import { Dienst } from '@/lib/types/dienst';
+import '@/styles/staffing-management.css';
 
 // Utility functions
 function addDaysISO(iso: string, n: number): string {
@@ -194,8 +195,8 @@ export default function StaffingManager({ rosterId, rosterPeriod, startDate, onC
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-7xl max-h-[90vh] flex flex-col">
+    <div className="staffing-modal">
+      <div className="staffing-modal-content">
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
           <div>
@@ -203,7 +204,7 @@ export default function StaffingManager({ rosterId, rosterPeriod, startDate, onC
               Beheer bezetting voor rooster {rosterPeriod}
             </h2>
             {isLocked && (
-              <div className="mt-1 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+              <div className="mt-1 status-locked">
                 ✅ Bezetting vastgesteld
               </div>
             )}
@@ -218,7 +219,7 @@ export default function StaffingManager({ rosterId, rosterPeriod, startDate, onC
 
         {/* Error display */}
         {error && (
-          <div className="mx-6 mt-4 p-3 bg-red-100 border border-red-300 text-red-700 rounded">
+          <div className="mx-6 mt-4 error-message">
             {error}
           </div>
         )}
@@ -226,16 +227,16 @@ export default function StaffingManager({ rosterId, rosterPeriod, startDate, onC
         {/* Content */}
         <div className="flex-1 overflow-auto p-6">
           <div className="overflow-auto border rounded">
-            <table className="min-w-[1400px] border-separate border-spacing-0 text-sm">
+            <table className="staffing-table">
               <thead>
                 {/* Week headers */}
                 <tr>
-                  <th className="sticky left-0 top-0 z-30 bg-gray-50 border px-3 py-2 text-left w-[200px]" rowSpan={2}>
+                  <th className="sticky-corner w-[200px]" rowSpan={2}>
                     Dienst
                   </th>
                   {weekGroups.map(g => (
                     <th key={`w-${g.week}-${g.startIndex}`} 
-                        className="sticky top-0 z-20 bg-gray-100 border px-2 py-2 text-center text-sm text-gray-800" 
+                        className="sticky-top text-center text-sm text-gray-800" 
                         colSpan={g.span * 2}>
                       Week {g.week}
                     </th>
@@ -249,18 +250,18 @@ export default function StaffingManager({ rosterId, rosterPeriod, startDate, onC
                     const weekend = isWeekend(date);
                     const day = date.split('-')[2];
                     const month = date.split('-')[1];
-                    const colorClass = weekend ? 'text-red-600' : 'text-gray-800';
+                    const colorClass = weekend ? 'weekend-header' : 'text-gray-800';
                     
                     return (
                       <React.Fragment key={date}>
-                        <th className={`sticky top-8 z-20 bg-gray-50 border px-1 py-2 text-xs ${colorClass} w-[50px]`}>
+                        <th className={`sticky-top text-xs ${colorClass} w-[50px]`}>
                           <div className="flex flex-col items-center">
                             <span className="uppercase leading-3">{short}</span>
                             <span className="leading-3">{day}-{month}</span>
                             <span className="text-[10px] text-gray-500">min</span>
                           </div>
                         </th>
-                        <th className={`sticky top-8 z-20 bg-gray-50 border px-1 py-2 text-xs ${colorClass} w-[50px]`}>
+                        <th className={`sticky-top text-xs ${colorClass} w-[50px]`}>
                           <div className="flex flex-col items-center">
                             <span className="uppercase leading-3">{short}</span>
                             <span className="leading-3">{day}-{month}</span>
@@ -277,10 +278,10 @@ export default function StaffingManager({ rosterId, rosterPeriod, startDate, onC
                 {services.map(service => (
                   <tr key={service.id} className="hover:bg-gray-50">
                     {/* Service name */}
-                    <td className="sticky left-0 z-10 bg-white border px-3 py-2 font-medium">
+                    <td className="sticky-left font-medium">
                       <div className="flex items-center gap-2">
                         <div 
-                          className="w-4 h-4 rounded border"
+                          className="service-indicator"
                           style={{ backgroundColor: service.kleur }}
                         />
                         <div>
@@ -307,7 +308,7 @@ export default function StaffingManager({ rosterId, rosterPeriod, startDate, onC
                               value={minValue}
                               onChange={(e) => handleStaffingChange(date, service.id, 'min', parseInt(e.target.value))}
                               disabled={isLocked || isSaving}
-                              className="w-full px-1 py-1 text-xs border rounded bg-blue-50 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                              className="w-full px-1 py-1 text-xs border rounded staffing-input-min disabled:bg-gray-100 disabled:cursor-not-allowed"
                             >
                               {Array.from({ length: 9 }, (_, i) => (
                                 <option key={i} value={i}>{i}</option>
@@ -321,7 +322,7 @@ export default function StaffingManager({ rosterId, rosterPeriod, startDate, onC
                               value={maxValue}
                               onChange={(e) => handleStaffingChange(date, service.id, 'max', parseInt(e.target.value))}
                               disabled={isLocked || isSaving}
-                              className="w-full px-1 py-1 text-xs border rounded bg-green-50 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                              className="w-full px-1 py-1 text-xs border rounded staffing-input-max disabled:bg-gray-100 disabled:cursor-not-allowed"
                             >
                               {Array.from({ length: 10 }, (_, i) => (
                                 <option key={i} value={i}>
@@ -346,12 +347,12 @@ export default function StaffingManager({ rosterId, rosterPeriod, startDate, onC
             <div className="text-sm text-gray-600">
               {isSaving && (
                 <span className="inline-flex items-center gap-2">
-                  <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                  <div className="loading-spinner" />
                   Opslaan...
                 </span>
               )}
               {hasChanges && !isSaving && (
-                <span className="text-yellow-600">● Wijzigingen automatisch opgeslagen</span>
+                <span className="changes-indicator">Wijzigingen automatisch opgeslagen</span>
               )}
             </div>
           </div>
