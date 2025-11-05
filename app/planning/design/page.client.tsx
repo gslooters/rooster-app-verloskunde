@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { loadRosterDesignData, updateEmployeeMaxShifts, toggleUnavailability, autofillUnavailability } from '@/lib/planning/rosterDesign';
+import { fetchNetherlandsHolidays, createHolidaySet, findHolidayByDate } from '@/lib/services/holidays-api';
 import type { RosterDesignData, RosterEmployee } from '@/lib/types/roster';
+import type { Holiday } from '@/lib/types/holiday';
 import { TeamType, DienstverbandType } from '@/lib/types/employee';
 
 const TEAM_COLORS: Record<string, string> = {
@@ -41,6 +43,11 @@ export default function DesignPageClient() {
   const [employees, setEmployees] = useState<RosterEmployee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
+  const [holidaysLoading, setHolidaysLoading] = useState(false);
+
+  // Memoized holiday set voor O(1) lookup
+  const holidaySet = useMemo(() => createHolidaySet(holidays), [holidays]);
 
   useEffect(() => {
     if (!rosterId) { setError('Geen roster ID gevonden'); setLoading(false); return; }
@@ -52,12 +59,41 @@ export default function DesignPageClient() {
         const latest = loadRosterDesignData(rosterId) || data;
         setDesignData(latest);
         setEmployees(latest.employees);
+        
+        // Laad feestdagen voor de roster periode
+        if (startISO) {
+          loadHolidaysForPeriod(startISO);
+        }
       } else { setError('Geen roster ontwerp data gevonden'); }
     } catch (err) {
       console.error('Error loading design data:', err); setError('Fout bij laden van ontwerp data');
     }
     setLoading(false);
   }, [rosterId]);
+
+  async function loadHolidaysForPeriod(startISO: string) {
+    setHolidaysLoading(true);
+    try {
+      const startDate = new Date(startISO + 'T00:00:00');
+      const endDate = new Date(startDate);
+      endDate.setDate(startDate.getDate() + (4 * 7) + 6); // 5 weken periode
+      
+      const startStr = startDate.toISOString().split('T')[0];
+      const endStr = endDate.toISOString().split('T')[0];
+      
+      console.log(`Loading holidays for period: ${startStr} to ${endStr}`);
+      
+      const fetchedHolidays = await fetchNetherlandsHolidays(startStr, endStr);
+      setHolidays(fetchedHolidays);
+      
+      console.log(`Loaded ${fetchedHolidays.length} holidays:`, fetchedHolidays);
+    } catch (error) {
+      console.error('Error loading holidays:', error);
+      // Continue zonder feestdagen bij fout
+    } finally {
+      setHolidaysLoading(false);
+    }
+  }
 
   function updateMaxShiftsHandler(empId: string, maxShifts: number) {
     if (!rosterId || !designData) return;
@@ -118,7 +154,7 @@ export default function DesignPageClient() {
     return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
   }
 
-  function formatDateCell(dateStr: string): { day: string, date: string, month: string, isWeekend: boolean } {
+  function formatDateCell(dateStr: string): { day: string, date: string, month: string, isWeekend: boolean, isHoliday: boolean, holidayName?: string } {
     const date = new Date(dateStr + 'T00:00:00');
     const dayNames = ['ZO', 'MA', 'DI', 'WO', 'DO', 'VR', 'ZA'];
     const dayIndex = date.getDay();
@@ -126,7 +162,10 @@ export default function DesignPageClient() {
     const dd = String(date.getDate()).padStart(2, '0');
     const mm = String(date.getMonth() + 1).padStart(2, '0');
     const isWeekend = dayIndex === 0 || dayIndex === 6;
-    return { day, date: dd, month: mm, isWeekend };
+    const isHoliday = holidaySet.has(dateStr);
+    const holiday = isHoliday ? findHolidayByDate(holidays, dateStr) : undefined;
+    
+    return { day, date: dd, month: mm, isWeekend, isHoliday, holidayName: holiday?.name };
   }
 
   const firstWeek = weeks[0];
@@ -136,14 +175,30 @@ export default function DesignPageClient() {
 
   const weekendHeaderClass = 'bg-yellow-100';
   const weekdayHeaderClass = 'bg-yellow-50';
+  const holidayHeaderClass = 'bg-amber-100 border-amber-300';
+  const weekendHolidayHeaderClass = 'bg-gradient-to-r from-yellow-100 to-amber-100 border-amber-300';
   const weekendBodyClass = 'bg-yellow-50/40';
+  const holidayBodyClass = 'bg-amber-50/30';
+  const weekendHolidayBodyClass = 'bg-gradient-to-r from-yellow-50/40 to-amber-50/30';
 
-  // Helper: verticale scheiding links van MA (na ZO) en dikkere borders rond weekend
-  function weekendColumnClasses(dateStr: string): string {
+  // Helper: verticale scheiding links van MA (na ZO) en dikkere borders rond weekend/feestdagen
+  function columnClasses(dateStr: string): string {
     const date = new Date(dateStr + 'T00:00:00');
     const d = date.getDay();
+    const isHoliday = holidaySet.has(dateStr);
     const leftWeekSep = d === 1 ? ' border-l-4 border-yellow-200' : ''; // scheiding tussen ZO en MA
-    const weekendRim = (d === 0 || d === 6) ? ' border-x-2 border-yellow-300' : '';
+    
+    let weekendRim = '';
+    if (d === 0 || d === 6) { // Weekend
+      if (isHoliday) {
+        weekendRim = ' border-x-2 border-amber-300'; // Weekend + feestdag
+      } else {
+        weekendRim = ' border-x-2 border-yellow-300'; // Alleen weekend
+      }
+    } else if (isHoliday) {
+      weekendRim = ' border-x-2 border-amber-300'; // Alleen feestdag
+    }
+    
     return leftWeekSep + weekendRim;
   }
 
@@ -156,10 +211,16 @@ export default function DesignPageClient() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900 mb-1">{periodTitle}</h1>
             <p className="text-xs text-gray-500">{dateSubtitle}</p>
+            {holidaysLoading && (
+              <p className="text-xs text-blue-600 mt-1">Feestdagen worden geladen...</p>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1 text-xs text-gray-700 bg-yellow-50 border border-yellow-200 px-2 py-1 rounded-md">
               <span className="inline-block w-3 h-3 rounded-sm bg-yellow-100 border border-yellow-300" /> Weekend
+            </span>
+            <span className="inline-flex items-center gap-1 text-xs text-gray-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-md">
+              <span className="inline-block w-3 h-3 rounded-sm bg-amber-100 border border-amber-300" /> Feestdag
             </span>
             <div className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">🎨 Ontwerpfase</div>
             <button onClick={goToEditing} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium">Ga naar Bewerking →</button>
@@ -167,7 +228,7 @@ export default function DesignPageClient() {
         </div>
 
         <div className="bg-blue-50 p-4 rounded-lg mb-6">
-          <p className="text-blue-800"><strong>Instructies:</strong> Stel voor elke medewerker het maximum aantal diensten in (0-35) en markeer niet-beschikbare dagen met de NB-knoppen.</p>
+          <p className="text-blue-800"><strong>Instructies:</strong> Stel voor elke medewerker het maximum aantal diensten in (0-35) en markeer niet-beschikbare dagen met de NB-knoppen. Nederlandse feestdagen zijn automatisch gemarkeerd.</p>
         </div>
 
         <div className="bg-white rounded-lg shadow-sm border overflow-x-auto">
@@ -185,9 +246,25 @@ export default function DesignPageClient() {
                 <th className="sticky left-0 bg-white border-b"></th>
                 <th className="border-b"></th>
                 {weeks.map(week => week.dates.map(date => {
-                  const { day, isWeekend } = formatDateCell(date);
+                  const { day, isWeekend, isHoliday } = formatDateCell(date);
+                  let headerClass = weekdayHeaderClass;
+                  if (isWeekend && isHoliday) {
+                    headerClass = weekendHolidayHeaderClass;
+                  } else if (isHoliday) {
+                    headerClass = holidayHeaderClass;
+                  } else if (isWeekend) {
+                    headerClass = weekendHeaderClass;
+                  }
+                  
                   return (
-                    <th key={`day-${date}`} className={`border-b px-1 py-1 text-xs font-medium text-gray-700 min-w-[50px] ${isWeekend ? weekendHeaderClass : weekdayHeaderClass}${weekendColumnClasses(date)}`}>{day}</th>
+                    <th key={`day-${date}`} className={`border-b px-1 py-1 text-xs font-medium text-gray-700 min-w-[50px] ${headerClass}${columnClasses(date)} relative`}>
+                      {day}
+                      {isHoliday && (
+                        <span className="absolute top-0 right-0 bg-amber-600 text-white text-xs px-1 rounded-bl text-[10px] font-bold leading-none" style={{ fontSize: '8px', padding: '1px 2px' }}>
+                          FD
+                        </span>
+                      )}
+                    </th>
                   );
                 }))}
               </tr>
@@ -196,9 +273,20 @@ export default function DesignPageClient() {
                 <th className="sticky left-0 bg-white border-b"></th>
                 <th className="border-b"></th>
                 {weeks.map(week => week.dates.map(date => {
-                  const { date: dd, isWeekend } = formatDateCell(date);
+                  const { date: dd, isWeekend, isHoliday, holidayName } = formatDateCell(date);
+                  let headerClass = weekdayHeaderClass;
+                  if (isWeekend && isHoliday) {
+                    headerClass = weekendHolidayHeaderClass;
+                  } else if (isHoliday) {
+                    headerClass = holidayHeaderClass;
+                  } else if (isWeekend) {
+                    headerClass = weekendHeaderClass;
+                  }
+                  
                   return (
-                    <th key={`date-${date}`} className={`border-b px-1 py-1 text-xs text-gray-600 min-w-[50px] ${isWeekend ? weekendHeaderClass : weekdayHeaderClass}${weekendColumnClasses(date)}`}>{dd}</th>
+                    <th key={`date-${date}`} className={`border-b px-1 py-1 text-xs text-gray-600 min-w-[50px] ${headerClass}${columnClasses(date)}`} title={holidayName || undefined}>
+                      {dd}
+                    </th>
                   );
                 }))}
               </tr>
@@ -207,9 +295,20 @@ export default function DesignPageClient() {
                 <th className="sticky left-0 bg-white border-b"></th>
                 <th className="border-b"></th>
                 {weeks.map(week => week.dates.map(date => {
-                  const { month, isWeekend } = formatDateCell(date);
+                  const { month, isWeekend, isHoliday } = formatDateCell(date);
+                  let headerClass = weekdayHeaderClass;
+                  if (isWeekend && isHoliday) {
+                    headerClass = weekendHolidayHeaderClass;
+                  } else if (isHoliday) {
+                    headerClass = holidayHeaderClass;
+                  } else if (isWeekend) {
+                    headerClass = weekendHeaderClass;
+                  }
+                  
                   return (
-                    <th key={`month-${date}`} className={`border-b px-1 py-1 text-xs text-gray-500 min-w-[50px] ${isWeekend ? weekendHeaderClass : weekdayHeaderClass}${weekendColumnClasses(date)}`}>{month}</th>
+                    <th key={`month-${date}`} className={`border-b px-1 py-1 text-xs text-gray-500 min-w-[50px] ${headerClass}${columnClasses(date)}`}>
+                      {month}
+                    </th>
                   );
                 }))}
               </tr>
@@ -229,9 +328,19 @@ export default function DesignPageClient() {
                     </td>
                     {weeks.map(week => week.dates.map(date => {
                       const isUnavailable = designData.unavailabilityData?.[emp.id]?.[date] || false;
-                      const { isWeekend } = formatDateCell(date);
+                      const { isWeekend, isHoliday } = formatDateCell(date);
+                      
+                      let cellClass = '';
+                      if (isWeekend && isHoliday) {
+                        cellClass = weekendHolidayBodyClass;
+                      } else if (isHoliday) {
+                        cellClass = holidayBodyClass;
+                      } else if (isWeekend) {
+                        cellClass = weekendBodyClass;
+                      }
+                      
                       return (
-                        <td key={date} className={`border-b p-0.5 text-center h-8 ${isWeekend ? 'bg-yellow-50/40' : ''}${weekendColumnClasses(date)}`}>
+                        <td key={date} className={`border-b p-0.5 text-center h-8 ${cellClass}${columnClasses(date)}`}>
                           <button onClick={() => toggleUnavailable(emp.id, date)} className={`w-10 h-6 rounded text-xs font-bold transition-colors ${isUnavailable ? 'bg-red-100 text-red-700 border border-red-300 hover:bg-red-200' : 'bg-gray-100 text-gray-400 border border-gray-300 hover:bg-gray-200'}`} title={isUnavailable ? 'Klik om beschikbaar te maken' : 'Klik om niet-beschikbaar te markeren'}>
                             {isUnavailable ? 'NB' : '—'}
                           </button>
@@ -247,7 +356,12 @@ export default function DesignPageClient() {
 
         <div className="mt-6 flex items-center justify-between">
           <button onClick={() => router.push('/planning')} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">← Terug naar Dashboard</button>
-          <div className="text-sm text-gray-600">Wijzigingen worden automatisch opgeslagen</div>
+          <div className="text-sm text-gray-600">
+            Wijzigingen worden automatisch opgeslagen
+            {holidays.length > 0 && (
+              <span className="ml-2 text-amber-600">• {holidays.length} feestdagen geladen</span>
+            )}
+          </div>
         </div>
       </div>
     </div>
