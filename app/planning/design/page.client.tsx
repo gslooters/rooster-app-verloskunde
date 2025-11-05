@@ -47,7 +47,6 @@ export default function DesignPageClient() {
     try {
       const data = loadRosterDesignData(rosterId);
       if (data) {
-        // Eerste keer: voer NB auto-fill uit op basis van roostervrijDagen
         const startISO = (data as any).start_date || (data as any).roster_start;
         if (startISO) { autofillUnavailability(rosterId, startISO); }
         const latest = loadRosterDesignData(rosterId) || data;
@@ -104,10 +103,7 @@ export default function DesignPageClient() {
 
   const startISO = (designData as any).start_date || (designData as any).roster_start || new Date().toISOString().split('T')[0];
   const startDate = new Date(startISO + 'T00:00:00');
-  
-  // Bereken eind datum (4 weken verder)
-  const endDate = new Date(startDate);
-  endDate.setDate(startDate.getDate() + (4 * 7) + 6); // 4 weken + 6 dagen
+  const endDate = new Date(startDate); endDate.setDate(startDate.getDate() + (4 * 7) + 6);
 
   const weeks = Array.from({ length: 5 }, (_, i) => {
     const weekStart = new Date(startDate); weekStart.setDate(startDate.getDate() + (i * 7));
@@ -122,19 +118,25 @@ export default function DesignPageClient() {
     return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
   }
 
-  function formatDateCell(dateStr: string): { day: string, date: string, month: string } {
+  function formatDateCell(dateStr: string): { day: string, date: string, month: string, isWeekend: boolean } {
     const date = new Date(dateStr + 'T00:00:00');
     const dayNames = ['ZO', 'MA', 'DI', 'WO', 'DO', 'VR', 'ZA'];
-    const day = dayNames[date.getDay()];
+    const dayIndex = date.getDay();
+    const day = dayNames[dayIndex];
     const dd = String(date.getDate()).padStart(2, '0');
     const mm = String(date.getMonth() + 1).padStart(2, '0');
-    return { day, date: dd, month: mm };
+    const isWeekend = dayIndex === 0 || dayIndex === 6; // ZO of ZA
+    return { day, date: dd, month: mm, isWeekend };
   }
 
   const firstWeek = weeks[0];
   const lastWeek = weeks[weeks.length - 1];
   const periodTitle = `Rooster Ontwerp : Periode Week ${firstWeek.number} - Week ${lastWeek.number} ${startDate.getFullYear()}`;
   const dateSubtitle = `Van ${formatDutchDate(startISO)} tot en met ${formatDutchDate(endDate.toISOString().split('T')[0])}`;
+
+  const weekendHeaderClass = 'bg-yellow-100';
+  const weekdayHeaderClass = 'bg-yellow-50';
+  const weekendBodyClass = 'bg-yellow-50/40';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-4">
@@ -172,9 +174,9 @@ export default function DesignPageClient() {
                 <th className="sticky left-0 bg-white border-b"></th>
                 <th className="border-b"></th>
                 {weeks.map(week => week.dates.map(date => {
-                  const { day } = formatDateCell(date);
+                  const { day, isWeekend } = formatDateCell(date);
                   return (
-                    <th key={`day-${date}`} className="border-b px-1 py-1 text-xs font-medium text-gray-700 bg-yellow-50 min-w-[50px]">{day}</th>
+                    <th key={`day-${date}`} className={`border-b px-1 py-1 text-xs font-medium text-gray-700 min-w-[50px] ${isWeekend ? weekendHeaderClass : weekdayHeaderClass}`}>{day}</th>
                   );
                 }))}
               </tr>
@@ -184,9 +186,9 @@ export default function DesignPageClient() {
                 <th className="sticky left-0 bg-white border-b"></th>
                 <th className="border-b"></th>
                 {weeks.map(week => week.dates.map(date => {
-                  const { date: dd } = formatDateCell(date);
+                  const { date: dd, isWeekend } = formatDateCell(date);
                   return (
-                    <th key={`date-${date}`} className="border-b px-1 py-1 text-xs text-gray-600 bg-yellow-50 min-w-[50px]">{dd}</th>
+                    <th key={`date-${date}`} className={`border-b px-1 py-1 text-xs text-gray-600 min-w-[50px] ${isWeekend ? weekendHeaderClass : weekdayHeaderClass}`}>{dd}</th>
                   );
                 }))}
               </tr>
@@ -196,9 +198,9 @@ export default function DesignPageClient() {
                 <th className="sticky left-0 bg-white border-b"></th>
                 <th className="border-b"></th>
                 {weeks.map(week => week.dates.map(date => {
-                  const { month } = formatDateCell(date);
+                  const { month, isWeekend } = formatDateCell(date);
                   return (
-                    <th key={`month-${date}`} className="border-b px-1 py-1 text-xs text-gray-500 bg-yellow-50 min-w-[50px]">{month}</th>
+                    <th key={`month-${date}`} className={`border-b px-1 py-1 text-xs text-gray-500 min-w-[50px] ${isWeekend ? weekendHeaderClass : weekdayHeaderClass}`}>{month}</th>
                   );
                 }))}
               </tr>
@@ -218,8 +220,9 @@ export default function DesignPageClient() {
                     </td>
                     {weeks.map(week => week.dates.map(date => {
                       const isUnavailable = designData.unavailabilityData?.[emp.id]?.[date] || false;
+                      const { isWeekend } = formatDateCell(date);
                       return (
-                        <td key={date} className="border-b p-0.5 text-center h-8">
+                        <td key={date} className={`border-b p-0.5 text-center h-8 ${isWeekend ? weekendBodyClass : ''}`}>
                           <button onClick={() => toggleUnavailable(emp.id, date)} className={`w-10 h-6 rounded text-xs font-bold transition-colors ${isUnavailable ? 'bg-red-100 text-red-700 border border-red-300 hover:bg-red-200' : 'bg-gray-100 text-gray-400 border border-gray-300 hover:bg-gray-200'}`} title={isUnavailable ? 'Klik om beschikbaar te maken' : 'Klik om niet-beschikbaar te markeren'}>
                             {isUnavailable ? 'NB' : '—'}
                           </button>
