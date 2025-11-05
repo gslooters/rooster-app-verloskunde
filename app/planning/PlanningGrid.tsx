@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { getRosters, isDutchHoliday, isAvailable } from './libAliases';
 import AvailabilityPopup from './_components/AvailabilityPopup';
+import StaffingManager from './_components/StaffingManager';
 import '@/styles/planning.css';
 import '@/styles/compact-service.css';
 import '../toolbar.css';
@@ -10,6 +11,9 @@ import '../toolbar.css';
 // Sprint 2.2: Import roster design functionality
 import { loadRosterDesignData, isEmployeeUnavailable } from '@/lib/planning/rosterDesign';
 import type { RosterDesignData, RosterEmployee } from '@/lib/types/roster';
+
+// NEW: Import roster staffing functionality
+import { isRosterStaffingLocked } from '@/lib/services/roster-staffing-storage';
 
 import { prepareRosterForExport, exportToExcel, exportToCSV, exportRosterToPDF, exportEmployeeToPDF } from '@/lib/export';
 import { getAllServices } from '@/lib/services/diensten-storage';
@@ -65,6 +69,10 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
   const [allServices, setAllServices] = useState<Dienst[]>([]);
   const [employeeServiceMappings, setEmployeeServiceMappings] = useState<Record<string, Dienst[]>>({});
   
+  // NEW: Staffing management state
+  const [showStaffingManager, setShowStaffingManager] = useState(false);
+  const [staffingLocked, setStaffingLocked] = useState(false);
+  
   useEffect(() => {
     // Sprint 2.2: Try to load roster design data first
     const loadedDesignData = loadRosterDesignData(rosterId);
@@ -103,6 +111,14 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
       console.error('Error loading services:', err);
       setAllServices([]);
       setEmployeeServiceMappings({});
+    }
+
+    // NEW: Check staffing lock status
+    try {
+      const locked = isRosterStaffingLocked(rosterId);
+      setStaffingLocked(locked);
+    } catch (err) {
+      console.error('Error checking staffing lock status:', err);
     }
   }, [rosterId]);
 
@@ -205,6 +221,20 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
     if (emp) exportEmployeeToPDF(exportable, { id: emp.originalEmployeeId, name: getFirstName(emp.name) });
   }
 
+  // NEW: Handle staffing manager actions
+  function handleStaffingManagerOpen() {
+    setShowStaffingManager(true);
+  }
+
+  function handleStaffingManagerClose() {
+    setShowStaffingManager(false);
+  }
+
+  function handleStaffingLocked() {
+    setStaffingLocked(true);
+    setShowStaffingManager(false);
+  }
+
   return (
     <main className="p-4">
       <nav className="text-sm text-gray-500 mb-3">Dashboard &gt; Rooster Planning &gt; Rooster</nav>
@@ -230,6 +260,24 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
 
       <div className="toolbar mb-4">
         <button className="btn" onClick={() => window.location.href = '/planning'}>← Dashboard</button>
+        <span style={{ marginLeft: 12 }} />
+        
+        {/* NEW: Staffing Management Button */}
+        <button 
+          className={`btn ${staffingLocked ? 'locked' : 'primary'}`}
+          onClick={staffingLocked ? undefined : handleStaffingManagerOpen}
+          disabled={staffingLocked}
+          style={{
+            backgroundColor: staffingLocked ? '#10B981' : undefined,
+            color: staffingLocked ? 'white' : undefined,
+            cursor: staffingLocked ? 'default' : 'pointer',
+            opacity: staffingLocked ? 0.8 : 1
+          }}
+          title={staffingLocked ? 'Bezetting is vastgesteld en kan niet meer worden gewijzigd' : 'Klik om bezetting te beheren'}
+        >
+          {staffingLocked ? '✅ Bezetting vastgesteld' : '⚙️ Bezetting beheren'}
+        </button>
+        
         <span style={{ marginLeft: 12 }} />
         <button className="btn" onClick={onExportCSV}>Export CSV</button>
         <button className="btn" onClick={onExportExcel}>Export Excel</button>
@@ -385,6 +433,7 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
         </table>
       </div>
 
+      {/* Existing popup */}
       {popupFor && isDraft && !isDesignPhase && (
         <AvailabilityPopup
           rosterId={roster.id}
@@ -392,6 +441,17 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
           startDate={start}
           onClose={() => setPopupFor(null)}
           onSaved={() => {}}
+        />
+      )}
+
+      {/* NEW: Staffing Manager Modal */}
+      {showStaffingManager && (
+        <StaffingManager
+          rosterId={rosterId}
+          rosterPeriod={formatPeriodDDMM(start)}
+          startDate={start}
+          onClose={handleStaffingManagerClose}
+          onLocked={handleStaffingLocked}
         />
       )}
     </main>
