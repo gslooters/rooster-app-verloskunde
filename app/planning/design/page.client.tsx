@@ -1,9 +1,9 @@
-// Enhanced team normalization + robust color mapping + sorting + extended debug
+// Enhanced team normalization + robust color mapping + sorting + extended debug + SYNC
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { loadRosterDesignData, updateEmployeeMaxShifts, toggleUnavailability, autofillUnavailability } from '@/lib/planning/rosterDesign';
+import { loadRosterDesignData, updateEmployeeMaxShifts, toggleUnavailability, autofillUnavailability, syncRosterDesignWithEmployeeData } from '@/lib/planning/rosterDesign';
 import { fetchNetherlandsHolidays, createHolidaySet, findHolidayByDate } from '@/lib/services/holidays-api';
 import type { RosterDesignData, RosterEmployee } from '@/lib/types/roster';
 import type { Holiday } from '@/lib/types/holiday';
@@ -136,13 +136,17 @@ export default function DesignPageClient() {
     try {
       const data = loadRosterDesignData(rosterId);
       if (data) {
+        // CRITICAL: Sync met actuele employee data voor de nieuwste team-toewijzingen
+        syncRosterDesignWithEmployeeData(rosterId);
+        
         const startISO = (data as any).start_date || (data as any).roster_start;
         if (startISO) { autofillUnavailability(rosterId, startISO); }
+        
+        // Laad opnieuw na sync
         const latest = loadRosterDesignData(rosterId) || data;
-        // Optionele runtime normalisatie van teamwaarden
-        const normalized = (latest.employees || []).map((e: any) => ({ ...e, team: normalizeTeam(e?.team) }));
         setDesignData(latest);
-        setEmployees(normalized);
+        setEmployees(latest.employees);
+        
         if (startISO) { loadHolidaysForPeriod(startISO); }
       } else { setError('Geen roster ontwerp data gevonden'); }
     } catch (err) { console.error('Error loading design data:', err); setError('Fout bij laden van ontwerp data'); }
@@ -151,7 +155,7 @@ export default function DesignPageClient() {
 
   useEffect(() => {
     if (employees.length) {
-      console.log('TEAM DEBUG (canonical):', employees.map(emp => ({
+      console.log('TEAM DEBUG (canonical + synced):', employees.map(emp => ({
         id: (emp as any).id,
         name: (emp as any).voornaam || (emp as any).name,
         raw: (emp as any).team,
@@ -178,13 +182,21 @@ export default function DesignPageClient() {
   function updateMaxShiftsHandler(empId: string, maxShifts: number) {
     if (!rosterId || !designData) return;
     updateEmployeeMaxShifts(rosterId, empId, maxShifts);
-    const updated = loadRosterDesignData(rosterId); if (updated) { setDesignData(updated); setEmployees((updated.employees || []).map((e: any) => ({ ...e, team: normalizeTeam(e?.team) }))); }
+    const updated = loadRosterDesignData(rosterId); 
+    if (updated) { 
+      setDesignData(updated); 
+      setEmployees(updated.employees); 
+    }
   }
 
   function toggleUnavailable(empId: string, date: string) {
     if (!rosterId || !designData) return;
     toggleUnavailability(rosterId, empId, date);
-    const updated = loadRosterDesignData(rosterId); if (updated) { setDesignData(updated); setEmployees((updated.employees || []).map((e: any) => ({ ...e, team: normalizeTeam(e?.team) }))); }
+    const updated = loadRosterDesignData(rosterId); 
+    if (updated) { 
+      setDesignData(updated); 
+      setEmployees(updated.employees); 
+    }
   }
 
   function goToEditing() { if (!rosterId) return; router.push(`/planning/${rosterId}`); }
