@@ -12,18 +12,23 @@ export type Employee = {
 
 const EKEY = 'verloskunde_employees';
 
-// Sprint 2.2: Mock test data voor development
+// Sprint 2.2: Mock test data voor development - uitgebreid naar 12 medewerkers
 const MOCK_TEST_EMPLOYEES: Employee[] = [
+  // Team GROEN (6 medewerkers)
   { id: 'emp1', name: 'Anna van der Berg', active: true, voornaam: 'Anna', achternaam: 'van der Berg', actief: true },
   { id: 'emp2', name: 'Bram Jansen', active: true, voornaam: 'Bram', achternaam: 'Jansen', actief: true },
   { id: 'emp3', name: 'Carla de Wit', active: true, voornaam: 'Carla', achternaam: 'de Wit', actief: true },
   { id: 'emp4', name: 'Daan Bakker', active: true, voornaam: 'Daan', achternaam: 'Bakker', actief: true },
   { id: 'emp5', name: 'Eva Smit', active: true, voornaam: 'Eva', achternaam: 'Smit', actief: true },
   { id: 'emp6', name: 'Frank de Jong', active: true, voornaam: 'Frank', achternaam: 'de Jong', actief: true },
+  
+  // Team ORANJE (6 medewerkers)  
   { id: 'emp7', name: 'Greta van Dijk', active: true, voornaam: 'Greta', achternaam: 'van Dijk', actief: true },
   { id: 'emp8', name: 'Hans Visser', active: true, voornaam: 'Hans', achternaam: 'Visser', actief: true },
   { id: 'emp9', name: 'Iris Peters', active: true, voornaam: 'Iris', achternaam: 'Peters', actief: true },
-  { id: 'emp10', name: 'Jan Mulder', active: false, voornaam: 'Jan', achternaam: 'Mulder', actief: false },
+  { id: 'emp10', name: 'Jan Mulder', active: true, voornaam: 'Jan', achternaam: 'Mulder', actief: true }, // Actief gemaakt
+  { id: 'emp11', name: 'Karin van den Berg', active: true, voornaam: 'Karin', achternaam: 'van den Berg', actief: true },
+  { id: 'emp12', name: 'Linda Dekker', active: true, voornaam: 'Linda', achternaam: 'Dekker', actief: true },
 ];
 
 // Demo: lees uit localStorage. Koppel later aan echte bron (API/DB).
@@ -81,7 +86,7 @@ export function initializeTestData(): boolean {
     const existing = localStorage.getItem(EKEY);
     if (!existing || JSON.parse(existing).length === 0) {
       localStorage.setItem(EKEY, JSON.stringify(MOCK_TEST_EMPLOYEES));
-      console.log('Test employee data geïnitialiseerd');
+      console.log('Test employee data geïnitialiseerd - 12 medewerkers');
       return true;
     }
     return false;
