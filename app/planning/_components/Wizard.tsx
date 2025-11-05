@@ -1,8 +1,12 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { computeDefaultStart, validateStartMonday, computeEnd, readRosters, writeRosters, type Roster } from '@/lib/planning/storage';
-import { getActiveEmployees, type Employee } from '@/lib/planning/employees';
+import { 
+  computeDefaultStart, computeEnd, readRosters, writeRosters, type Roster,
+  generateFiveWeekPeriods, getPeriodStatus, formatWeekRange, formatDateRangeNl
+} from '@/lib/planning/storage';
+import { getAllEmployees, getActiveEmployees } from '@/lib/services/employees-storage';
+import { Employee, TeamType, DienstverbandType, getFullName } from '@/lib/types/employee';
 import { initializeRosterDesign } from '@/lib/planning/rosterDesign';
 import { useRouter } from 'next/navigation';
 
@@ -10,119 +14,201 @@ function genId() { return 'r_' + Math.random().toString(36).slice(2, 10) + Date.
 
 const FIXED_WEEKS = 5;
 
-interface WizardProps {
-  onClose?: () => void;
-}
+type WizardStep = 'period' | 'employees' | 'confirm';
+
+interface WizardProps { onClose?: () => void; }
 
 export default function Wizard({ onClose }: WizardProps = {}) {
   const router = useRouter();
-  const defaultStart = useMemo(() => computeDefaultStart(), []);
-  const [start, setStart] = useState<string>(defaultStart);
-  const weeks = FIXED_WEEKS;
 
-  const [activeEmployees, setActiveEmployees] = useState<Employee[]>([]);
-  const [showConfirm, setShowConfirm] = useState<boolean>(false);
+  // Stap 1: Periode keuze
+  const [periods, setPeriods] = useState<{ start: string; end: string; status: string }[]>([]);
+  const [selectedStart, setSelectedStart] = useState<string>('');
+  const [selectedEnd, setSelectedEnd] = useState<string>('');
+
+  // Stap 2: Medewerkers controle
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [step, setStep] = useState<WizardStep>('period');
   const [error, setError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState<boolean>(false);
 
   useEffect(() => {
-    setActiveEmployees(getActiveEmployees());
+    // Genereer perioden + status
+    const base = generateFiveWeekPeriods(30);
+    const list = base.map(p => ({ ...p, status: getPeriodStatus(p.start, p.end) }));
+
+    // Ordening: eerst alle in_progress (oud->jong), dan draft (oud->jong), dan eerste free
+    const inProg = list.filter(p => p.status === 'in_progress').sort((a,b)=>a.start.localeCompare(b.start));
+    const drafts = list.filter(p => p.status === 'draft').sort((a,b)=>a.start.localeCompare(b.start));
+    const free = list.filter(p => p.status === 'free');
+
+    const ordered = [...inProg, ...drafts, ...free];
+    setPeriods(ordered);
+
+    // Selecteer eerste vrije
+    const firstFree = free[0];
+    if (firstFree) { setSelectedStart(firstFree.start); setSelectedEnd(firstFree.end); }
+
+    // Haal medewerkers op (alle, inclusief inactief voor weergave Ja/Nee)
+    setEmployees(getAllEmployees());
   }, []);
 
-  function openConfirm() {
-    const isValidMonday = validateStartMonday(start);
-    if (!isValidMonday) { setError('Startdatum moet een maandag zijn'); return; }
-    const actives = getActiveEmployees();
-    if (actives.length === 0) { setError('Geen actieve medewerkers gevonden. Voeg eerst medewerkers toe in Medewerkers Beheer.'); return; }
-    setError(null); setShowConfirm(true);
+  function gotoEmployeesStep() {
+    if (!selectedStart || !selectedEnd) { setError('Geen beschikbare periode gevonden.'); return; }
+    setError(null); setStep('employees');
   }
+
+  function gotoConfirmStep() { setStep('confirm'); }
+  function backToDashboard() { if (onClose) onClose(); router.push('/dashboard'); }
 
   async function createRosterConfirmed() {
     setIsCreating(true); setError(null);
     try {
       const id = genId();
-      const end = computeEnd(start);
-      const roster: Roster = { id, start_date: start, end_date: end, status: 'draft', created_at: new Date().toISOString() };
+      const roster: Roster = { id, start_date: selectedStart, end_date: selectedEnd, status: 'draft', created_at: new Date().toISOString() } as Roster;
       const list = readRosters().filter(x => x.id !== roster.id); list.push(roster); writeRosters(list);
 
-      // Sleutels voor self-heal en deep link
       if (typeof window !== 'undefined') {
         localStorage.setItem('lastRosterId', id);
         localStorage.setItem('recentDesignRoute', `/planning/design?rosterId=${id}`);
       }
 
       initializeRosterDesign(roster.id);
-      
-      // Close modal if onClose is provided, otherwise navigate
-      if (onClose) {
-        onClose();
-        // Small delay to allow modal to close before navigation
-        setTimeout(() => {
-          router.push(`/planning/design?rosterId=${id}`);
-        }, 100);
-      } else {
-        router.push(`/planning/design?rosterId=${id}`);
-      }
+      if (onClose) { onClose(); setTimeout(()=>router.push(`/planning/design?rosterId=${id}`), 100); }
+      else { router.push(`/planning/design?rosterId=${id}`); }
     } catch (err) {
-      console.error('Error creating rooster:', err);
-      setError('Er is een fout opgetreden bij het aanmaken van het rooster. Probeer opnieuw.');
-      setIsCreating(false);
+      console.error('Error creating rooster:', err); setError('Er is een fout opgetreden bij het aanmaken van het rooster. Probeer opnieuw.'); setIsCreating(false);
     }
   }
 
-  function handleCancel() {
-    setShowConfirm(false);
-    if (onClose) {
-      onClose();
-    }
+  // Helpers voor labels/kleuren
+  function statusBadge(period: {status: string}) {
+    if (period.status === 'in_progress') return (<span className="px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">In bewerking</span>);
+    if (period.status === 'draft') return (<span className="px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">In ontwerp</span>);
+    return null;
   }
 
-  return (
-    <section className={onClose ? "" : "p-4 border rounded bg-white"}>
-      {!onClose && <h2 className="text-lg font-semibold mb-3">Nieuw rooster</h2>}
-      {error && <p className="text-red-600 mb-2">{error}</p>}
-      <div className="flex flex-col gap-3 max-w-md">
-        <label className="flex items-center justify-between gap-3">
-          <span>Startdatum (moet maandag zijn)</span>
-          <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className="border rounded px-2 py-1" disabled={isCreating} />
-        </label>
-        <div className="flex items-center justify-between gap-3">
-          <span>Aantal weken</span>
-          <div className="border rounded px-2 py-1 w-24 bg-gray-100 text-gray-600 text-center">{FIXED_WEEKS}</div>
+  function isDisabled(period: {status: string}) { return period.status === 'in_progress' || period.status === 'draft'; }
+
+  function renderPeriodCard(p: {start:string; end:string; status:string}) {
+    const isSelected = selectedStart === p.start;
+    const selectable = p.status === 'free' && periods.findIndex(x=>x.status==='free') === periods.indexOf(p); // alleen eerste free
+    const baseCls = 'border rounded-lg p-3 flex items-center justify-between';
+    const disabledCls = isDisabled(p) ? 'bg-gray-50 opacity-70 cursor-not-allowed' : '';
+    const selectedCls = isSelected ? 'ring-2 ring-red-300 bg-red-50' : '';
+    const selectableCls = selectable ? 'hover:bg-red-50 cursor-pointer' : (isDisabled(p) ? '' : 'opacity-60 cursor-not-allowed');
+
+    const handle = () => { if (selectable) { setSelectedStart(p.start); setSelectedEnd(p.end);} };
+
+    return (
+      <div key={`${p.start}-${p.end}`} onClick={handle} className={`${baseCls} ${disabledCls} ${selectedCls} ${selectableCls}`}>
+        <div>
+          <div className="font-semibold">{formatWeekRange(p.start,p.end)}</div>
+          <div className="text-sm text-gray-600">{formatDateRangeNl(p.start,p.end)}</div>
         </div>
-        <p className="text-sm text-gray-600">Alle roosters worden gemaakt voor {FIXED_WEEKS} weken.</p>
-        <div className="flex gap-2">
-          <button type="button" onClick={openConfirm} disabled={isCreating} className="px-3 py-2 border rounded bg-blue-600 text-white w-fit disabled:bg-blue-400 disabled:cursor-not-allowed">{isCreating ? 'Rooster wordt aangemaakt...' : 'Creëer rooster'}</button>
-          {onClose && (
-            <button type="button" onClick={onClose} disabled={isCreating} className="px-3 py-2 border border-gray-300 rounded bg-white text-gray-700 hover:bg-gray-50 disabled:bg-gray-100">Annuleren</button>
+        <div className="flex items-center gap-2">
+          {statusBadge(p)}
+          {p.status === 'free' && periods.findIndex(x=>x.status==='free') === periods.indexOf(p) && (
+            <span className="px-2 py-1 rounded-full text-xs bg-red-100 text-red-700">Te kiezen</span>
           )}
         </div>
       </div>
+    );
+  }
 
-      {showConfirm && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60]">
-          <div className="bg-white rounded shadow-xl p-4 w-[600px] max-w-[90vw]">
-            <h3 className="text-md font-semibold mb-2">Bevestig actieve medewerkers</h3>
-            <p className="text-sm text-gray-600 mb-2">Dit rooster wordt aangemaakt voor alle medewerkers die nu op <span className="font-medium">actief</span> staan. Er wordt een snapshot gemaakt van deze medewerkers zodat het rooster stabiel blijft.</p>
-            <div className="max-h-[220px] overflow-auto border rounded mb-3">
-              <table className="w-full text-sm">
-                <thead><tr className="bg-gray-50"><th className="text-left px-2 py-1">Naam</th><th className="text-left px-2 py-1">Status</th><th className="text-left px-2 py-1">Max diensten</th></tr></thead>
-                <tbody>
-                  {activeEmployees.map(emp => (
-                    <tr key={emp.id} className="border-t">
-                      <td className="px-2 py-1">{emp.name}</td>
-                      <td className="px-2 py-1"><span className={`px-2 py-1 rounded text-xs ${emp.active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>{emp.active ? 'actief' : 'inactief'}</span></td>
-                      <td className="px-2 py-1 text-gray-500 text-xs">Wordt later ingevuld</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+  function sortedEmployees() {
+    const orderTeam = [TeamType.GROEN, TeamType.ORANJE, TeamType.OVERIG];
+    const orderDienst = [DienstverbandType.MAAT, DienstverbandType.LOONDIENST, DienstverbandType.ZZP];
+    return [...employees].sort((a,b)=>{
+      const t = orderTeam.indexOf(a.team) - orderTeam.indexOf(b.team);
+      if (t !== 0) return t;
+      const d = orderDienst.indexOf(a.dienstverband) - orderDienst.indexOf(b.dienstverband);
+      if (d !== 0) return d;
+      return a.achternaam.localeCompare(b.achternaam, 'nl');
+    });
+  }
+
+  return (
+    <section className={onClose ? '' : 'p-4 border rounded bg-white'}>
+      {!onClose && <h2 className="text-lg font-semibold mb-3">Nieuw rooster</h2>}
+      {error && <p className="text-red-600 mb-2">{error}</p>}
+
+      {step === 'period' && (
+        <div className="flex flex-col gap-4">
+          <div className="text-sm text-gray-600">Kies de eerstvolgende beschikbare periode. Perioden in ontwerp/bewerking zijn niet kiesbaar.</div>
+          {/* In bewerking */}
+          {periods.some(p=>p.status==='in_progress') && (
+            <div>
+              <div className="text-xs uppercase text-gray-500 mb-1">In bewerking</div>
+              <div className="flex flex-col gap-2 max-h-48 overflow-auto">
+                {periods.filter(p=>p.status==='in_progress').map(renderPeriodCard)}
+              </div>
             </div>
-            <div className="bg-blue-50 p-3 rounded mb-3"><p className="text-sm text-blue-800"><strong>Volgende stappen:</strong> Na aanmaken kunt u per medewerker het aantal diensten instellen en NB markeren in de ontwerpfase.</p></div>
-            <div className="flex items-center justify-end gap-2">
-              <button onClick={handleCancel} disabled={isCreating} className="px-3 py-2 border rounded bg-white disabled:bg-gray-100">Annuleer</button>
-              <button onClick={createRosterConfirmed} disabled={isCreating} className="px-3 py-2 border rounded bg-blue-600 text-white disabled:bg-blue-400 disabled:cursor-not-allowed">{isCreating ? (<span className="flex items-center gap-2"><span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>Aanmaken...</span>) : ('Bevestig en maak rooster')}</button>
+          )}
+          {/* In ontwerp */}
+          {periods.some(p=>p.status==='draft') && (
+            <div>
+              <div className="text-xs uppercase text-gray-500 mb-1">In ontwerp</div>
+              <div className="flex flex-col gap-2 max-h-48 overflow-auto">
+                {periods.filter(p=>p.status==='draft').map(renderPeriodCard)}
+              </div>
             </div>
+          )}
+          {/* Beschikbaar */}
+          <div>
+            <div className="text-xs uppercase text-gray-500 mb-1">Beschikbaar</div>
+            <div className="flex flex-col gap-2 max-h-48 overflow-auto">
+              {periods.filter(p=>p.status==='free').slice(0,1).map(renderPeriodCard)}
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end">
+            <button onClick={onClose} className="px-3 py-2 border rounded bg-white">Annuleren</button>
+            <button onClick={gotoEmployeesStep} disabled={!selectedStart} className="px-3 py-2 border rounded bg-blue-600 text-white disabled:bg-gray-300">Verder</button>
+          </div>
+        </div>
+      )}
+
+      {step === 'employees' && (
+        <div className="flex flex-col gap-4">
+          <div className="text-sm text-gray-600">Controleer of de medewerkers die deelnemen op actief staan.</div>
+          <div className="border rounded overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="text-left px-3 py-2">Team</th>
+                  <th className="text-left px-3 py-2">Naam</th>
+                  <th className="text-left px-3 py-2">Actief</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedEmployees().map(emp => (
+                  <tr key={emp.id} className="border-t">
+                    <td className="px-3 py-2">{emp.team}</td>
+                    <td className="px-3 py-2">{getFullName(emp)}</td>
+                    <td className="px-3 py-2">{emp.actief ? 'Ja' : 'Nee'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex items-center gap-2">
+            <span>Medewerkerslijst akkoord?</span>
+            <button onClick={()=>gotoConfirmStep()} className="px-3 py-2 border rounded bg-blue-600 text-white">Ja</button>
+            <button onClick={backToDashboard} className="px-3 py-2 border rounded bg-white">Nee</button>
+          </div>
+          <div className="text-sm text-gray-600">Bij Nee: Pas medewerkers aan in Medewerkers Beheer.</div>
+        </div>
+      )}
+
+      {step === 'confirm' && (
+        <div className="flex flex-col gap-4">
+          <div className="text-sm">
+            <div className="font-semibold">{formatWeekRange(selectedStart, selectedEnd)}</div>
+            <div className="text-gray-600">{formatDateRangeNl(selectedStart, selectedEnd)} wordt aangemaakt. Is dit akkoord?</div>
+          </div>
+          <div className="flex gap-2 justify-end">
+            <button onClick={backToDashboard} className="px-3 py-2 border rounded bg-white">Nee</button>
+            <button onClick={createRosterConfirmed} disabled={isCreating} className="px-3 py-2 border rounded bg-blue-600 text-white disabled:bg-blue-400">{isCreating ? 'Aanmaken…' : 'Ja, aanmaken'}</button>
           </div>
         </div>
       )}
