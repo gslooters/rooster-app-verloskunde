@@ -10,7 +10,11 @@ function genId() { return 'r_' + Math.random().toString(36).slice(2, 10) + Date.
 
 const FIXED_WEEKS = 5;
 
-export default function Wizard() {
+interface WizardProps {
+  onClose?: () => void;
+}
+
+export default function Wizard({ onClose }: WizardProps = {}) {
   const router = useRouter();
   const defaultStart = useMemo(() => computeDefaultStart(), []);
   const [start, setStart] = useState<string>(defaultStart);
@@ -48,7 +52,17 @@ export default function Wizard() {
       }
 
       initializeRosterDesign(roster.id);
-      router.push(`/planning/design?rosterId=${id}`);
+      
+      // Close modal if onClose is provided, otherwise navigate
+      if (onClose) {
+        onClose();
+        // Small delay to allow modal to close before navigation
+        setTimeout(() => {
+          router.push(`/planning/design?rosterId=${id}`);
+        }, 100);
+      } else {
+        router.push(`/planning/design?rosterId=${id}`);
+      }
     } catch (err) {
       console.error('Error creating rooster:', err);
       setError('Er is een fout opgetreden bij het aanmaken van het rooster. Probeer opnieuw.');
@@ -56,9 +70,16 @@ export default function Wizard() {
     }
   }
 
+  function handleCancel() {
+    setShowConfirm(false);
+    if (onClose) {
+      onClose();
+    }
+  }
+
   return (
-    <section className="p-4 border rounded bg-white">
-      <h2 className="text-lg font-semibold mb-3">Nieuw rooster</h2>
+    <section className={onClose ? "" : "p-4 border rounded bg-white"}>
+      {!onClose && <h2 className="text-lg font-semibold mb-3">Nieuw rooster</h2>}
       {error && <p className="text-red-600 mb-2">{error}</p>}
       <div className="flex flex-col gap-3 max-w-md">
         <label className="flex items-center justify-between gap-3">
@@ -70,11 +91,16 @@ export default function Wizard() {
           <div className="border rounded px-2 py-1 w-24 bg-gray-100 text-gray-600 text-center">{FIXED_WEEKS}</div>
         </div>
         <p className="text-sm text-gray-600">Alle roosters worden gemaakt voor {FIXED_WEEKS} weken.</p>
-        <button type="button" onClick={openConfirm} disabled={isCreating} className="px-3 py-2 border rounded bg-gray-900 text-white w-fit disabled:bg-gray-400 disabled:cursor-not-allowed">{isCreating ? 'Rooster wordt aangemaakt...' : 'Creëer rooster'}</button>
+        <div className="flex gap-2">
+          <button type="button" onClick={openConfirm} disabled={isCreating} className="px-3 py-2 border rounded bg-blue-600 text-white w-fit disabled:bg-blue-400 disabled:cursor-not-allowed">{isCreating ? 'Rooster wordt aangemaakt...' : 'Creëer rooster'}</button>
+          {onClose && (
+            <button type="button" onClick={onClose} disabled={isCreating} className="px-3 py-2 border border-gray-300 rounded bg-white text-gray-700 hover:bg-gray-50 disabled:bg-gray-100">Annuleren</button>
+          )}
+        </div>
       </div>
 
       {showConfirm && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60]">
           <div className="bg-white rounded shadow-xl p-4 w-[600px] max-w-[90vw]">
             <h3 className="text-md font-semibold mb-2">Bevestig actieve medewerkers</h3>
             <p className="text-sm text-gray-600 mb-2">Dit rooster wordt aangemaakt voor alle medewerkers die nu op <span className="font-medium">actief</span> staan. Er wordt een snapshot gemaakt van deze medewerkers zodat het rooster stabiel blijft.</p>
@@ -94,7 +120,7 @@ export default function Wizard() {
             </div>
             <div className="bg-blue-50 p-3 rounded mb-3"><p className="text-sm text-blue-800"><strong>Volgende stappen:</strong> Na aanmaken kunt u per medewerker het aantal diensten instellen en NB markeren in de ontwerpfase.</p></div>
             <div className="flex items-center justify-end gap-2">
-              <button onClick={() => setShowConfirm(false)} disabled={isCreating} className="px-3 py-2 border rounded bg-white disabled:bg-gray-100">Annuleer</button>
+              <button onClick={handleCancel} disabled={isCreating} className="px-3 py-2 border rounded bg-white disabled:bg-gray-100">Annuleer</button>
               <button onClick={createRosterConfirmed} disabled={isCreating} className="px-3 py-2 border rounded bg-blue-600 text-white disabled:bg-blue-400 disabled:cursor-not-allowed">{isCreating ? (<span className="flex items-center gap-2"><span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>Aanmaken...</span>) : ('Bevestig en maak rooster')}</button>
             </div>
           </div>
