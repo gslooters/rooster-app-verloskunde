@@ -5,7 +5,7 @@ import {
   computeDefaultStart, computeEnd, readRosters, writeRosters, type Roster,
   generateFiveWeekPeriods, getPeriodStatus, formatWeekRange, formatDateRangeNl
 } from '@/lib/planning/storage';
-import { getAllEmployees, getActiveEmployees } from '@/lib/services/employees-storage';
+import { getAllEmployees } from '@/lib/services/employees-storage';
 import { Employee, TeamType, DienstverbandType, getFullName } from '@/lib/types/employee';
 import { initializeRosterDesign } from '@/lib/planning/rosterDesign';
 import { useRouter } from 'next/navigation';
@@ -33,11 +33,9 @@ export default function Wizard({ onClose }: WizardProps = {}) {
   const [isCreating, setIsCreating] = useState<boolean>(false);
 
   useEffect(() => {
-    // Genereer perioden + status
     const base = generateFiveWeekPeriods(30);
     const list = base.map(p => ({ ...p, status: getPeriodStatus(p.start, p.end) }));
 
-    // Ordening: eerst alle in_progress (oud->jong), dan draft (oud->jong), dan eerste free
     const inProg = list.filter(p => p.status === 'in_progress').sort((a,b)=>a.start.localeCompare(b.start));
     const drafts = list.filter(p => p.status === 'draft').sort((a,b)=>a.start.localeCompare(b.start));
     const free = list.filter(p => p.status === 'free');
@@ -45,11 +43,9 @@ export default function Wizard({ onClose }: WizardProps = {}) {
     const ordered = [...inProg, ...drafts, ...free];
     setPeriods(ordered);
 
-    // Selecteer eerste vrije
     const firstFree = free[0];
     if (firstFree) { setSelectedStart(firstFree.start); setSelectedEnd(firstFree.end); }
 
-    // Haal medewerkers op (alle, inclusief inactief voor weergave Ja/Nee)
     setEmployees(getAllEmployees());
   }, []);
 
@@ -81,7 +77,6 @@ export default function Wizard({ onClose }: WizardProps = {}) {
     }
   }
 
-  // Helpers voor labels/kleuren
   function statusBadge(period: {status: string}) {
     if (period.status === 'in_progress') return (<span className="px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">In bewerking</span>);
     if (period.status === 'draft') return (<span className="px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">In ontwerp</span>);
@@ -92,7 +87,7 @@ export default function Wizard({ onClose }: WizardProps = {}) {
 
   function renderPeriodCard(p: {start:string; end:string; status:string}) {
     const isSelected = selectedStart === p.start;
-    const selectable = p.status === 'free' && periods.findIndex(x=>x.status==='free') === periods.indexOf(p); // alleen eerste free
+    const selectable = p.status === 'free' && periods.findIndex(x=>x.status==='free') === periods.indexOf(p);
     const baseCls = 'border rounded-lg p-3 flex items-center justify-between';
     const disabledCls = isDisabled(p) ? 'bg-gray-50 opacity-70 cursor-not-allowed' : '';
     const selectedCls = isSelected ? 'ring-2 ring-red-300 bg-red-50' : '';
@@ -124,7 +119,7 @@ export default function Wizard({ onClose }: WizardProps = {}) {
       if (t !== 0) return t;
       const d = orderDienst.indexOf(a.dienstverband) - orderDienst.indexOf(b.dienstverband);
       if (d !== 0) return d;
-      return a.achternaam.localeCompare(b.achternaam, 'nl');
+      return a.voornaam.localeCompare(b.voornaam, 'nl');
     });
   }
 
@@ -136,7 +131,6 @@ export default function Wizard({ onClose }: WizardProps = {}) {
       {step === 'period' && (
         <div className="flex flex-col gap-4">
           <div className="text-sm text-gray-600">Kies de eerstvolgende beschikbare periode. Perioden in ontwerp/bewerking zijn niet kiesbaar.</div>
-          {/* In bewerking */}
           {periods.some(p=>p.status==='in_progress') && (
             <div>
               <div className="text-xs uppercase text-gray-500 mb-1">In bewerking</div>
@@ -145,7 +139,6 @@ export default function Wizard({ onClose }: WizardProps = {}) {
               </div>
             </div>
           )}
-          {/* In ontwerp */}
           {periods.some(p=>p.status==='draft') && (
             <div>
               <div className="text-xs uppercase text-gray-500 mb-1">In ontwerp</div>
@@ -154,7 +147,6 @@ export default function Wizard({ onClose }: WizardProps = {}) {
               </div>
             </div>
           )}
-          {/* Beschikbaar */}
           <div>
             <div className="text-xs uppercase text-gray-500 mb-1">Beschikbaar</div>
             <div className="flex flex-col gap-2 max-h-48 overflow-auto">
