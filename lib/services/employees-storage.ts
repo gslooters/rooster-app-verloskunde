@@ -137,15 +137,23 @@ function migrateOldData(rawData: any[]): Employee[] {
   return employees;
 }
 
+// UITGEBREID NAAR 12 DEFAULT MEDEWERKERS MET REALISTISCHE VERDELING
 const DEFAULT_EMPLOYEES: Employee[] = [
-  { id: 'emp1', voornaam: 'Anna', achternaam: 'van der Berg', email: 'anna@verloskunde-arnhem.nl', telefoon: '+31 6 1234 5678', actief: true, dienstverband: DienstverbandType.MAAT, team: TeamType.OVERIG, aantalWerkdagen: 24, roostervrijDagen: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'emp2', voornaam: 'Bram', achternaam: 'de Jong', email: 'bram@verloskunde-arnhem.nl', telefoon: '+31 6 2345 6789', actief: true, dienstverband: DienstverbandType.MAAT, team: TeamType.GROEN, aantalWerkdagen: 24, roostervrijDagen: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'emp3', voornaam: 'Carla', achternaam: 'Bakker', email: 'carla@verloskunde-arnhem.nl', actief: true, dienstverband: DienstverbandType.MAAT, team: TeamType.ORANJE, aantalWerkdagen: 24, roostervrijDagen: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'emp4', voornaam: 'Daan', achternaam: 'van Leeuwen', telefoon: '+31 6 4567 8901', actief: true, dienstverband: DienstverbandType.LOONDIENST, team: TeamType.GROEN, aantalWerkdagen: 24, roostervrijDagen: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'emp5', voornaam: 'Eva', achternaam: 'Vermeer', email: 'eva@verloskunde-arnhem.nl', actief: true, dienstverband: DienstverbandType.LOONDIENST, team: TeamType.ORANJE, aantalWerkdagen: 24, roostervrijDagen: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'emp6', voornaam: 'Frank', achternaam: 'Jansen', telefoon: '+31 6 5678 9012', actief: true, dienstverband: DienstverbandType.MAAT, team: TeamType.GROEN, aantalWerkdagen: 24, roostervrijDagen: ['za', 'zo'], created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'emp7', voornaam: 'Greta', achternaam: 'van Dijk', email: 'greta@verloskunde-arnhem.nl', telefoon: '+31 6 6789 0123', actief: true, dienstverband: DienstverbandType.LOONDIENST, team: TeamType.ORANJE, aantalWerkdagen: 24, roostervrijDagen: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'emp8', voornaam: 'Hans', achternaam: 'Peters', actief: true, dienstverband: DienstverbandType.MAAT, team: TeamType.GROEN, aantalWerkdagen: 24, roostervrijDagen: ['wo'], created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  // Team GROEN (6 medewerkers: 3 Maat + 2 Loondienst + 1 ZZP)
+  { id: 'emp1', voornaam: 'Anna', achternaam: 'van der Berg', email: 'anna@verloskunde-arnhem.nl', telefoon: '+31 6 1234 5678', actief: true, dienstverband: DienstverbandType.MAAT, team: TeamType.GROEN, aantalWerkdagen: 24, roostervrijDagen: ['zo'], created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 'emp2', voornaam: 'Bram', achternaam: 'de Jong', email: 'bram@verloskunde-arnhem.nl', telefoon: '+31 6 2345 6789', actief: true, dienstverband: DienstverbandType.MAAT, team: TeamType.GROEN, aantalWerkdagen: 24, roostervrijDagen: ['ma', 'za'], created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 'emp3', voornaam: 'Carla', achternaam: 'Bakker', email: 'carla@verloskunde-arnhem.nl', actief: true, dienstverband: DienstverbandType.LOONDIENST, team: TeamType.GROEN, aantalWerkdagen: 24, roostervrijDagen: ['wo'], created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 'emp4', voornaam: 'Daan', achternaam: 'van Leeuwen', telefoon: '+31 6 4567 8901', actief: true, dienstverband: DienstverbandType.LOONDIENST, team: TeamType.GROEN, aantalWerkdagen: 24, roostervrijDagen: ['di'], created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 'emp5', voornaam: 'Eva', achternaam: 'Vermeer', email: 'eva@verloskunde-arnhem.nl', actief: true, dienstverband: DienstverbandType.LOONDIENST, team: TeamType.GROEN, aantalWerkdagen: 24, roostervrijDagen: ['vr', 'zo'], created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 'emp6', voornaam: 'Frank', achternaam: 'Jansen', telefoon: '+31 6 5678 9012', actief: true, dienstverband: DienstverbandType.ZZP, team: TeamType.GROEN, aantalWerkdagen: 24, roostervrijDagen: ['do'], created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  
+  // Team ORANJE (6 medewerkers: 2 Maat + 3 Loondienst + 1 ZZP)
+  { id: 'emp7', voornaam: 'Greta', achternaam: 'van Dijk', email: 'greta@verloskunde-arnhem.nl', telefoon: '+31 6 6789 0123', actief: true, dienstverband: DienstverbandType.MAAT, team: TeamType.ORANJE, aantalWerkdagen: 24, roostervrijDagen: ['ma'], created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 'emp8', voornaam: 'Hans', achternaam: 'Peters', actief: true, dienstverband: DienstverbandType.MAAT, team: TeamType.ORANJE, aantalWerkdagen: 24, roostervrijDagen: ['za', 'zo'], created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 'emp9', voornaam: 'Iris', achternaam: 'Smits', email: 'iris@verloskunde-arnhem.nl', actief: true, dienstverband: DienstverbandType.LOONDIENST, team: TeamType.ORANJE, aantalWerkdagen: 24, roostervrijDagen: ['wo'], created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 'emp10', voornaam: 'Jan', achternaam: 'Mulder', telefoon: '+31 6 7890 1234', actief: true, dienstverband: DienstverbandType.LOONDIENST, team: TeamType.ORANJE, aantalWerkdagen: 24, roostervrijDagen: ['di', 'vr'], created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 'emp11', voornaam: 'Karin', achternaam: 'van den Berg', email: 'karin@verloskunde-arnhem.nl', actief: true, dienstverband: DienstverbandType.LOONDIENST, team: TeamType.ORANJE, aantalWerkdagen: 24, roostervrijDagen: ['do'], created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 'emp12', voornaam: 'Linda', achternaam: 'Dekker', telefoon: '+31 6 8901 2345', actief: true, dienstverband: DienstverbandType.ZZP, team: TeamType.ORANJE, aantalWerkdagen: 24, roostervrijDagen: ['za'], created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
 ];
 
 function load(): Employee[] {
@@ -308,7 +316,7 @@ export function canDeleteEmployee(empId: string): { canDelete: boolean; reason?:
     const raw = localStorage.getItem('roosters') || '[]';
     try {
       const roosters = JSON.parse(raw) as any[];
-      const inUse = roosters.some(r => JSON.stringify(r).includes(`"${empId}"`) || JSON.stringify(r).includes(`:${empId}`));
+      const inUse = roosters.some(r => JSON.stringify(r).includes(`"${empId}"`r || JSON.stringify(r).includes(`:${empId}`));
       if (inUse) return { canDelete: false, reason: 'Staat in rooster' };
     } catch {}
   }
