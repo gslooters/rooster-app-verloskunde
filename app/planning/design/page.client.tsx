@@ -125,7 +125,7 @@ export default function DesignPageClient() {
     const day = dayNames[dayIndex];
     const dd = String(date.getDate()).padStart(2, '0');
     const mm = String(date.getMonth() + 1).padStart(2, '0');
-    const isWeekend = dayIndex === 0 || dayIndex === 6; // ZO of ZA
+    const isWeekend = dayIndex === 0 || dayIndex === 6;
     return { day, date: dd, month: mm, isWeekend };
   }
 
@@ -138,6 +138,15 @@ export default function DesignPageClient() {
   const weekdayHeaderClass = 'bg-yellow-50';
   const weekendBodyClass = 'bg-yellow-50/40';
 
+  // Helper: verticale scheiding links van MA (na ZO) en dikkere borders rond weekend
+  function weekendColumnClasses(dateStr: string): string {
+    const date = new Date(dateStr + 'T00:00:00');
+    const d = date.getDay();
+    const leftWeekSep = d === 1 ? ' border-l-4 border-yellow-200' : ''; // scheiding tussen ZO en MA
+    const weekendRim = (d === 0 || d === 6) ? ' border-x-2 border-yellow-300' : '';
+    return leftWeekSep + weekendRim;
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-4">
       <div className="max-w-full mx-auto">
@@ -148,7 +157,10 @@ export default function DesignPageClient() {
             <h1 className="text-2xl font-bold text-gray-900 mb-1">{periodTitle}</h1>
             <p className="text-xs text-gray-500">{dateSubtitle}</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1 text-xs text-gray-700 bg-yellow-50 border border-yellow-200 px-2 py-1 rounded-md">
+              <span className="inline-block w-3 h-3 rounded-sm bg-yellow-100 border border-yellow-300" /> Weekend
+            </span>
             <div className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">🎨 Ontwerpfase</div>
             <button onClick={goToEditing} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium">Ga naar Bewerking →</button>
           </div>
@@ -160,7 +172,7 @@ export default function DesignPageClient() {
 
         <div className="bg-white rounded-lg shadow-sm border overflow-x-auto">
           <table className="min-w-full">
-            <thead>
+            <thead className="sticky top-0 bg-white z-10">
               <tr>
                 <th className="sticky left-0 bg-white border-b px-3 py-2 text-left font-semibold text-gray-900 w-40">Medewerker</th>
                 <th className="border-b px-3 py-2 text-center font-semibold text-gray-900 w-16">Dst</th>
@@ -169,38 +181,35 @@ export default function DesignPageClient() {
                 ))}
               </tr>
               
-              {/* Dag namen rij */}
               <tr>
                 <th className="sticky left-0 bg-white border-b"></th>
                 <th className="border-b"></th>
                 {weeks.map(week => week.dates.map(date => {
                   const { day, isWeekend } = formatDateCell(date);
                   return (
-                    <th key={`day-${date}`} className={`border-b px-1 py-1 text-xs font-medium text-gray-700 min-w-[50px] ${isWeekend ? weekendHeaderClass : weekdayHeaderClass}`}>{day}</th>
+                    <th key={`day-${date}`} className={`border-b px-1 py-1 text-xs font-medium text-gray-700 min-w-[50px] ${isWeekend ? weekendHeaderClass : weekdayHeaderClass}${weekendColumnClasses(date)}`}>{day}</th>
                   );
                 }))}
               </tr>
               
-              {/* Datum nummers rij */}
               <tr>
                 <th className="sticky left-0 bg-white border-b"></th>
                 <th className="border-b"></th>
                 {weeks.map(week => week.dates.map(date => {
                   const { date: dd, isWeekend } = formatDateCell(date);
                   return (
-                    <th key={`date-${date}`} className={`border-b px-1 py-1 text-xs text-gray-600 min-w-[50px] ${isWeekend ? weekendHeaderClass : weekdayHeaderClass}`}>{dd}</th>
+                    <th key={`date-${date}`} className={`border-b px-1 py-1 text-xs text-gray-600 min-w-[50px] ${isWeekend ? weekendHeaderClass : weekdayHeaderClass}${weekendColumnClasses(date)}`}>{dd}</th>
                   );
                 }))}
               </tr>
               
-              {/* Maand nummers rij */}
               <tr>
                 <th className="sticky left-0 bg-white border-b"></th>
                 <th className="border-b"></th>
                 {weeks.map(week => week.dates.map(date => {
                   const { month, isWeekend } = formatDateCell(date);
                   return (
-                    <th key={`month-${date}`} className={`border-b px-1 py-1 text-xs text-gray-500 min-w-[50px] ${isWeekend ? weekendHeaderClass : weekdayHeaderClass}`}>{month}</th>
+                    <th key={`month-${date}`} className={`border-b px-1 py-1 text-xs text-gray-500 min-w-[50px] ${isWeekend ? weekendHeaderClass : weekdayHeaderClass}${weekendColumnClasses(date)}`}>{month}</th>
                   );
                 }))}
               </tr>
@@ -222,7 +231,7 @@ export default function DesignPageClient() {
                       const isUnavailable = designData.unavailabilityData?.[emp.id]?.[date] || false;
                       const { isWeekend } = formatDateCell(date);
                       return (
-                        <td key={date} className={`border-b p-0.5 text-center h-8 ${isWeekend ? weekendBodyClass : ''}`}>
+                        <td key={date} className={`border-b p-0.5 text-center h-8 ${isWeekend ? 'bg-yellow-50/40' : ''}${weekendColumnClasses(date)}`}>
                           <button onClick={() => toggleUnavailable(emp.id, date)} className={`w-10 h-6 rounded text-xs font-bold transition-colors ${isUnavailable ? 'bg-red-100 text-red-700 border border-red-300 hover:bg-red-200' : 'bg-gray-100 text-gray-400 border border-gray-300 hover:bg-gray-200'}`} title={isUnavailable ? 'Klik om beschikbaar te maken' : 'Klik om niet-beschikbaar te markeren'}>
                             {isUnavailable ? 'NB' : '—'}
                           </button>
