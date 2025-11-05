@@ -3,7 +3,7 @@
 // maxShifts = aantalWerkdagen, en NB auto-fill op basis van roostervrijDagen.
 
 import { RosterEmployee, RosterStatus, RosterDesignData, validateMaxShifts, createDefaultRosterEmployee, createDefaultRosterStatus } from '@/lib/types/roster';
-import { getAllEmployees, getActiveEmployees } from '@/lib/services/employees-storage';
+import { getAllEmployees } from '@/lib/services/employees-storage';
 import { TeamType, DienstverbandType } from '@/lib/types/employee';
 
 // LocalStorage keys
@@ -30,65 +30,29 @@ function sortEmployeesForRoster(list: any[]) {
 export function createEmployeeSnapshot(rosterId: string): RosterEmployee[] {
   const activeEmployees = sortEmployeesForRoster(getAllEmployees());
   return activeEmployees.map(emp => {
-    const rosterEmployee = createDefaultRosterEmployee({
-      id: emp.id,
-      name: `${emp.voornaam} ${emp.achternaam}`,
-      actief: emp.actief
-    });
-    // Auto-fill Max Diensten uit contract (per 5 weken)
-    rosterEmployee.maxShifts = emp.aantalWerkdagen ?? 0;
-    // Voor nu lege services - wordt later uitgebreid
+    const rosterEmployee = createDefaultRosterEmployee({ id: emp.id, name: `${emp.voornaam} ${emp.achternaam}`, actief: emp.actief });
+    rosterEmployee.maxShifts = emp.aantalWerkdagen ?? 0; // Max diensten per 5 weken
     rosterEmployee.availableServices = [];
-    // Team/dienstverband hints meenemen voor UI (non-breaking via cast)
-    (rosterEmployee as any).team = emp.team;
-    (rosterEmployee as any).dienstverband = emp.dienstverband;
-    (rosterEmployee as any).voornaam = emp.voornaam;
-    (rosterEmployee as any).roostervrijDagen = emp.roostervrijDagen || [];
+    (rosterEmployee as any).team = emp.team; (rosterEmployee as any).dienstverband = emp.dienstverband; (rosterEmployee as any).voornaam = emp.voornaam; (rosterEmployee as any).roostervrijDagen = emp.roostervrijDagen || [];
     return rosterEmployee;
   });
 }
 
 /** Laad roster ontwerp data */
 export function loadRosterDesignData(rosterId: string): RosterDesignData | null {
-  try {
-    const stored = localStorage.getItem(`${ROSTER_DESIGN_KEY}_${rosterId}`);
-    if (!stored) return null;
-    return JSON.parse(stored) as RosterDesignData;
-  } catch (error) {
-    console.error('Fout bij laden roster ontwerp data:', error);
-    return null;
-  }
+  try { const stored = localStorage.getItem(`${ROSTER_DESIGN_KEY}_${rosterId}`); if (!stored) return null; return JSON.parse(stored) as RosterDesignData; } catch (error) { console.error('Fout bij laden roster ontwerp data:', error); return null; }
 }
 
 /** Sla roster ontwerp data op */
 export function saveRosterDesignData(data: RosterDesignData): boolean {
-  try {
-    const key = `${ROSTER_DESIGN_KEY}_${data.rosterId}`;
-    data.updated_at = new Date().toISOString();
-    localStorage.setItem(key, JSON.stringify(data));
-    return true;
-  } catch (error) {
-    console.error('Fout bij opslaan roster ontwerp data:', error);
-    return false;
-  }
+  try { const key = `${ROSTER_DESIGN_KEY}_${data.rosterId}`; data.updated_at = new Date().toISOString(); localStorage.setItem(key, JSON.stringify(data)); return true; } catch (error) { console.error('Fout bij opslaan roster ontwerp data:', error); return false; }
 }
 
 /** Initialiseer nieuw roster ontwerp met auto-fill */
 export function initializeRosterDesign(rosterId: string, start_date?: string): RosterDesignData {
-  const employees = createEmployeeSnapshot(rosterId);
-  const status = createDefaultRosterStatus();
-  const designData: RosterDesignData = {
-    rosterId,
-    employees,
-    status,
-    unavailabilityData: {},
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    // niet in type maar bruikbaar in client
-    ...(start_date ? ({ start_date } as any) : {})
-  };
-  saveRosterDesignData(designData);
-  return designData;
+  const employees = createEmployeeSnapshot(rosterId); const status = createDefaultRosterStatus();
+  const designData: RosterDesignData = { rosterId, employees, status, unavailabilityData: {}, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), ...(start_date ? ({ start_date } as any) : {}) };
+  saveRosterDesignData(designData); return designData;
 }
 
 /** Update max shifts voor een medewerker */
@@ -114,35 +78,26 @@ export function autofillUnavailability(rosterId: string, start_date: string): bo
   for (const emp of designData.employees) {
     const roostervrij: string[] = (emp as any).roostervrijDagen || [];
     if (!designData.unavailabilityData[emp.id]) { designData.unavailabilityData[emp.id] = {}; }
-    for (let i=0; i<35; i++) {
-      const d = new Date(start); d.setDate(start.getDate()+i);
-      const dayCode = ['zo','ma','di','wo','do','vr','za'][d.getDay()];
-      const iso = d.toISOString().split('T')[0];
-      if (roostervrij.includes(dayCode)) {
-        designData.unavailabilityData[emp.id][iso] = true; // zachte default
-      } else if (designData.unavailabilityData[emp.id][iso] === undefined) {
-        designData.unavailabilityData[emp.id][iso] = false;
-      }
-    }
+    for (let i=0; i<35; i++) { const d = new Date(start); d.setDate(start.getDate()+i); const dayCode = ['zo','ma','di','wo','do','vr','za'][d.getDay()]; const iso = d.toISOString().split('T')[0]; designData.unavailabilityData[emp.id][iso] = roostervrij.includes(dayCode); }
   }
   return saveRosterDesignData(designData);
 }
 
-export function updateRosterDesignStatus(rosterId: string, updates: Partial<RosterStatus>): boolean {
+/** Exporteer helper voor andere modules */
+export function isEmployeeUnavailable(rosterId: string, employeeId: string, date: string): boolean {
   const designData = loadRosterDesignData(rosterId); if (!designData) return false;
-  designData.status = { ...designData.status, ...updates }; return saveRosterDesignData(designData);
+  return !!designData.unavailabilityData?.[employeeId]?.[date];
+}
+
+export function updateRosterDesignStatus(rosterId: string, updates: Partial<RosterStatus>): boolean {
+  const designData = loadRosterDesignData(rosterId); if (!designData) return false; designData.status = { ...designData.status, ...updates }; return saveRosterDesignData(designData);
 }
 
 export function validateDesignComplete(rosterId: string): { isValid: boolean; errors: string[] } {
   const designData = loadRosterDesignData(rosterId); if (!designData) { return { isValid: false, errors: ['Roster ontwerp data niet gevonden'] }; }
-  const errors: string[] = [];
-  const employeesWithoutShifts = designData.employees.filter(emp => emp.maxShifts === 0);
-  if (employeesWithoutShifts.length > 0) { errors.push(`Volgende medewerkers hebben geen aantal diensten ingevuld: ${employeesWithoutShifts.map(e => e.name).join(', ')}`); }
+  const errors: string[] = []; const employeesWithoutShifts = designData.employees.filter(emp => emp.maxShifts === 0); if (employeesWithoutShifts.length > 0) { errors.push(`Volgende medewerkers hebben geen aantal diensten ingevuld: ${employeesWithoutShifts.map(e => e.name).join(', ')}`); }
   if (designData.status.servicesStatus !== 'vastgesteld') { errors.push('Diensten per dag moeten worden vastgesteld voordat AI kan worden gebruikt'); }
   return { isValid: errors.length === 0, errors };
 }
 
-export function exportRosterDesignData(rosterId: string): string | null {
-  const designData = loadRosterDesignData(rosterId); if (!designData) return null;
-  return JSON.stringify(designData, null, 2);
-}
+export function exportRosterDesignData(rosterId: string): string | null { const designData = loadRosterDesignData(rosterId); if (!designData) return null; return JSON.stringify(designData, null, 2); }
