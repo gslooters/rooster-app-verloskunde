@@ -194,14 +194,6 @@ export default function PlanningPage() {
           </div>
         </div>
       )}
-      
-      {/* Final Roosters Section (existing) */}
-      <section className="p-4 border rounded-lg bg-gray-50">
-        <h2 className="text-lg font-semibold mb-3 text-gray-900">Afgeronde roosters</h2>
-        <p className="text-gray-600 text-sm">
-          Hier komt een overzicht van definitieve roosters (status: 'final').
-        </p>
-      </section>
     </main>
   );
 }
