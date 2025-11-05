@@ -2,7 +2,8 @@ export type Roster = {
   id: string;
   start_date: string; // YYYY-MM-DD
   end_date: string;   // YYYY-MM-DD
-  status: 'draft' | 'final';
+  // Uitgebreide status: draft (in ontwerp), in_progress (in bewerking), final (afgesloten)
+  status: 'draft' | 'in_progress' | 'final';
   created_at: string;
 };
 
@@ -23,90 +24,78 @@ function safeWrite<T>(key: string, value: T) {
   localStorage.setItem(key, JSON.stringify(value));
 }
 
-export function getRosters(): Roster[] {
-  return safeRead<Roster[]>(K_ROSTERS, []);
-}
+export function getRosters(): Roster[] { return safeRead<Roster[]>(K_ROSTERS, []); }
+export function upsertRoster(r: Roster) { const list = getRosters().filter(x => x.id !== r.id); list.push(r); safeWrite(K_ROSTERS, list); }
+export function readRosters(): Roster[] { return getRosters(); }
+export function writeRosters(rosters: Roster[]) { safeWrite(K_ROSTERS, rosters); }
 
-export function upsertRoster(r: Roster) {
-  const list = getRosters().filter(x => x.id !== r.id);
-  list.push(r);
-  safeWrite(K_ROSTERS, list);
-}
+// Nieuwe helpers voor periode generatie en formatting
+const BASE_START = '2025-11-24'; // Eerste maandag
 
-// Missing functions that components are trying to import
-export function readRosters(): Roster[] {
-  return getRosters();
-}
-
-export function writeRosters(rosters: Roster[]) {
-  safeWrite(K_ROSTERS, rosters);
-}
-
-export function computeDefaultStart(): string {
-  const rosters = getRosters();
-  if (rosters.length === 0) {
-    // Default to next Monday
-    const today = new Date();
-    const nextMonday = new Date(today);
-    const daysUntilMonday = (8 - today.getDay()) % 7;
-    nextMonday.setDate(today.getDate() + daysUntilMonday);
-    return nextMonday.toISOString().split('T')[0];
+export function generateFiveWeekPeriods(limit = 20) {
+  const res: { start: string; end: string }[] = [];
+  const [y,m,d] = BASE_START.split('-').map(n=>parseInt(n));
+  let cursor = new Date(y, m-1, d);
+  for (let i=0;i<limit;i++) {
+    const start = new Date(cursor);
+    const end = new Date(start); end.setDate(start.getDate()+34); // 5 weken - 1 dag
+    res.push({ start: start.toISOString().split('T')[0], end: end.toISOString().split('T')[0]});
+    // naar volgende periode
+    cursor.setDate(cursor.getDate()+35);
   }
-  
-  // Find latest end date and add 1 day to get next Monday
-  const latestEnd = rosters.reduce((latest, roster) => {
-    return roster.end_date > latest ? roster.end_date : latest;
-  }, rosters[0].end_date);
-  
-  const nextDay = new Date(latestEnd);
-  nextDay.setDate(nextDay.getDate() + 1);
-  
-  // Ensure it's a Monday
-  const dayOfWeek = nextDay.getDay();
-  if (dayOfWeek !== 1) {
-    const daysUntilMonday = (8 - dayOfWeek) % 7;
-    nextDay.setDate(nextDay.getDate() + daysUntilMonday);
-  }
-  
-  return nextDay.toISOString().split('T')[0];
+  return res;
+}
+
+export function formatWeekRange(startDate: string, endDate: string): string {
+  const s = new Date(startDate); const e = new Date(endDate);
+  const sw = (s as any).getWeek ? (s as any).getWeek() : getISOWeek(s);
+  const ew = (e as any).getWeek ? (e as any).getWeek() : getISOWeek(e);
+  return `Week ${sw}-${ew}, ${s.getFullYear()}`;
+}
+
+export function formatDateRangeNl(startDate: string, endDate: string): string {
+  const s = new Date(startDate); const e = new Date(endDate);
+  const fmt = new Intl.DateTimeFormat('nl-NL', { day:'2-digit', month:'short' });
+  const fmtY = new Intl.DateTimeFormat('nl-NL', { day:'2-digit', month:'short', year:'numeric' });
+  return `${fmt.format(s)} - ${fmtY.format(e)}`;
+}
+
+function getISOWeek(date: Date): number {
+  // Copy date so don't modify original
+  const dt = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  // Set to nearest Thursday: current date + 4 - current day number
+  const dayNum = dt.getUTCDay() || 7; dt.setUTCDate(dt.getUTCDate() + 4 - dayNum);
+  // Get first day of year
+  const yearStart = new Date(Date.UTC(dt.getUTCFullYear(),0,1));
+  // Calculate full weeks to the date
+  return Math.ceil((((dt as any) - (yearStart as any)) / 86400000 + 1)/7);
 }
 
 export function validateStartMonday(dateStr: string): boolean {
-  // More robust date parsing to avoid timezone issues
-  const parts = dateStr.split('-');
-  if (parts.length !== 3) return false;
-  
-  const year = parseInt(parts[0]);
-  const month = parseInt(parts[1]) - 1; // JavaScript months are 0-based
-  const day = parseInt(parts[2]);
-  
-  const date = new Date(year, month, day);
-  const dayOfWeek = date.getDay();
-  
-  // Debug info (will be removed in production)
-  if (typeof window !== 'undefined') {
-    console.log('validateStartMonday debug:', {
-      input: dateStr,
-      parsed: { year, month: month + 1, day },
-      date: date.toISOString(),
-      dayOfWeek,
-      isMonday: dayOfWeek === 1
-    });
+  const parts = dateStr.split('-'); if (parts.length !== 3) return false;
+  const y = parseInt(parts[0]); const m = parseInt(parts[1]) - 1; const d = parseInt(parts[2]);
+  const date = new Date(y,m,d); return date.getDay() === 1;
+}
+
+export function computeDefaultStart(): string {
+  // Voor compatibiliteit: pak eerstvolgende vrije periode vanaf BASE_START
+  const periods = generateFiveWeekPeriods(100);
+  const rosters = getRosters();
+  for (const p of periods) {
+    const exists = rosters.some(r => r.start_date === p.start);
+    if (!exists) return p.start;
   }
-  
-  return dayOfWeek === 1; // Monday = 1
+  return periods[0].start;
 }
 
 export function computeEnd(startDate: string): string {
-  // Use same robust parsing
-  const parts = startDate.split('-');
-  const year = parseInt(parts[0]);
-  const month = parseInt(parts[1]) - 1;
-  const day = parseInt(parts[2]);
-  
-  const start = new Date(year, month, day);
-  // 5 weeks = 35 days - 1 (to end on Sunday)
-  const end = new Date(start);
-  end.setDate(start.getDate() + 34);
+  const [y,m,d] = startDate.split('-').map(n=>parseInt(n));
+  const start = new Date(y,m-1,d); const end = new Date(start); end.setDate(start.getDate()+34);
   return end.toISOString().split('T')[0];
+}
+
+export function getPeriodStatus(startDate: string, endDate: string): 'draft'|'in_progress'|'final'|'free' {
+  const roster = getRosters().find(r => r.start_date === startDate && r.end_date === endDate);
+  if (!roster) return 'free';
+  return roster.status;
 }
