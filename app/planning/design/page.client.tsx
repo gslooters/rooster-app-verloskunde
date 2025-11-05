@@ -251,7 +251,7 @@ export default function DesignPageClient() {
                       if (isWeekend && isHoliday) cellClass = weekendHolidayBodyClass; else if (isHoliday) cellClass = holidayBodyClass; else if (isWeekend) cellClass = weekendBodyClass;
                       return (
                         <td key={date} className={`border-b p-0.5 text-center h-8 ${cellClass}${columnClasses(date)}`}>
-                          <button onClick={() => toggleUnavailable((emp as any).id, date)} className={`w-10 h-6 rounded text-xs font-bold transition-colors ${isUnavailable ? 'bg-red-100 text-red-700 border border-red-300 hover:bg-red-200' : 'bg-gray-100 text-gray-400 border border-gray-300 hover:bg-gray-200'}`} title={isUnavailable ? 'Klik om beschikbaar te maken' : 'Klik om niet-beschikbaar te markeren`}>
+                          <button onClick={() => toggleUnavailable((emp as any).id, date)} className={`w-10 h-6 rounded text-xs font-bold transition-colors ${isUnavailable ? 'bg-red-100 text-red-700 border border-red-300 hover:bg-red-200' : 'bg-gray-100 text-gray-400 border border-gray-300 hover:bg-gray-200'}`} title={isUnavailable ? 'Klik om beschikbaar te maken' : 'Klik om niet-beschikbaar te markeren'}>
                             {isUnavailable ? 'NB' : '—'}
                           </button>
                         </td>
