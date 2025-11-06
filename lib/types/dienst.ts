@@ -9,10 +9,11 @@ export interface Dienst {
   duur: number; // Automatisch berekend in uren
   kleur: string; // hex
   dienstwaarde: number; // 0..6 in stappen van 0.5
-  system: boolean; // vaste, niet wijzigbare dienst ("=", "NB", "VRIJ")
+  system: boolean; // vaste, niet wijzigbare dienst ("=", "NB")
   actief: boolean;
   created_at: string;
   updated_at: string;
+  planregels?: string; // planningsafspraken voor deze dienst
 }
 
 export function validateDienstwaarde(v: number): boolean {
@@ -38,22 +39,4 @@ export function calculateDuration(begintijd: string, eindtijd: string): number {
   }
   
   return (eindTotalMinutes - beginTotalMinutes) / 60;
-}
-
-// Controleer overlap tussen twee diensten
-export function checkOverlap(dienst1: Dienst, dienst2: Dienst): boolean {
-  if (dienst1.begintijd === '00:00' && dienst1.eindtijd === '00:00') return false;
-  if (dienst2.begintijd === '00:00' && dienst2.eindtijd === '00:00') return false;
-  
-  const start1 = timeToMinutes(dienst1.begintijd);
-  const end1 = timeToMinutes(dienst1.eindtijd);
-  const start2 = timeToMinutes(dienst2.begintijd);
-  const end2 = timeToMinutes(dienst2.eindtijd);
-  
-  return (start1 < end2 && end1 > start2);
-}
-
-function timeToMinutes(time: string): number {
-  const [hours, minutes] = time.split(':').map(Number);
-  return hours * 60 + minutes;
 }
