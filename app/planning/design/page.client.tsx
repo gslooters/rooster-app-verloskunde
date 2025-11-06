@@ -9,14 +9,10 @@ import type { RosterDesignData, RosterEmployee } from '@/lib/types/roster';
 import type { Holiday } from '@/lib/types/holiday';
 import { TeamType } from '@/lib/types/employee';
 
-// ... rest van het bestand ...
 export default function DesignPageClient() {
-  // Alle benodigde states!
-  const [holidays, setHolidays] = useState<Holiday[]>([]); // <-- Toegevoegd!
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [holidaysLoading, setHolidaysLoading] = useState(false);
-  // ... overige states ...
 
-  // ... rest van je functie ...
   async function loadHolidaysForPeriod(startISO: string) {
     setHolidaysLoading(true);
     try {
@@ -32,6 +28,10 @@ export default function DesignPageClient() {
       setHolidaysLoading(false);
     }
   }
-  // ... overige component code ...
+
+  // Tijdelijke simpele render (vervang dit straks weer door eigen layout)
+  return (<div style={{padding:'2rem',fontFamily:'sans-serif',background:'#f8fafc'}}>
+    <h2>Rooster Design Component (JSX fix)</h2>
+    <p>De basis-export geeft nu valid JSX terug.<br/>Vervang dit blok door je volledige rooster-planning UI zodra de build slaagt!</p>
+  </div>);
 }
-// ... einde bestand ...
