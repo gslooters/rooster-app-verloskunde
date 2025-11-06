@@ -8,7 +8,14 @@ import { fetchNetherlandsHolidays, createHolidaySet, findHolidayByDate } from '@
 import type { RosterDesignData, RosterEmployee } from '@/lib/types/roster';
 import type { Holiday } from '@/lib/types/holiday';
 import { TeamType } from '@/lib/types/employee';
+
 // ... rest van het bestand ...
+// LET OP: setHolidaysLoading komt uit de useState!
+export default function DesignPageClient() {
+  // ... andere states ...
+  const [holidaysLoading, setHolidaysLoading] = useState(false);
+
+  // ... rest van je functie ...
   async function loadHolidaysForPeriod(startISO: string) {
     setHolidaysLoading(true);
     try {
@@ -24,4 +31,6 @@ import { TeamType } from '@/lib/types/employee';
       setHolidaysLoading(false);
     }
   }
-// ... rest van het bestand ...
+  // ... overige component code ...
+}
+// ... einde bestand ...
