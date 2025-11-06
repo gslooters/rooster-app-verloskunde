@@ -77,6 +77,7 @@ export default function ServiceTypesPage() {
     const start = timeToMinutes(begintijd); const end = timeToMinutes(eindtijd); const totalMinutes = 24 * 60;
     let startPercent = (start / totalMinutes) * 100; let width = ((end - start) / totalMinutes) * 100;
     if (end < start) width = ((totalMinutes - start + end) / totalMinutes) * 100;
+    if (start === end && start !== 0) width = 100; // 24-uurs dienst
     return <div className="w-full h-2 bg-gray-200 rounded-full relative"><div className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full absolute" style={{ left: `${startPercent}%`, width: `${Math.max(width, 2)}%` }}></div></div>;
   };
 
@@ -120,7 +121,7 @@ export default function ServiceTypesPage() {
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
               <div>
                 <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-2 flex items-center">
-                  <span className="text-2xl mr-3">⚙️</span>Diensten beheren - Fix 12:08
+                  <span className="text-2xl mr-3">⚙️</span>Diensten beheren - Finaal
                 </h1>
                 <p className="text-gray-600">Configureer diensttypes met tijdsinformatie, kleurcodering en planregels.</p>
               </div>
@@ -135,7 +136,7 @@ export default function ServiceTypesPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 max-h-[70vh] overflow-y-auto pr-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 max-h-[65vh] overflow-y-auto pr-2 pb-4">
             {diensten.map((dienst) => {
               return (
                 <div key={dienst.id} className="bg-white border-2 border-gray-200 rounded-xl p-4 hover:shadow-lg transition-all duration-200 relative">
@@ -170,7 +171,7 @@ export default function ServiceTypesPage() {
                     <strong>Planregels:</strong> {(dienst as any).planregels || 'geen'}
                   </div>
 
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 mt-auto">
                     {!dienst.system ? (
                       <>
                         <button onClick={() => openModal(dienst)} className="flex-1 px-3 py-2 bg-indigo-100 text-indigo-700 rounded-md hover:bg-indigo-200 transition-colors text-sm font-medium">Bewerken</button>
@@ -217,7 +218,7 @@ export default function ServiceTypesPage() {
                         <input type="time" value={formData.begintijd} onChange={(e) => { setFormData({...formData, begintijd: e.target.value}); setTimeout(handleTimeChange, 100); }} className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" disabled={editingDienst?.system}/>
                       </div>
                       <div><label className="block text-sm font-medium text-gray-700 mb-2">Eindtijd</label>
-                        <input type="time" value={formData.eindtijd} onChange={(e) => { setFormData({...formData, eindtijd: e.target.value}); setTimeout(handleTimeChange, 100); }} className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" disabled={editingDienst?.system}/>
+                        <input type="time" value={formData.eindtijd} onChange={(e) => { setFormData({...formData, eindtijd: e.target.value}); setTimeout(handleTimeChange, 100); }} className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent" disabled={editingDienst?.system}/>
                       </div>
                     </div>
 
