@@ -1,12 +1,12 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { getAllServices } from '@/lib/services/diensten-storage';
 import { getAllEmployees } from '@/lib/services/employees-storage';
 import { getAllEmployeeServiceMappings, setServicesForEmployee } from '@/lib/services/medewerker-diensten-storage';
 import { Dienst } from '@/lib/types/dienst';
 import { Employee, TeamType, DienstverbandType } from '@/lib/types/employee';
 
-// Sort helpers
 const sortOrder = {
   teams: [TeamType.GROEN, TeamType.ORANJE, TeamType.OVERIG],
   dienstverband: [DienstverbandType.MAAT, DienstverbandType.LOONDIENST, DienstverbandType.ZZP],
@@ -20,20 +20,16 @@ function medewerkerSort(a: Employee, b: Employee) {
 }
 
 export default function ServiceAssignmentsTable() {
+  const router=useRouter();
   const [services, setServices] = useState<Dienst[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [origMappings, setOrigMappings] = useState<Record<string,string[]>>({});
   const [mappings, setMappings] = useState<Record<string,string[]>>({});
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
-  const warnReset = useRef(false);
+  const firstRender = useRef(true);
   useEffect(()=>{
-    loadData();
-    const handler=(e: BeforeUnloadEvent)=>{if(dirty){e.preventDefault();e.returnValue='';return'';}};
-    window.addEventListener('beforeunload',handler);
-    return()=>window.removeEventListener('beforeunload',handler);
-  },[dirty]);
-  const loadData=()=>{
+    // bij opladen altijd bestaande mappings in component-state
     const allServices=getAllServices().filter(s=>s.actief);
     const allEmployees=getAllEmployees().filter(emp=>emp.actief);
     const allMappings=getAllEmployeeServiceMappings();
@@ -42,7 +38,12 @@ export default function ServiceAssignmentsTable() {
     setOrigMappings(allMappings);
     setMappings(JSON.parse(JSON.stringify(allMappings)));
     setDirty(false);
-  };
+    firstRender.current=false;
+    const handler=(e: BeforeUnloadEvent)=>{if(dirty){e.preventDefault();e.returnValue='';return'';}};
+    window.addEventListener('beforeunload',handler);
+    return()=>window.removeEventListener('beforeunload',handler);
+  },[]);
+  // Changes alleen in ui-state! Pas bij opslaan naar storage
   const handleToggle=(empId:string,code:string)=>{
     setMappings(prev=>{
       const empCodes=prev[empId]||[];
@@ -52,9 +53,13 @@ export default function ServiceAssignmentsTable() {
       }else{
         nieuw=[...empCodes,code];
       }
-      // force immediate UI update via dirty state
-      setDirty(JSON.stringify(origMappings[empId]||[])!==JSON.stringify(nieuw));
-      return{...prev,[empId]:nieuw};
+      // dirty = alleen als huidig mapping differeert van origMappings
+      const isDirty=Object.keys(origMappings).some(id=>{
+        const ref=id===empId?nieuw:(prev[id]||[]);
+        return JSON.stringify(ref)!==JSON.stringify(origMappings[id]||[]);
+      });
+      setDirty(isDirty);
+      return {...prev,[empId]:nieuw};
     });
   };
   const handleSave=()=>{
@@ -84,13 +89,20 @@ export default function ServiceAssignmentsTable() {
             <div>
               <h1 className="text-2xl md:text-4xl font-bold text-gray-900 flex items-center mb-0 md:mb-0"><span className="text-xl mr-3">🧩</span>Diensten Toewijzing</h1>
             </div>
-            <button
-              disabled={!dirty||saving}
-              onClick={handleSave}
-              className={`px-6 py-2 rounded-lg text-white font-bold shadow-md transition bg-blue-700 hover:bg-blue-800 mt-2 md:mt-0 ${!dirty||saving?'opacity-50 cursor-not-allowed':''}`}
-            >
-              {saving?'Bezig met opslaan...':'Opslaan'}
-            </button>
+            <div className="flex flex-row gap-4 items-end">
+              <button
+                onClick={()=>router.back()}
+                className="px-4 py-2 rounded-lg border bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium shadow-none border-gray-200"
+                type="button"
+              >Terug vorig scherm</button>
+              <button
+                disabled={!dirty||saving}
+                onClick={handleSave}
+                className={`px-6 py-2 rounded-lg text-white font-bold shadow-md transition bg-blue-700 hover:bg-blue-800 mt-2 md:mt-0 ${!dirty||saving?'opacity-50 cursor-not-allowed':''}`}
+              >
+                {saving?'Bezig met opslaan...':'Opslaan'}
+              </button>
+            </div>
           </div>
           {dirty && <div className="mb-2"><span className="text-sm text-yellow-800 bg-yellow-50 px-3 py-1 rounded">Je hebt onopgeslagen wijzigingen!</span></div>}
           <div className="overflow-x-auto">
