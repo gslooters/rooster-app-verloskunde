@@ -59,14 +59,35 @@ export default function DesignPageClient() {
   if (loading) { return (<div className="min-h-screen flex items-center justify-center"><div>Ontwerp wordt geladen...</div></div>); }
   if (error || !designData) { return (<div className="min-h-screen flex items-center justify-center"><div>Fout: {error || 'Onbekende fout'}</div></div>); }
 
-  // Corrigeer periodetitel: neem een bestaande property, bijvoorbeeld start_date + " t/m " + end_date
+  // ENKEL DE BASIS STRUCTUUR, maar met rooster tabel 5-wekenschema (dummy)
   const periodeTitel = (designData as any).periodTitle || `${(designData as any).start_date || ''} t/m ${(designData as any).end_date || ''}`;
-
   return (
     <div className="rooster-design-container" style={{padding:'2rem',fontFamily:'sans-serif'}}>
       <h2 className="text-2xl font-bold">Rooster Ontwerp: {periodeTitel}</h2>
-      {/* Je volledige UI-code: tabel, knoppen en roosterfunctionaliteit mag hier teruggeplaatst worden */}
-      <div>Roostereditor is nu hersteld. Hergebruik de oorspronkelijke tabel-layout, knoppen enz. uit vorige versie voor volledige functionaliteit.</div>
+      {/* Simpel 5-weken rooster (dummy), net als oorspronkelijke UI */}
+      <table style={{borderCollapse:'collapse',marginTop:'2rem',minWidth:'800px',background:'#fff'}}>
+        <thead>
+          <tr>
+            <th style={{border:'1px solid #ddd',padding:'8px',background:'#f4f4f4'}}>Medewerker</th>
+            {[0,1,2,3,4].map(w => <th key={w} style={{border:'1px solid #ddd',padding:'8px',background:'#f4f4f4'}}>Week {w+1}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {employees.length === 0 ? (
+            <tr><td colSpan={6} style={{textAlign:'center',padding:'16px'}}>Geen medewerkers gevonden</td></tr>
+          ) : employees.map(emp => (
+            <tr key={(emp as any).id}>
+              <td style={{border:'1px solid #ddd',padding:'8px',fontWeight:'bold'}}>{(emp as any).name || (emp as any).voornaam}</td>
+              {[0,1,2,3,4].map(wk => (
+                <td key={wk} style={{border:'1px solid #ddd',padding:'8px',textAlign:'center'}}>
+                  <button style={{padding:'2px 8px',borderRadius:'4px',fontSize:'14px',background:'#f5fafb',border:'1px solid #ccc',cursor:'pointer'}}>DST</button>
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div style={{marginTop:'2rem',color:'#666'}}>Kleurcoderingen en dienstlabels komen terug zodra de eerstvolgende defectherstel commits zijn afgerond.</div>
     </div>
   );
 }
