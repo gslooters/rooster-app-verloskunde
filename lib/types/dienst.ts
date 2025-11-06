@@ -25,13 +25,19 @@ export function validateDienstwaarde(v: number): boolean {
 
 // Bereken duur in uren tussen begintijd en eindtijd
 export function calculateDuration(begintijd: string, eindtijd: string): number {
-  if (begintijd === '00:00' && eindtijd === '00:00') return 0;
+  // Speciale gevallen
+  if (begintijd === '00:00' && eindtijd === '00:00') return 0; // Geen werk
   
   const [beginHours, beginMinutes] = begintijd.split(':').map(Number);
   const [eindHours, eindMinutes] = eindtijd.split(':').map(Number);
   
   let beginTotalMinutes = beginHours * 60 + beginMinutes;
   let eindTotalMinutes = eindHours * 60 + eindMinutes;
+  
+  // Als begin- en eindtijd gelijk zijn (maar niet 00:00), dan 24 uur
+  if (beginTotalMinutes === eindTotalMinutes && beginTotalMinutes !== 0) {
+    return 24;
+  }
   
   // Als eindtijd kleiner is dan begintijd, ga er vanuit dat het de volgende dag is
   if (eindTotalMinutes < beginTotalMinutes) {
