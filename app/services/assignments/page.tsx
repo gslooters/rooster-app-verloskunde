@@ -1,3 +1,4 @@
+'use client';
 import { useState, useEffect, useRef } from 'react';
 import { getAllServices } from '@/lib/services/diensten-storage';
 import { getAllEmployees } from '@/lib/services/employees-storage';
