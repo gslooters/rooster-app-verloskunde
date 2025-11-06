@@ -10,10 +10,11 @@ import type { Holiday } from '@/lib/types/holiday';
 import { TeamType } from '@/lib/types/employee';
 
 // ... rest van het bestand ...
-// LET OP: setHolidaysLoading komt uit de useState!
 export default function DesignPageClient() {
-  // ... andere states ...
+  // Alle benodigde states!
+  const [holidays, setHolidays] = useState<Holiday[]>([]); // <-- Toegevoegd!
   const [holidaysLoading, setHolidaysLoading] = useState(false);
+  // ... overige states ...
 
   // ... rest van je functie ...
   async function loadHolidaysForPeriod(startISO: string) {
