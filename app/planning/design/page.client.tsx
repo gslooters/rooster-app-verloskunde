@@ -8,6 +8,7 @@ import { fetchNetherlandsHolidays, createHolidaySet, findHolidayByDate } from '@
 import type { RosterDesignData, RosterEmployee } from '@/lib/types/roster';
 import type { Holiday } from '@/lib/types/holiday';
 import { TeamType } from '@/lib/types/employee';
+import { isRosterStaffingLocked } from '@/lib/services/roster-staffing-storage';
 
 function extractTeamRaw(team: unknown): string { if (team && typeof team === 'object') { const t = team as any; return String(t.name ?? t.label ?? t.code ?? t.value ?? ''); } return String(team ?? ''); }
 function normalizeTeam(input: unknown): 'Groen' | 'Oranje' | 'Overig' { const raw = extractTeamRaw(input).normalize('NFKD').replace(/[\u0300-\u036f]/g,''); const s = raw.trim().toLowerCase(); if (/(^|\b)groen(e|en)?\b|green|\bg\b/.test(s)) return 'Groen'; if (/(^|\b)oranje\b|orange|\bo\b/.test(s)) return 'Oranje'; if (/(^|\b)overig(e|en)?\b|other|rest|divers|overige|overigen/.test(s)) return 'Overig'; return 'Overig'; }
@@ -31,6 +32,7 @@ export default function DesignPageClient() {
   const [error, setError] = useState<string | null>(null);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [holidaysLoading, setHolidaysLoading] = useState(false);
+  const [staffingLocked, setStaffingLocked] = useState(false);
 
   const holidaySet = useMemo(() => createHolidaySet(holidays), [holidays]);
 
@@ -38,7 +40,7 @@ export default function DesignPageClient() {
 
   const computedValues = useMemo(() => { if (!designData) { return { startISO: new Date().toISOString().split('T')[0], startDate: new Date(), endDate: new Date(), weeks: [], periodTitle: '', dateSubtitle: '' }; } const startISO = (designData as any).start_date || (designData as any).roster_start || new Date().toISOString().split('T')[0]; const startDate = new Date(startISO + 'T00:00:00'); const endDate = new Date(startDate); endDate.setDate(startDate.getDate() + (4 * 7) + 6); const weeks = Array.from({ length: 5 }, (_, i) => { const weekStart = new Date(startDate); weekStart.setDate(startDate.getDate() + (i * 7)); const weekNumber = getWeekNumber(weekStart); return { number: weekNumber, dates: Array.from({ length: 7 }, (_, d) => { const date = new Date(weekStart); date.setDate(weekStart.getDate() + d); return date.toISOString().split('T')[0]; }) }; }); const firstWeek = weeks[0]; const lastWeek = weeks[weeks.length - 1]; const periodTitle = `Rooster Ontwerp : Periode Week ${firstWeek?.number || ''} - Week ${lastWeek?.number || ''} ${startDate.getFullYear()}`; const dateSubtitle = `Van ${formatDutchDate(startISO)} tot en met ${formatDutchDate(endDate.toISOString().split('T')[0])}`; return { startISO, startDate, endDate, weeks, periodTitle, dateSubtitle }; }, [designData]);
 
-  useEffect(() => { if (!rosterId) { setError('Geen roster ID gevonden'); setLoading(false); return; } try { const data = loadRosterDesignData(rosterId); if (data) { syncRosterDesignWithEmployeeData(rosterId); const startISO = (data as any).start_date || (data as any).roster_start; if (startISO) { autofillUnavailability(rosterId, startISO); } const latest = loadRosterDesignData(rosterId) || data; setDesignData(latest); setEmployees(latest.employees); if (startISO) { loadHolidaysForPeriod(startISO); } } else { setError('Geen roster ontwerp data gevonden'); } } catch (err) { console.error('Error loading design data:', err); setError('Fout bij laden van ontwerp data'); } setLoading(false); }, [rosterId]);
+  useEffect(() => { if (!rosterId) { setError('Geen roster ID gevonden'); setLoading(false); return; } try { const data = loadRosterDesignData(rosterId); if (data) { syncRosterDesignWithEmployeeData(rosterId); const startISO = (data as any).start_date || (data as any).roster_start; if (startISO) { autofillUnavailability(rosterId, startISO); } const latest = loadRosterDesignData(rosterId) || data; setDesignData(latest); setEmployees(latest.employees); if (startISO) { loadHolidaysForPeriod(startISO); } setStaffingLocked(isRosterStaffingLocked(rosterId)); } else { setError('Geen roster ontwerp data gevonden'); } } catch (err) { console.error('Error loading design data:', err); setError('Fout bij laden van ontwerp data'); } setLoading(false); }, [rosterId]);
 
   useEffect(() => { if (employees.length) { console.log('TEAM DEBUG (canonical + synced):', employees.map(emp => ({ id: (emp as any).id, name: (emp as any).voornaam || (emp as any).name, raw: (emp as any).team, extracted: extractTeamRaw((emp as any).team), normalized: normalizeTeam((emp as any).team), color: getTeamColor((emp as any).team) }))); } }, [employees]);
 
@@ -79,7 +81,15 @@ export default function DesignPageClient() {
             <span className="inline-flex items-center gap-1 text-xs text-gray-700 bg-yellow-50 border border-yellow-200 px-2 py-1 rounded-md"><span className="inline-block w-3 h-3 rounded-sm bg-yellow-100 border border-yellow-300" /> Weekend</span>
             <span className="inline-flex items-center gap-1 text-xs text-gray-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-md"><span className="inline-block w-3 h-3 rounded-sm bg-amber-100 border border-amber-300" /> Feestdag</span>
             <div className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">🎨 Ontwerpfase</div>
-            <button onClick={goToStaffing} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium">Bezetting beheren</button>
+            <button
+              onClick={goToStaffing}
+              className={`px-4 py-2 text-white rounded-lg font-medium ${
+                staffingLocked ? 'bg-green-600 hover:bg-green-600' : 'bg-indigo-600 hover:bg-indigo-700'
+              }`}
+              title={staffingLocked ? 'Bezetting is vastgesteld (read-only te bekijken)' : 'Beheer bezetting voor dit rooster'}
+            >
+              {staffingLocked ? '✅ Bezetting vastgelegd' : 'Bezetting beheren'}
+            </button>
             <button onClick={goToEditing} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium">Ga naar Bewerking →</button>
           </div>
         </div>
