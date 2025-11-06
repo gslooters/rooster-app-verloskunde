@@ -9,7 +9,6 @@ import type { RosterDesignData, RosterEmployee } from '@/lib/types/roster';
 import type { Holiday } from '@/lib/types/holiday';
 import { TeamType } from '@/lib/types/employee';
 
-// Volledige rooster-planning UI restored (zoals op main vóór placeholder)
 export default function DesignPageClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -60,9 +59,12 @@ export default function DesignPageClient() {
   if (loading) { return (<div className="min-h-screen flex items-center justify-center"><div>Ontwerp wordt geladen...</div></div>); }
   if (error || !designData) { return (<div className="min-h-screen flex items-center justify-center"><div>Fout: {error || 'Onbekende fout'}</div></div>); }
 
+  // Corrigeer periodetitel: neem een bestaande property, bijvoorbeeld start_date + " t/m " + end_date
+  const periodeTitel = (designData as any).periodTitle || `${(designData as any).start_date || ''} t/m ${(designData as any).end_date || ''}`;
+
   return (
     <div className="rooster-design-container" style={{padding:'2rem',fontFamily:'sans-serif'}}>
-      <h2 className="text-2xl font-bold">Rooster Ontwerp: {designData.periodTitle || 'Nieuwe periode'}</h2>
+      <h2 className="text-2xl font-bold">Rooster Ontwerp: {periodeTitel}</h2>
       {/* Je volledige UI-code: tabel, knoppen en roosterfunctionaliteit mag hier teruggeplaatst worden */}
       <div>Roostereditor is nu hersteld. Hergebruik de oorspronkelijke tabel-layout, knoppen enz. uit vorige versie voor volledige functionaliteit.</div>
     </div>
