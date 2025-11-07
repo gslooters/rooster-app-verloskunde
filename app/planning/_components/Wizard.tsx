@@ -1,5 +1,4 @@
 'use client';
-
 import React, { useEffect, useMemo, useState } from 'react';
 import { 
   computeDefaultStart, computeEnd, readRosters, writeRosters, type Roster,
@@ -8,6 +7,7 @@ import {
 import { getAllEmployees } from '@/lib/services/employees-storage';
 import { Employee, TeamType, DienstverbandType, getFullName } from '@/lib/types/employee';
 import { initializeRosterDesign } from '@/lib/planning/rosterDesign';
+import { initializePeriodStaffingForRoster } from '@/lib/services/period-day-staffing-storage';
 import { useRouter } from 'next/navigation';
 
 function genId() { return 'r_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
@@ -71,7 +71,9 @@ export default function Wizard({ onClose }: WizardProps = {}) {
 
       // Fix: geef start_date expliciet mee aan initializeRosterDesign
       initializeRosterDesign(roster.id, selectedStart);
-      
+      // ✨ Toegevoegde auto-fill integratie
+      initializePeriodStaffingForRoster(roster.id, selectedStart, []);
+
       if (onClose) { onClose(); setTimeout(()=>router.push(`/planning/design?rosterId=${id}`), 100); }
       else { router.push(`/planning/design?rosterId=${id}`); }
     } catch (err) {
