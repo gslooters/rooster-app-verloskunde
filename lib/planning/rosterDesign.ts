@@ -5,6 +5,7 @@ import { RosterEmployee, RosterStatus, RosterDesignData, validateMaxShifts, crea
 import { getAllEmployees } from '@/lib/services/employees-storage';
 import { TeamType, DienstverbandType } from '@/lib/types/employee';
 import { readRosters } from './storage';
+import { getWeekdayCode } from '@/lib/utils/date-helpers';
 
 const ROSTER_DESIGN_KEY = 'roster_design_data';
 
@@ -57,7 +58,8 @@ export function createEmployeeSnapshot(rosterId: string): RosterEmployee[] {
     name: e.voornaam + ' ' + e.achternaam,
     team: `${e.team} → ${normalizeTeam(e.team)}`,
     dienstverband: `${e.dienstverband} → ${normalizeDienstverband(e.dienstverband)}`,
-    aantalWerkdagen: e.aantalWerkdagen // ✅ Debug
+    aantalWerkdagen: e.aantalWerkdagen,
+    roostervrijDagen: e.roostervrijDagen // ✅ Debug
   })));
 
   return employees.map(emp => {
@@ -76,7 +78,7 @@ export function createEmployeeSnapshot(rosterId: string): RosterEmployee[] {
     (rosterEmployee as any).voornaam = emp.voornaam || emp.name?.split(' ')[0] || '';
     (rosterEmployee as any).roostervrijDagen = emp.roostervrijDagen || [];
 
-    console.log(`👤 ${emp.voornaam}: maxShifts=${rosterEmployee.maxShifts} (van aantalWerkdagen=${emp.aantalWerkdagen}) team=${emp.team}→${normalizeTeam(emp.team)} dienstverband=${emp.dienstverband}→${normalizeDienstverband(emp.dienstverband)}`);
+    console.log(`👤 ${emp.voornaam}: maxShifts=${rosterEmployee.maxShifts} (van aantalWerkdagen=${emp.aantalWerkdagen}) roostervrijDagen=${(emp.roostervrijDagen || []).join(',')}`);
 
     return rosterEmployee;
   });
@@ -152,49 +154,95 @@ export function toggleUnavailability(rosterId: string, employeeId: string, date:
   designData.unavailabilityData[employeeId][date] = !current; return saveRosterDesignData(designData);
 }
 
-/** Batch auto-fill NB op basis van ECHTE roostervrijDagen en start_date */
+/**
+ * Auto-fill NB (Niet Beschikbaar) voor alle medewerkers op basis van roostervrijDagen
+ * 
+ * Deze functie vult automatisch NB in voor elke medewerker op de dagen die zijn ingesteld
+ * als roostervrijDagen in het medewerkersprofiel.
+ * 
+ * @param rosterId - ID van het rooster
+ * @param start_date - Startdatum van het rooster (YYYY-MM-DD)
+ * @returns true als succesvol, false bij fout
+ * 
+ * Features:
+ * - Gebruikt ECHTE roostervrijDagen uit employee storage
+ * - Respecteert bestaande handmatige NB-invoer (overschrijft niet)
+ * - Werkt voor volledige 5-weken periode (35 dagen)
+ * - Gedetailleerde logging voor debugging
+ */
 export function autofillUnavailability(rosterId: string, start_date: string): boolean {
-  console.log('🔍 Starting autofill for rosterId:', rosterId, 'start_date:', start_date);
+  console.log('🚀 Auto-fill NB gestart voor rosterId:', rosterId, 'start_date:', start_date);
 
   const designData = loadRosterDesignData(rosterId);
-  if (!designData) { console.error('❌ No design data found'); return false; }
+  if (!designData) { 
+    console.error('❌ Geen design data gevonden voor roster:', rosterId); 
+    return false; 
+  }
 
-  // HAAL ECHTE EMPLOYEE DATA OP
+  // Haal ACTUELE employee data op (niet de snapshot)
   const realEmployees = getAllEmployees();
   const employeeMap = new Map(realEmployees.map(emp => [emp.id, emp]));
 
-  const start = new Date(start_date + 'T00:00:00');
+  const startDate = new Date(start_date + 'T00:00:00');
   let totalFilledCells = 0;
+  let totalSkippedCells = 0;
 
   for (const emp of designData.employees) {
-    // GEBRUIK ECHTE roostervrijDagen uit employee storage
+    // Gebruik ACTUELE roostervrijDagen uit employee storage
     const realEmployee = employeeMap.get(emp.id);
-    const roostervrij: string[] = realEmployee?.roostervrijDagen || [];
-    console.log(`👤 ${emp.name}: roostervrijDagen =`, roostervrij);
+    const roostervrijDagen: string[] = realEmployee?.roostervrijDagen || [];
+    
+    if (roostervrijDagen.length === 0) {
+      console.log(`👤 ${emp.name}: geen roostervrijDagen ingesteld`);
+      continue;
+    }
 
+    console.log(`👤 ${emp.name}: roostervrijDagen = [${roostervrijDagen.join(', ')}]`);
+
+    // Initialiseer unavailabilityData als nog niet bestaat
     if (!designData.unavailabilityData[emp.id]) {
       designData.unavailabilityData[emp.id] = {};
     }
 
     let empFilledCells = 0;
-    for (let i = 0; i < 35; i++) {
-      const d = new Date(start); d.setDate(start.getDate() + i);
-      const dayCode = ['zo','ma','di','wo','do','vr','za'][d.getDay()];
-      const iso = d.toISOString().split('T')[0];
+    let empSkippedCells = 0;
 
-      if (roostervrij.includes(dayCode)) {
-        designData.unavailabilityData[emp.id][iso] = true; // NB
-        empFilledCells++;
-      } else if (designData.unavailabilityData[emp.id][iso] === undefined) {
-        designData.unavailabilityData[emp.id][iso] = false; // beschikbaar
+    // Loop door alle 35 dagen (5 weken)
+    for (let i = 0; i < 35; i++) {
+      const currentDate = new Date(startDate);
+      currentDate.setDate(startDate.getDate() + i);
+      
+      // Gebruik onze nieuwe helper functie voor dag-code
+      const dagCode = getWeekdayCode(currentDate);
+      const dateISO = currentDate.toISOString().split('T')[0];
+
+      // Check of deze dag een roostervrije dag is
+      if (roostervrijDagen.includes(dagCode)) {
+        // Check of er al een waarde is (handmatig ingevoerd)
+        const bestaandeWaarde = designData.unavailabilityData[emp.id][dateISO];
+        
+        if (bestaandeWaarde === undefined) {
+          // Nog geen waarde: vul NB in
+          designData.unavailabilityData[emp.id][dateISO] = true; // NB
+          empFilledCells++;
+        } else {
+          // Al een waarde: respecteer de handmatige invoer
+          empSkippedCells++;
+        }
+      } else {
+        // Geen roostervrije dag: zet op beschikbaar als nog niet ingesteld
+        if (designData.unavailabilityData[emp.id][dateISO] === undefined) {
+          designData.unavailabilityData[emp.id][dateISO] = false; // Beschikbaar
+        }
       }
     }
 
-    console.log(`   -> Filled ${empFilledCells} NB cells`);
+    console.log(`   ✅ Ingevuld: ${empFilledCells} NB cellen | ⏭️  Overgeslagen: ${empSkippedCells} (al ingesteld)`);
     totalFilledCells += empFilledCells;
+    totalSkippedCells += empSkippedCells;
   }
 
-  console.log('✅ Autofill completed:', totalFilledCells, 'total NB cells filled');
+  console.log(`✅ Auto-fill voltooid: ${totalFilledCells} NB cellen ingevuld, ${totalSkippedCells} overgeslagen (handmatig ingevoerd)`);
   return saveRosterDesignData(designData);
 }
 
