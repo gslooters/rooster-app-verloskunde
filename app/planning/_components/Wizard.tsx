@@ -1,3 +1,4 @@
+'use client';
 import React, { useEffect, useMemo, useState } from 'react';
 import { 
   computeDefaultStart, computeEnd, readRosters, writeRosters, type Roster,
