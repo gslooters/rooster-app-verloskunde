@@ -35,7 +35,13 @@ function sortEmployeesForRoster(list: any[]) {
 /** Creëer employee snapshot bij rooster creatie met ECHTE employee data */
 export function createEmployeeSnapshot(rosterId: string): RosterEmployee[] {
   const employees = sortEmployeesForRoster(getAllEmployees());
-  console.log('🔍 Creating employee snapshot with REAL employee data:', employees.map(e => ({ id: e.id, name: e.voornaam + ' ' + e.achternaam, team: e.team, dienstverband: e.dienstverband })));
+  console.log('🔍 Creating employee snapshot with REAL employee data:', employees.map(e => ({ 
+    id: e.id, 
+    name: e.voornaam + ' ' + e.achternaam, 
+    team: e.team, 
+    dienstverband: e.dienstverband,
+    aantalWerkdagen: e.aantalWerkdagen  // ✅ TOEGEVOEGD voor debug
+  })));
   
   return employees.map(emp => {
     const rosterEmployee = createDefaultRosterEmployee({ 
@@ -44,16 +50,17 @@ export function createEmployeeSnapshot(rosterId: string): RosterEmployee[] {
       actief: emp.actief || emp.active || true
     });
     
-    // GEBRUIK ECHTE EMPLOYEE DATA (geen mock meer)
-    rosterEmployee.maxShifts = emp.dienstverband === DienstverbandType.ZZP ? 15 : 
-                               emp.dienstverband === DienstverbandType.LOONDIENST ? 20 : 25;
+    // ✅ FIX: Gebruik aantalWerkdagen uit employee data (niet harde mapping)
+    // Dit wordt eenmalige snapshot voor deze roosterperiode
+    rosterEmployee.maxShifts = emp.aantalWerkdagen || 24;
+    
     rosterEmployee.availableServices = ['dagdienst', 'nachtdienst', 'bereikbaarheidsdienst'];
     (rosterEmployee as any).team = emp.team; // ECHTE team uit employee storage
     (rosterEmployee as any).dienstverband = emp.dienstverband;
     (rosterEmployee as any).voornaam = emp.voornaam || emp.name?.split(' ')[0] || '';
     (rosterEmployee as any).roostervrijDagen = emp.roostervrijDagen || [];
     
-    console.log(`👤 ${emp.voornaam}: team=${emp.team}, dienstverband=${emp.dienstverband}`);
+    console.log(`👤 ${emp.voornaam}: maxShifts=${rosterEmployee.maxShifts} (van aantalWerkdagen=${emp.aantalWerkdagen})`);
     
     return rosterEmployee;
   });
