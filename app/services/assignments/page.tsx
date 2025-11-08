@@ -12,6 +12,11 @@ const sortOrder = {
   teams: [TeamType.GROEN, TeamType.ORANJE, TeamType.OVERIG],
   dienstverband: [DienstverbandType.MAAT, DienstverbandType.LOONDIENST, DienstverbandType.ZZP],
 };
+const TEAM_COLORS: Record<string,string> = {
+  Groen: 'bg-green-100 text-green-800 border-green-400',
+  Oranje: 'bg-orange-100 text-orange-800 border-orange-400',
+  Overig: 'bg-blue-100 text-blue-800 border-blue-400',
+};
 function medewerkerSort(a: Employee, b: Employee) {
   const teamSort =sortOrder.teams.indexOf(a.team)-sortOrder.teams.indexOf(b.team);
   if(teamSort!==0)return teamSort;
@@ -104,10 +109,15 @@ export default function ServiceAssignmentsTable() {
     return (mappings[empId]||[]).includes(code);
   }
   const getDienstKolomStijl = (s: Dienst) => {
-    if (s.code==='NB') return 'border font-bold bg-yellow-50 text-yellow-700';
-    if (s.code==='===') return 'border font-bold bg-green-50 text-green-700';
-    return 'border font-bold bg-blue-50 text-blue-900';
-  }
+    if (s.code==='NB') return 'border font-bold bg-yellow-50 text-yellow-700 w-16';
+    if (s.code==='===') return 'border font-bold bg-green-50 text-green-700 w-16';
+    return 'border font-bold bg-blue-50 text-blue-900 w-16';
+  };
+  const getTeamIcon = (team: string) => {
+    if(team==='Groen') return <span className="inline-flex rounded-full w-7 h-7 border-2 items-center justify-center text-xl font-bold bg-green-100 border-green-400 text-green-700">G</span>;
+    if(team==='Oranje') return <span className="inline-flex rounded-full w-7 h-7 border-2 items-center justify-center text-xl font-bold bg-orange-100 border-orange-400 text-orange-700">O</span>;
+    return <span className="inline-flex rounded-full w-7 h-7 border-2 items-center justify-center text-xl font-bold bg-blue-100 border-blue-400 text-blue-700">V</span>;
+  };
   if (loading) {
     return <div className="p-10 text-xl">Laden...</div>;
   }
@@ -136,33 +146,34 @@ export default function ServiceAssignmentsTable() {
           </div>
           {dirty && <div className="mb-2"><span className="text-sm text-yellow-800 bg-yellow-50 px-3 py-1 rounded">Je hebt onopgeslagen wijzigingen!</span></div>}
           <div className="overflow-x-auto">
-            <table className="min-w-full border table-fixed text-center">
+            <table className="min-w-full border table-fixed text-center ">
               <thead>
                 <tr>
-                  <th className="border bg-gray-50 w-48 text-left px-2 py-2">Team</th>
-                  <th className="border bg-gray-50 w-48 text-left px-2 py-2">Naam</th>
+                  <th className="border bg-gray-50 w-16 text-center px-1 py-1">Team</th>
+                  <th className="border bg-gray-50 w-32 text-left px-2 py-1">Naam</th>
                   {services.map((s)=>(
-                    <th key={s.code} className={getDienstKolomStijl(s)+" px-2 py-1"}><b>{s.code}</b></th>
+                    <th key={s.code} className={getDienstKolomStijl(s)+" px-1 py-1"}><b>{s.code}</b></th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {employees.map(emp=>(
                   <tr key={emp.id} className="border-b border-gray-100">
-                    <td className="border bg-gray-50 text-left px-2 py-1 font-semibold">{emp.team}</td>
-                    <td className="border bg-gray-50 text-left px-2 py-1">{emp.voornaam+' '+emp.achternaam}</td>
+                    <td className="border bg-gray-50 text-center px-0 py-1">{getTeamIcon(emp.team)}</td>
+                    <td className="border bg-gray-50 text-left px-1 py-1">{emp.voornaam}</td>
                     {services.map(s=>(
                       <td
                         key={s.code}
                         onClick={()=>handleToggle(emp.id,s.code)}
                         className={
-                          "border cursor-pointer transition duration-200 "+
+                          "border cursor-pointer transition duration-200 w-16 max-w-16 overflow-hidden text-ellipsis "+
                           (cellAssigned(emp.id,s.code)
                             ? ((SERVICE_COLORS[s.code]||'bg-blue-100 border-blue-400')+ ' ring-2 ring-blue-500')
                             : 'bg-white opacity-45 hover:bg-blue-50'
                           )
                         }
                         title={cellAssigned(emp.id,s.code)?'Dienst toegekend':'Niet toegekend'}
+                        style={{maxWidth:'5ch'}}
                       >
                         {cellAssigned(emp.id,s.code) ? '✔' : ''}
                       </td>
