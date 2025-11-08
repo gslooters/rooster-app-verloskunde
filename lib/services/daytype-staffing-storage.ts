@@ -172,8 +172,8 @@ export function upsertStaffingRule(input: DayTypeStaffingInput): DayTypeStaffing
   }
 }
 
-export function initializeDefaultStaffingRules(): DayTypeStaffing[] {
-  const services = getAllServices();
+export async function initializeDefaultStaffingRules(): Promise<DayTypeStaffing[]> {
+  const services = await getAllServices();
   const existingRules = getAllDayTypeStaffing();
   // Beschermende check: als er al regels zijn, niet opnieuw initialiseren
   if (existingRules.length > 0) {
@@ -207,29 +207,28 @@ export function initializeDefaultStaffingRules(): DayTypeStaffing[] {
   return allRules;
 }
 
-export function deleteStaffingRule(id: string): void {
+export async function deleteStaffingRule(id: string): Promise<void> {
   const allRules = getAllDayTypeStaffing();
   const filteredRules = allRules.filter(rule => rule.id !== id);
   saveAllDayTypeStaffing(filteredRules);
 }
 
-export function deleteStaffingRulesForService(dienstId: string): void {
+export async function deleteStaffingRulesForService(dienstId: string): Promise<void> {
   const allRules = getAllDayTypeStaffing();
   const filteredRules = allRules.filter(rule => rule.dienstId !== dienstId);
   saveAllDayTypeStaffing(filteredRules);
-  
   // Also remove service team scope
   const scopes = getAllServiceTeamScopes();
   const filteredScopes = scopes.filter(scope => scope.dienstId !== dienstId);
   saveAllServiceTeamScopes(filteredScopes);
 }
 
-export function resetToDefaults(): DayTypeStaffing[] {
+export async function resetToDefaults(): Promise<DayTypeStaffing[]> {
   if (typeof window !== 'undefined') {
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(SERVICE_TEAM_SCOPE_KEY);
   }
-  return initializeDefaultStaffingRules();
+  return await initializeDefaultStaffingRules();
 }
 
 export function exportStaffingRules(): string {
@@ -244,37 +243,32 @@ export function exportStaffingRules(): string {
   }, null, 2);
 }
 
-export function importStaffingRules(jsonData: string): void {
+export async function importStaffingRules(jsonData: string): Promise<void> {
   try {
     const data = JSON.parse(jsonData);
-    
     // Check if it's new format with team scopes or legacy format
     if (data.version && data.staffingRules && data.serviceTeamScopes) {
       // New format
       if (!Array.isArray(data.staffingRules)) {
         throw new Error('staffingRules moet een array zijn');
       }
-      
       data.staffingRules.forEach((rule: any, index: number) => {
         if (!rule.id || !rule.dienstId || typeof rule.dagSoort !== 'number' || 
             typeof rule.minBezetting !== 'number' || typeof rule.maxBezetting !== 'number') {
           throw new Error(`Ongeldige regel op index ${index}`);
         }
       });
-      
       saveAllDayTypeStaffing(data.staffingRules);
       saveAllServiceTeamScopes(data.serviceTeamScopes || []);
     } else {
       // Legacy format - assume it's just the rules array
       const rules = Array.isArray(data) ? data : [data];
-      
       rules.forEach((rule: any, index: number) => {
         if (!rule.id || !rule.dienstId || typeof rule.dagSoort !== 'number' || 
             typeof rule.minBezetting !== 'number' || typeof rule.maxBezetting !== 'number') {
           throw new Error(`Ongeldige regel op index ${index}`);
         }
       });
-      
       // Migrate legacy data
       const migratedRules = migrateExistingData(rules);
       saveAllDayTypeStaffing(migratedRules);
