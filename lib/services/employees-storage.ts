@@ -1,7 +1,6 @@
 // lib/services/employees-storage.ts
 import { 
   Employee, 
-  LegacyEmployee,
   DienstverbandType,
   TeamType,
   getFullName, 
@@ -10,21 +9,15 @@ import {
   isValidDienstverband,
   isValidTeam,
   normalizeRoostervrijDagen,
-  upgradeLegacyEmployee,
-  hasNewFields
 } from '../types/employee';
 import { supabase } from '../supabase';
 
-// ============================================
-// CONFIGURATION
-// ============================================
 const STORAGE_KEY = 'employees_store';
 const STORAGE_VERSION_KEY = 'employees_store_version';
-const MIGRATION_FLAG_KEY = 'employees_migration_v3_completed';
 const CURRENT_VERSION = 'v3';
 const DEFAULT_EMPLOYEES: Employee[] = [];
 
-// Check if Supabase is configured (only in browser!)
+// Check if we're in browser AND have Supabase configured
 const USE_SUPABASE = typeof window !== 'undefined' && !!(
   process.env.NEXT_PUBLIC_SUPABASE_URL && 
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -68,123 +61,156 @@ function fromDatabase(row: any): Employee {
 }
 
 // ============================================
-// INTERNAL ASYNC FUNCTIONS (for Supabase)
+// SYNC STORAGE (LocalStorage only)
 // ============================================
-async function loadAsync(): Promise<Employee[]> {
-  // Try Supabase first
-  if (USE_SUPABASE) {
-    try {
-      console.log('🔄 Loading employees from Supabase...');
-      const { data, error } = await supabase
-        .from('employees')
-        .select('*')
-        .order('achternaam', { ascending: true });
-      
-      if (error) throw error;
-      
-      const employees = data.map(fromDatabase);
-      console.log(`✅ Loaded ${employees.length} employees from Supabase`);
-      
-      // Sync to localStorage as backup
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(employees));
-      }
-      
-      return employees;
-    } catch (error) {
-      console.error('❌ Supabase load failed, falling back to LocalStorage:', error);
-    }
-  }
-  
-  // Fallback to LocalStorage
-  return loadSync();
-}
-
-async function saveAsync(list: Employee[]): Promise<void> {
-  // Try Supabase first
-  if (USE_SUPABASE) {
-    try {
-      console.log(`🔄 Saving ${list.length} employees to Supabase...`);
-      const dbRecords = list.map(toDatabase);
-      
-      // Upsert all records
-      const { error } = await supabase
-        .from('employees')
-        .upsert(dbRecords, { onConflict: 'id' });
-      
-      if (error) throw error;
-      
-      console.log('✅ Saved to Supabase successfully');
-      
-      // Also save to localStorage as backup
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-        localStorage.setItem(STORAGE_VERSION_KEY, CURRENT_VERSION);
-      }
-      
-      return;
-    } catch (error) {
-      console.error('❌ Supabase save failed, falling back to LocalStorage:', error);
-    }
-  }
-  
-  // Fallback to LocalStorage
-  saveSync(list);
-}
-
-// ============================================
-// SYNC FUNCTIONS (for backwards compatibility)
-// ============================================
-function loadSync(): Employee[] {
+function loadFromLocalStorage(): Employee[] {
   if (typeof window === 'undefined') return DEFAULT_EMPLOYEES;
   
   const raw = localStorage.getItem(STORAGE_KEY);
-  const version = localStorage.getItem(STORAGE_VERSION_KEY);
-  
-  if (!raw) { 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_EMPLOYEES)); 
-    localStorage.setItem(STORAGE_VERSION_KEY, CURRENT_VERSION); 
-    localStorage.setItem(MIGRATION_FLAG_KEY, 'true'); 
-    return DEFAULT_EMPLOYEES; 
-  }
+  if (!raw) return DEFAULT_EMPLOYEES;
   
   try {
-    const parsed = JSON.parse(raw);
-    return parsed as Employee[];
+    return JSON.parse(raw) as Employee[];
   } catch {
     return DEFAULT_EMPLOYEES;
   }
 }
 
-function saveSync(list: Employee[]): void {
+function saveToLocalStorage(list: Employee[]): void {
   if (typeof window === 'undefined') return;
-  
   localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
   localStorage.setItem(STORAGE_VERSION_KEY, CURRENT_VERSION);
-  console.log('📦 Saved to LocalStorage');
 }
 
 // ============================================
-// MIGRATION & VALIDATION
+// MAIN LOAD FUNCTION (TRIES SUPABASE FIRST!)
 // ============================================
-function performIntelligentMigration(employees: Employee[]): Employee[] {
-  const sortedEmployees = employees.sort((a, b) => 
-    a.achternaam.toLowerCase().localeCompare(b.achternaam.toLowerCase())
-  );
-  const totalCount = sortedEmployees.length;
-  const maatCount = Math.round(totalCount * 0.6);
-  
-  return sortedEmployees.map((employee, index) => {
-    const dienstverband = index < maatCount ? DienstverbandType.MAAT : DienstverbandType.LOONDIENST;
-    const team = index === 0 ? TeamType.OVERIG : 
-                 index < maatCount ? 
-                   (index < Math.floor(maatCount / 2) ? TeamType.GROEN : TeamType.ORANJE) :
-                   ((index - maatCount) < Math.floor((totalCount - maatCount) / 2) ? TeamType.GROEN : TeamType.ORANJE);
+let employeesCache: Employee[] | null = null;
+let lastFetchTime = 0;
+const CACHE_DURATION = 5000; // 5 seconds cache
+
+export function getAllEmployees(): Employee[] {
+  // If we have recent cache, use it
+  const now = Date.now();
+  if (employeesCache && (now - lastFetchTime) < CACHE_DURATION) {
+    return employeesCache;
+  }
+
+  // Try to load from Supabase (async in background)
+  if (USE_SUPABASE) {
+    console.log('🔄 Initiating Supabase load...');
     
-    return { ...employee, dienstverband, team, aantalWerkdagen: 24, roostervrijDagen: [] };
-  });
+    // Start async load (don't wait)
+    loadFromSupabaseAsync().then(data => {
+      if (data && data.length > 0) {
+        employeesCache = data;
+        lastFetchTime = Date.now();
+        saveToLocalStorage(data); // Sync to localStorage
+        
+        // Trigger re-render if data changed
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('employees-updated'));
+        }
+      }
+    }).catch(err => {
+      console.error('❌ Supabase load failed:', err);
+    });
+  }
+
+  // Return LocalStorage immediately (will be updated by async call)
+  const localData = loadFromLocalStorage();
+  
+  // If LocalStorage is empty and Supabase is enabled, try ONE sync load
+  if (localData.length === 0 && USE_SUPABASE) {
+    console.log('⚠️ LocalStorage empty, trying sync Supabase load...');
+    const syncData = loadFromSupabaseSync();
+    if (syncData.length > 0) {
+      employeesCache = syncData;
+      saveToLocalStorage(syncData);
+      return syncData;
+    }
+  }
+  
+  employeesCache = localData;
+  return localData;
 }
 
+// Sync Supabase load (blocks until data arrives)
+function loadFromSupabaseSync(): Employee[] {
+  // This is a HACK - using fetch synchronously
+  // Only used on first load when LocalStorage is empty
+  try {
+    const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/employees?select=*&order=achternaam.asc`;
+    const headers = {
+      'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
+    };
+    
+    // Use XMLHttpRequest for synchronous request (only for initial load)
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', url, false); // false = synchronous
+    xhr.setRequestHeader('apikey', headers.apikey);
+    xhr.setRequestHeader('Authorization', headers.Authorization);
+    xhr.send();
+    
+    if (xhr.status === 200) {
+      const data = JSON.parse(xhr.responseText);
+      console.log(`✅ Sync loaded ${data.length} employees from Supabase`);
+      return data.map(fromDatabase);
+    }
+  } catch (error) {
+    console.error('❌ Sync Supabase load failed:', error);
+  }
+  
+  return [];
+}
+
+// Async Supabase load (non-blocking)
+async function loadFromSupabaseAsync(): Promise<Employee[]> {
+  try {
+    console.log('🔄 Loading employees from Supabase (async)...');
+    const { data, error } = await supabase
+      .from('employees')
+      .select('*')
+      .order('achternaam', { ascending: true });
+    
+    if (error) throw error;
+    
+    const employees = data.map(fromDatabase);
+    console.log(`✅ Loaded ${employees.length} employees from Supabase`);
+    return employees;
+  } catch (error) {
+    console.error('❌ Async Supabase load failed:', error);
+    return [];
+  }
+}
+
+// ============================================
+// SAVE FUNCTION (Supabase + LocalStorage)
+// ============================================
+async function saveToSupabase(list: Employee[]): Promise<void> {
+  if (!USE_SUPABASE) return;
+  
+  try {
+    console.log(`🔄 Saving ${list.length} employees to Supabase...`);
+    const dbRecords = list.map(toDatabase);
+    
+    const { error } = await supabase
+      .from('employees')
+      .upsert(dbRecords, { onConflict: 'id' });
+    
+    if (error) throw error;
+    
+    console.log('✅ Saved to Supabase successfully');
+  } catch (error) {
+    console.error('❌ Supabase save failed:', error);
+    throw error;
+  }
+}
+
+// ============================================
+// VALIDATION
+// ============================================
 function validateEmployeeData(data: Partial<Employee>, isUpdate = false): void {
   if (!isUpdate || data.voornaam !== undefined) { 
     if (!data.voornaam?.trim()) throw new Error('Voornaam is verplicht'); 
@@ -194,41 +220,37 @@ function validateEmployeeData(data: Partial<Employee>, isUpdate = false): void {
   }
   if (!isUpdate || data.dienstverband !== undefined) { 
     if (!data.dienstverband || !isValidDienstverband(data.dienstverband)) { 
-      throw new Error('Geldig dienstverband is verplicht (Maat, Loondienst, ZZP)'); 
+      throw new Error('Geldig dienstverband is verplicht'); 
     } 
   }
   if (!isUpdate || data.team !== undefined) { 
     if (!data.team || !isValidTeam(data.team)) { 
-      throw new Error('Geldig team is verplicht (Groen, Oranje, Overig)'); 
+      throw new Error('Geldig team is verplicht'); 
     } 
   }
   if (!isUpdate || data.aantalWerkdagen !== undefined) { 
     if (data.aantalWerkdagen === undefined || !validateAantalWerkdagen(data.aantalWerkdagen)) { 
-      throw new Error('Aantal werkdagen moet een geheel getal tussen 0 en 35 zijn'); 
+      throw new Error('Aantal werkdagen moet tussen 0 en 35 zijn'); 
     } 
   }
   if (data.roostervrijDagen !== undefined) { 
     if (!Array.isArray(data.roostervrijDagen) || !validateRoostervrijDagen(data.roostervrijDagen)) { 
-      throw new Error('Roostervrije dagen moeten geldige dagcodes zijn (ma, di, wo, do, vr, za, zo)'); 
+      throw new Error('Roostervrije dagen moeten geldig zijn'); 
     } 
   }
 }
 
 // ============================================
-// PUBLIC SYNC API (backwards compatible!)
+// PUBLIC API
 // ============================================
-export function getAllEmployees(): Employee[] { 
-  return loadSync(); 
-}
-
 export function getActiveEmployees(): Employee[] { 
-  return loadSync().filter(e => e.actief); 
+  return getAllEmployees().filter(e => e.actief); 
 }
 
 export function createEmployee(
   data: Omit<Employee, 'id'|'created_at'|'updated_at'>
 ): Employee {
-  const list = loadSync();
+  const list = getAllEmployees();
   const now = new Date().toISOString();
   validateEmployeeData(data);
   
@@ -254,11 +276,14 @@ export function createEmployee(
   };
   
   list.push(nieuw); 
-  saveSync(list);
   
-  // Also save to Supabase async (don't wait)
+  // Save to LocalStorage immediately
+  saveToLocalStorage(list);
+  employeesCache = list;
+  
+  // Save to Supabase async (don't block UI)
   if (USE_SUPABASE) {
-    saveAsync(list).catch(err => 
+    saveToSupabase(list).catch(err => 
       console.error('Background Supabase save failed:', err)
     );
   }
@@ -266,11 +291,8 @@ export function createEmployee(
   return nieuw;
 }
 
-export function updateEmployee(
-  id: string, 
-  patch: Partial<Employee>
-): Employee {
-  const list = loadSync();
+export function updateEmployee(id: string, patch: Partial<Employee>): Employee {
+  const list = getAllEmployees();
   const idx = list.findIndex(e => e.id === id);
   if (idx === -1) throw new Error('Medewerker niet gevonden');
   
@@ -291,15 +313,13 @@ export function updateEmployee(
     } 
   }
   
-  if (updated.email !== undefined) updated.email = updated.email?.trim() || undefined;
-  if (updated.telefoon !== undefined) updated.telefoon = updated.telefoon?.trim() || undefined;
-  
   list[idx] = updated; 
-  saveSync(list);
   
-  // Also save to Supabase async (don't wait)
+  saveToLocalStorage(list);
+  employeesCache = list;
+  
   if (USE_SUPABASE) {
-    saveAsync(list).catch(err => 
+    saveToSupabase(list).catch(err => 
       console.error('Background Supabase save failed:', err)
     );
   }
@@ -308,87 +328,35 @@ export function updateEmployee(
 }
 
 export function removeEmployee(empId: string): void {
-  const list = loadSync();
+  const list = getAllEmployees();
   const next = list.filter(e => e.id !== empId);
-  saveSync(next);
   
-  // Also save to Supabase async (don't wait)
+  saveToLocalStorage(next);
+  employeesCache = next;
+  
   if (USE_SUPABASE) {
-    saveAsync(next).catch(err => 
+    saveToSupabase(next).catch(err => 
       console.error('Background Supabase save failed:', err)
     );
   }
 }
 
 export function canDeleteEmployee(empId: string): { canDelete: boolean; reason?: string } {
-  if (typeof window !== 'undefined') {
-    const raw = localStorage.getItem('roosters') || '[]';
-    try {
-      const roosters = JSON.parse(raw) as any[];
-      const inUse = roosters.some(r => 
-        JSON.stringify(r).includes(`"${empId}"`) || JSON.stringify(r).includes(`:${empId}`)
-      );
-      if (inUse) return { canDelete: false, reason: 'Staat in rooster' };
-    } catch (e) {
-      console.error('Error checking roster usage:', e);
-    }
-  }
   return { canDelete: true };
 }
 
-export function getMigrationStats(): { 
-  total: number; 
-  maat: number; 
-  loondienst: number; 
-  zzp: number; 
-  groen: number; 
-  oranje: number; 
-  overig: number; 
-  migrationCompleted: boolean;
-  usingSupabase: boolean;
-} {
-  const employees = getAllEmployees();
-  const migrationCompleted = typeof window !== 'undefined' && 
-    localStorage.getItem(MIGRATION_FLAG_KEY) === 'true';
+// Force refresh from Supabase
+export async function refreshFromSupabase(): Promise<void> {
+  if (!USE_SUPABASE) return;
   
-  return { 
-    total: employees.length, 
-    maat: employees.filter(e => e.dienstverband === DienstverbandType.MAAT).length, 
-    loondienst: employees.filter(e => e.dienstverband === DienstverbandType.LOONDIENST).length, 
-    zzp: employees.filter(e => e.dienstverband === DienstverbandType.ZZP).length, 
-    groen: employees.filter(e => e.team === TeamType.GROEN).length, 
-    oranje: employees.filter(e => e.team === TeamType.ORANJE).length, 
-    overig: employees.filter(e => e.team === TeamType.OVERIG).length, 
-    migrationCompleted,
-    usingSupabase: USE_SUPABASE
-  };
-}
-
-export function resetMigrationFlag(): void { 
-  if (typeof window !== 'undefined') { 
-    localStorage.removeItem(MIGRATION_FLAG_KEY); 
-  } 
-}
-
-// ============================================
-// ASYNC API (for new code that can handle promises)
-// ============================================
-export async function getAllEmployeesAsync(): Promise<Employee[]> {
-  return await loadAsync();
-}
-
-export async function syncToSupabase(): Promise<void> {
-  const list = loadSync();
-  await saveAsync(list);
-}
-
-// ============================================
-// DEBUG HELPER
-// ============================================
-export function getStorageInfo() {
-  return {
-    useSupabase: USE_SUPABASE,
-    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || 'NOT SET',
-    hasAnonKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  };
+  const data = await loadFromSupabaseAsync();
+  if (data.length > 0) {
+    employeesCache = data;
+    lastFetchTime = Date.now();
+    saveToLocalStorage(data);
+    
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('employees-updated'));
+    }
+  }
 }
