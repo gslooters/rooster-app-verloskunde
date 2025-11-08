@@ -35,6 +35,15 @@ export default function ServicesByDayTypePage() {
   const [validationErrors, setValidationErrors] = useState<Set<string>>(new Set());
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
+  const validateRules = (rules: DayTypeStaffing[]) => {
+    const errors = new Set<string>();
+    rules.forEach(rule => {
+      const key = `${rule.dienstId}-${rule.dagSoort}`;
+      if (rule.minBezetting > rule.maxBezetting) errors.add(key);
+    });
+    setValidationErrors(errors);
+  };
+
   useEffect(() => {
     loadData();
   }, []);
