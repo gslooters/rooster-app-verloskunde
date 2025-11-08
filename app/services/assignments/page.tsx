@@ -39,9 +39,9 @@ export default function ServiceAssignmentsTable() {
     async function loadAll() {
       setLoading(true);
       const allServices = (await getAllServices()).filter(s=>s.actief);
-      // Gesorteerd: eerst NB en ===, daarna overige op label/naam
+      // Gesorteerd: eerst NB en ===, daarna overige op naam
       const prioritized = allServices.filter(s=>SERVICE_PRIORITEIT.includes(s.code));
-      const rest = allServices.filter(s=>!SERVICE_PRIORITEIT.includes(s.code)).sort((a,b)=>a.label.localeCompare(b.label,'nl'));
+      const rest = allServices.filter(s=>!SERVICE_PRIORITEIT.includes(s.code)).sort((a,b)=>a.naam.localeCompare(b.naam,'nl'));
       setServices([...prioritized,...rest]);
       const allEmployees = getAllEmployees().filter(emp=>emp.actief).sort(medewerkerSort);
       setEmployees(allEmployees);
@@ -123,7 +123,7 @@ export default function ServiceAssignmentsTable() {
                 <tr>
                   <th className="border bg-gray-50 w-36 text-left px-2">Medewerker</th>
                   {services.map((s)=>(
-                    <th key={s.code} className={"border px-2 py-1 "+(SERVICE_COLORS[s.code]||'bg-white')}>{s.label}</th>
+                    <th key={s.code} className={"border px-2 py-1 "+(SERVICE_COLORS[s.code]||'bg-white')}>{s.naam}</th>
                   ))}
                 </tr>
               </thead>
