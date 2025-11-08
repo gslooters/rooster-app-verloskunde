@@ -40,9 +40,9 @@ export default function ServiceAssignmentsTable() {
     async function loadAll() {
       setLoading(true);
       const allServices = (await getAllServices()).filter(s=>s.actief);
-      // Gesorteerd: eerst NB en ===, daarna overige op naam
+      // Gesorteerd: eerst NB en ===, daarna overige op afkorting
       const prioritized = allServices.filter(s=>SERVICE_PRIORITEIT.includes(s.code));
-      const rest = allServices.filter(s=>!SERVICE_PRIORITEIT.includes(s.code)).sort((a,b)=>a.naam.localeCompare(b.naam,'nl'));
+      const rest = allServices.filter(s=>!SERVICE_PRIORITEIT.includes(s.code)).sort((a,b)=>a.afkorting.localeCompare(b.afkorting,'nl'));
       setServices([...prioritized,...rest]);
       const allEmployees = getAllEmployees().filter(emp=>emp.actief).sort(medewerkerSort);
       setEmployees(allEmployees);
@@ -103,6 +103,11 @@ export default function ServiceAssignmentsTable() {
   function cellAssigned(empId: string, code: string) {
     return (mappings[empId]||[]).includes(code);
   }
+  const getDienstKolomStijl = (s: Dienst) => {
+    if (s.code==='NB') return 'border font-bold bg-yellow-50 text-yellow-700';
+    if (s.code==='===') return 'border font-bold bg-green-50 text-green-700';
+    return 'border font-bold bg-blue-50 text-blue-900';
+  }
   if (loading) {
     return <div className="p-10 text-xl">Laden...</div>;
   }
@@ -134,15 +139,17 @@ export default function ServiceAssignmentsTable() {
             <table className="min-w-full border table-fixed text-center">
               <thead>
                 <tr>
-                  <th className="border bg-gray-50 w-36 text-left px-2">Medewerker</th>
+                  <th className="border bg-gray-50 w-48 text-left px-2 py-2">Team</th>
+                  <th className="border bg-gray-50 w-48 text-left px-2 py-2">Naam</th>
                   {services.map((s)=>(
-                    <th key={s.code} className={"border px-2 py-1 "+(SERVICE_COLORS[s.code]||'bg-white')}>{s.naam}</th>
+                    <th key={s.code} className={getDienstKolomStijl(s)+" px-2 py-1"}>{s.afkorting}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {employees.map(emp=>(
                   <tr key={emp.id} className="border-b border-gray-100">
+                    <td className="border bg-gray-50 text-left px-2 py-1 font-semibold">{emp.team}</td>
                     <td className="border bg-gray-50 text-left px-2 py-1">{emp.voornaam+' '+emp.achternaam}</td>
                     {services.map(s=>(
                       <td
