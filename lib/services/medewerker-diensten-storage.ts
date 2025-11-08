@@ -1,4 +1,3 @@
-// lib/services/medewerker-diensten-storage.ts
 import { getAllServices } from './diensten-storage';
 
 const STORAGE_KEY = 'medewerker_diensten';
@@ -34,17 +33,17 @@ function save(mapping: Record<string, string[]>) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(mapping));
 }
 
-export function getServicesForEmployee(employeeId: string): string[] {
+export async function getServicesForEmployee(employeeId: string): Promise<string[]> {
   const mapping = load();
   const codes = mapping[employeeId];
+  const services = await getAllServices();
   if (!codes || codes.length === 0) {
     // Fallback: all active services if no mapping exists
-    return getAllServices().filter(s => s.actief).map(s => s.code);
+    return services.filter(s => s.actief).map(s => s.code);
   }
   // Filter out inactive services
-  const allServices = getAllServices();
   return codes.filter(code => {
-    const service = allServices.find(s => s.code === code);
+    const service = services.find(s => s.code === code);
     return service && service.actief;
   });
 }
