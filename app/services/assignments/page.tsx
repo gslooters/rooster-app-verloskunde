@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { getAllServices } from '@/lib/services/diensten-storage';
 import { getAllEmployees } from '@/lib/services/employees-storage';
-import { getAllEmployeeServiceMappings, setServicesForEmployee } from '@/lib/services/medewerker-diensten-storage';
+import { getEmployeeServicesMappings, setServicesForEmployee } from '@/lib/services/medewerker-diensten-supabase';
 import { Dienst } from '@/lib/types/dienst';
 import { Employee, TeamType, DienstverbandType } from '@/lib/types/employee';
 
@@ -19,25 +19,37 @@ function medewerkerSort(a: Employee, b: Employee) {
   return a.voornaam.localeCompare(b.voornaam,'nl');
 }
 
+const SERVICE_PRIORITEIT = ['NB','==='];
+const SERVICE_COLORS: Record<string,string> = {
+  'NB':'bg-yellow-100 border-yellow-400',
+  '===':'bg-green-100 border-green-400',
+};
+
 export default function ServiceAssignmentsTable() {
-  const router=useRouter();
+  const router = useRouter();
   const [services, setServices] = useState<Dienst[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [origMappings, setOrigMappings] = useState<Record<string,string[]>>({});
   const [mappings, setMappings] = useState<Record<string,string[]>>({});
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
   const firstRender = useRef(true);
   useEffect(()=>{
     async function loadAll() {
+      setLoading(true);
       const allServices = (await getAllServices()).filter(s=>s.actief);
-      const allEmployees = getAllEmployees().filter(emp=>emp.actief);
-      const allMappings = getAllEmployeeServiceMappings();
-      setServices(allServices);
-      setEmployees(allEmployees.sort(medewerkerSort));
+      // Gesorteerd: eerst NB en ===, daarna overige op label/naam
+      const prioritized = allServices.filter(s=>SERVICE_PRIORITEIT.includes(s.code));
+      const rest = allServices.filter(s=>!SERVICE_PRIORITEIT.includes(s.code)).sort((a,b)=>a.label.localeCompare(b.label,'nl'));
+      setServices([...prioritized,...rest]);
+      const allEmployees = getAllEmployees().filter(emp=>emp.actief).sort(medewerkerSort);
+      setEmployees(allEmployees);
+      const allMappings = await getEmployeeServicesMappings();
       setOrigMappings(allMappings);
       setMappings(JSON.parse(JSON.stringify(allMappings)));
       setDirty(false);
+      setLoading(false);
       firstRender.current=false;
     }
     loadAll();
@@ -45,7 +57,7 @@ export default function ServiceAssignmentsTable() {
     window.addEventListener('beforeunload',handler);
     return()=>window.removeEventListener('beforeunload',handler);
   },[]);
-  // Changes alleen in ui-state! Pas bij opslaan naar storage
+  // Cell state toggling
   const handleToggle=(empId:string,code:string)=>{
     setMappings(prev=>{
       const empCodes=prev[empId]||[];
@@ -64,25 +76,23 @@ export default function ServiceAssignmentsTable() {
       return {...prev,[empId]:nieuw};
     });
   };
-  const handleSave=()=>{
+  const handleSave=async()=>{
     setSaving(true);
-    Object.keys(mappings).forEach(empId=>{
+    await Promise.all(Object.keys(mappings).map(async empId=>{
       if(JSON.stringify(mappings[empId]||[])!==JSON.stringify(origMappings[empId]||[])){
-        setServicesForEmployee(empId,mappings[empId]||[]);
+        await setServicesForEmployee(empId,mappings[empId]||[]);
       }
-    });
+    }));
     setSaving(false);
     setOrigMappings(JSON.parse(JSON.stringify(mappings)));
     setDirty(false);
   };
-  function getServiceStats(serviceCode:string){
-    return Object.values(mappings).filter(v=>v.includes(serviceCode)).length;
+  function cellAssigned(empId: string, code: string) {
+    return (mappings[empId]||[]).includes(code);
   }
-  const TEAM_COLORS:Record<string,string>={
-    Groen:'bg-green-100 text-green-800',
-    Oranje:'bg-orange-100 text-orange-800',
-    Overig:'bg-gray-100 text-gray-800',
-  };
+  if (loading) {
+    return <div className="p-10 text-xl">Laden...</div>;
+  }
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-3 md:p-6">
       <div className="max-w-7xl mx-auto">
@@ -108,10 +118,41 @@ export default function ServiceAssignmentsTable() {
           </div>
           {dirty && <div className="mb-2"><span className="text-sm text-yellow-800 bg-yellow-50 px-3 py-1 rounded">Je hebt onopgeslagen wijzigingen!</span></div>}
           <div className="overflow-x-auto">
-            <table className="min-w-full border table-fixed text-center ">
-              <thead>...</thead>
-              <tbody>...</tbody>
+            <table className="min-w-full border table-fixed text-center">
+              <thead>
+                <tr>
+                  <th className="border bg-gray-50 w-36 text-left px-2">Medewerker</th>
+                  {services.map((s)=>(
+                    <th key={s.code} className={"border px-2 py-1 "+(SERVICE_COLORS[s.code]||'bg-white')}>{s.label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {employees.map(emp=>(
+                  <tr key={emp.id} className="border-b border-gray-100">
+                    <td className="border bg-gray-50 text-left px-2 py-1">{emp.voornaam+' '+emp.achternaam}</td>
+                    {services.map(s=>(
+                      <td
+                        key={s.code}
+                        onClick={()=>handleToggle(emp.id,s.code)}
+                        className={
+                          "border cursor-pointer transition duration-200 "+
+                          (cellAssigned(emp.id,s.code)
+                            ? ((SERVICE_COLORS[s.code]||'bg-blue-100 border-blue-400')+ ' ring-2 ring-blue-500')
+                            : 'bg-white opacity-45 hover:bg-blue-50'
+                          )
+                        }
+                        title={cellAssigned(emp.id,s.code)?'Dienst toegekend':'Niet toegekend'}
+                      >
+                        {cellAssigned(emp.id,s.code) ? '✔' : ''}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
             </table>
+            {employees.length===0&&<div className="p-3">Geen medewerkers gevonden.</div>}
+            {services.length===0&&<div className="p-3">Geen diensten geregistreerd.</div>}
           </div>
         </div>
       </div>
