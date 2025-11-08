@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { getAllServices } from '@/lib/services/diensten-storage';
 import { getAllEmployees } from '@/lib/services/employees-storage';
 import { getEmployeeServicesMappings, setServicesForEmployee } from '@/lib/services/medewerker-diensten-supabase';
+import { getAllEmployeeServiceMappings as fallbackLocal } from '@/lib/services/medewerker-diensten-storage';
 import { Dienst } from '@/lib/types/dienst';
 import { Employee, TeamType, DienstverbandType } from '@/lib/types/employee';
 
@@ -45,7 +46,14 @@ export default function ServiceAssignmentsTable() {
       setServices([...prioritized,...rest]);
       const allEmployees = getAllEmployees().filter(emp=>emp.actief).sort(medewerkerSort);
       setEmployees(allEmployees);
-      const allMappings = await getEmployeeServicesMappings();
+      let allMappings: Record<string, string[]> = {};
+      try {
+        allMappings = await getEmployeeServicesMappings();
+        if (!allMappings || typeof allMappings !== 'object') allMappings = {};
+      } catch (err) {
+        // Fallback naar localStorage
+        allMappings = fallbackLocal();
+      }
       setOrigMappings(allMappings);
       setMappings(JSON.parse(JSON.stringify(allMappings)));
       setDirty(false);
@@ -80,7 +88,12 @@ export default function ServiceAssignmentsTable() {
     setSaving(true);
     await Promise.all(Object.keys(mappings).map(async empId=>{
       if(JSON.stringify(mappings[empId]||[])!==JSON.stringify(origMappings[empId]||[])){
-        await setServicesForEmployee(empId,mappings[empId]||[]);
+        try {
+          await setServicesForEmployee(empId,mappings[empId]||[]);
+        } catch {
+          // als Supabase faalt, fallback localStorage direct updaten
+          localStorage.setItem('employeeServiceMappings', JSON.stringify(mappings));
+        }
       }
     }));
     setSaving(false);
