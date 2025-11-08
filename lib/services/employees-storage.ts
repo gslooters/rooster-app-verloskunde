@@ -24,9 +24,8 @@ const MIGRATION_FLAG_KEY = 'employees_migration_v3_completed';
 const CURRENT_VERSION = 'v3';
 const DEFAULT_EMPLOYEES: Employee[] = [];
 
-// Check if Supabase is configured
-const USE_SUPABASE = !!(
-  typeof window !== 'undefined' &&
+// Check if Supabase is configured (only in browser!)
+const USE_SUPABASE = typeof window !== 'undefined' && !!(
   process.env.NEXT_PUBLIC_SUPABASE_URL && 
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
@@ -69,9 +68,9 @@ function fromDatabase(row: any): Employee {
 }
 
 // ============================================
-// CORE STORAGE FUNCTIONS
+// INTERNAL ASYNC FUNCTIONS (for Supabase)
 // ============================================
-async function load(): Promise<Employee[]> {
+async function loadAsync(): Promise<Employee[]> {
   // Try Supabase first
   if (USE_SUPABASE) {
     try {
@@ -98,21 +97,10 @@ async function load(): Promise<Employee[]> {
   }
   
   // Fallback to LocalStorage
-  if (typeof window === 'undefined') return DEFAULT_EMPLOYEES;
-  
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return DEFAULT_EMPLOYEES;
-  
-  try {
-    const parsed = JSON.parse(raw);
-    console.log(`📦 Loaded ${parsed.length} employees from LocalStorage`);
-    return parsed as Employee[];
-  } catch {
-    return DEFAULT_EMPLOYEES;
-  }
+  return loadSync();
 }
 
-async function save(list: Employee[]): Promise<void> {
+async function saveAsync(list: Employee[]): Promise<void> {
   // Try Supabase first
   if (USE_SUPABASE) {
     try {
@@ -141,15 +129,43 @@ async function save(list: Employee[]): Promise<void> {
   }
   
   // Fallback to LocalStorage
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-    localStorage.setItem(STORAGE_VERSION_KEY, CURRENT_VERSION);
-    console.log('📦 Saved to LocalStorage');
-  }
+  saveSync(list);
 }
 
 // ============================================
-// MIGRATION & VALIDATION (behouden zoals was)
+// SYNC FUNCTIONS (for backwards compatibility)
+// ============================================
+function loadSync(): Employee[] {
+  if (typeof window === 'undefined') return DEFAULT_EMPLOYEES;
+  
+  const raw = localStorage.getItem(STORAGE_KEY);
+  const version = localStorage.getItem(STORAGE_VERSION_KEY);
+  
+  if (!raw) { 
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_EMPLOYEES)); 
+    localStorage.setItem(STORAGE_VERSION_KEY, CURRENT_VERSION); 
+    localStorage.setItem(MIGRATION_FLAG_KEY, 'true'); 
+    return DEFAULT_EMPLOYEES; 
+  }
+  
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed as Employee[];
+  } catch {
+    return DEFAULT_EMPLOYEES;
+  }
+}
+
+function saveSync(list: Employee[]): void {
+  if (typeof window === 'undefined') return;
+  
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  localStorage.setItem(STORAGE_VERSION_KEY, CURRENT_VERSION);
+  console.log('📦 Saved to LocalStorage');
+}
+
+// ============================================
+// MIGRATION & VALIDATION
 // ============================================
 function performIntelligentMigration(employees: Employee[]): Employee[] {
   const sortedEmployees = employees.sort((a, b) => 
@@ -199,21 +215,20 @@ function validateEmployeeData(data: Partial<Employee>, isUpdate = false): void {
 }
 
 // ============================================
-// PUBLIC API (now async!)
+// PUBLIC SYNC API (backwards compatible!)
 // ============================================
-export async function getAllEmployees(): Promise<Employee[]> { 
-  return await load(); 
+export function getAllEmployees(): Employee[] { 
+  return loadSync(); 
 }
 
-export async function getActiveEmployees(): Promise<Employee[]> { 
-  const all = await load();
-  return all.filter(e => e.actief); 
+export function getActiveEmployees(): Employee[] { 
+  return loadSync().filter(e => e.actief); 
 }
 
-export async function createEmployee(
+export function createEmployee(
   data: Omit<Employee, 'id'|'created_at'|'updated_at'>
-): Promise<Employee> {
-  const list = await load();
+): Employee {
+  const list = loadSync();
   const now = new Date().toISOString();
   validateEmployeeData(data);
   
@@ -239,15 +254,23 @@ export async function createEmployee(
   };
   
   list.push(nieuw); 
-  await save(list); 
+  saveSync(list);
+  
+  // Also save to Supabase async (don't wait)
+  if (USE_SUPABASE) {
+    saveAsync(list).catch(err => 
+      console.error('Background Supabase save failed:', err)
+    );
+  }
+  
   return nieuw;
 }
 
-export async function updateEmployee(
+export function updateEmployee(
   id: string, 
   patch: Partial<Employee>
-): Promise<Employee> {
-  const list = await load();
+): Employee {
+  const list = loadSync();
   const idx = list.findIndex(e => e.id === id);
   if (idx === -1) throw new Error('Medewerker niet gevonden');
   
@@ -272,14 +295,29 @@ export async function updateEmployee(
   if (updated.telefoon !== undefined) updated.telefoon = updated.telefoon?.trim() || undefined;
   
   list[idx] = updated; 
-  await save(list); 
+  saveSync(list);
+  
+  // Also save to Supabase async (don't wait)
+  if (USE_SUPABASE) {
+    saveAsync(list).catch(err => 
+      console.error('Background Supabase save failed:', err)
+    );
+  }
+  
   return updated;
 }
 
-export async function removeEmployee(empId: string): Promise<void> {
-  const list = await load();
+export function removeEmployee(empId: string): void {
+  const list = loadSync();
   const next = list.filter(e => e.id !== empId);
-  await save(next);
+  saveSync(next);
+  
+  // Also save to Supabase async (don't wait)
+  if (USE_SUPABASE) {
+    saveAsync(next).catch(err => 
+      console.error('Background Supabase save failed:', err)
+    );
+  }
 }
 
 export function canDeleteEmployee(empId: string): { canDelete: boolean; reason?: string } {
@@ -298,8 +336,18 @@ export function canDeleteEmployee(empId: string): { canDelete: boolean; reason?:
   return { canDelete: true };
 }
 
-export async function getMigrationStats() {
-  const employees = await getAllEmployees();
+export function getMigrationStats(): { 
+  total: number; 
+  maat: number; 
+  loondienst: number; 
+  zzp: number; 
+  groen: number; 
+  oranje: number; 
+  overig: number; 
+  migrationCompleted: boolean;
+  usingSupabase: boolean;
+} {
+  const employees = getAllEmployees();
   const migrationCompleted = typeof window !== 'undefined' && 
     localStorage.getItem(MIGRATION_FLAG_KEY) === 'true';
   
@@ -320,6 +368,18 @@ export function resetMigrationFlag(): void {
   if (typeof window !== 'undefined') { 
     localStorage.removeItem(MIGRATION_FLAG_KEY); 
   } 
+}
+
+// ============================================
+// ASYNC API (for new code that can handle promises)
+// ============================================
+export async function getAllEmployeesAsync(): Promise<Employee[]> {
+  return await loadAsync();
+}
+
+export async function syncToSupabase(): Promise<void> {
+  const list = loadSync();
+  await saveAsync(list);
 }
 
 // ============================================
