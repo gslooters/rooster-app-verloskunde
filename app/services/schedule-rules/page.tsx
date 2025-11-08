@@ -57,7 +57,7 @@ export default function ServicesByDayTypePage() {
       // Load staffing rules with migration support
       let loadedRules = getAllDayTypeStaffing();
       if (!loadedRules || loadedRules.length === 0) {
-        loadedRules = initializeDefaultStaffingRules();
+        loadedRules = await initializeDefaultStaffingRules();
       }
       setStaffingRules(loadedRules);
       // Load service team scopes
