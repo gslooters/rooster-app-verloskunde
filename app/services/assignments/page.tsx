@@ -40,9 +40,9 @@ export default function ServiceAssignmentsTable() {
     async function loadAll() {
       setLoading(true);
       const allServices = (await getAllServices()).filter(s=>s.actief);
-      // Gesorteerd: eerst NB en ===, daarna overige op afkorting
+      // Gesorteerd: eerst NB en ===, daarna overige op code
       const prioritized = allServices.filter(s=>SERVICE_PRIORITEIT.includes(s.code));
-      const rest = allServices.filter(s=>!SERVICE_PRIORITEIT.includes(s.code)).sort((a,b)=>a.afkorting.localeCompare(b.afkorting,'nl'));
+      const rest = allServices.filter(s=>!SERVICE_PRIORITEIT.includes(s.code)).sort((a,b)=>a.code.localeCompare(b.code,'nl'));
       setServices([...prioritized,...rest]);
       const allEmployees = getAllEmployees().filter(emp=>emp.actief).sort(medewerkerSort);
       setEmployees(allEmployees);
@@ -142,7 +142,7 @@ export default function ServiceAssignmentsTable() {
                   <th className="border bg-gray-50 w-48 text-left px-2 py-2">Team</th>
                   <th className="border bg-gray-50 w-48 text-left px-2 py-2">Naam</th>
                   {services.map((s)=>(
-                    <th key={s.code} className={getDienstKolomStijl(s)+" px-2 py-1"}>{s.afkorting}</th>
+                    <th key={s.code} className={getDienstKolomStijl(s)+" px-2 py-1"}><b>{s.code}</b></th>
                   ))}
                 </tr>
               </thead>
