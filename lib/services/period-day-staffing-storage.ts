@@ -24,7 +24,6 @@ export async function initializePeriodStaffingForRoster(
   const dates = getDatesForRosterPeriod(startDate, holidays);
   const diensten = (await getAllServices()).filter(s => s.actief);
   const dagsoortRegels = getAllDayTypeStaffing();
-
   const periodStaffing: PeriodDayStaffing[] = [];
   const now = new Date().toISOString();
 
@@ -130,4 +129,14 @@ export function updateTeamScopeForService(
 export function periodStaffingExists(rosterId: string): boolean {
   const key = getStorageKey(rosterId);
   return localStorage.getItem(key) !== null;
+}
+
+export function deletePeriodStaffingForRoster(rosterId: string): void {
+  try {
+    const key = getStorageKey(rosterId);
+    localStorage.removeItem(key);
+    console.log(`[PeriodStaffing] Deleted data for roster ${rosterId}`);
+  } catch (error) {
+    console.error('[PeriodStaffing] Error deleting data:', error);
+  }
 }
