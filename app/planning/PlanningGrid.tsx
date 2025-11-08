@@ -96,14 +96,14 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
       try {
         const services = await getAllServices();
         setAllServices(services);
-        // Mapping per medewerker
+        // Mapping per medewerker - NU MET AWAIT
         const mappings: Record<string, Dienst[]> = {};
-        curEmployees.forEach(emp => {
-          const serviceCodes = getServicesForEmployee(emp.originalEmployeeId);
+        for (const emp of curEmployees) {
+          const serviceCodes = await getServicesForEmployee(emp.originalEmployeeId);
           mappings[emp.id] = serviceCodes
             .map(code => services.find(s => s.code === code))
             .filter(Boolean) as Dienst[];
-        });
+        }
         setEmployeeServiceMappings(mappings);
       } catch (err: any) {
         setServicesError('Kan diensten niet laden. Controleer je internetverbinding of probeer later opnieuw.');
@@ -116,17 +116,20 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
     loadServicesAndMappings();
   }, [rosterId]);
 
-  // Update mappings als medewerkers veranderen
+  // Update mappings als medewerkers veranderen - NU MET AWAIT
   useEffect(() => {
     if (employees.length > 0 && allServices.length > 0) {
-      const mappings: Record<string, Dienst[]> = {};
-      employees.forEach(emp => {
-        const serviceCodes = getServicesForEmployee(emp.originalEmployeeId);
-        mappings[emp.id] = serviceCodes
-          .map(code => allServices.find(s => s.code === code))
-          .filter(Boolean) as Dienst[];
-      });
-      setEmployeeServiceMappings(mappings);
+      async function updateMappings() {
+        const mappings: Record<string, Dienst[]> = {};
+        for (const emp of employees) {
+          const serviceCodes = await getServicesForEmployee(emp.originalEmployeeId);
+          mappings[emp.id] = serviceCodes
+            .map(code => allServices.find(s => s.code === code))
+            .filter(Boolean) as Dienst[];
+        }
+        setEmployeeServiceMappings(mappings);
+      }
+      updateMappings();
     }
   }, [employees, allServices]);
 
