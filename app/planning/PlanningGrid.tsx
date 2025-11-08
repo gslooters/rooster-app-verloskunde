@@ -70,13 +70,15 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
   // Async loading van diensten + mappings, met foutafhandeling en fallback naar cache
   useEffect(() => {
     const loadedDesignData = loadRosterDesignData(rosterId);
+    let curEmployees: RosterEmployee[] = [];
     if (loadedDesignData) {
       setDesignData(loadedDesignData);
       setEmployees(loadedDesignData.employees);
+      curEmployees = loadedDesignData.employees;
     } else {
       // Fallback to static employees for backwards compatibility
       console.warn('No roster design data found, using fallback employees');
-      const fallbackRosterEmployees = FALLBACK_EMPLOYEES.map(emp => ({
+      curEmployees = FALLBACK_EMPLOYEES.map(emp => ({
         id: `re_${emp.id}`,
         name: emp.name,
         maxShifts: 0,
@@ -85,7 +87,7 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
         originalEmployeeId: emp.id,
         snapshotDate: new Date().toISOString()
       }));
-      setEmployees(fallbackRosterEmployees);
+      setEmployees(curEmployees);
     }
 
     setServicesLoading(true);
@@ -96,7 +98,6 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
         setAllServices(services);
         // Mapping per medewerker
         const mappings: Record<string, Dienst[]> = {};
-        const curEmployees = loadedDesignData ? loadedDesignData.employees : fallbackRosterEmployees;
         curEmployees.forEach(emp => {
           const serviceCodes = getServicesForEmployee(emp.originalEmployeeId);
           mappings[emp.id] = serviceCodes
@@ -130,25 +131,4 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
   }, [employees, allServices]);
 
   // ... (rest van het component blijft ongewijzigd)
-
-  // -- originele code voor tabel en interactie blijft gelijk --
-  // tot aan de <tbody> (hier komt loading/error indicatie erbij)
-  // ...
-
-  // In de render (rond <div className="overflow-auto ... >)
-
-  // Plaats na buttons (voor tabel) een loading/error-notificatie
-
-  /* voorbeeld render (rest van return blijft gelijk):
-      {servicesLoading && (
-        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 text-blue-900 rounded-lg text-sm">
-          Diensten worden geladen...
-        </div>
-      )}
-      {servicesError && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
-          {servicesError}
-        </div>
-      )}
-  */
 }
