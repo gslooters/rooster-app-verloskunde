@@ -13,14 +13,144 @@ import {
   upgradeLegacyEmployee,
   hasNewFields
 } from '../types/employee';
+import { supabase } from '../supabase';
 
+// ============================================
+// CONFIGURATION
+// ============================================
 const STORAGE_KEY = 'employees_store';
 const STORAGE_VERSION_KEY = 'employees_store_version';
 const MIGRATION_FLAG_KEY = 'employees_migration_v3_completed';
 const CURRENT_VERSION = 'v3';
-
 const DEFAULT_EMPLOYEES: Employee[] = [];
 
+// Check if Supabase is configured
+const USE_SUPABASE = !!(
+  typeof window !== 'undefined' &&
+  process.env.NEXT_PUBLIC_SUPABASE_URL && 
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
+
+// ============================================
+// DATABASE HELPERS
+// ============================================
+function toDatabase(emp: Employee) {
+  return {
+    id: emp.id,
+    voornaam: emp.voornaam,
+    achternaam: emp.achternaam,
+    email: emp.email || null,
+    telefoon: emp.telefoon || null,
+    actief: emp.actief,
+    dienstverband: emp.dienstverband,
+    team: emp.team,
+    aantal_werkdagen: emp.aantalWerkdagen,
+    roostervrij_dagen: emp.roostervrijDagen,
+    created_at: emp.created_at,
+    updated_at: emp.updated_at
+  };
+}
+
+function fromDatabase(row: any): Employee {
+  return {
+    id: row.id,
+    voornaam: row.voornaam,
+    achternaam: row.achternaam,
+    email: row.email || undefined,
+    telefoon: row.telefoon || undefined,
+    actief: row.actief,
+    dienstverband: row.dienstverband,
+    team: row.team,
+    aantalWerkdagen: row.aantal_werkdagen,
+    roostervrijDagen: row.roostervrij_dagen || [],
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  };
+}
+
+// ============================================
+// CORE STORAGE FUNCTIONS
+// ============================================
+async function load(): Promise<Employee[]> {
+  // Try Supabase first
+  if (USE_SUPABASE) {
+    try {
+      console.log('🔄 Loading employees from Supabase...');
+      const { data, error } = await supabase
+        .from('employees')
+        .select('*')
+        .order('achternaam', { ascending: true });
+      
+      if (error) throw error;
+      
+      const employees = data.map(fromDatabase);
+      console.log(`✅ Loaded ${employees.length} employees from Supabase`);
+      
+      // Sync to localStorage as backup
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(employees));
+      }
+      
+      return employees;
+    } catch (error) {
+      console.error('❌ Supabase load failed, falling back to LocalStorage:', error);
+    }
+  }
+  
+  // Fallback to LocalStorage
+  if (typeof window === 'undefined') return DEFAULT_EMPLOYEES;
+  
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return DEFAULT_EMPLOYEES;
+  
+  try {
+    const parsed = JSON.parse(raw);
+    console.log(`📦 Loaded ${parsed.length} employees from LocalStorage`);
+    return parsed as Employee[];
+  } catch {
+    return DEFAULT_EMPLOYEES;
+  }
+}
+
+async function save(list: Employee[]): Promise<void> {
+  // Try Supabase first
+  if (USE_SUPABASE) {
+    try {
+      console.log(`🔄 Saving ${list.length} employees to Supabase...`);
+      const dbRecords = list.map(toDatabase);
+      
+      // Upsert all records
+      const { error } = await supabase
+        .from('employees')
+        .upsert(dbRecords, { onConflict: 'id' });
+      
+      if (error) throw error;
+      
+      console.log('✅ Saved to Supabase successfully');
+      
+      // Also save to localStorage as backup
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+        localStorage.setItem(STORAGE_VERSION_KEY, CURRENT_VERSION);
+      }
+      
+      return;
+    } catch (error) {
+      console.error('❌ Supabase save failed, falling back to LocalStorage:', error);
+    }
+  }
+  
+  // Fallback to LocalStorage
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    localStorage.setItem(STORAGE_VERSION_KEY, CURRENT_VERSION);
+    console.log('📦 Saved to LocalStorage');
+  }
+}
+
+// ============================================
+// MIGRATION & VALIDATION (behouden zoals was)
+// ============================================
 function performIntelligentMigration(employees: Employee[]): Employee[] {
   const sortedEmployees = employees.sort((a, b) => 
     a.achternaam.toLowerCase().localeCompare(b.achternaam.toLowerCase())
@@ -37,80 +167,6 @@ function performIntelligentMigration(employees: Employee[]): Employee[] {
     
     return { ...employee, dienstverband, team, aantalWerkdagen: 24, roostervrijDagen: [] };
   });
-}
-
-function migrateOldData(rawData: any[]): Employee[] {
-  const employees = rawData.map((item) => {
-    if (hasNewFields(item)) return item as Employee;
-    if (item.voornaam && item.achternaam) return upgradeLegacyEmployee(item as LegacyEmployee);
-    
-    const parts = (item.name || '').trim().split(' ');
-    const voornaam = parts[0] || 'Onbekend';
-    const achternaam = parts.slice(1).join(' ') || 'Naam';
-    const legacyEmployee: LegacyEmployee = { 
-      id: item.id || `emp${Date.now()}`, 
-      voornaam, 
-      achternaam, 
-      email: item.email || undefined, 
-      telefoon: item.telefoon || item.phone || undefined, 
-      actief: item.actief !== undefined ? item.actief : (item.active !== undefined ? item.active : true), 
-      created_at: item.created_at || new Date().toISOString(), 
-      updated_at: new Date().toISOString() 
-    };
-    return upgradeLegacyEmployee(legacyEmployee);
-  });
-  
-  const migrationCompleted = typeof window !== 'undefined' && localStorage.getItem(MIGRATION_FLAG_KEY) === 'true';
-  if (!migrationCompleted && employees.length > 0) {
-    const needsIntelligentMigration = employees.some(emp => 
-      emp.dienstverband === DienstverbandType.LOONDIENST && 
-      emp.team === TeamType.OVERIG && 
-      emp.aantalWerkdagen === 24
-    );
-    if (needsIntelligentMigration) {
-      const migrated = performIntelligentMigration(employees);
-      if (typeof window !== 'undefined') localStorage.setItem(MIGRATION_FLAG_KEY, 'true');
-      return migrated;
-    }
-  }
-  return employees;
-}
-
-function load(): Employee[] {
-  if (typeof window === 'undefined') return DEFAULT_EMPLOYEES;
-  const raw = localStorage.getItem(STORAGE_KEY);
-  const version = localStorage.getItem(STORAGE_VERSION_KEY);
-  
-  if (!raw) { 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_EMPLOYEES)); 
-    localStorage.setItem(STORAGE_VERSION_KEY, CURRENT_VERSION); 
-    localStorage.setItem(MIGRATION_FLAG_KEY, 'true'); 
-    return DEFAULT_EMPLOYEES; 
-  }
-  
-  try {
-    const parsed = JSON.parse(raw);
-    const needsMigration = version !== CURRENT_VERSION || (Array.isArray(parsed) && parsed.length > 0 && !hasNewFields(parsed[0]));
-    
-    if (needsMigration) { 
-      const migrated = migrateOldData(Array.isArray(parsed) ? parsed : []); 
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated)); 
-      localStorage.setItem(STORAGE_VERSION_KEY, CURRENT_VERSION); 
-      return migrated; 
-    }
-    return parsed as Employee[];
-  } catch {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_EMPLOYEES)); 
-    localStorage.setItem(STORAGE_VERSION_KEY, CURRENT_VERSION); 
-    localStorage.setItem(MIGRATION_FLAG_KEY, 'true'); 
-    return DEFAULT_EMPLOYEES;
-  }
-}
-
-function save(list: Employee[]) { 
-  if (typeof window === 'undefined') return; 
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(list)); 
-  localStorage.setItem(STORAGE_VERSION_KEY, CURRENT_VERSION); 
 }
 
 function validateEmployeeData(data: Partial<Employee>, isUpdate = false): void {
@@ -142,20 +198,26 @@ function validateEmployeeData(data: Partial<Employee>, isUpdate = false): void {
   }
 }
 
-export function getAllEmployees(): Employee[] { 
-  return load(); 
+// ============================================
+// PUBLIC API (now async!)
+// ============================================
+export async function getAllEmployees(): Promise<Employee[]> { 
+  return await load(); 
 }
 
-export function getActiveEmployees(): Employee[] { 
-  return load().filter(e => e.actief); 
+export async function getActiveEmployees(): Promise<Employee[]> { 
+  const all = await load();
+  return all.filter(e => e.actief); 
 }
 
-export function createEmployee(data: Omit<Employee, 'id'|'created_at'|'updated_at'>): Employee {
-  const list = load();
+export async function createEmployee(
+  data: Omit<Employee, 'id'|'created_at'|'updated_at'>
+): Promise<Employee> {
+  const list = await load();
   const now = new Date().toISOString();
   validateEmployeeData(data);
-  const fullName = `${data.voornaam.trim()} ${data.achternaam.trim()}`;
   
+  const fullName = `${data.voornaam.trim()} ${data.achternaam.trim()}`;
   if (list.some(e => getFullName(e).toLowerCase() === fullName.toLowerCase())) { 
     throw new Error('Deze naam bestaat al'); 
   }
@@ -177,12 +239,15 @@ export function createEmployee(data: Omit<Employee, 'id'|'created_at'|'updated_a
   };
   
   list.push(nieuw); 
-  save(list); 
+  await save(list); 
   return nieuw;
 }
 
-export function updateEmployee(id: string, patch: Partial<Employee>): Employee {
-  const list = load();
+export async function updateEmployee(
+  id: string, 
+  patch: Partial<Employee>
+): Promise<Employee> {
+  const list = await load();
   const idx = list.findIndex(e => e.id === id);
   if (idx === -1) throw new Error('Medewerker niet gevonden');
   
@@ -203,16 +268,18 @@ export function updateEmployee(id: string, patch: Partial<Employee>): Employee {
     } 
   }
   
-  if (updated.email !== undefined) { 
-    updated.email = updated.email?.trim() || undefined; 
-  }
-  if (updated.telefoon !== undefined) { 
-    updated.telefoon = updated.telefoon?.trim() || undefined; 
-  }
+  if (updated.email !== undefined) updated.email = updated.email?.trim() || undefined;
+  if (updated.telefoon !== undefined) updated.telefoon = updated.telefoon?.trim() || undefined;
   
   list[idx] = updated; 
-  save(list); 
+  await save(list); 
   return updated;
+}
+
+export async function removeEmployee(empId: string): Promise<void> {
+  const list = await load();
+  const next = list.filter(e => e.id !== empId);
+  await save(next);
 }
 
 export function canDeleteEmployee(empId: string): { canDelete: boolean; reason?: string } {
@@ -231,28 +298,11 @@ export function canDeleteEmployee(empId: string): { canDelete: boolean; reason?:
   return { canDelete: true };
 }
 
-export function removeEmployee(empId: string): void {
-  const check = canDeleteEmployee(empId);
-  if (!check.canDelete) { 
-    throw new Error(`Kan deze medewerker niet verwijderen. ${check.reason ?? ''}`.trim()); 
-  }
-  const list = load();
-  const next = list.filter(e => e.id !== empId);
-  save(next);
-}
-
-export function getMigrationStats(): { 
-  total: number; 
-  maat: number; 
-  loondienst: number; 
-  zzp: number; 
-  groen: number; 
-  oranje: number; 
-  overig: number; 
-  migrationCompleted: boolean; 
-} {
-  const employees = getAllEmployees();
-  const migrationCompleted = typeof window !== 'undefined' && localStorage.getItem(MIGRATION_FLAG_KEY) === 'true';
+export async function getMigrationStats() {
+  const employees = await getAllEmployees();
+  const migrationCompleted = typeof window !== 'undefined' && 
+    localStorage.getItem(MIGRATION_FLAG_KEY) === 'true';
+  
   return { 
     total: employees.length, 
     maat: employees.filter(e => e.dienstverband === DienstverbandType.MAAT).length, 
@@ -261,7 +311,8 @@ export function getMigrationStats(): {
     groen: employees.filter(e => e.team === TeamType.GROEN).length, 
     oranje: employees.filter(e => e.team === TeamType.ORANJE).length, 
     overig: employees.filter(e => e.team === TeamType.OVERIG).length, 
-    migrationCompleted 
+    migrationCompleted,
+    usingSupabase: USE_SUPABASE
   };
 }
 
@@ -269,4 +320,15 @@ export function resetMigrationFlag(): void {
   if (typeof window !== 'undefined') { 
     localStorage.removeItem(MIGRATION_FLAG_KEY); 
   } 
+}
+
+// ============================================
+// DEBUG HELPER
+// ============================================
+export function getStorageInfo() {
+  return {
+    useSupabase: USE_SUPABASE,
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || 'NOT SET',
+    hasAnonKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  };
 }
