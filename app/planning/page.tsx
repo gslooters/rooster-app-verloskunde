@@ -10,7 +10,8 @@ function DraftRosterCard({ roster }: { roster: Roster }) {
   const weekRange = formatWeekRange(roster.start_date, roster.end_date);
   const dateRange = formatDateRangeNl(roster.start_date, roster.end_date);
 
-  const handleOpenRoster = () => { router.push(`/planning/design?rosterId=${roster.id}`); };
+  // Navigate to Dashboard Rooster Ontwerp instead of directly to the grid
+  const handleOpenRoster = () => { router.push(`/planning/design/dashboard?rosterId=${roster.id}`); };
 
   return (
     <div className="bg-white border border-blue-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer" onClick={handleOpenRoster}>
