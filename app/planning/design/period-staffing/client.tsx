@@ -30,6 +30,7 @@ import TeamSelector from '@/app/_components/TeamSelector';
  * - Verwijderd: "Ga naar bewerking" button
  * - Verwijderd: Weekend/Feestdag/Ontwerpfase visuele indicaties
  * - Toegevoegd: Grote blauwe "Terug naar Dashboard" button rechtsboven
+ * - Fixed: TeamSelector gebruikt currentScope prop (was: value)
  */
 export default function PeriodStaffingClient() {
   const router = useRouter();
@@ -55,12 +56,10 @@ export default function PeriodStaffingClient() {
     async function loadData() {
       try {
         setIsLoading(true);
-        // Haal diensten op
         const dienstenAlle = await getAllServices();
         const activeDiensten = dienstenAlle.filter(s => s.actief);
         setDiensten(activeDiensten);
 
-        // Haal period staffing op
         let data = getPeriodStaffingForRoster(rosterId!);
         if (data.length === 0) {
           console.warn('[PeriodStaffing] Data not found, initializing...');
@@ -290,9 +289,8 @@ export default function PeriodStaffingClient() {
                             </div>
                             <div className="text-xs text-gray-600">{dienst.naam}</div>
                             <div className="mt-1">
-                              {/* FIX: Gebruik nu de correcte prop voor TeamSelector */}
                               <TeamSelector
-                                currentScope={dienstData[0]?.teamScope || 'TEAM_A'}
+                                currentScope={dienstData[0]?.teamScope || 'total'}
                                 onChange={(newScope) => handleTeamScopeChange(dienst.id, newScope)}
                                 disabled={readOnly}
                               />
