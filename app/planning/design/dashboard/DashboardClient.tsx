@@ -159,14 +159,8 @@ export default function DashboardClient() {
           </div>
           {isLastRoster && (
             <div className="border-t border-gray-200 pt-6 mt-6">
-              <div className="flex items-start mb-2">
-                <span className="text-xl mr-2 text-red-600">⚠️</span>
-                <div><span className="font-semibold text-red-800">Gevarenzone</span>
-                  <div className="text-sm text-red-700 mt-1">Dit is het laatste aangemaakte rooster. Je kunt het verwijderen als je opnieuw wilt beginnen.<br/><span className="font-semibold">Alle data worden permanent verwijderd.</span></div>
-                </div>
-              </div>
               {!showDeleteConfirm && (
-                <button onClick={()=>setShowDeleteConfirm(true)} className="px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 font-medium mt-2">Rooster Verwijderen</button>
+                <button onClick={()=>setShowDeleteConfirm(true)} className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 font-medium mt-2">Rooster Verwijderen</button>
               )}
               {showDeleteConfirm && (
                 <div className="bg-white border border-red-300 rounded-lg p-4 mt-3"><p className="text-red-800 font-semibold mb-3">{deleteStep === 1 ? 'Eerste bevestiging: Weet je zeker dat je dit rooster wilt verwijderen?' : 'Tweede bevestiging: Dit kan NIET ongedaan worden gemaakt!'}</p><div className="flex gap-3"><button onClick={()=>{setShowDeleteConfirm(false);setDeleteStep(1);}} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-medium">Nee, annuleren</button><button onClick={handleDeleteRoster} className="px-4 py-2 bg-red-700 text-white rounded-lg hover:bg-red-800 font-bold">{deleteStep === 1 ? 'Ja, doorgaan →' : 'JA, DEFINITIEF VERWIJDEREN'}</button></div></div>
