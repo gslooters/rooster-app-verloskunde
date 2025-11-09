@@ -159,6 +159,26 @@ async function saveToSupabase(list: Employee[]): Promise<void> {
   }
 }
 
+/**
+ * NIEUWE FUNCTIE: Expliciete DELETE operatie in Supabase
+ * Fix voor het probleem dat UPSERT geen records verwijdert
+ */
+async function deleteFromSupabase(empId: string): Promise<void> {
+  if (!USE_SUPABASE) return;
+  try {
+    const { error } = await supabase
+      .from('employees')
+      .delete()
+      .eq('id', empId);
+    
+    if (error) throw error;
+    console.log(`✅ Medewerker ${empId} succesvol verwijderd uit Supabase`);
+  } catch (error) {
+    console.error('❌ Supabase delete failed:', error);
+    throw error;
+  }
+}
+
 function validateEmployeeData(data: Partial<Employee>, isUpdate = false): void {
   if (!isUpdate || data.voornaam !== undefined) {
     if (!data.voornaam?.trim()) throw new Error('Voornaam is verplicht');
@@ -254,15 +274,49 @@ function updateEmployee(id: string, patch: Partial<Employee>): Employee {
   return updated;
 }
 
+/**
+ * AANGEPASTE FUNCTIE: Nu met expliciete DELETE in Supabase
+ * 
+ * Workflow:
+ * 1. Verwijder eerst uit Supabase (indien actief)
+ * 2. Update lokale cache
+ * 3. Update localStorage
+ * 
+ * Dit voorkomt dat verwijderde medewerkers terugkomen bij refresh
+ */
 function removeEmployee(empId: string): void {
   const list = getAllEmployees();
+  const employee = list.find(e => e.id === empId);
+  
+  if (!employee) {
+    console.warn(`⚠️ Medewerker ${empId} niet gevonden in cache`);
+    return;
+  }
+  
+  // Filter de medewerker uit de lijst
   const next = list.filter(e => e.id !== empId);
+  
+  // Update lokale storage en cache
   saveToLocalStorage(next);
   employeesCache = next;
+  
+  // Verwijder uit Supabase database
   if (USE_SUPABASE) {
-    saveToSupabase(next).catch(err =>
-      console.error('Background Supabase save failed:', err)
-    );
+    deleteFromSupabase(empId)
+      .then(() => {
+        console.log(`✅ Medewerker ${getFullName(employee)} succesvol verwijderd`);
+        // Trigger een refresh event
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('employees-updated'));
+        }
+      })
+      .catch(err => {
+        console.error('❌ Supabase delete failed:', err);
+        // Bij falen: probeer alsnog de lijst te synchroniseren
+        saveToSupabase(next).catch(syncErr => 
+          console.error('❌ Fallback sync failed:', syncErr)
+        );
+      });
   }
 }
 
