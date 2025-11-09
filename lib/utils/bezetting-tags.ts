@@ -37,20 +37,23 @@ export function getBezettingTag(min: number, max: number): string {
  * Gebaseerd op het type bezetting
  */
 export function getBezettingTagClass(min: number, max: number): string {
-  // Geen bezetting - grijs
-  if (min === 0 && max === 0) return 'tag-geen';
+  // GROEN: "Geen" (0-0)
+  if (min === 0 && max === 0) {
+    return 'bg-green-100 text-green-700 border-green-400';
+  }
   
-  // Exact 1 - blauw
-  if (min === 1 && max === 1) return 'tag-exact-1';
+  // ORANJE: Exact waarden (1-1, 2-2, 3-3, 4-4, etc.)
+  if (min === max) {
+    return 'bg-orange-100 text-orange-700 border-orange-400';
+  }
   
-  // Exact 2 - groen
-  if (min === 2 && max === 2) return 'tag-exact-2';
+  // GRIJS: Onbeperkt (max = 9)
+  if (max === 9) {
+    return 'bg-gray-100 text-gray-600 border-gray-400';
+  }
   
-  // Onbeperkt - beige
-  if (max === 9) return 'tag-onbeperkt';
-  
-  // Standaard range - oranje
-  return 'tag-range';
+  // GEEL: Flexibele ranges (0-2, 2-4, 1-3, etc.)
+  return 'bg-yellow-100 text-yellow-700 border-yellow-400';
 }
 
 /**
