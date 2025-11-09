@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ChevronLeft, Save, AlertTriangle } from 'lucide-react';
+import { Save, AlertTriangle, Home } from 'lucide-react';
 import { 
   PeriodDayStaffing, 
   makeCellKey,
@@ -23,8 +23,13 @@ import { getDatesForRosterPeriod, groupDatesByWeek } from '@/lib/utils/roster-da
 import TeamSelector from '@/app/_components/TeamSelector';
 
 /**
- * Client Component voor Diensten per dag scherm
+ * Client Component voor NB/period-staffing scherm (Ontwerpfase)
  * Periode-specifieke bezettingsregels voor een rooster van 35 dagen (5 weken)
+ * 
+ * VERSIE: Draad 22b - Grid aanpassingen:
+ * - Verwijderd: "Ga naar bewerking" button
+ * - Verwijderd: Weekend/Feestdag/Ontwerpfase visuele indicaties
+ * - Toegevoegd: Grote blauwe "Terug naar Dashboard" button rechtsboven
  */
 export default function PeriodStaffingClient() {
   const router = useRouter();
@@ -50,18 +55,15 @@ export default function PeriodStaffingClient() {
     async function loadData() {
       try {
         setIsLoading(true);
-        // Haal diensten op (nu async!)
+        // Haal diensten op
         const dienstenAlle = await getAllServices();
         const activeDiensten = dienstenAlle.filter(s => s.actief);
         setDiensten(activeDiensten);
 
         // Haal period staffing op
         let data = getPeriodStaffingForRoster(rosterId!);
-        // Als data niet bestaat, initialiseer (zou niet moeten gebeuren, maar safety check)
         if (data.length === 0) {
           console.warn('[PeriodStaffing] Data not found, initializing...');
-          // TODO: Haal roster data op voor startDate en holidays
-          // Voor nu: dummy init
           data = [];
         }
         setStaffingData(data);
@@ -108,7 +110,6 @@ export default function PeriodStaffingClient() {
       const updated = prev.map(item => {
         if (item.dienstId === dienstId && item.dagIndex === dagIndex) {
           const newItem = { ...item, [field]: value, updated_at: new Date().toISOString() };
-          // Validate
           const cellKey = makeCellKey(dienstId, dagIndex);
           if (newItem.minBezetting > newItem.maxBezetting) {
             setValidationErrors(prev => new Set([...prev, cellKey]));
@@ -158,6 +159,14 @@ export default function PeriodStaffingClient() {
     }
   }, [rosterId, staffingData, validationErrors]);
 
+  const handleBackToDashboard = useCallback(() => {
+    if (isDirty && !readOnly) {
+      const confirmed = confirm('Je hebt niet-opgeslagen wijzigingen. Weet je zeker dat je terug wilt naar het dashboard?');
+      if (!confirmed) return;
+    }
+    router.push(`/planning/design/dashboard?rosterId=${rosterId}`);
+  }, [isDirty, readOnly, rosterId, router]);
+
   // Groepeer data per dienst
   const dataByService = useMemo(() => {
     const grouped: { [dienstId: string]: PeriodDayStaffing[] } = {};
@@ -191,44 +200,46 @@ export default function PeriodStaffingClient() {
     );
   }
 
-  // Bepaal titel met week-info
   const title = weekGroups.length > 0 
-    ? `Diensten per dag : Periode Week ${weekGroups[0].weekNumber} - Week ${weekGroups[weekGroups.length - 1].weekNumber} ${weekGroups[0].year}`
-    : 'Diensten per dag';
+    ? `NB Bezetting per Dag : Week ${weekGroups[0].weekNumber} - Week ${weekGroups[weekGroups.length - 1].weekNumber} ${weekGroups[0].year}`
+    : 'NB Bezetting per Dag';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-4">
       <div className="max-w-full mx-auto">
         <div className="bg-white rounded-xl shadow-lg">
-          {/* Header */}
+          {/* Header met Terug naar Dashboard button rechtsboven */}
           <div className="p-6 border-b border-gray-200">
             <div className="flex items-center justify-between mb-4">
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 flex items-center">
+                <span className="text-2xl mr-3">📅</span>
+                {title}
+              </h1>
               <button
-                onClick={() => router.push('/planning/design')}
-                className="flex items-center text-blue-600 hover:text-blue-800 transition-colors"
+                onClick={handleBackToDashboard}
+                className="flex items-center gap-2 px-8 py-3 text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-md hover:shadow-lg font-semibold text-lg"
               >
-                <ChevronLeft className="w-5 h-5 mr-1" />
-                Terug naar Rooster Ontwerp
+                <Home className="w-5 h-5" />
+                Terug naar Dashboard
               </button>
-              {!readOnly && (
+            </div>
+            {/* Opslaan button onder titel */}
+            {!readOnly && (
+              <div className="flex justify-end mt-4">
                 <button
                   onClick={handleSave}
                   disabled={!isDirty || isSaving || validationErrors.size > 0}
                   className={`flex items-center gap-2 px-6 py-2 rounded-lg transition-colors ${
                     isDirty && !isSaving && validationErrors.size === 0
-                      ? 'text-white bg-blue-600 hover:bg-blue-700'
+                      ? 'text-white bg-green-600 hover:bg-green-700 shadow-md'
                       : 'text-gray-400 bg-gray-100 cursor-not-allowed'
                   }`}
                 >
                   <Save className="w-4 h-4" />
-                  {isSaving ? 'Opslaan...' : 'Opslaan'}
+                  {isSaving ? 'Opslaan...' : 'Wijzigingen Opslaan'}
                 </button>
-              )}
-            </div>
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 flex items-center">
-              <span className="text-2xl mr-3">📅</span>
-              {title}
-            </h1>
+              </div>
+            )}
           </div>
 
           {/* Warning voor validatie errors */}
@@ -248,17 +259,129 @@ export default function PeriodStaffingClient() {
           <div className="p-6">
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
-                <thead> ... </thead>
-                <tbody> ... </tbody>
+                <thead>
+                  <tr className="bg-gray-50">
+                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold text-gray-700 sticky left-0 bg-gray-50 z-10">
+                      Dienst / Team
+                    </th>
+                    {dateInfo.map((d, idx) => (
+                      <th key={idx} className="border border-gray-300 px-2 py-2 text-center text-sm font-medium text-gray-700 min-w-[80px]">
+                        <div className="flex flex-col">
+                          <span className="text-xs text-gray-500">{d.dayName}</span>
+                          <span className="font-semibold">{d.date}</span>
+                        </div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {diensten.map(dienst => {
+                    const dienstData = dataByService[dienst.id] || [];
+                    return (
+                      <tr key={dienst.id} className="hover:bg-gray-50">
+                        <td className="border border-gray-300 px-3 py-2 sticky left-0 bg-white z-10">
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                              <span 
+                                className="inline-block w-3 h-3 rounded-full" 
+                                style={{ backgroundColor: dienst.kleur }}
+                              ></span>
+                              <span className="font-medium text-gray-900">{dienst.code}</span>
+                            </div>
+                            <div className="text-xs text-gray-600">{dienst.naam}</div>
+                            <div className="mt-1">
+                              <TeamSelector
+                                value={dienstData[0]?.teamScope || 'TEAM_A'}
+                                onChange={(newScope) => handleTeamScopeChange(dienst.id, newScope)}
+                                disabled={readOnly}
+                                size="sm"
+                              />
+                            </div>
+                          </div>
+                        </td>
+                        {dateInfo.map((d, idx) => {
+                          const cellData = dienstData.find(item => item.dagIndex === idx);
+                          const cellKey = makeCellKey(dienst.id, idx);
+                          const hasError = validationErrors.has(cellKey);
+                          
+                          return (
+                            <td 
+                              key={idx} 
+                              className={`border border-gray-300 px-2 py-2 text-center ${
+                                hasError ? 'bg-red-50' : ''
+                              }`}
+                            >
+                              {cellData ? (
+                                <div className="flex flex-col gap-1">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="20"
+                                    value={cellData.minBezetting}
+                                    onChange={(e) => handleCellChange(
+                                      dienst.id, 
+                                      idx, 
+                                      'minBezetting', 
+                                      parseInt(e.target.value) || 0
+                                    )}
+                                    disabled={readOnly}
+                                    className={`w-full px-1 py-1 text-center border rounded text-sm ${
+                                      hasError ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                                    } disabled:bg-gray-100`}
+                                  />
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="20"
+                                    value={cellData.maxBezetting}
+                                    onChange={(e) => handleCellChange(
+                                      dienst.id, 
+                                      idx, 
+                                      'maxBezetting', 
+                                      parseInt(e.target.value) || 0
+                                    )}
+                                    disabled={readOnly}
+                                    className={`w-full px-1 py-1 text-center border rounded text-sm ${
+                                      hasError ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                                    } disabled:bg-gray-100`}
+                                  />
+                                </div>
+                              ) : (
+                                <span className="text-gray-400 text-xs">-</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
               </table>
             </div>
           </div>
 
           {/* Footer status */}
-          <div className="p-6 bg-gray-50 border-t border-gray-200"> ... </div>
+          <div className="p-6 bg-gray-50 border-t border-gray-200">
+            <div className="flex items-center justify-between text-sm text-gray-600">
+              <div>
+                <span className="font-medium">{diensten.length}</span> diensten
+                <span className="mx-2">·</span>
+                <span className="font-medium">{dateInfo.length}</span> dagen
+              </div>
+              {isDirty && !readOnly && (
+                <span className="text-amber-600 font-medium flex items-center gap-2">
+                  <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></span>
+                  Niet-opgeslagen wijzigingen
+                </span>
+              )}
+            </div>
+            <div className="mt-4 text-xs text-gray-500">
+              <p>Gebruik de button rechtsboven om terug te keren naar het Dashboard.</p>
+              <p className="mt-1">Via het Dashboard kun je naar de roosterbewerkingsfase gaan.</p>
+            </div>
+          </div>
         </div>
       </div>
-      {/* Floating unsaved indicator */} ...
     </div>
   );
 }
