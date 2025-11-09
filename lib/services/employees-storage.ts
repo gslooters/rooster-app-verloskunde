@@ -77,10 +77,33 @@ let employeesCache: Employee[] | null = null;
 let lastFetchTime = 0;
 const CACHE_DURATION = 5000;
 
+/**
+ * Sorteer medewerkers: actief → dienstverband (Maat→Loondienst→ZZP) → voornaam
+ */
+function sortEmployees(employees: Employee[]): Employee[] {
+  const dienstverbandOrder: Record<DienstverbandType, number> = {
+    [DienstverbandType.MAAT]: 1,
+    [DienstverbandType.LOONDIENST]: 2,
+    [DienstverbandType.ZZP]: 3
+  };
+
+  return [...employees].sort((a, b) => {
+    // 1. Actief eerst
+    if (a.actief !== b.actief) {
+      return a.actief ? -1 : 1;
+    }
+    // 2. Dienstverband volgorde
+    const dvCompare = dienstverbandOrder[a.dienstverband] - dienstverbandOrder[b.dienstverband];
+    if (dvCompare !== 0) return dvCompare;
+    // 3. Alfabetisch op voornaam
+    return a.voornaam.localeCompare(b.voornaam, 'nl');
+  });
+}
+
 function getAllEmployees(): Employee[] {
   const now = Date.now();
   if (employeesCache && (now - lastFetchTime) < CACHE_DURATION) {
-    return employeesCache;
+    return sortEmployees(employeesCache);
   }
   if (USE_SUPABASE) {
     loadFromSupabaseAsync().then(data => {
@@ -102,11 +125,11 @@ function getAllEmployees(): Employee[] {
     if (syncData.length > 0) {
       employeesCache = syncData;
       saveToLocalStorage(syncData);
-      return syncData;
+      return sortEmployees(syncData);
     }
   }
   employeesCache = localData;
-  return localData;
+  return sortEmployees(localData);
 }
 
 function loadFromSupabaseSync(): Employee[] {
@@ -236,10 +259,11 @@ function createEmployee(
     roostervrijDagen: normalizeRoostervrijDagen(data.roostervrijDagen)
   };
   list.push(nieuw);
-  saveToLocalStorage(list);
-  employeesCache = list;
+  const sorted = sortEmployees(list);
+  saveToLocalStorage(sorted);
+  employeesCache = sorted;
   if (USE_SUPABASE) {
-    saveToSupabase(list).catch(err =>
+    saveToSupabase(sorted).catch(err =>
       console.error('Background Supabase save failed:', err)
     );
   }
@@ -264,10 +288,11 @@ function updateEmployee(id: string, patch: Partial<Employee>): Employee {
     }
   }
   list[idx] = updated;
-  saveToLocalStorage(list);
-  employeesCache = list;
+  const sorted = sortEmployees(list);
+  saveToLocalStorage(sorted);
+  employeesCache = sorted;
   if (USE_SUPABASE) {
-    saveToSupabase(list).catch(err =>
+    saveToSupabase(sorted).catch(err =>
       console.error('Background Supabase save failed:', err)
     );
   }
@@ -295,10 +320,11 @@ function removeEmployee(empId: string): void {
   
   // Filter de medewerker uit de lijst
   const next = list.filter(e => e.id !== empId);
+  const sorted = sortEmployees(next);
   
   // Update lokale storage en cache
-  saveToLocalStorage(next);
-  employeesCache = next;
+  saveToLocalStorage(sorted);
+  employeesCache = sorted;
   
   // Verwijder uit Supabase database
   if (USE_SUPABASE) {
@@ -313,24 +339,67 @@ function removeEmployee(empId: string): void {
       .catch(err => {
         console.error('❌ Supabase delete failed:', err);
         // Bij falen: probeer alsnog de lijst te synchroniseren
-        saveToSupabase(next).catch(syncErr => 
+        saveToSupabase(sorted).catch(syncErr => 
           console.error('❌ Fallback sync failed:', syncErr)
         );
       });
   }
 }
 
-function canDeleteEmployee(empId: string): { canDelete: boolean; reason?: string } {
-  return { canDelete: true };
+/**
+ * NIEUWE ASYNC FUNCTIE: Check of medewerker kan worden verwijderd
+ * Blokkeer als medewerker in roosters staat met status 'ontwerp' of 'inbewerking'
+ */
+async function canDeleteEmployee(empId: string): Promise<{
+  canDelete: boolean;
+  reason?: string;
+  roosters?: string[];
+}> {
+  if (!USE_SUPABASE) {
+    // Zonder Supabase kunnen we niet checken, sta verwijderen toe
+    return { canDelete: true };
+  }
+
+  try {
+    // Query schedules tabel voor roosters met deze medewerker
+    const { data, error } = await supabase
+      .from('schedules')
+      .select('id, naam, status, medewerkers')
+      .in('status', ['ontwerp', 'inbewerking'])
+      .contains('medewerkers', [empId]);
+
+    if (error) {
+      console.error('❌ Fout bij checken delete-status:', error);
+      // Bij fout: sta verwijderen toe met waarschuwing
+      return { canDelete: true };
+    }
+
+    if (data && data.length > 0) {
+      const roosterNamen = data.map(r => `${r.naam} (${r.id})`);
+      return {
+        canDelete: false,
+        reason: `Medewerker staat nog in ${data.length} actieve rooster(s)`,
+        roosters: roosterNamen
+      };
+    }
+
+    // Geen actieve roosters gevonden
+    return { canDelete: true };
+  } catch (error) {
+    console.error('❌ Onverwachte fout bij delete-check:', error);
+    // Bij onverwachte fout: sta verwijderen toe met waarschuwing
+    return { canDelete: true };
+  }
 }
 
 async function refreshFromSupabase(): Promise<void> {
   if (!USE_SUPABASE) return;
   const data = await loadFromSupabaseAsync();
   if (data.length > 0) {
-    employeesCache = data;
+    const sorted = sortEmployees(data);
+    employeesCache = sorted;
     lastFetchTime = Date.now();
-    saveToLocalStorage(data);
+    saveToLocalStorage(sorted);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('employees-updated'));
     }
