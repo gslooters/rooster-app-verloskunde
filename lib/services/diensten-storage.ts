@@ -12,6 +12,8 @@
 // - ✅ Referential integrity checks
 // - ✅ Health check en fallback strategie
 // - ✅ Cache voor read-only bij storing
+// - ✅ Dag-bezetting per dienst (ma-zo min/max)
+// - ✅ Team scope per dienst (Tot/Gro/Ora)
 // ============================================================================
 
 import { Dienst, validateDienstwaarde, calculateDuration } from "../types/dienst";
@@ -27,6 +29,37 @@ const HEALTH_CHECK_INTERVAL = 60000; // 1 minuut
 
 // Systeemdiensten die altijd aanwezig moeten zijn
 const SYSTEM_CODES = ['NB', '==='];
+
+// ============================================================================
+// TYPES VOOR DAG-BEZETTING
+// ============================================================================
+
+export interface DayStaffing {
+  ma_min: number;
+  ma_max: number;
+  di_min: number;
+  di_max: number;
+  wo_min: number;
+  wo_max: number;
+  do_min: number;
+  do_max: number;
+  vr_min: number;
+  vr_max: number;
+  za_min: number;
+  za_max: number;
+  zo_min: number;
+  zo_max: number;
+}
+
+export interface TeamScope {
+  tot_enabled: boolean;
+  gro_enabled: boolean;
+  ora_enabled: boolean;
+}
+
+export interface ServiceDayStaffing extends DayStaffing, TeamScope {
+  service_id: string;
+}
 
 // ============================================================================
 // SUPABASE HEALTH CHECK
@@ -155,6 +188,253 @@ function toDatabase(dienst: Partial<Dienst>) {
   if (dienst.updated_at) data.updated_at = dienst.updated_at;
   
   return data;
+}
+
+// ============================================================================
+// DAG-BEZETTING FUNCTIES
+// ============================================================================
+
+/**
+ * Haal dag-bezetting en team scope op voor een specifieke dienst
+ */
+export async function getServiceDayStaffing(serviceId: string): Promise<ServiceDayStaffing | null> {
+  const healthy = await checkSupabaseHealth();
+  
+  if (!healthy) {
+    throw new Error('⚠️ Database niet bereikbaar.');
+  }
+  
+  try {
+    const { data, error } = await supabase
+      .from('service_types')
+      .select(`
+        id,
+        ma_min, ma_max,
+        di_min, di_max,
+        wo_min, wo_max,
+        do_min, do_max,
+        vr_min, vr_max,
+        za_min, za_max,
+        zo_min, zo_max,
+        tot_enabled,
+        gro_enabled,
+        ora_enabled
+      `)
+      .eq('id', serviceId)
+      .single();
+    
+    if (error) throw error;
+    if (!data) return null;
+    
+    return {
+      service_id: data.id,
+      ma_min: data.ma_min ?? 0,
+      ma_max: data.ma_max ?? 0,
+      di_min: data.di_min ?? 0,
+      di_max: data.di_max ?? 0,
+      wo_min: data.wo_min ?? 0,
+      wo_max: data.wo_max ?? 0,
+      do_min: data.do_min ?? 0,
+      do_max: data.do_max ?? 0,
+      vr_min: data.vr_min ?? 0,
+      vr_max: data.vr_max ?? 0,
+      za_min: data.za_min ?? 0,
+      za_max: data.za_max ?? 0,
+      zo_min: data.zo_min ?? 0,
+      zo_max: data.zo_max ?? 0,
+      tot_enabled: data.tot_enabled ?? true,
+      gro_enabled: data.gro_enabled ?? false,
+      ora_enabled: data.ora_enabled ?? false
+    };
+  } catch (error) {
+    console.error('❌ Error loading service day staffing:', error);
+    throw error;
+  }
+}
+
+/**
+ * Haal alle dag-bezetting data op voor alle diensten
+ */
+export async function getAllServicesDayStaffing(): Promise<ServiceDayStaffing[]> {
+  const healthy = await checkSupabaseHealth();
+  
+  if (!healthy) {
+    throw new Error('⚠️ Database niet bereikbaar.');
+  }
+  
+  try {
+    const { data, error } = await supabase
+      .from('service_types')
+      .select(`
+        id,
+        ma_min, ma_max,
+        di_min, di_max,
+        wo_min, wo_max,
+        do_min, do_max,
+        vr_min, vr_max,
+        za_min, za_max,
+        zo_min, zo_max,
+        tot_enabled,
+        gro_enabled,
+        ora_enabled
+      `)
+      .eq('actief', true)
+      .order('code', { ascending: true });
+    
+    if (error) throw error;
+    
+    return (data || []).map(row => ({
+      service_id: row.id,
+      ma_min: row.ma_min ?? 0,
+      ma_max: row.ma_max ?? 0,
+      di_min: row.di_min ?? 0,
+      di_max: row.di_max ?? 0,
+      wo_min: row.wo_min ?? 0,
+      wo_max: row.wo_max ?? 0,
+      do_min: row.do_min ?? 0,
+      do_max: row.do_max ?? 0,
+      vr_min: row.vr_min ?? 0,
+      vr_max: row.vr_max ?? 0,
+      za_min: row.za_min ?? 0,
+      za_max: row.za_max ?? 0,
+      zo_min: row.zo_min ?? 0,
+      zo_max: row.zo_max ?? 0,
+      tot_enabled: row.tot_enabled ?? true,
+      gro_enabled: row.gro_enabled ?? false,
+      ora_enabled: row.ora_enabled ?? false
+    }));
+  } catch (error) {
+    console.error('❌ Error loading all services day staffing:', error);
+    throw error;
+  }
+}
+
+/**
+ * Update dag-bezetting voor een specifieke dienst
+ */
+export async function updateServiceDayStaffing(
+  serviceId: string,
+  staffing: Partial<DayStaffing>
+): Promise<void> {
+  const healthy = await checkSupabaseHealth();
+  
+  if (!healthy) {
+    throw new Error('⚠️ Database niet bereikbaar. Kan bezetting niet bijwerken.');
+  }
+  
+  // Validaties
+  const validateField = (fieldName: string, value: number | undefined, isMax: boolean) => {
+    if (value === undefined) return;
+    const maxValue = isMax ? 9 : 8;
+    if (value < 0 || value > maxValue) {
+      throw new Error(`${fieldName} moet tussen 0 en ${maxValue} liggen`);
+    }
+  };
+  
+  Object.keys(staffing).forEach(key => {
+    const value = (staffing as any)[key];
+    if (typeof value === 'number') {
+      validateField(key, value, key.includes('_max'));
+    }
+  });
+  
+  try {
+    const { error } = await supabase
+      .from('service_types')
+      .update({
+        ...staffing,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', serviceId);
+    
+    if (error) throw error;
+    
+    console.log('✅ Service day staffing updated:', serviceId);
+  } catch (error) {
+    console.error('❌ Error updating service day staffing:', error);
+    throw error;
+  }
+}
+
+/**
+ * Update team scope voor een specifieke dienst
+ * Controleert de exclusieve regels:
+ * - Als Tot aan is, moeten Gro en Ora uit
+ * - Als Gro of Ora aan is, moet Tot uit
+ */
+export async function updateServiceTeamScope(
+  serviceId: string,
+  teamScope: TeamScope
+): Promise<void> {
+  const healthy = await checkSupabaseHealth();
+  
+  if (!healthy) {
+    throw new Error('⚠️ Database niet bereikbaar. Kan team scope niet bijwerken.');
+  }
+  
+  // Valideer exclusieve regels
+  if (teamScope.tot_enabled && (teamScope.gro_enabled || teamScope.ora_enabled)) {
+    throw new Error('Als Totaal aan is, moeten Groen en Oranje uit zijn');
+  }
+  
+  try {
+    const { error } = await supabase
+      .from('service_types')
+      .update({
+        tot_enabled: teamScope.tot_enabled,
+        gro_enabled: teamScope.gro_enabled,
+        ora_enabled: teamScope.ora_enabled,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', serviceId);
+    
+    if (error) throw error;
+    
+    console.log('✅ Service team scope updated:', serviceId);
+  } catch (error) {
+    console.error('❌ Error updating service team scope:', error);
+    throw error;
+  }
+}
+
+/**
+ * Update beide dag-bezetting én team scope in één keer
+ */
+export async function updateServiceDayStaffingAndTeam(
+  serviceId: string,
+  staffing: Partial<DayStaffing>,
+  teamScope: TeamScope
+): Promise<void> {
+  const healthy = await checkSupabaseHealth();
+  
+  if (!healthy) {
+    throw new Error('⚠️ Database niet bereikbaar.');
+  }
+  
+  // Valideer team scope regels
+  if (teamScope.tot_enabled && (teamScope.gro_enabled || teamScope.ora_enabled)) {
+    throw new Error('Als Totaal aan is, moeten Groen en Oranje uit zijn');
+  }
+  
+  try {
+    const { error } = await supabase
+      .from('service_types')
+      .update({
+        ...staffing,
+        tot_enabled: teamScope.tot_enabled,
+        gro_enabled: teamScope.gro_enabled,
+        ora_enabled: teamScope.ora_enabled,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', serviceId);
+    
+    if (error) throw error;
+    
+    console.log('✅ Service day staffing and team scope updated:', serviceId);
+  } catch (error) {
+    console.error('❌ Error updating service:', error);
+    throw error;
+  }
 }
 
 // ============================================================================
