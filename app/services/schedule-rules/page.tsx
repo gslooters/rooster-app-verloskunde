@@ -25,6 +25,7 @@ export default function ServicesByDayTypePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle');
   const [validationErrors, setValidationErrors] = useState<Map<string, string>>(new Map());
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -33,6 +34,7 @@ export default function ServicesByDayTypePage() {
   const loadData = async () => {
     try {
       setIsLoading(true);
+      setLoadError(null);
       const [dienstenAlle, staffing] = await Promise.all([
         getAllServices(),
         getAllServicesDayStaffing()
@@ -40,8 +42,10 @@ export default function ServicesByDayTypePage() {
       const activeServices = sortServices(dienstenAlle.filter(s => s.actief));
       setServices(activeServices);
       setStaffingData(staffing);
-    } catch (error) {
-      setSaveStatus('error');
+    } catch (error: any) {
+      setLoadError('Fout bij laden planning-data. Probeer opnieuw of neem contact op met beheer.');
+      setServices([]);
+      setStaffingData([]);
     } finally {
       setIsLoading(false);
     }
@@ -161,12 +165,22 @@ export default function ServicesByDayTypePage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-center h-96">
-            <div className="text-lg text-gray-600">Laden...</div>
-          </div>
-        </div>
+      <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
+        <div className="text-lg text-gray-600">Laden...</div>
+      </div>
+    );
+  }
+  if (loadError) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
+        <div className="text-lg text-red-700 font-medium">{loadError}</div>
+      </div>
+    );
+  }
+  if (!services.length) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
+        <div className="text-lg text-gray-500 font-medium">Geen diensten gevonden. Controleer of er actieve diensten zijn ingesteld.</div>
       </div>
     );
   }
