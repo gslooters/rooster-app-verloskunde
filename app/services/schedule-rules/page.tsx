@@ -321,7 +321,7 @@ export default function ServicesByDayTypePage() {
                       const errorKey = `${service.id}-${day.short}`;
                       const hasError = validationErrors.has(errorKey);
                       const tag = getBezettingTag(minVal, maxVal);
-                      const tagClass = getBezettingTagClass(tag);
+                      const tagClass = getBezettingTagClass(minVal, maxVal);
 
                       return (
                         <td key={day.short} className="px-2 py-2 border-r border-gray-200">
