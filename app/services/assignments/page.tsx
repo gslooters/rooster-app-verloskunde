@@ -56,7 +56,6 @@ export default function ServiceAssignmentsTable() {
         allMappings = await getEmployeeServicesMappings();
         if (!allMappings || typeof allMappings !== 'object') allMappings = {};
       } catch (err) {
-        // Fallback naar localStorage
         allMappings = fallbackLocal();
       }
       setOrigMappings(allMappings);
@@ -70,7 +69,7 @@ export default function ServiceAssignmentsTable() {
     window.addEventListener('beforeunload',handler);
     return()=>window.removeEventListener('beforeunload',handler);
   },[]);
-  // Cell state toggling
+  // Verbeterde dirty-detection: elk verschil (ook als user/rij nieuw is)
   const handleToggle=(empId:string,code:string)=>{
     setMappings(prev=>{
       const empCodes=prev[empId]||[];
@@ -80,23 +79,27 @@ export default function ServiceAssignmentsTable() {
       }else{
         nieuw=[...empCodes,code];
       }
-      // dirty = alleen als huidig mapping differeert van origMappings
-      const isDirty=Object.keys(origMappings).some(id=>{
-        const ref=id===empId?nieuw:(prev[id]||[]);
-        return JSON.stringify(ref)!==JSON.stringify(origMappings[id]||[]);
+      // Verbeterde dirty-check - alle ids!
+      const allIds = new Set([...Object.keys(origMappings), ...Object.keys(prev), empId]);
+      const isDirty = [...allIds].some(id => {
+        const current = id===empId? nieuw : (prev[id]||[]);
+        return JSON.stringify(current)!==JSON.stringify(origMappings[id]||[]);
       });
       setDirty(isDirty);
       return {...prev,[empId]:nieuw};
     });
   };
+  // Extra logging + feedback voor save errors
   const handleSave=async()=>{
     setSaving(true);
+    let hadErrors = false;
     await Promise.all(Object.keys(mappings).map(async empId=>{
       if(JSON.stringify(mappings[empId]||[])!==JSON.stringify(origMappings[empId]||[])){
         try {
           await setServicesForEmployee(empId,mappings[empId]||[]);
-        } catch {
-          // als Supabase faalt, fallback localStorage direct updaten
+        } catch(e) {
+          hadErrors = true;
+          console.error('Opslaan voor medewerker', empId, 'mislukt:', e);
           localStorage.setItem('employeeServiceMappings', JSON.stringify(mappings));
         }
       }
@@ -104,6 +107,9 @@ export default function ServiceAssignmentsTable() {
     setSaving(false);
     setOrigMappings(JSON.parse(JSON.stringify(mappings)));
     setDirty(false);
+    if(hadErrors) {
+      alert('Niet alle wijzigingen konden worden opgeslagen. Controleer je internetverbinding of vraag de beheerder om hulp.');
+    }
   };
   function cellAssigned(empId: string, code: string) {
     return (mappings[empId]||[]).includes(code);
