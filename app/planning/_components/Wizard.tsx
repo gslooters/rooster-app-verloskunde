@@ -66,14 +66,16 @@ export default function Wizard({ onClose }: WizardProps = {}) {
 
       if (typeof window !== 'undefined') {
         localStorage.setItem('lastRosterId', id);
-        localStorage.setItem('recentDesignRoute', `/planning/design?rosterId=${id}`);
+        // Update to point to dashboard instead of direct grid
+        localStorage.setItem('recentDesignRoute', `/planning/design/dashboard?rosterId=${id}`);
       }
 
       // Fix: geef start_date expliciet mee aan initializeRosterDesign
       initializeRosterDesign(roster.id, selectedStart);
       
-      if (onClose) { onClose(); setTimeout(()=>router.push(`/planning/design?rosterId=${id}`), 100); }
-      else { router.push(`/planning/design?rosterId=${id}`); }
+      // Navigate to the new Dashboard Rooster Ontwerp instead of directly to the grid
+      if (onClose) { onClose(); setTimeout(()=>router.push(`/planning/design/dashboard?rosterId=${id}`), 100); }
+      else { router.push(`/planning/design/dashboard?rosterId=${id}`); }
     } catch (err) {
       console.error('Error creating rooster:', err); setError('Er is een fout opgetreden bij het aanmaken van het rooster. Probeer opnieuw.'); setIsCreating(false);
     }
