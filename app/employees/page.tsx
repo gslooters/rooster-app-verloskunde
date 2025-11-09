@@ -104,6 +104,7 @@ export default function MedewerkersPage() {
       } else {
         createEmployee(formData); 
       }
+      // Direct scherm verversen na create/update
       loadData(); 
       closeEmployeeModal(); 
     } catch (err: any) { 
@@ -113,13 +114,29 @@ export default function MedewerkersPage() {
 
   const handleEmployeeDelete = async (employee: Employee) => {
     if (!confirm(`Weet je zeker dat je medewerker "${getFullName(employee)}" wilt verwijderen?`)) return;
+    
     try { 
-      const check = canDeleteEmployee(employee.id); 
+      // Async check of medewerker verwijderd kan worden
+      const check = await canDeleteEmployee(employee.id); 
+      
       if (!check.canDelete) { 
-        alert(`Kan deze medewerker niet verwijderen. ${check.reason}`); 
+        // Blokkade: Toon alert met details
+        let message = `❌ Kan medewerker niet verwijderen.\n\n${check.reason || 'Medewerker staat in actieve roosters.'}\n\n`;
+        
+        if (check.roosters && check.roosters.length > 0) {
+          message += `Betrokken roosters:\n${check.roosters.map(r => `• ${r}`).join('\n')}\n\n`;
+        }
+        
+        message += `💡 Suggestie: Maak de medewerker inactief in plaats van verwijderen. Dan blijven historische roosters intact.`;
+        
+        alert(message);
         return; 
       } 
+      
+      // Verwijderen toegestaan
       removeEmployee(employee.id); 
+      
+      // Direct scherm verversen na delete
       loadData(); 
     } catch (err: any) { 
       alert(err.message || 'Er is een fout opgetreden bij het verwijderen'); 
