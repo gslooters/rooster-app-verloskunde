@@ -210,7 +210,123 @@ export default function ServicesByDayTypePage() {
             </button>
           </div>
         </div>
-        {/* ...rest van de tabel interface volgt zoals vorige code ... */}
+        {/* ----------- HOOFD CONTENT TABEL: HERSTELD ----------- */}
+        <div className="bg-white rounded-lg shadow-sm overflow-x-auto mt-5">
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b border-gray-200 text-xs">
+              <tr>
+                <th className="px-2 py-2 text-left font-semibold text-gray-600 w-52">Dienst</th>
+                <th className="px-2 py-2 text-center font-semibold text-gray-600 w-44">Team</th>
+                {DAY_NAMES.map(day => (
+                  <th key={day.short} colSpan={2} className="px-1 py-2 text-center font-semibold text-gray-600 w-20">
+                    {day.long}
+                  </th>
+                ))}
+              </tr>
+              <tr>
+                <th></th>
+                <th></th>
+                {DAY_NAMES.map(day => (
+                  <>
+                    <th key={day.short+'min'} className="text-[10px] text-gray-400 font-normal">min</th>
+                    <th key={day.short+'max'} className="text-[10px] text-gray-400 font-normal">max</th>
+                  </>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {services.map(service => {
+                const staffing = getStaffingForService(service.id);
+                if (!staffing) return null;
+                return (
+                  <tr key={service.id} className="hover:bg-gray-50 transition-colors h-12">
+                    <td className="px-2 py-1">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-7 h-7 rounded flex items-center justify-center text-white font-bold text-xs flex-shrink-0"
+                          style={{ backgroundColor: service.kleur }}
+                        >
+                          {service.code}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="font-medium text-gray-900 truncate text-xs">{service.naam}</div>
+                          {service.beschrijving && (
+                            <div className="text-[11px] text-gray-400 truncate">{service.beschrijving}</div>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-2 py-1">
+                      <div className="flex flex-row items-center gap-1 justify-center">
+                        <button
+                          type="button"
+                          onClick={() => handleTeamToggle(service.id, 'tot')}
+                          className={`px-3 py-1 rounded text-xs font-medium transition-all min-w-[42px] border ${
+                            staffing.tot_enabled
+                              ? 'bg-blue-600 border-blue-700 text-white shadow-sm'
+                              : 'bg-gray-100 border-gray-200 text-gray-600 hover:bg-gray-200'}`}
+                        >Tot</button>
+                        <button
+                          type="button"
+                          onClick={() => handleTeamToggle(service.id, 'gro')}
+                          className={`px-3 py-1 rounded text-xs font-medium transition-all min-w-[42px] border ${
+                            staffing.gro_enabled
+                              ? 'bg-green-600 border-green-700 text-white shadow-sm'
+                              : 'bg-gray-100 border-gray-200 text-gray-600 hover:bg-gray-200'}`}
+                        >Gro</button>
+                        <button
+                          type="button"
+                          onClick={() => handleTeamToggle(service.id, 'ora')}
+                          className={`px-3 py-1 rounded text-xs font-medium transition-all min-w-[42px] border ${
+                            staffing.ora_enabled
+                              ? 'bg-orange-500 border-orange-700 text-white shadow-sm'
+                              : 'bg-gray-100 border-gray-200 text-gray-600 hover:bg-gray-200'}`}
+                        >Ora</button>
+                      </div>
+                    </td>
+                    {DAY_NAMES.map(day => {
+                      const minKey = `${day.short}_min`;
+                      const maxKey = `${day.short}_max`;
+                      const minVal = (staffing as any)[minKey] as number;
+                      const maxVal = (staffing as any)[maxKey] as number;
+                      const errorKey = `${service.id}-${day.short}`;
+                      const hasError = validationErrors.has(errorKey);
+                      return (
+                        <>
+                          <td key={day.short+'min'} className="px-1 py-1">
+                            <input
+                              type="number"
+                              min="0"
+                              max="8"
+                              value={minVal}
+                              onChange={e => handleMinMaxChange(service.id, day.short, 'min', e.target.value)}
+                              className={`w-9 px-1 py-1 text-center text-xs border rounded focus:outline-none focus:ring-2 ${
+                                hasError ? 'border-red-300 focus:ring-red-500 bg-red-50 shadow' : 'border-gray-300 focus:ring-blue-500'
+                              }`}
+                            />
+                          </td>
+                          <td key={day.short+'max'} className="px-1 py-1">
+                            <input
+                              type="number"
+                              min="0"
+                              max="9"
+                              value={maxVal}
+                              onChange={e => handleMinMaxChange(service.id, day.short, 'max', e.target.value)}
+                              className={`w-9 px-1 py-1 text-center text-xs border rounded focus:outline-none focus:ring-2 ${
+                                hasError ? 'border-red-300 focus:ring-red-500 bg-red-50 shadow' : 'border-gray-300 focus:ring-blue-500'
+                              }`}
+                            />
+                          </td>
+                        </>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        {/* ----------- EINDE HOOFD CONTENT TABEL ----------- */}
       </div>
     </div>
   );
