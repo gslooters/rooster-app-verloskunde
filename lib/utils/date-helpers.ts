@@ -93,3 +93,31 @@ export function isDateOnAnyWeekday(dateString: string, dagCodes: string[]): bool
   const dagCode = getWeekdayCodeFromString(dateString);
   return dagCodes.includes(dagCode);
 }
+
+/**
+ * Bereken ISO weeknummer voor een gegeven datum
+ * ISO 8601 definitie: Week 1 is de week met de eerste donderdag van het jaar
+ * 
+ * @param date - JavaScript Date object
+ * @returns ISO weeknummer (1-53)
+ * 
+ * @example
+ * getWeekNumber(new Date('2025-01-01')); // Returns: 1
+ * getWeekNumber(new Date('2025-12-31')); // Returns: 53 of 1 (afhankelijk van jaar)
+ */
+export function getWeekNumber(date: Date): number {
+  // Kopieer de datum om de originele niet te wijzigen
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  
+  // Zet op dichtstbijzijnde donderdag (huidige dag + 4 - huidige weekdag)
+  const dayNum = d.getUTCDay() || 7; // Zondag = 7 i.p.v. 0
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  
+  // Begin van het jaar
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  
+  // Bereken volledige weken tot nu
+  const weekNo = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  
+  return weekNo;
+}
