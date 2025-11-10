@@ -2,7 +2,7 @@
 // Opslaglaag: TypeScript functies voor Supabase interactie (Diensten per Dag)
 
 import { createClient } from '@supabase/supabase-js';
-import { getAllServicesDayStaffing } from '@/lib/services/diensten-storage';
+import { getAllServicesDayStaffing, ServiceDayStaffing } from '@/lib/services/diensten-storage';
 import { getFallbackHolidays } from '@/lib/data/dutch-holidays-fallback';
 
 export interface RosterPeriodStaffing {
@@ -60,6 +60,33 @@ export async function hasRosterPeriodStaffing(rosterId: string): Promise<boolean
   return (count ?? 0) > 0;
 }
 
+/**
+ * Helper functie: Haal min/max staffing op voor een specifieke dag uit ServiceDayStaffing
+ * @param service ServiceDayStaffing object
+ * @param dayOfWeek 0=Zondag, 1=Maandag, ..., 6=Zaterdag
+ * @returns {min: number, max: number}
+ */
+function getStaffingForDay(service: ServiceDayStaffing, dayOfWeek: number): { min: number; max: number } {
+  switch (dayOfWeek) {
+    case 0: // Zondag
+      return { min: service.zo_min, max: service.zo_max };
+    case 1: // Maandag
+      return { min: service.ma_min, max: service.ma_max };
+    case 2: // Dinsdag
+      return { min: service.di_min, max: service.di_max };
+    case 3: // Woensdag
+      return { min: service.wo_min, max: service.wo_max };
+    case 4: // Donderdag
+      return { min: service.do_min, max: service.do_max };
+    case 5: // Vrijdag
+      return { min: service.vr_min, max: service.vr_max };
+    case 6: // Zaterdag
+      return { min: service.za_min, max: service.za_max };
+    default:
+      return { min: 0, max: 0 };
+  }
+}
+
 // Auto-fill: vul alle dagen met standaardwaarden per dienst en dagsoort
 export async function generateRosterPeriodStaffing(rosterId: string, startDate: string, endDate: string): Promise<void> {
   if (await hasRosterPeriodStaffing(rosterId)) return;
@@ -81,17 +108,19 @@ export async function generateRosterPeriodStaffing(rosterId: string, startDate: 
     for (const date of days) {
       // Dienstcodes per dagsoort en feestdaglogica
       const dayOfWeek = new Date(date).getDay(); // 0=Zo..6=Za
-      let base = service.staffingPerDayType[dayOfWeek];
-      if (isHoliday(date)) base = service.staffingPerDayType[0]; // Zondagsettings voor feestdag
+      let base = getStaffingForDay(service, dayOfWeek);
+      if (isHoliday(date)) {
+        base = getStaffingForDay(service, 0); // Zondagsettings voor feestdag
+      }
       result.push({
         rosterid: rosterId,
-        serviceid: service.id,
+        serviceid: service.service_id,
         date,
         minstaff: base.min,
         maxstaff: base.max,
-        teamtot: service.teamtot ?? null,
-        teamgro: service.teamgro ?? null,
-        teamora: service.teamora ?? null
+        teamtot: service.tot_enabled ?? null,
+        teamgro: service.gro_enabled ?? null,
+        teamora: service.ora_enabled ?? null
       });
     }
   }
