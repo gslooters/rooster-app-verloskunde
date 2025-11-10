@@ -34,56 +34,82 @@ export function initializePeriodStaffingForRoster(
   startDate: string,
   holidays: string[] = []
 ): PeriodDayStaffing[] {
-  // Genereer 35 dagen info
-  const dates = getDatesForRosterPeriod(startDate, holidays);
+  console.log('[PeriodStaffing] 🚀 Start initialisatie voor roster:', rosterId);
+  console.log('[PeriodStaffing] Start datum:', startDate);
+  console.log('[PeriodStaffing] Feestdagen:', holidays);
+  console.log('[PeriodStaffing] Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? '✅ Configured' : '❌ Missing');
+  console.log('[PeriodStaffing] Supabase Key:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? '✅ Configured' : '❌ Missing');
   
-  // Haal actieve diensten en dagsoort-regels op
-  const diensten = getAllServices().filter(s => s.actief);
-  const dagsoortRegels = getAllDayTypeStaffing();
-  
-  const periodStaffing: PeriodDayStaffing[] = [];
-  const now = new Date().toISOString();
-  
-  // Voor elke dienst × elke dag
-  diensten.forEach(dienst => {
-    dates.forEach(dateInfo => {
-      // Bij feestdag: gebruik zondag-regel (dagSoort = 6)
-      const effectieveDagSoort = getEffectiveDayType(dateInfo);
+  try {
+    // Genereer 35 dagen info
+    console.log('[PeriodStaffing] Genereer 35 dagen info...');
+    const dates = getDatesForRosterPeriod(startDate, holidays);
+    console.log(`[PeriodStaffing] ✅ ${dates.length} dagen gegenereerd`);
+    
+    // Haal actieve diensten en dagsoort-regels op
+    console.log('[PeriodStaffing] Haal diensten op...');
+    const diensten = getAllServices().filter(s => s.actief);
+    console.log(`[PeriodStaffing] ✅ ${diensten.length} actieve diensten gevonden`);
+    
+    console.log('[PeriodStaffing] Haal dagsoort-regels op...');
+    const dagsoortRegels = getAllDayTypeStaffing();
+    console.log(`[PeriodStaffing] ✅ ${dagsoortRegels.length} dagsoort-regels gevonden`);
+    
+    const periodStaffing: PeriodDayStaffing[] = [];
+    const now = new Date().toISOString();
+    
+    // Voor elke dienst × elke dag
+    console.log('[PeriodStaffing] Genereer period staffing records...');
+    diensten.forEach((dienst, dienstIndex) => {
+      console.log(`[PeriodStaffing] Verwerk dienst ${dienstIndex + 1}/${diensten.length}: ${dienst.code}`);
       
-      // Zoek de dagsoort-regel voor deze dienst + effectieve dagsoort
-      const regel = dagsoortRegels.find(r => 
-        r.dienstId === dienst.id && 
-        r.dagSoort === effectieveDagSoort
-      );
-      
-      // Team-scope ALTIJD van dienst-niveau, niet van dagsoort
-      const teamScope = getServiceTeamScope(dienst.id);
-      
-      // Maak period staffing record
-      const staffing: PeriodDayStaffing = {
-        id: generatePeriodStaffingId(),
-        rosterId,
-        dienstId: dienst.id,
-        dagDatum: dateInfo.date,
-        dagIndex: dateInfo.dagIndex,
-        dagSoort: dateInfo.dagSoort, // Originele dagsoort (niet effectief)
-        isFeestdag: dateInfo.isFeestdag,
-        minBezetting: regel?.minBezetting || 0,
-        maxBezetting: regel?.maxBezetting || 0,
-        teamScope: teamScope,
-        created_at: now,
-        updated_at: now
-      };
-      
-      periodStaffing.push(staffing);
+      dates.forEach(dateInfo => {
+        // Bij feestdag: gebruik zondag-regel (dagSoort = 6)
+        const effectieveDagSoort = getEffectiveDayType(dateInfo);
+        
+        // Zoek de dagsoort-regel voor deze dienst + effectieve dagsoort
+        const regel = dagsoortRegels.find(r => 
+          r.dienstId === dienst.id && 
+          r.dagSoort === effectieveDagSoort
+        );
+        
+        // Team-scope ALTIJD van dienst-niveau, niet van dagsoort
+        const teamScope = getServiceTeamScope(dienst.id);
+        
+        // Maak period staffing record
+        const staffing: PeriodDayStaffing = {
+          id: generatePeriodStaffingId(),
+          rosterId,
+          dienstId: dienst.id,
+          dagDatum: dateInfo.date,
+          dagIndex: dateInfo.dagIndex,
+          dagSoort: dateInfo.dagSoort, // Originele dagsoort (niet effectief)
+          isFeestdag: dateInfo.isFeestdag,
+          minBezetting: regel?.minBezetting || 0,
+          maxBezetting: regel?.maxBezetting || 0,
+          teamScope: teamScope,
+          created_at: now,
+          updated_at: now
+        };
+        
+        periodStaffing.push(staffing);
+      });
     });
-  });
-  
-  // Opslaan in localStorage
-  savePeriodStaffingForRoster(rosterId, periodStaffing);
-  
-  console.log(`[PeriodStaffing] Initialized ${periodStaffing.length} records for roster ${rosterId}`);
-  return periodStaffing;
+    
+    console.log(`[PeriodStaffing] ✅ ${periodStaffing.length} period staffing records gegenereerd`);
+    
+    // Opslaan in localStorage
+    console.log('[PeriodStaffing] Opslaan in localStorage...');
+    savePeriodStaffingForRoster(rosterId, periodStaffing);
+    console.log('[PeriodStaffing] ✅ Succesvol opgeslagen');
+    
+    console.log(`[PeriodStaffing] ✅ Initialisatie voltooid voor roster ${rosterId}`);
+    return periodStaffing;
+  } catch (error) {
+    console.error('[PeriodStaffing] ❌ KRITIEKE FOUT bij initialisatie:', error);
+    console.error('[PeriodStaffing] Error details:', JSON.stringify(error, null, 2));
+    throw error;
+  }
 }
 
 /**
@@ -102,9 +128,10 @@ export function getPeriodStaffingForRoster(rosterId: string): PeriodDayStaffing[
     }
     
     const parsed = JSON.parse(data) as PeriodDayStaffing[];
+    console.log(`[PeriodStaffing] ✅ Loaded ${parsed.length} records for roster ${rosterId}`);
     return parsed;
   } catch (error) {
-    console.error('[PeriodStaffing] Error loading data:', error);
+    console.error('[PeriodStaffing] ❌ Error loading data:', error);
     return [];
   }
 }
@@ -119,18 +146,20 @@ export function savePeriodStaffingForRoster(
   data: PeriodDayStaffing[]
 ): void {
   try {
+    console.log(`[PeriodStaffing] Valideer ${data.length} records...`);
     // Valideer alle records
     const invalidRecords = data.filter(s => !validatePeriodStaffing(s));
     if (invalidRecords.length > 0) {
-      console.error('[PeriodStaffing] Invalid records found:', invalidRecords);
+      console.error('[PeriodStaffing] ❌ Invalid records found:', invalidRecords);
       throw new Error(`${invalidRecords.length} invalid records found`);
     }
+    console.log('[PeriodStaffing] ✅ Alle records zijn valide');
     
     const key = getStorageKey(rosterId);
     localStorage.setItem(key, JSON.stringify(data));
-    console.log(`[PeriodStaffing] Saved ${data.length} records for roster ${rosterId}`);
+    console.log(`[PeriodStaffing] ✅ Saved ${data.length} records for roster ${rosterId}`);
   } catch (error) {
-    console.error('[PeriodStaffing] Error saving data:', error);
+    console.error('[PeriodStaffing] ❌ Error saving data:', error);
     throw error;
   }
 }
