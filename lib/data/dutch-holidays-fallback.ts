@@ -30,8 +30,11 @@ function calculateEaster(year: number): Date {
 
 /**
  * Genereert fallback feestdagen voor een gegeven jaar
+ * 
+ * @param year - Het jaar waarvoor feestdagen gegenereerd moeten worden
+ * @returns Array van Holiday objecten
  */
-export function getFallbackHolidays(year: number): Holiday[] {
+function getFallbackHolidaysForYear(year: number): Holiday[] {
   const holidays: Holiday[] = [];
   
   // Vaste feestdagen
@@ -106,13 +109,66 @@ export function getFallbackHolidays(year: number): Holiday[] {
 }
 
 /**
+ * Genereert fallback feestdagen voor een datum-bereik
+ * Deze overload accepteert startDate en endDate als strings (YYYY-MM-DD)
+ * 
+ * @param startDate - Begindatum in YYYY-MM-DD formaat
+ * @param endDate - Einddatum in YYYY-MM-DD formaat
+ * @returns Array van feestdagen als date strings (YYYY-MM-DD)
+ */
+export function getFallbackHolidays(startDate: string, endDate: string): string[];
+
+/**
+ * Genereert fallback feestdagen voor een enkel jaar
+ * Deze overload accepteert een jaar nummer
+ * 
+ * @param year - Het jaar waarvoor feestdagen gegenereerd moeten worden
+ * @returns Array van Holiday objecten
+ */
+export function getFallbackHolidays(year: number): Holiday[];
+
+/**
+ * Implementatie van getFallbackHolidays met overloads
+ */
+export function getFallbackHolidays(param1: string | number, param2?: string): Holiday[] | string[] {
+  // Overload 1: startDate, endDate (strings)
+  if (typeof param1 === 'string' && typeof param2 === 'string') {
+    const start = new Date(param1);
+    const end = new Date(param2);
+    const startYear = start.getFullYear();
+    const endYear = end.getFullYear();
+    
+    // Verzamel alle feestdagen voor relevante jaren
+    const years: number[] = [];
+    for (let year = startYear; year <= endYear; year++) {
+      years.push(year);
+    }
+    
+    const allHolidays = getFallbackHolidaysForYears(years);
+    
+    // Filter feestdagen binnen de datum range en retourneer alleen date strings
+    return allHolidays
+      .filter(h => h.date >= param1 && h.date <= param2)
+      .map(h => h.date);
+  }
+  
+  // Overload 2: year (number)
+  if (typeof param1 === 'number') {
+    return getFallbackHolidaysForYear(param1);
+  }
+  
+  // Fallback (zou nooit moeten gebeuren)
+  return [];
+}
+
+/**
  * Genereert fallback feestdagen voor meerdere jaren
  */
 export function getFallbackHolidaysForYears(years: number[]): Holiday[] {
   const allHolidays: Holiday[] = [];
   
   for (const year of years) {
-    allHolidays.push(...getFallbackHolidays(year));
+    allHolidays.push(...getFallbackHolidaysForYear(year));
   }
   
   return allHolidays.sort((a, b) => a.date.localeCompare(b.date));
