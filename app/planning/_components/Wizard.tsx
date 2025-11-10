@@ -9,6 +9,7 @@ import { getAllEmployees } from '@/lib/services/employees-storage';
 import { Employee, TeamType, DienstverbandType, getFullName } from '@/lib/types/employee';
 import { initializeRosterDesign } from '@/lib/planning/rosterDesign';
 import { useRouter } from 'next/navigation';
+import { generateRosterPeriodStaffing } from '@/lib/planning/roster-period-staffing-storage';
 
 function genId() { return 'r_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
 
@@ -72,6 +73,10 @@ export default function Wizard({ onClose }: WizardProps = {}) {
 
       // Fix: geef start_date expliciet mee aan initializeRosterDesign
       initializeRosterDesign(roster.id, selectedStart);
+      
+      // --- BELANGRIJK: Vul automatisch Diensten per Dag ---
+      await generateRosterPeriodStaffing(roster.id, selectedStart, selectedEnd);
+      // --- EINDE aanvulling ---
       
       // Navigate to the new Dashboard Rooster Ontwerp instead of directly to the grid
       if (onClose) { onClose(); setTimeout(()=>router.push(`/planning/design/dashboard?rosterId=${id}`), 100); }
