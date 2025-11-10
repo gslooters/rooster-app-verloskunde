@@ -10,12 +10,12 @@ interface Props {
 }
 
 export function DayCell({ record, isHoliday, isWeekend, onChange }: Props) {
-  const [min, setMin] = useState(record.minstaff);
-  const [max, setMax] = useState(record.maxstaff);
+  const [min, setMin] = useState(record.min_staff);
+  const [max, setMax] = useState(record.max_staff);
   const [hasChanges, setHasChanges] = useState(false);
 
   function handleBlur() {
-    if (min !== record.minstaff || max !== record.maxstaff) {
+    if (min !== record.min_staff || max !== record.max_staff) {
       onChange(record.id, min, max);
       setHasChanges(false);
     }
