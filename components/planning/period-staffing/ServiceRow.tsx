@@ -25,7 +25,7 @@ export function ServiceRow({ serviceId, records, days, holidays, onUpdate }: Pro
 
   async function handleMinMaxChange(id: string, min: number, max: number) {
     await updateRosterPeriodStaffingMinMax(id, min, max);
-    onUpdate(id, { minstaff: min, maxstaff: max });
+    onUpdate(id, { min_staff: min, max_staff: max });
   }
 
   return (
@@ -36,33 +36,33 @@ export function ServiceRow({ serviceId, records, days, holidays, onUpdate }: Pro
         <div className="flex gap-1 shrink-0">
           <button
             className={`px-2 py-1.5 text-xs font-bold rounded transition-all ${
-              firstRecord.teamtot 
+              firstRecord.team_tot 
                 ? 'bg-blue-600 text-white shadow-md hover:bg-blue-700' 
                 : 'bg-gray-200 text-gray-400 hover:bg-gray-300'
             }`}
-            title={firstRecord.teamtot ? 'Team Totaal actief' : 'Team Totaal inactief'}
+            title={firstRecord.team_tot ? 'Team Totaal actief' : 'Team Totaal inactief'}
             disabled
           >
             Tot
           </button>
           <button
             className={`px-2 py-1.5 text-xs font-bold rounded transition-all ${
-              firstRecord.teamgro 
+              firstRecord.team_gro 
                 ? 'bg-green-600 text-white shadow-md hover:bg-green-700' 
                 : 'bg-gray-200 text-gray-400 hover:bg-gray-300'
             }`}
-            title={firstRecord.teamgro ? 'Team Groen actief' : 'Team Groen inactief'}
+            title={firstRecord.team_gro ? 'Team Groen actief' : 'Team Groen inactief'}
             disabled
           >
             Gro
           </button>
           <button
             className={`px-2 py-1.5 text-xs font-bold rounded transition-all ${
-              firstRecord.teamora 
+              firstRecord.team_ora 
                 ? 'bg-orange-600 text-white shadow-md hover:bg-orange-700' 
                 : 'bg-gray-200 text-gray-400 hover:bg-gray-300'
             }`}
-            title={firstRecord.teamora ? 'Team Oranje actief' : 'Team Oranje inactief'}
+            title={firstRecord.team_ora ? 'Team Oranje actief' : 'Team Oranje inactief'}
             disabled
           >
             Ora
