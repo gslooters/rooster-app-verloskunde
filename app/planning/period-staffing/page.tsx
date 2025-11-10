@@ -1,9 +1,10 @@
 'use client';
 // app/planning/period-staffing/page.tsx
+import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { PeriodStaffingGrid } from '@/components/planning/period-staffing/PeriodStaffingGrid';
 
-export default function PeriodStaffingPage() {
+function PeriodStaffingContent() {
   const searchParams = useSearchParams();
   const rosterId = searchParams.get('rosterId') || 'test-roster';
   const startDate = searchParams.get('startDate') || '2025-11-24';
@@ -24,5 +25,20 @@ export default function PeriodStaffingPage() {
         endDate={endDate}
       />
     </div>
+  );
+}
+
+export default function PeriodStaffingPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">Diensten per Dag</h1>
+          <p className="text-sm text-gray-600 mt-1">Laden...</p>
+        </div>
+      </div>
+    }>
+      <PeriodStaffingContent />
+    </Suspense>
   );
 }
