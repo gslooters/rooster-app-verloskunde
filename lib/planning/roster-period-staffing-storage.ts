@@ -7,16 +7,16 @@ import { getFallbackHolidays } from '@/lib/data/dutch-holidays-fallback';
 
 export interface RosterPeriodStaffing {
   id: string;
-  rosterid: string;
-  serviceid: string;
+  roster_id: string;
+  service_id: string;
   date: string; // "2025-11-24"
-  minstaff: number;
-  maxstaff: number;
-  teamtot: boolean | null;
-  teamgro: boolean | null;
-  teamora: boolean | null;
-  createdat: string;
-  updatedat: string;
+  min_staff: number;
+  max_staff: number;
+  team_tot: boolean | null;
+  team_gro: boolean | null;
+  team_ora: boolean | null;
+  created_at: string;
+  updated_at: string;
 }
 
 const supabase = createClient(
@@ -25,39 +25,117 @@ const supabase = createClient(
 );
 
 export async function getRosterPeriodStaffing(rosterId: string): Promise<RosterPeriodStaffing[]> {
-  const { data, error } = await supabase
-    .from('rosterperiodstaffing')
-    .select('*')
-    .eq('rosterid', rosterId);
-  if (error) throw error;
-  return data as RosterPeriodStaffing[];
+  try {
+    console.log('[getRosterPeriodStaffing] Fetching data for rosterId:', rosterId);
+    
+    const { data, error } = await supabase
+      .from('roster_period_staffing')
+      .select('*')
+      .eq('roster_id', rosterId)
+      .order('date', { ascending: true })
+      .order('service_id', { ascending: true });
+    
+    if (error) {
+      console.error('[getRosterPeriodStaffing] Supabase error:', error);
+      throw new Error(`Database fout: ${error.message}`);
+    }
+    
+    console.log('[getRosterPeriodStaffing] Records opgehaald:', data?.length || 0);
+    return data as RosterPeriodStaffing[] || [];
+  } catch (err) {
+    console.error('[getRosterPeriodStaffing] Unexpected error:', err);
+    throw err;
+  }
 }
 
 export async function updateRosterPeriodStaffingMinMax(id: string, min: number, max: number): Promise<void> {
-  const { error } = await supabase
-    .from('rosterperiodstaffing')
-    .update({ minstaff: min, maxstaff: max })
-    .eq('id', id);
-  if (error) throw error;
+  try {
+    console.log('[updateRosterPeriodStaffingMinMax] Updating id:', id, 'min:', min, 'max:', max);
+    
+    const { error } = await supabase
+      .from('roster_period_staffing')
+      .update({ 
+        min_staff: min, 
+        max_staff: max,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id);
+    
+    if (error) {
+      console.error('[updateRosterPeriodStaffingMinMax] Supabase error:', error);
+      throw new Error(`Update fout: ${error.message}`);
+    }
+    
+    console.log('[updateRosterPeriodStaffingMinMax] Update succesvol');
+  } catch (err) {
+    console.error('[updateRosterPeriodStaffingMinMax] Unexpected error:', err);
+    throw err;
+  }
 }
 
-export async function bulkCreateRosterPeriodStaffing(records: Omit<RosterPeriodStaffing, 'id' | 'createdat' | 'updatedat'>[]): Promise<void> {
-  if (!records.length) return;
-  const now = new Date().toISOString();
-  const inRecords = records.map(r => ({ ...r, createdat: now, updatedat: now }));
-  const { error } = await supabase
-    .from('rosterperiodstaffing')
-    .insert(inRecords);
-  if (error) throw error;
+export async function bulkCreateRosterPeriodStaffing(
+  records: Omit<RosterPeriodStaffing, 'id' | 'created_at' | 'updated_at'>[]
+): Promise<void> {
+  if (!records.length) {
+    console.log('[bulkCreateRosterPeriodStaffing] Geen records om aan te maken');
+    return;
+  }
+  
+  try {
+    console.log('[bulkCreateRosterPeriodStaffing] Aanmaken van', records.length, 'records');
+    
+    const now = new Date().toISOString();
+    const recordsWithTimestamps = records.map(r => ({
+      ...r,
+      created_at: now,
+      updated_at: now
+    }));
+    
+    // Batch insert in chunks van 100 voor betere performance
+    const chunkSize = 100;
+    for (let i = 0; i < recordsWithTimestamps.length; i += chunkSize) {
+      const chunk = recordsWithTimestamps.slice(i, i + chunkSize);
+      
+      const { error } = await supabase
+        .from('roster_period_staffing')
+        .insert(chunk);
+      
+      if (error) {
+        console.error('[bulkCreateRosterPeriodStaffing] Supabase error bij chunk', i / chunkSize + 1, ':', error);
+        throw new Error(`Bulk insert fout: ${error.message}`);
+      }
+      
+      console.log('[bulkCreateRosterPeriodStaffing] Chunk', i / chunkSize + 1, 'succesvol aangemaakt');
+    }
+    
+    console.log('[bulkCreateRosterPeriodStaffing] Alle records succesvol aangemaakt');
+  } catch (err) {
+    console.error('[bulkCreateRosterPeriodStaffing] Unexpected error:', err);
+    throw err;
+  }
 }
 
 export async function hasRosterPeriodStaffing(rosterId: string): Promise<boolean> {
-  const { count, error } = await supabase
-    .from('rosterperiodstaffing')
-    .select('*', { count: 'exact', head: true })
-    .eq('rosterid', rosterId);
-  if (error) throw error;
-  return (count ?? 0) > 0;
+  try {
+    console.log('[hasRosterPeriodStaffing] Checking for rosterId:', rosterId);
+    
+    const { count, error } = await supabase
+      .from('roster_period_staffing')
+      .select('*', { count: 'exact', head: true })
+      .eq('roster_id', rosterId);
+    
+    if (error) {
+      console.error('[hasRosterPeriodStaffing] Supabase error:', error);
+      throw new Error(`Check fout: ${error.message}`);
+    }
+    
+    const exists = (count ?? 0) > 0;
+    console.log('[hasRosterPeriodStaffing] Records gevonden:', count, 'exists:', exists);
+    return exists;
+  } catch (err) {
+    console.error('[hasRosterPeriodStaffing] Unexpected error:', err);
+    throw err;
+  }
 }
 
 /**
@@ -88,41 +166,78 @@ function getStaffingForDay(service: ServiceDayStaffing, dayOfWeek: number): { mi
 }
 
 // Auto-fill: vul alle dagen met standaardwaarden per dienst en dagsoort
-export async function generateRosterPeriodStaffing(rosterId: string, startDate: string, endDate: string): Promise<void> {
-  if (await hasRosterPeriodStaffing(rosterId)) return;
-  const services = await getAllServicesDayStaffing();
-  const holidays = await getFallbackHolidays(startDate, endDate);
-  const begin = new Date(startDate);
-  const stop = new Date(endDate);
-  const days: string[] = [];
-  for (
-    let d = new Date(begin);
-    d <= stop;
-    d.setDate(d.getDate() + 1)
-  ) {
-    days.push(d.toISOString().split('T')[0]);
-  }
-  const isHoliday = (date: string) => holidays.includes(date);
-  const result: Omit<RosterPeriodStaffing, 'id' | 'createdat' | 'updatedat'>[] = [];
-  for (const service of services) {
-    for (const date of days) {
-      // Dienstcodes per dagsoort en feestdaglogica
-      const dayOfWeek = new Date(date).getDay(); // 0=Zo..6=Za
-      let base = getStaffingForDay(service, dayOfWeek);
-      if (isHoliday(date)) {
-        base = getStaffingForDay(service, 0); // Zondagsettings voor feestdag
-      }
-      result.push({
-        rosterid: rosterId,
-        serviceid: service.service_id,
-        date,
-        minstaff: base.min,
-        maxstaff: base.max,
-        teamtot: service.tot_enabled ?? null,
-        teamgro: service.gro_enabled ?? null,
-        teamora: service.ora_enabled ?? null
-      });
+export async function generateRosterPeriodStaffing(
+  rosterId: string,
+  startDate: string,
+  endDate: string
+): Promise<void> {
+  try {
+    console.log('[generateRosterPeriodStaffing] Start voor rosterId:', rosterId, 'periode:', startDate, 'tot', endDate);
+    
+    // Check of data al bestaat
+    if (await hasRosterPeriodStaffing(rosterId)) {
+      console.log('[generateRosterPeriodStaffing] Data bestaat al, skip generatie');
+      return;
     }
+    
+    // Haal diensten op
+    const services = await getAllServicesDayStaffing();
+    console.log('[generateRosterPeriodStaffing] Diensten opgehaald:', services.length);
+    
+    if (services.length === 0) {
+      throw new Error('Geen diensten gevonden. Configureer eerst diensten in de instellingen.');
+    }
+    
+    // Haal feestdagen op
+    const holidays = await getFallbackHolidays(startDate, endDate);
+    console.log('[generateRosterPeriodStaffing] Feestdagen opgehaald:', holidays.length);
+    
+    // Genereer alle datums
+    const begin = new Date(startDate + 'T00:00:00');
+    const stop = new Date(endDate + 'T00:00:00');
+    const days: string[] = [];
+    
+    for (let d = new Date(begin); d <= stop; d.setDate(d.getDate() + 1)) {
+      days.push(d.toISOString().split('T')[0]);
+    }
+    
+    console.log('[generateRosterPeriodStaffing] Dagen gegenereerd:', days.length);
+    
+    const isHoliday = (date: string) => holidays.includes(date);
+    const result: Omit<RosterPeriodStaffing, 'id' | 'created_at' | 'updated_at'>[] = [];
+    
+    // Genereer records voor elke dienst en elke dag
+    for (const service of services) {
+      for (const date of days) {
+        const dayOfWeek = new Date(date + 'T00:00:00').getDay(); // 0=Zo..6=Za
+        let base = getStaffingForDay(service, dayOfWeek);
+        
+        // Gebruik zondag-waarden voor feestdagen
+        if (isHoliday(date)) {
+          base = getStaffingForDay(service, 0);
+        }
+        
+        result.push({
+          roster_id: rosterId,
+          service_id: service.service_id,
+          date,
+          min_staff: base.min,
+          max_staff: base.max,
+          team_tot: service.tot_enabled ?? null,
+          team_gro: service.gro_enabled ?? null,
+          team_ora: service.ora_enabled ?? null
+        });
+      }
+    }
+    
+    console.log('[generateRosterPeriodStaffing] Records voorbereid:', result.length);
+    
+    // Bulk insert
+    await bulkCreateRosterPeriodStaffing(result);
+    
+    console.log('[generateRosterPeriodStaffing] Generatie voltooid!');
+  } catch (err) {
+    console.error('[generateRosterPeriodStaffing] Error:', err);
+    throw err;
   }
-  await bulkCreateRosterPeriodStaffing(result);
 }
