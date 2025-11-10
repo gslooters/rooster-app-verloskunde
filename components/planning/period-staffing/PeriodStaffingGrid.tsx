@@ -18,7 +18,7 @@ export function PeriodStaffingGrid({ rosterId, startDate, endDate }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [initializationStatus, setInitializationStatus] = useState<string>('Data voorbereiden...');
 
-  // Genereer 35-dagen array
+  // Genereer dagen array
   const days: string[] = [];
   const start = new Date(startDate + 'T00:00:00');
   const end = new Date(endDate + 'T00:00:00');
@@ -57,7 +57,7 @@ export function PeriodStaffingGrid({ rosterId, startDate, endDate }: Props) {
         if (!isMounted) return;
         
         if (!records || records.length === 0) {
-          setError('Geen bezettingsgegevens gevonden. Probeer de pagina te verversen.');
+          setError('Geen bezettingsgegevens gevonden. Configureer eerst diensten in de instellingen.');
           setLoading(false);
           return;
         }
@@ -69,7 +69,8 @@ export function PeriodStaffingGrid({ rosterId, startDate, endDate }: Props) {
       } catch (err) {
         console.error('Fout bij initialiseren period staffing:', err);
         if (isMounted) {
-          setError(`Fout bij laden van bezettingsgegevens: ${err instanceof Error ? err.message : 'Onbekende fout'}`);
+          const errorMessage = err instanceof Error ? err.message : 'Onbekende fout bij laden';
+          setError(errorMessage);
           setLoading(false);
         }
       }
@@ -82,11 +83,11 @@ export function PeriodStaffingGrid({ rosterId, startDate, endDate }: Props) {
     };
   }, [rosterId, startDate, endDate]);
 
-  // Groepeer per dienst
+  // Groepeer per dienst (service_id)
   const serviceGroups: Record<string, RosterPeriodStaffing[]> = {};
   staffing.forEach(entry => {
-    if (!serviceGroups[entry.serviceid]) serviceGroups[entry.serviceid] = [];
-    serviceGroups[entry.serviceid].push(entry);
+    if (!serviceGroups[entry.service_id]) serviceGroups[entry.service_id] = [];
+    serviceGroups[entry.service_id].push(entry);
   });
 
   function handleUpdate(id: string, updates: Partial<RosterPeriodStaffing>) {
