@@ -33,6 +33,10 @@ export default function Wizard({ onClose }: WizardProps = {}) {
   const [isCreating, setIsCreating] = useState<boolean>(false);
 
   useEffect(() => {
+    // Log Supabase env vars (alleen in ontwikkeling)
+    console.log('[Wizard/useEffect] Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? '✅ Set' : '❌ Missing');
+    console.log('[Wizard/useEffect] Supabase Anon Key:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? '✅ Set' : '❌ Missing');
+
     const base = generateFiveWeekPeriods(30);
     const list = base.map(p => ({ ...p, status: getPeriodStatus(p.start, p.end) }));
 
@@ -58,26 +62,74 @@ export default function Wizard({ onClose }: WizardProps = {}) {
   function backToDashboard() { if (onClose) onClose(); router.push('/dashboard'); }
 
   async function createRosterConfirmed() {
-    setIsCreating(true); setError(null);
+    setIsCreating(true); 
+    setError(null);
+    
+    console.log('[Wizard/createRosterConfirmed] Start rooster aanmaken...');
+    console.log('[Wizard/createRosterConfirmed] Periode:', selectedStart, 'tot', selectedEnd);
+    
     try {
       const id = genId();
-      const roster: Roster = { id, start_date: selectedStart, end_date: selectedEnd, status: 'draft', created_at: new Date().toISOString() } as Roster;
-      const list = readRosters().filter(x => x.id !== roster.id); list.push(roster); writeRosters(list);
+      console.log('[Wizard/createRosterConfirmed] Gegenereerd roster ID:', id);
+      
+      const roster: Roster = { 
+        id, 
+        start_date: selectedStart, 
+        end_date: selectedEnd, 
+        status: 'draft', 
+        created_at: new Date().toISOString() 
+      } as Roster;
+      
+      const list = readRosters().filter(x => x.id !== roster.id); 
+      list.push(roster); 
+      writeRosters(list);
+      console.log('[Wizard/createRosterConfirmed] Roster opgeslagen in storage');
 
       if (typeof window !== 'undefined') {
         localStorage.setItem('lastRosterId', id);
-        localStorage.setItem('recentDesignRoute', `/planning/design?rosterId=${id}`);
+        localStorage.setItem('recentDesignRoute', `/planning/design/dashboard?rosterId=${id}`);
+        console.log('[Wizard/createRosterConfirmed] LastRosterId en recentDesignRoute ingesteld');
       }
 
-      // Fix: geef start_date expliciet mee aan initializeRosterDesign
+      // Initialize roster design
+      console.log('[Wizard/createRosterConfirmed] Initialiseer roster design...');
       initializeRosterDesign(roster.id, selectedStart);
-      // ✨ Toegevoegde auto-fill integratie
-      initializePeriodStaffingForRoster(roster.id, selectedStart, []);
+      
+      // Initialize period staffing met verbeterde error afhandeling
+      console.log('[Wizard/createRosterConfirmed] Initialiseer period staffing...');
+      try {
+        initializePeriodStaffingForRoster(roster.id, selectedStart, []);
+        console.log('[Wizard/createRosterConfirmed] ✅ Period staffing succesvol geïnitialiseerd');
+      } catch (staffingError) {
+        console.error('[Wizard/createRosterConfirmed] ❌ Fout bij initializePeriodStaffingForRoster:', staffingError);
+        
+        // Uitgebreide error message voor gebruiker
+        const errorMessage = typeof staffingError === 'object' && staffingError !== null && 'message' in staffingError
+          ? String((staffingError as any).message)
+          : String(staffingError);
+        
+        setError(`Rooster aanmaken faalt bij period staffing: ${errorMessage}`);
+        setIsCreating(false);
+        throw staffingError; // Re-throw zodat catch-blok hieronder ook triggert
+      }
 
-      if (onClose) { onClose(); setTimeout(()=>router.push(`/planning/design?rosterId=${id}`), 100); }
-      else { router.push(`/planning/design?rosterId=${id}`); }
+      console.log('[Wizard/createRosterConfirmed] Navigeer naar design dashboard...');
+      if (onClose) { 
+        onClose(); 
+        setTimeout(()=>router.push(`/planning/design/dashboard?rosterId=${id}`), 100); 
+      } else { 
+        router.push(`/planning/design/dashboard?rosterId=${id}`); 
+      }
     } catch (err) {
-      console.error('Error creating rooster:', err); setError('Er is een fout opgetreden bij het aanmaken van het rooster. Probeer opnieuw.'); setIsCreating(false);
+      console.error('[Wizard/createRosterConfirmed] ❌ Algemene fout:', err);
+      
+      // Geef gebruiker specifieke foutmelding
+      const errorMessage = typeof err === 'object' && err !== null && 'message' in err
+        ? String((err as any).message)
+        : String(err);
+      
+      setError(`Algemene fout bij rooster aanmaken: ${errorMessage}`);
+      setIsCreating(false);
     }
   }
 
@@ -130,7 +182,12 @@ export default function Wizard({ onClose }: WizardProps = {}) {
   return (
     <section className={onClose ? '' : 'p-4 border rounded bg-white'}>
       {!onClose && <h2 className="text-lg font-semibold mb-3">Nieuw rooster</h2>}
-      {error && <p className="text-red-600 mb-2">{error}</p>}
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded">
+          <p className="text-red-700 font-semibold">⚠️ Fout</p>
+          <p className="text-red-600 text-sm mt-1">{error}</p>
+        </div>
+      )}
 
       {step === 'period' && (
         <div className="flex flex-col gap-4">
