@@ -37,6 +37,7 @@ export default function MedewerkersPage() {
 
   const loadData = () => {
     try {
+      // FIX: getAllEmployees is synchronous, not async
       const allEmployees = getAllEmployees();
       setEmployees(allEmployees);
     } catch (err) { 
