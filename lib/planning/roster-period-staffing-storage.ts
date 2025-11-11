@@ -359,7 +359,7 @@ export async function generateRosterPeriodStaffing(
       if (!service.service_id) {
         console.error(`[generateRosterPeriodStaffing] ❌ Dienst ${i} heeft geen service_id:`, service);
         throw new Error(
-          `Dienst op positie ${i} ("${service.name || 'onbekend'}") mist service_id veld`
+          `Dienst op positie ${i} mist service_id veld`
         );
       }
       
@@ -373,7 +373,7 @@ export async function generateRosterPeriodStaffing(
       // Valideer UUID format van service_id
       if (!isValidUUID(service.service_id)) {
         throw new Error(
-          `Dienst ${i} ("${service.name || 'onbekend'}") heeft ongeldige service_id: ` +
+          `Dienst ${i} heeft ongeldige service_id: ` +
           `"${service.service_id}" (moet geldige UUID zijn)`
         );
       }
