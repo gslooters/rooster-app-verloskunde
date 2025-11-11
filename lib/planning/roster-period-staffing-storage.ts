@@ -30,6 +30,26 @@ function isValidUUID(uuid: string): boolean {
 }
 
 /**
+ * Helper functie: Valideer UUID of custom ID format (r_...)
+ * @param id String die gevalideerd moet worden
+ * @param fieldName Naam van het veld voor foutmelding
+ * @returns true als geldig, anders throw Error
+ */
+function validateId(id: string, fieldName: string): void {
+  if (!id || typeof id !== 'string') {
+    throw new Error(`Ongeldig ${fieldName}: "${id}" (moet een string zijn)`);
+  }
+  
+  // Accepteer UUID of custom format (r_...)
+  if (!id.startsWith('r_') && !isValidUUID(id)) {
+    throw new Error(
+      `Ongeldig ${fieldName} format: "${id}". ` +
+      `Moet een UUID zijn of beginnen met "r_"`
+    );
+  }
+}
+
+/**
  * Helper functie: Valideer ISO8601 date format (YYYY-MM-DD)
  * @param dateStr String die gevalideerd moet worden
  * @returns true als geldige datum, anders false
@@ -45,6 +65,10 @@ function isValidISODate(dateStr: string): boolean {
 export async function getRosterPeriodStaffing(rosterId: string): Promise<RosterPeriodStaffing[]> {
   try {
     console.log('[getRosterPeriodStaffing] Fetching data for rosterId:', rosterId);
+    
+    // === FIX 4: UUID VALIDATIE ===
+    validateId(rosterId, 'rosterId');
+    console.log('[getRosterPeriodStaffing] ✓ RosterId validated');
     
     const { data, error } = await supabase
       .from('roster_period_staffing')
@@ -69,6 +93,22 @@ export async function getRosterPeriodStaffing(rosterId: string): Promise<RosterP
 export async function updateRosterPeriodStaffingMinMax(id: string, min: number, max: number): Promise<void> {
   try {
     console.log('[updateRosterPeriodStaffingMinMax] Updating id:', id, 'min:', min, 'max:', max);
+    
+    // === FIX 4: UUID VALIDATIE ===
+    validateId(id, 'id');
+    
+    // Valideer min/max waarden
+    if (typeof min !== 'number' || min < 0) {
+      throw new Error(`Ongeldige min_staff waarde: ${min} (moet een positief getal zijn)`);
+    }
+    if (typeof max !== 'number' || max < 0) {
+      throw new Error(`Ongeldige max_staff waarde: ${max} (moet een positief getal zijn)`);
+    }
+    if (min > max) {
+      throw new Error(`min_staff (${min}) kan niet groter zijn dan max_staff (${max})`);
+    }
+    
+    console.log('[updateRosterPeriodStaffingMinMax] ✓ Parameters validated');
     
     const { error } = await supabase
       .from('roster_period_staffing')
@@ -171,6 +211,10 @@ export async function bulkCreateRosterPeriodStaffing(
 export async function hasRosterPeriodStaffing(rosterId: string): Promise<boolean> {
   try {
     console.log('[hasRosterPeriodStaffing] Checking for rosterId:', rosterId);
+    
+    // === FIX 4: UUID VALIDATIE ===
+    validateId(rosterId, 'rosterId');
+    console.log('[hasRosterPeriodStaffing] ✓ RosterId validated');
     
     const { count, error } = await supabase
       .from('roster_period_staffing')
