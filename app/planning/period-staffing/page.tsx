@@ -148,26 +148,6 @@ function PeriodStaffingContent() {
             endDate={periodInfo.endDate}
           />
         </div>
-
-        {/* Footer */}
-        <div className="mt-6 flex justify-between items-center">
-          <button
-            onClick={() => router.push(`/planning/design/dashboard?rosterId=${rosterId}`)}
-            className="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium flex items-center gap-2"
-          >
-            <span>←</span>
-            <span>Terug naar Dashboard</span>
-          </button>
-          <button
-            onClick={() => {
-              alert('Opslaan en doorgaan naar volgende stap');
-              router.push(`/planning/design/dashboard?rosterId=${rosterId}`);
-            }}
-            className="px-8 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 font-bold text-lg shadow-lg"
-          >
-            Opslaan en Doorgaan →
-          </button>
-        </div>
       </div>
     </div>
   );
