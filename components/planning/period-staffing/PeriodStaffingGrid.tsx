@@ -139,17 +139,6 @@ export function PeriodStaffingGrid({ rosterId, startDate, endDate }: Props) {
 
   return (
     <div className="w-full">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <p className="text-sm text-gray-600">
-            <strong>{Object.keys(serviceGroups).length}</strong> diensten gevonden voor periode van <strong>{days.length}</strong> dagen
-          </p>
-        </div>
-        <div className="text-xs text-gray-500">
-          Feestdagen: {holidays.length > 0 ? holidays.join(', ') : 'Geen'}
-        </div>
-      </div>
-
       <div className="overflow-x-auto border border-gray-300 rounded-lg">
         <div className="min-w-[2400px]">
           {/* 3-niveau header */}
@@ -171,30 +160,6 @@ export function PeriodStaffingGrid({ rosterId, startDate, endDate }: Props) {
               ))
             }
           </div>
-        </div>
-      </div>
-
-      {/* Legenda */}
-      <div className="mt-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
-        <h4 className="font-semibold text-gray-900 mb-2">Legenda</h4>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-red-50 border border-red-200 rounded"></div>
-            <span className="text-gray-700">Feestdag</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gray-50 border border-gray-200 rounded"></div>
-            <span className="text-gray-700">Weekend</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-white border border-gray-300 rounded"></div>
-            <span className="text-gray-700">Werkdag</span>
-          </div>
-        </div>
-        <div className="mt-3 pt-3 border-t border-gray-300">
-          <p className="text-xs text-gray-600">
-            <strong>Instructie:</strong> Klik in de cellen om het minimum (links) en maximum (rechts) aantal medewerkers per dienst aan te passen.
-          </p>
         </div>
       </div>
     </div>
