@@ -19,6 +19,29 @@ export interface RosterPeriodStaffing {
   updated_at: string;
 }
 
+/**
+ * Helper functie: Valideer UUID format
+ * @param uuid String die gevalideerd moet worden
+ * @returns true als geldige UUID, anders false
+ */
+function isValidUUID(uuid: string): boolean {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(uuid);
+}
+
+/**
+ * Helper functie: Valideer ISO8601 date format (YYYY-MM-DD)
+ * @param dateStr String die gevalideerd moet worden
+ * @returns true als geldige datum, anders false
+ */
+function isValidISODate(dateStr: string): boolean {
+  const isoDateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!isoDateRegex.test(dateStr)) return false;
+  
+  const date = new Date(dateStr + 'T00:00:00');
+  return date instanceof Date && !isNaN(date.getTime());
+}
+
 export async function getRosterPeriodStaffing(rosterId: string): Promise<RosterPeriodStaffing[]> {
   try {
     console.log('[getRosterPeriodStaffing] Fetching data for rosterId:', rosterId);
@@ -208,13 +231,58 @@ export async function generateRosterPeriodStaffing(
     console.log('[generateRosterPeriodStaffing] Periode:', startDate, 'tot', endDate);
     console.log('='.repeat(80) + '\n');
     
-    // Valideer input parameters
+    // === VALIDATIE INPUT PARAMETERS ===
+    console.log('[generateRosterPeriodStaffing] STAP 0: Valideren input parameters...');
+    
     if (!rosterId || typeof rosterId !== 'string') {
-      throw new Error(`Ongeldige rosterId: ${rosterId}`);
+      throw new Error(`Ongeldige rosterId: "${rosterId}" (moet een string zijn)`);
     }
-    if (!startDate || !endDate) {
-      throw new Error(`Ongeldige datums: start=${startDate}, end=${endDate}`);
+    
+    // Valideer rosterId format - moet UUID zijn of custom format (r_...)
+    if (!rosterId.startsWith('r_') && !isValidUUID(rosterId)) {
+      throw new Error(
+        `Ongeldige rosterId format: "${rosterId}". ` +
+        `Moet een UUID zijn of beginnen met "r_"`
+      );
     }
+    
+    if (!startDate || typeof startDate !== 'string') {
+      throw new Error(`Ongeldige startDate: "${startDate}" (moet een string zijn)`);
+    }
+    
+    if (!endDate || typeof endDate !== 'string') {
+      throw new Error(`Ongeldige endDate: "${endDate}" (moet een string zijn)`);
+    }
+    
+    if (!isValidISODate(startDate)) {
+      throw new Error(
+        `Ongeldige startDate format: "${startDate}". ` +
+        `Moet ISO8601 datum zijn (YYYY-MM-DD)`
+      );
+    }
+    
+    if (!isValidISODate(endDate)) {
+      throw new Error(
+        `Ongeldige endDate format: "${endDate}". ` +
+        `Moet ISO8601 datum zijn (YYYY-MM-DD)`
+      );
+    }
+    
+    // Valideer dat startDate voor endDate ligt
+    const start = new Date(startDate + 'T00:00:00');
+    const end = new Date(endDate + 'T00:00:00');
+    
+    if (start > end) {
+      throw new Error(
+        `Ongeldige datumrange: startDate (${startDate}) moet voor endDate (${endDate}) liggen`
+      );
+    }
+    
+    console.log('[generateRosterPeriodStaffing] ✓ Alle input parameters gevalideerd');
+    console.log('[generateRosterPeriodStaffing] ✓ RosterId format: geldig');
+    console.log('[generateRosterPeriodStaffing] ✓ Datums: geldig ISO8601 format');
+    console.log('[generateRosterPeriodStaffing] ✓ Datumrange: geldig (start <= end)');
+    console.log('');
     
     // Check of data al bestaat
     console.log('[generateRosterPeriodStaffing] STAP 1: Check of data al bestaat...');
@@ -238,14 +306,37 @@ export async function generateRosterPeriodStaffing(
     console.log('[generateRosterPeriodStaffing] Eerste dienst sample:', JSON.stringify(services[0], null, 2));
     console.log('');
     
-    // Valideer dat alle services een service_id hebben
+    // === VALIDATIE DIENSTEN ===
+    console.log('[generateRosterPeriodStaffing] STAP 2a: Valideren diensten...');
+    
     for (let i = 0; i < services.length; i++) {
-      if (!services[i].service_id) {
-        console.error(`[generateRosterPeriodStaffing] ❌ Dienst ${i} heeft geen service_id:`, services[i]);
-        throw new Error(`Dienst op positie ${i} mist service_id veld`);
+      const service = services[i];
+      
+      if (!service.service_id) {
+        console.error(`[generateRosterPeriodStaffing] ❌ Dienst ${i} heeft geen service_id:`, service);
+        throw new Error(
+          `Dienst op positie ${i} ("${service.name || 'onbekend'}") mist service_id veld`
+        );
+      }
+      
+      if (typeof service.service_id !== 'string') {
+        throw new Error(
+          `Dienst ${i} heeft ongeldige service_id type: ` +
+          `"${typeof service.service_id}" (moet string zijn)`
+        );
+      }
+      
+      // Valideer UUID format van service_id
+      if (!isValidUUID(service.service_id)) {
+        throw new Error(
+          `Dienst ${i} ("${service.name || 'onbekend'}") heeft ongeldige service_id: ` +
+          `"${service.service_id}" (moet geldige UUID zijn)`
+        );
       }
     }
-    console.log('[generateRosterPeriodStaffing] ✓ Alle diensten hebben een geldig service_id\n');
+    
+    console.log('[generateRosterPeriodStaffing] ✓ Alle diensten hebben een geldig service_id (UUID format)');
+    console.log('');
     
     // Haal feestdagen op
     console.log('[generateRosterPeriodStaffing] STAP 3: Ophalen feestdagen...');
@@ -258,11 +349,9 @@ export async function generateRosterPeriodStaffing(
     
     // Genereer alle datums
     console.log('[generateRosterPeriodStaffing] STAP 4: Genereer datums...');
-    const begin = new Date(startDate + 'T00:00:00');
-    const stop = new Date(endDate + 'T00:00:00');
     const days: string[] = [];
     
-    for (let d = new Date(begin); d <= stop; d.setDate(d.getDate() + 1)) {
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       days.push(d.toISOString().split('T')[0]);
     }
     
