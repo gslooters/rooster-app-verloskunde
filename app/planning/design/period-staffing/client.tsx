@@ -26,11 +26,11 @@ import TeamSelector from '@/app/_components/TeamSelector';
  * Client Component voor NB/period-staffing scherm (Ontwerpfase)
  * Periode-specifieke bezettingsregels voor een rooster van 35 dagen (5 weken)
  * 
- * VERSIE: Draad 22b - Grid aanpassingen:
- * - Verwijderd: "Ga naar bewerking" button
- * - Verwijderd: Weekend/Feestdag/Ontwerpfase visuele indicaties
- * - Toegevoegd: Grote blauwe "Terug naar Dashboard" button rechtsboven
- * - Fixed: TeamSelector gebruikt currentScope prop (was: value)
+ * VERSIE: Draad 24R - Layout verbeteringen:
+ * - Footer cleanup: Terug naar Dashboard buttons verwijderd uit footer
+ * - Terug naar Dashboard button rechtsboven extra opvallend (bg-blue-600)
+ * - Compact label formaat in tabel-cellen: "x-onbep" op 1 regel
+ * - Als maxBezetting === 9, toon "onbep", anders toon getal
  */
 export default function PeriodStaffingClient() {
   const router = useRouter();
@@ -343,6 +343,10 @@ export default function PeriodStaffingClient() {
                                       hasError ? 'border-red-500 bg-red-50' : 'border-gray-300'
                                     } disabled:bg-gray-100`}
                                   />
+                                  {/* Compact label formaat: x-onbep */}
+                                  <div className="text-xs text-gray-600 font-medium whitespace-nowrap">
+                                    {cellData.minBezetting}-{cellData.maxBezetting === 9 ? 'onbep' : cellData.maxBezetting}
+                                  </div>
                                 </div>
                               ) : (
                                 <span className="text-gray-400 text-xs">-</span>
@@ -358,7 +362,7 @@ export default function PeriodStaffingClient() {
             </div>
           </div>
 
-          {/* Footer status */}
+          {/* Footer status - BEIDE Terug naar Dashboard buttons verwijderd */}
           <div className="p-6 bg-gray-50 border-t border-gray-200">
             <div className="flex items-center justify-between text-sm text-gray-600">
               <div>
@@ -372,10 +376,6 @@ export default function PeriodStaffingClient() {
                   Niet-opgeslagen wijzigingen
                 </span>
               )}
-            </div>
-            <div className="mt-4 text-xs text-gray-500">
-              <p>Gebruik de button rechtsboven om terug te keren naar het Dashboard.</p>
-              <p className="mt-1">Via het Dashboard kun je naar de roosterbewerkingsfase gaan.</p>
             </div>
           </div>
         </div>
