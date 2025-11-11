@@ -143,13 +143,13 @@ export default function ServiceAssignmentsTable() {
                 onClick={()=>router.back()}
                 className="px-4 py-2 rounded-lg border bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium shadow-none border-gray-200"
                 type="button"
-              >Terug vorig scherm</button>
+              >← Terug naar Dashboard</button>
               <button
                 disabled={!dirty||saving}
                 onClick={handleSave}
-                className={`px-6 py-2 rounded-lg text-white font-bold shadow-md transition bg-blue-700 hover:bg-blue-800 mt-2 md:mt-0 ${!dirty||saving?'opacity-50 cursor-not-allowed':''}`}
+                className={`px-6 py-2 rounded-lg text-white font-bold shadow-md transition bg-purple-600 hover:bg-purple-700 mt-2 md:mt-0 ${!dirty||saving?'opacity-50 cursor-not-allowed':''}`}
               >
-                {saving?'Bezig met opslaan...':'Opslaan'}
+                {saving?'Bezig met opslaan...':'Opslaan en Doorgaan →'}
               </button>
             </div>
           </div>
