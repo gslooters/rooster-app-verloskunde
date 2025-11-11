@@ -30,21 +30,21 @@ function isValidUUID(uuid: string): boolean {
 }
 
 /**
- * Helper functie: Valideer UUID of custom ID format (r_...)
+ * Helper functie: Valideer UUID format (strict - alleen echte UUIDs)
  * @param id String die gevalideerd moet worden
  * @param fieldName Naam van het veld voor foutmelding
- * @returns true als geldig, anders throw Error
+ * @returns void - throws Error als ongeldig
  */
 function validateId(id: string, fieldName: string): void {
   if (!id || typeof id !== 'string') {
     throw new Error(`Ongeldig ${fieldName}: "${id}" (moet een string zijn)`);
   }
   
-  // Accepteer UUID of custom format (r_...)
-  if (!id.startsWith('r_') && !isValidUUID(id)) {
+  // FIX: Alleen UUID formaat toegestaan - geen custom formaten meer
+  if (!isValidUUID(id)) {
     throw new Error(
       `Ongeldig ${fieldName} format: "${id}". ` +
-      `Moet een UUID zijn of beginnen met "r_"`
+      `Moet een geldige UUID zijn (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)`
     );
   }
 }
@@ -66,9 +66,9 @@ export async function getRosterPeriodStaffing(rosterId: string): Promise<RosterP
   try {
     console.log('[getRosterPeriodStaffing] Fetching data for rosterId:', rosterId);
     
-    // === FIX 4: UUID VALIDATIE ===
+    // === FIX 4: UUID VALIDATIE (STRICT) ===
     validateId(rosterId, 'rosterId');
-    console.log('[getRosterPeriodStaffing] ✓ RosterId validated');
+    console.log('[getRosterPeriodStaffing] ✓ RosterId validated (UUID format)');
     
     const { data, error } = await supabase
       .from('roster_period_staffing')
@@ -94,7 +94,7 @@ export async function updateRosterPeriodStaffingMinMax(id: string, min: number, 
   try {
     console.log('[updateRosterPeriodStaffingMinMax] Updating id:', id, 'min:', min, 'max:', max);
     
-    // === FIX 4: UUID VALIDATIE ===
+    // === FIX 4: UUID VALIDATIE (STRICT) ===
     validateId(id, 'id');
     
     // Valideer min/max waarden
@@ -149,9 +149,27 @@ export async function bulkCreateRosterPeriodStaffing(
       if (!r.roster_id || typeof r.roster_id !== 'string') {
         throw new Error(`Record ${i}: roster_id is verplicht en moet een string zijn (waarde: ${r.roster_id})`);
       }
+      
+      // FIX: Valideer dat roster_id een echte UUID is
+      if (!isValidUUID(r.roster_id)) {
+        throw new Error(
+          `Record ${i}: roster_id moet een geldige UUID zijn ` +
+          `(waarde: "${r.roster_id}", type: ${typeof r.roster_id})`
+        );
+      }
+      
       if (!r.service_id || typeof r.service_id !== 'string') {
         throw new Error(`Record ${i}: service_id is verplicht en moet een string zijn (waarde: ${r.service_id})`);
       }
+      
+      // Valideer dat service_id een echte UUID is
+      if (!isValidUUID(r.service_id)) {
+        throw new Error(
+          `Record ${i}: service_id moet een geldige UUID zijn ` +
+          `(waarde: "${r.service_id}", type: ${typeof r.service_id})`
+        );
+      }
+      
       if (!r.date || typeof r.date !== 'string') {
         throw new Error(`Record ${i}: date is verplicht en moet een string zijn (waarde: ${r.date})`);
       }
@@ -164,6 +182,7 @@ export async function bulkCreateRosterPeriodStaffing(
     }
     
     console.log('[bulkCreateRosterPeriodStaffing] Alle records gevalideerd ✓');
+    console.log('[bulkCreateRosterPeriodStaffing] Alle IDs zijn geldige UUIDs ✓');
     
     const now = new Date().toISOString();
     const recordsWithTimestamps = records.map(r => ({
@@ -212,9 +231,9 @@ export async function hasRosterPeriodStaffing(rosterId: string): Promise<boolean
   try {
     console.log('[hasRosterPeriodStaffing] Checking for rosterId:', rosterId);
     
-    // === FIX 4: UUID VALIDATIE ===
+    // === FIX 4: UUID VALIDATIE (STRICT) ===
     validateId(rosterId, 'rosterId');
-    console.log('[hasRosterPeriodStaffing] ✓ RosterId validated');
+    console.log('[hasRosterPeriodStaffing] ✓ RosterId validated (UUID format)');
     
     const { count, error } = await supabase
       .from('roster_period_staffing')
@@ -282,11 +301,11 @@ export async function generateRosterPeriodStaffing(
       throw new Error(`Ongeldige rosterId: "${rosterId}" (moet een string zijn)`);
     }
     
-    // Valideer rosterId format - moet UUID zijn of custom format (r_...)
-    if (!rosterId.startsWith('r_') && !isValidUUID(rosterId)) {
+    // FIX: Valideer rosterId format - moet UUID zijn (geen custom formats meer)
+    if (!isValidUUID(rosterId)) {
       throw new Error(
         `Ongeldige rosterId format: "${rosterId}". ` +
-        `Moet een UUID zijn of beginnen met "r_"`
+        `Moet een geldige UUID zijn (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)`
       );
     }
     
@@ -323,7 +342,7 @@ export async function generateRosterPeriodStaffing(
     }
     
     console.log('[generateRosterPeriodStaffing] ✓ Alle input parameters gevalideerd');
-    console.log('[generateRosterPeriodStaffing] ✓ RosterId format: geldig');
+    console.log('[generateRosterPeriodStaffing] ✓ RosterId format: geldige UUID');
     console.log('[generateRosterPeriodStaffing] ✓ Datums: geldig ISO8601 format');
     console.log('[generateRosterPeriodStaffing] ✓ Datumrange: geldig (start <= end)');
     console.log('');
