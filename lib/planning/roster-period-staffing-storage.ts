@@ -1,7 +1,7 @@
 // lib/planning/roster-period-staffing-storage.ts
 // Opslaglaag: TypeScript functies voor Supabase interactie (Diensten per Dag)
 
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
 import { getAllServicesDayStaffing, ServiceDayStaffing } from '@/lib/services/diensten-storage';
 import { getFallbackHolidays } from '@/lib/data/dutch-holidays-fallback';
 
@@ -18,11 +18,6 @@ export interface RosterPeriodStaffing {
   created_at: string;
   updated_at: string;
 }
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
 
 export async function getRosterPeriodStaffing(rosterId: string): Promise<RosterPeriodStaffing[]> {
   try {
