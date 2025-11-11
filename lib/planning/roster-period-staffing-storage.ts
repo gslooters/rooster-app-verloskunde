@@ -162,13 +162,8 @@ export async function bulkCreateRosterPeriodStaffing(
         throw new Error(`Record ${i}: service_id is verplicht en moet een string zijn (waarde: ${r.service_id})`);
       }
       
-      // Valideer dat service_id een echte UUID is
-      if (!isValidUUID(r.service_id)) {
-        throw new Error(
-          `Record ${i}: service_id moet een geldige UUID zijn ` +
-          `(waarde: "${r.service_id}", type: ${typeof r.service_id})`
-        );
-      }
+      // ✅ VERWIJDERD: UUID validatie voor service_id
+      // Service IDs zijn custom strings zoals "st2", "nb", etc.
       
       if (!r.date || typeof r.date !== 'string') {
         throw new Error(`Record ${i}: date is verplicht en moet een string zijn (waarde: ${r.date})`);
@@ -182,7 +177,8 @@ export async function bulkCreateRosterPeriodStaffing(
     }
     
     console.log('[bulkCreateRosterPeriodStaffing] Alle records gevalideerd ✓');
-    console.log('[bulkCreateRosterPeriodStaffing] Alle IDs zijn geldige UUIDs ✓');
+    console.log('[bulkCreateRosterPeriodStaffing] Roster ID is geldige UUID ✓');
+    console.log('[bulkCreateRosterPeriodStaffing] Service IDs zijn geldig ✓');
     
     const now = new Date().toISOString();
     const recordsWithTimestamps = records.map(r => ({
@@ -389,16 +385,10 @@ export async function generateRosterPeriodStaffing(
         );
       }
       
-      // Valideer UUID format van service_id
-      if (!isValidUUID(service.service_id)) {
-        throw new Error(
-          `Dienst ${i} heeft ongeldige service_id: ` +
-          `"${service.service_id}" (moet geldige UUID zijn)`
-        );
-      }
+      // Service IDs zijn custom strings (st2, nb, etc) - GEEN UUID validatie!
     }
     
-    console.log('[generateRosterPeriodStaffing] ✓ Alle diensten hebben een geldig service_id (UUID format)');
+    console.log('[generateRosterPeriodStaffing] ✓ Alle diensten hebben een geldig service_id');
     console.log('');
     
     // Haal feestdagen op
