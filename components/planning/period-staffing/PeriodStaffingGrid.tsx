@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { getRosterPeriodStaffing, generateRosterPeriodStaffing, RosterPeriodStaffing } from '@/lib/planning/roster-period-staffing-storage';
+import { getRosterPeriodStaffing, RosterPeriodStaffing } from '@/lib/planning/roster-period-staffing-storage';
 import { getFallbackHolidays } from '@/lib/data/dutch-holidays-fallback';
 import { WeekHeader } from './WeekHeader';
 import { ServiceRow } from './ServiceRow';
@@ -43,21 +43,20 @@ export function PeriodStaffingGrid({ rosterId, startDate, endDate }: Props) {
         
         if (!isMounted) return;
         setHolidays(holidayList);
-        setInitializationStatus('Diensten per dag genereren...');
-        
-        // Genereer rooster period staffing data
-        await generateRosterPeriodStaffing(rosterId, startDate, endDate);
-        
-        if (!isMounted) return;
         setInitializationStatus('Bezetting ophalen...');
         
-        // Haal opgeslagen data op
+        // Haal BESTAANDE data op (niet genereren!)
+        // Data wordt gegenereerd in Wizard.tsx voordat deze component mount
         const records = await getRosterPeriodStaffing(rosterId);
         
         if (!isMounted) return;
         
         if (!records || records.length === 0) {
-          setError('Geen bezettingsgegevens gevonden. Configureer eerst diensten in de instellingen.');
+          setError(
+            'Geen bezettingsgegevens gevonden. ' +
+            'Data moet eerst worden gegenereerd vanuit de wizard. ' +
+            'Ga terug naar het dashboard en maak een nieuw rooster aan.'
+          );
           setLoading(false);
           return;
         }
@@ -69,7 +68,9 @@ export function PeriodStaffingGrid({ rosterId, startDate, endDate }: Props) {
       } catch (err) {
         console.error('Fout bij initialiseren period staffing:', err);
         if (isMounted) {
-          const errorMessage = err instanceof Error ? err.message : 'Onbekende fout bij laden';
+          const errorMessage = err instanceof Error 
+            ? err.message 
+            : 'Onbekende fout bij laden van diensten per dag data';
           setError(errorMessage);
           setLoading(false);
         }
