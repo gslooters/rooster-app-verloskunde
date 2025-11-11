@@ -59,31 +59,93 @@ export default function Wizard({ onClose }: WizardProps = {}) {
   function backToDashboard() { if (onClose) onClose(); router.push('/dashboard'); }
 
   async function createRosterConfirmed() {
-    setIsCreating(true); setError(null);
+    setIsCreating(true);
+    setError(null);
+    
+    let rosterId: string | null = null;
+    
+    // === FASE 1: Rooster aanmaken (kritiek) ===
     try {
+      console.log('\n' + '='.repeat(80));
+      console.log('[Wizard] 🚀 START: Rooster aanmaken');
+      console.log('[Wizard] Periode:', selectedStart, 'tot', selectedEnd);
+      console.log('='.repeat(80) + '\n');
+      
       const id = genId();
-      const roster: Roster = { id, start_date: selectedStart, end_date: selectedEnd, status: 'draft', created_at: new Date().toISOString() } as Roster;
-      const list = readRosters().filter(x => x.id !== roster.id); list.push(roster); writeRosters(list);
-
+      const roster: Roster = {
+        id,
+        start_date: selectedStart,
+        end_date: selectedEnd,
+        status: 'draft',
+        created_at: new Date().toISOString()
+      } as Roster;
+      
+      const list = readRosters().filter(x => x.id !== roster.id);
+      list.push(roster);
+      writeRosters(list);
+      rosterId = id;
+      
       if (typeof window !== 'undefined') {
         localStorage.setItem('lastRosterId', id);
-        // Update to point to dashboard instead of direct grid
         localStorage.setItem('recentDesignRoute', `/planning/design/dashboard?rosterId=${id}`);
       }
-
+      
       // Fix: geef start_date expliciet mee aan initializeRosterDesign
       initializeRosterDesign(roster.id, selectedStart);
       
-      // --- BELANGRIJK: Vul automatisch Diensten per Dag ---
-      await generateRosterPeriodStaffing(roster.id, selectedStart, selectedEnd);
-      // --- EINDE aanvulling ---
+      console.log('[Wizard] ✅ Rooster succesvol aangemaakt:', rosterId);
+      console.log('[Wizard] Start date:', selectedStart);
+      console.log('[Wizard] End date:', selectedEnd);
+      console.log('');
       
-      // Navigate to the new Dashboard Rooster Ontwerp instead of directly to the grid
-      if (onClose) { onClose(); setTimeout(()=>router.push(`/planning/design/dashboard?rosterId=${id}`), 100); }
-      else { router.push(`/planning/design/dashboard?rosterId=${id}`); }
     } catch (err) {
-      console.error('Error creating rooster:', err); setError('Er is een fout opgetreden bij het aanmaken van het rooster. Probeer opnieuw.'); setIsCreating(false);
+      console.error('\n' + '='.repeat(80));
+      console.error('[Wizard] ❌ FOUT BIJ AANMAKEN ROOSTER');
+      console.error('[Wizard] Error:', err);
+      console.error('='.repeat(80) + '\n');
+      
+      setError('Kon rooster niet aanmaken. Probeer opnieuw.');
+      setIsCreating(false);
+      return; // Stop hier volledig
     }
+    
+    // === FASE 2: Period staffing genereren (niet-kritiek) ===
+    try {
+      console.log('[Wizard] 🔄 START: Genereren diensten per dag data...');
+      console.log('[Wizard] RosterId:', rosterId);
+      console.log('');
+      
+      await generateRosterPeriodStaffing(rosterId, selectedStart, selectedEnd);
+      
+      console.log('[Wizard] ✅ Diensten per dag data succesvol gegenereerd');
+      console.log('');
+      
+    } catch (err) {
+      console.error('\n' + '='.repeat(80));
+      console.error('[Wizard] ⚠️  WAARSCHUWING: Fout bij genereren diensten per dag');
+      console.error('[Wizard] Error:', err);
+      console.error('[Wizard] ⚠️  Rooster is WEL aangemaakt maar diensten per dag data ontbreekt.');
+      console.error('[Wizard] Gebruiker kan later handmatig genereren vanuit dashboard.');
+      console.error('='.repeat(80) + '\n');
+      
+      // Ga WEL door naar dashboard (rooster bestaat al)
+      // Geen error message tonen aan gebruiker - niet kritiek
+    }
+    
+    // === FASE 3: Navigeer naar dashboard ===
+    console.log('[Wizard] 🔄 Navigeren naar dashboard...');
+    console.log('[Wizard] Route:', `/planning/design/dashboard?rosterId=${rosterId}`);
+    console.log('\n' + '='.repeat(80));
+    console.log('[Wizard] ✅ WIZARD VOLTOOID');
+    console.log('='.repeat(80) + '\n');
+    
+    if (onClose) {
+      onClose();
+    }
+    
+    // Direct navigeren zonder setTimeout (voorkomt race conditions)
+    router.push(`/planning/design/dashboard?rosterId=${rosterId}`);
+    setIsCreating(false);
   }
 
   function statusBadge(period: {status: string}) {
