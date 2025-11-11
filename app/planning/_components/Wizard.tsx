@@ -11,7 +11,12 @@ import { initializeRosterDesign } from '@/lib/planning/rosterDesign';
 import { useRouter } from 'next/navigation';
 import { generateRosterPeriodStaffing } from '@/lib/planning/roster-period-staffing-storage';
 
-function genId() { return 'r_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
+// FIX: Gebruik native browser UUID generatie i.p.v. custom format
+// Voorheen: function genId() { return 'r_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
+// Nu: Echte UUID voor Supabase/Postgres compatibiliteit
+function genId() { 
+  return crypto.randomUUID(); 
+}
 
 const FIXED_WEEKS = 5;
 
