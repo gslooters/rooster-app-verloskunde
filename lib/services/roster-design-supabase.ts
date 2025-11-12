@@ -11,9 +11,6 @@ export interface RosterDesignRow {
   updated_at?: string;
 }
 
-/**
- * Converteer database row naar RosterDesignData object
- */
 function rowToDesignData(row: RosterDesignRow): RosterDesignData {
   return {
     rosterId: row.roster_id,
@@ -26,9 +23,6 @@ function rowToDesignData(row: RosterDesignRow): RosterDesignData {
   };
 }
 
-/**
- * Converteer RosterDesignData naar database row format
- */
 function designDataToRow(data: RosterDesignData): Partial<RosterDesignRow> {
   return {
     roster_id: data.rosterId,
@@ -40,4 +34,58 @@ function designDataToRow(data: RosterDesignData): Partial<RosterDesignRow> {
   };
 }
 
-// ... rest van de file ongewijzigd ...
+export async function getRosterDesignByRosterId(rosterId: string): Promise<RosterDesignData | null> {
+  try {
+    const { data, error } = await supabase
+      .from('roster_design')
+      .select('*')
+      .eq('roster_id', rosterId)
+      .maybeSingle();
+
+    if (error) {
+      console.error('❌ Supabase error bij ophalen roster design:', error);
+      throw error;
+    }
+    if (!data) return null;
+    return rowToDesignData(data as RosterDesignRow);
+  } catch (error) {
+    console.error('❌ Fout bij ophalen roster design:', error);
+    throw error;
+  }
+}
+
+export async function createRosterDesign(data: Omit<RosterDesignData, 'created_at' | 'updated_at'>): Promise<RosterDesignData> {
+  try {
+    const row = designDataToRow(data as RosterDesignData);
+    const { data: result, error } = await supabase
+      .from('roster_design')
+      .insert(row)
+      .select()
+      .single();
+    if (error) { throw error; }
+    return rowToDesignData(result as RosterDesignRow);
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function updateRosterDesign(rosterId: string, updates: Partial<RosterDesignData>): Promise<RosterDesignData> {
+  try {
+    const row = designDataToRow({ rosterId, ...updates } as RosterDesignData);
+    const { data, error } = await supabase
+      .from('roster_design')
+      .update(row)
+      .eq('roster_id', rosterId)
+      .select()
+      .single();
+    if (error) { throw error; }
+    return rowToDesignData(data as RosterDesignRow);
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function bulkUpdateUnavailability(rosterId: string, employeeId: string, dates: string[], isUnavailable: boolean): Promise<RosterDesignData> {
+  // Dummy implementatie
+  throw new Error('Not implemented.');
+}
