@@ -117,34 +117,26 @@ export default function DesignPageClient() {
       return; 
     }
     
-    // FIXED: Make entire data loading async with proper await
     async function fetchAndInitializeData() {
       try {
         setLoading(true);
-        
-        // Load roster design data with await
+        // CRUCIAL FIX: Only call with string - not string | null
+        if (typeof rosterId !== 'string') {
+          setError('Geen geldig rooster ID gevonden');
+          setLoading(false);
+          return;
+        }
         const data = await loadRosterDesignData(rosterId);
-        
         if (data) {
-          // Sync employee data with await
           await syncRosterDesignWithEmployeeData(rosterId);
-          
           const startISO = (data as any).start_date || (data as any).roster_start;
-          
-          // Autofill unavailability with await
           if (startISO) { 
             await autofillUnavailability(rosterId, startISO); 
           }
-          
-          // Reload data after autofill with await
           const latest = await loadRosterDesignData(rosterId) || data;
           setDesignData(latest);
           setEmployees(latest.employees);
-          
-          // Load holidays for period
-          if (startISO) { 
-            loadHolidaysForPeriod(startISO); 
-          }
+          if (startISO) { loadHolidaysForPeriod(startISO); }
         } else { 
           setError('Geen rooster ontwerp data gevonden'); 
         }
@@ -155,10 +147,8 @@ export default function DesignPageClient() {
         setLoading(false);
       }
     }
-    
     fetchAndInitializeData();
   }, [rosterId]);
-  
   async function loadHolidaysForPeriod(startISO: string) {
     setHolidaysLoading(true);
     try {
@@ -169,42 +159,32 @@ export default function DesignPageClient() {
       const endStr = endDate.toISOString().split('T')[0];
       const fetchedHolidays = await fetchNetherlandsHolidays(startStr, endStr);
       setHolidays(fetchedHolidays);
-    } catch { 
-      /* ignore */ 
-    }
+    } catch { /* ignore */ }
     setHolidaysLoading(false);
   }
-  
-  // FIXED: Make updateMaxShiftsHandler async
   async function updateMaxShiftsHandler(empId: string, maxShifts: number) {
     if (!rosterId || !designData) return;
-    
+    if (typeof rosterId !== 'string') return;
     await updateEmployeeMaxShifts(rosterId, empId, maxShifts);
     const updated = await loadRosterDesignData(rosterId);
-    
     if (updated) {
       setDesignData(updated);
       setEmployees(updated.employees);
     }
   }
-  
-  // FIXED: Make toggleUnavailable async
   async function toggleUnavailableHandler(empId: string, date: string) {
     if (!rosterId || !designData) return;
-    
+    if (typeof rosterId !== 'string') return;
     await toggleUnavailability(rosterId, empId, date);
     const updated = await loadRosterDesignData(rosterId);
-    
     if (updated) {
       setDesignData(updated);
       setEmployees(updated.employees);
     }
   }
-  
   function getFirstName(fullName: string): string { 
     return fullName.split(' ')[0]; 
   }
-  
   const computedValues = useMemo(() => {
     if (!designData) {
       return { 
@@ -250,7 +230,6 @@ export default function DesignPageClient() {
       </div>
     ); 
   }
-  
   if (error || !designData) { 
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 flex items-center justify-center">
@@ -269,9 +248,7 @@ export default function DesignPageClient() {
       </div>
     ); 
   }
-  
   const { weeks, periodTitle, dateSubtitle } = computedValues;
-  
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-4">
       <div className="max-w-full mx-auto">
@@ -281,12 +258,7 @@ export default function DesignPageClient() {
             <h1 className="text-2xl font-bold text-gray-900 mb-1">{periodTitle}</h1>
             <p className="text-xs text-gray-500">{dateSubtitle}</p>
           </div>
-          <button
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
-            onClick={() => router.push(`/planning/design/dashboard?rosterId=${rosterId}`)}
-          >
-            Terug naar dashboard
-          </button>
+          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium" onClick={() => router.push(`/planning/design/dashboard?rosterId=${rosterId}`)}>Terug naar dashboard</button>
         </div>
         <div className="bg-blue-50 p-4 rounded-lg mb-6">
           <p className="text-blue-800"><strong>Instructies:</strong> Stel voor elke medewerker het maximum aantal diensten in (0-35) en markeer niet-beschikbare dagen met de NB-knoppen. Nederlandse feestdagen zijn automatisch gemarkeerd.</p>
@@ -297,11 +269,7 @@ export default function DesignPageClient() {
               <tr>
                 <th className="sticky left-0 bg-white border-b px-3 py-2 text-left font-semibold text-gray-900 w-40">Medewerker</th>
                 <th className="border-b px-3 py-2 text-center font-semibold text-gray-900 w-16">Dst</th>
-                {weeks.map(week => (
-                  <th key={week.number} colSpan={7} className="border-b px-2 py-2 text-center font-semibold text-gray-900 bg-yellow-50">
-                    Week {week.number}
-                  </th>
-                ))}
+                {weeks.map(week => (<th key={week.number} colSpan={7} className="border-b px-2 py-2 text-center font-semibold text-gray-900 bg-yellow-50">Week {week.number}</th>))}
               </tr>
               {['day','date','month'].map((rowType) => (
                 <tr key={rowType}>
@@ -309,14 +277,7 @@ export default function DesignPageClient() {
                   <th className="border-b"></th>
                   {weeks.map(week => week.dates.map(date => {
                     const { day, date: dd, month, isWeekend, isHoliday, holidayName } = formatDateCell(date, holidaySet, holidays);
-                    return (
-                      <th key={`${rowType}-${date}`} className={`border-b px-1 py-1 text-xs ${rowType==='day'?'font-medium text-gray-700':rowType==='date'?'text-gray-600':'text-gray-500'} min-w-[50px] ${rowType==='day'?'relative':''}`} title={rowType==='date' ? (holidayName || undefined) : undefined}>
-                        {rowType==='day'? day : rowType==='date'? dd : month}
-                        {rowType==='day' && isHoliday && (
-                          <span className="absolute top-0 right-0 bg-amber-600 text-white text-xs px-1 rounded-bl text-[10px] font-bold leading-none" style={{ fontSize: '8px', padding: '1px 2px' }}>FD</span>
-                        )}
-                      </th>
-                    );
+                    return (<th key={`${rowType}-${date}`} className={`border-b px-1 py-1 text-xs ${rowType==='day'?'font-medium text-gray-700':rowType==='date'?'text-gray-600':'text-gray-500'} min-w-[50px] ${rowType==='day'?'relative':''}`} title={rowType==='date' ? (holidayName || undefined) : undefined}>{rowType==='day'? day : rowType==='date'? dd : month}{rowType==='day' && isHoliday && (<span className="absolute top-0 right-0 bg-amber-600 text-white text-xs px-1 rounded-bl text-[10px] font-bold leading-none" style={{ fontSize: '8px', padding: '1px 2px' }}>FD</span>)}</th>);
                   }))}
                 </tr>
               ))}
@@ -325,48 +286,13 @@ export default function DesignPageClient() {
               {sortedEmployees.map((emp, empIndex) => {
                 const team = (emp as any).team as any;
                 const firstName = (emp as any).voornaam || getFirstName((emp as any).name || '');
-                return (
-                  <tr key={(emp as any).id} className={`${empIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'} h-8`}>
-                    <td className="sticky left-0 bg-inherit border-b px-3 py-1 font-medium text-gray-900 h-8">
-                      <TeamBadge team={team} />{firstName}
-                    </td>
-                    <td className="border-b px-3 py-1 text-center h-8">
-                      <input 
-                        type="number" 
-                        min="0" 
-                        max="35" 
-                        value={(emp as any).maxShifts} 
-                        onChange={(e) => updateMaxShiftsHandler((emp as any).id, parseInt(e.target.value) || 0)} 
-                        className="w-12 px-1 py-0.5 border border-gray-300 rounded text-center text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
-                      />
-                    </td>
-                    {weeks.map(week => week.dates.map(date => {
-                      const isUnavailable = (designData as any).unavailabilityData?.[(emp as any).id]?.[date] || false;
-                      return (
-                        <td key={date} className={`border-b p-0.5 text-center h-8`}>
-                          <button 
-                            onClick={() => toggleUnavailableHandler((emp as any).id, date)} 
-                            className={`w-10 h-6 rounded text-xs font-bold transition-colors ${isUnavailable ? 'bg-red-100 text-red-700 border border-red-300 hover:bg-red-200' : 'bg-gray-100 text-gray-400 border border-gray-300 hover:bg-gray-200'}`} 
-                            title={isUnavailable ? 'Klik om beschikbaar te maken' : 'Klik om niet-beschikbaar te markeren'}
-                          >
-                            {isUnavailable ? 'NB' : '—'}
-                          </button>
-                        </td>
-                      );
-                    }))}
-                  </tr>
-                );
+                return (<tr key={(emp as any).id} className={`${empIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'} h-8`}><td className="sticky left-0 bg-inherit border-b px-3 py-1 font-medium text-gray-900 h-8"><TeamBadge team={team} />{firstName}</td><td className="border-b px-3 py-1 text-center h-8"><input type="number" min="0" max="35" value={(emp as any).maxShifts} onChange={(e) => updateMaxShiftsHandler((emp as any).id, parseInt(e.target.value) || 0)} className="w-12 px-1 py-0.5 border border-gray-300 rounded text-center text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent" /></td>{weeks.map(week => week.dates.map(date => {const isUnavailable = (designData as any).unavailabilityData?.[(emp as any).id]?.[date] || false;return (<td key={date} className={`border-b p-0.5 text-center h-8`}><button onClick={() => toggleUnavailableHandler((emp as any).id, date)} className={`w-10 h-6 rounded text-xs font-bold transition-colors ${isUnavailable ? 'bg-red-100 text-red-700 border border-red-300 hover:bg-red-200' : 'bg-gray-100 text-gray-400 border border-gray-300 hover:bg-gray-200'}`} title={isUnavailable ? 'Klik om beschikbaar te maken' : 'Klik om niet-beschikbaar te markeren'}>{isUnavailable ? 'NB' : '—'}</button></td>);}))}</tr>);
               })}
             </tbody>
           </table>
         </div>
         <div className="mt-6 flex items-center justify-end">
-          <div className="text-sm text-gray-600">
-            Wijzigingen worden automatisch opgeslagen
-            {holidays.length > 0 && (
-              <span className="ml-2 text-amber-600">• {holidays.length} feestdagen geladen</span>
-            )}
-          </div>
+          <div className="text-sm text-gray-600">Wijzigingen worden automatisch opgeslagen{holidays.length > 0 && (<span className="ml-2 text-amber-600">• {holidays.length} feestdagen geladen</span>)}</div>
         </div>
       </div>
     </div>
