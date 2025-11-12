@@ -3,6 +3,11 @@ import { getAllEmployees } from '@/lib/services/employees-storage';
 import { TeamType, DienstverbandType } from '@/lib/types/employee';
 import { getRosterDesignByRosterId, createRosterDesign, updateRosterDesign, bulkUpdateUnavailability } from '@/lib/services/roster-design-supabase';
 import { getWeekdayCode } from '@/lib/utils/date-helpers';
+import { 
+  isEmployeeUnavailableOnDate,
+  upsertNBAssignment,
+  deleteAssignmentByDate
+} from '@/lib/services/roster-assignments-supabase';
 
 function normalizeDienstverband(value: any): DienstverbandType {
   if (!value) return DienstverbandType.LOONDIENST;
@@ -97,6 +102,12 @@ export async function updateEmployeeMaxShifts(rosterId: string, employeeId: stri
   employee.maxShifts = maxShifts;
   return await saveRosterDesignData(designData);
 }
+
+/**
+ * DEPRECATED: Oude toggle functie die JSON gebruikt
+ * Wordt bewaard voor backwards compatibility
+ * Gebruik toggleNBAssignment() voor nieuwe implementatie
+ */
 export async function toggleUnavailability(rosterId: string, employeeId: string, date: string): Promise<boolean> {
   const designData = await loadRosterDesignData(rosterId); if (!designData) return false;
   if (!designData.unavailabilityData[employeeId]) { designData.unavailabilityData[employeeId] = {}; }
@@ -104,6 +115,51 @@ export async function toggleUnavailability(rosterId: string, employeeId: string,
   designData.unavailabilityData[employeeId][date] = !current;
   return await saveRosterDesignData(designData);
 }
+
+/**
+ * NIEUWE functie: Toggle NB via roster_assignments tabel (DRAAD26K)
+ * 
+ * Logica:
+ * - Als NB assignment bestaat → verwijder (maak beschikbaar)
+ * - Anders → insert NB assignment (maak niet-beschikbaar)
+ * 
+ * Deze functie vervangt de oude toggleUnavailability die JSON gebruikte
+ * 
+ * @param rosterId - UUID van het rooster
+ * @param employeeId - ID van de medewerker
+ * @param date - Datum in YYYY-MM-DD formaat
+ * @returns true als succesvol uitgevoerd
+ */
+export async function toggleNBAssignment(
+  rosterId: string,
+  employeeId: string,
+  date: string
+): Promise<boolean> {
+  try {
+    // Check huidige status
+    const isCurrentlyNB = await isEmployeeUnavailableOnDate(
+      rosterId, 
+      employeeId, 
+      date
+    );
+    
+    if (isCurrentlyNB) {
+      // Verwijder NB → medewerker wordt beschikbaar
+      await deleteAssignmentByDate(rosterId, employeeId, date);
+      console.log('✅ NB verwijderd - medewerker beschikbaar gemaakt:', { employeeId, date });
+      return true;
+    } else {
+      // Voeg NB toe → medewerker wordt niet-beschikbaar
+      await upsertNBAssignment(rosterId, employeeId, date);
+      console.log('✅ NB toegevoegd - medewerker niet-beschikbaar gemaakt:', { employeeId, date });
+      return true;
+    }
+  } catch (error) {
+    console.error('❌ Fout bij toggle NB assignment:', error);
+    return false;
+  }
+}
+
 export async function autofillUnavailability(rosterId: string, start_date: string): Promise<boolean> {
   const designData = await loadRosterDesignData(rosterId);
   if (!designData) { return false; }
