@@ -24,13 +24,20 @@ type WizardStep = 'period' | 'employees' | 'confirm';
 
 interface WizardProps { onClose?: () => void; }
 
+interface PeriodWithStatus {
+  start: string;
+  end: string;
+  status: 'draft' | 'in_progress' | 'final' | 'free';
+}
+
 export default function Wizard({ onClose }: WizardProps = {}) {
   const router = useRouter();
 
   // Stap 1: Periode keuze
-  const [periods, setPeriods] = useState<{ start: string; end: string; status: string }[]>([]);
+  const [periods, setPeriods] = useState<PeriodWithStatus[]>([]);
   const [selectedStart, setSelectedStart] = useState<string>('');
   const [selectedEnd, setSelectedEnd] = useState<string>('');
+  const [isLoadingPeriods, setIsLoadingPeriods] = useState(true);
 
   // Stap 2: Medewerkers controle
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -38,20 +45,51 @@ export default function Wizard({ onClose }: WizardProps = {}) {
   const [error, setError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState<boolean>(false);
 
+  // FIX: Async laden van perioden met status
   useEffect(() => {
-    const base = generateFiveWeekPeriods(30);
-    const list = base.map(p => ({ ...p, status: getPeriodStatus(p.start, p.end) }));
+    async function loadPeriods() {
+      try {
+        setIsLoadingPeriods(true);
+        
+        // Genereer basisperioden
+        const base = generateFiveWeekPeriods(30);
+        
+        // Haal async status op voor elke periode
+        const periodsWithStatus = await Promise.all(
+          base.map(async (p) => ({
+            ...p,
+            status: await getPeriodStatus(p.start, p.end)
+          }))
+        );
 
-    const inProg = list.filter(p => p.status === 'in_progress').sort((a,b)=>a.start.localeCompare(b.start));
-    const drafts = list.filter(p => p.status === 'draft').sort((a,b)=>a.start.localeCompare(b.start));
-    const free = list.filter(p => p.status === 'free');
+        // Sorteer: in_progress eerst, dan draft, dan free
+        const inProg = periodsWithStatus
+          .filter(p => p.status === 'in_progress')
+          .sort((a,b) => a.start.localeCompare(b.start));
+        const drafts = periodsWithStatus
+          .filter(p => p.status === 'draft')
+          .sort((a,b) => a.start.localeCompare(b.start));
+        const free = periodsWithStatus
+          .filter(p => p.status === 'free');
 
-    const ordered = [...inProg, ...drafts, ...free];
-    setPeriods(ordered);
+        const ordered = [...inProg, ...drafts, ...free];
+        setPeriods(ordered);
 
-    const firstFree = free[0];
-    if (firstFree) { setSelectedStart(firstFree.start); setSelectedEnd(firstFree.end); }
+        // Selecteer eerste vrije periode
+        const firstFree = free[0];
+        if (firstFree) { 
+          setSelectedStart(firstFree.start); 
+          setSelectedEnd(firstFree.end); 
+        }
+      } catch (err) {
+        console.error('[Wizard] Fout bij laden perioden:', err);
+        setError('Kon perioden niet laden. Probeer opnieuw.');
+      } finally {
+        setIsLoadingPeriods(false);
+      }
+    }
 
+    loadPeriods();
     setEmployees(getAllEmployees());
   }, []);
 
@@ -85,9 +123,9 @@ export default function Wizard({ onClose }: WizardProps = {}) {
         created_at: new Date().toISOString()
       } as Roster;
       
-      const list = readRosters().filter(x => x.id !== roster.id);
+      const list = (await readRosters()).filter(x => x.id !== roster.id);
       list.push(roster);
-      writeRosters(list);
+      await writeRosters(list);
       rosterId = id;
       
       if (typeof window !== 'undefined') {
@@ -96,7 +134,7 @@ export default function Wizard({ onClose }: WizardProps = {}) {
       }
       
       // Fix: geef start_date expliciet mee aan initializeRosterDesign
-      initializeRosterDesign(roster.id, selectedStart);
+      await initializeRosterDesign(roster.id, selectedStart);
       
       console.log('[Wizard] ✅ Rooster succesvol aangemaakt:', rosterId);
       console.log('[Wizard] Start date:', selectedStart);
@@ -153,15 +191,17 @@ export default function Wizard({ onClose }: WizardProps = {}) {
     setIsCreating(false);
   }
 
-  function statusBadge(period: {status: string}) {
+  function statusBadge(period: PeriodWithStatus) {
     if (period.status === 'in_progress') return (<span className="px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">In bewerking</span>);
     if (period.status === 'draft') return (<span className="px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">In ontwerp</span>);
     return null;
   }
 
-  function isDisabled(period: {status: string}) { return period.status === 'in_progress' || period.status === 'draft'; }
+  function isDisabled(period: PeriodWithStatus) { 
+    return period.status === 'in_progress' || period.status === 'draft'; 
+  }
 
-  function renderPeriodCard(p: {start:string; end:string; status:string}) {
+  function renderPeriodCard(p: PeriodWithStatus) {
     const isSelected = selectedStart === p.start;
     const selectable = p.status === 'free' && periods.findIndex(x=>x.status==='free') === periods.indexOf(p);
     const baseCls = 'border rounded-lg p-3 flex items-center justify-between';
@@ -197,6 +237,21 @@ export default function Wizard({ onClose }: WizardProps = {}) {
       if (d !== 0) return d;
       return a.voornaam.localeCompare(b.voornaam, 'nl');
     });
+  }
+
+  // Loading state voor perioden
+  if (isLoadingPeriods) {
+    return (
+      <section className={onClose ? '' : 'p-4 border rounded bg-white'}>
+        {!onClose && <h2 className="text-lg font-semibold mb-3">Nieuw rooster</h2>}
+        <div className="flex items-center justify-center py-8">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+            <p className="text-sm text-gray-600">Perioden laden...</p>
+          </div>
+        </div>
+      </section>
+    );
   }
 
   return (
