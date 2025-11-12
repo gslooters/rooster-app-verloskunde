@@ -1,32 +1,9 @@
-async function toggleUnavailableHandler(empId: string, date: string) {
-  if (!rosterId || !designData) {
-    console.error('🛑 No rosterId or designData');
-    return;
-  }
+// FIXED: Removed orphaned toggleUnavailableHandler function
+// The function was referencing undefined variables (rosterId, designData, etc.)
+// causing TypeScript compilation errors during Railway deployment
 
-  if (typeof rosterId !== 'string' || typeof empId !== 'string') {
-    console.error('🛑 Invalid types:', { rosterId: typeof rosterId, empId: typeof empId });
-    return;
-  }
+// This file is now empty but valid - the toggleUnavailableHandler logic
+// should be implemented in the parent component where rosterId and designData
+// are actually available (likely in DashboardClient.tsx or wrapper.tsx)
 
-  console.log('🔍 Toggle called:', { rosterId, empId, date });
-
-  try {
-    const success = await toggleNBAssignment(rosterId, empId, date);
-
-    if (!success) {
-      console.error('🛑 Toggle failed');
-      alert('NB opslaan mislukt. Check console.');
-      return;
-    }
-
-    // Reload NB assignments from database
-    const nbMap = await getNBAssignmentsByRosterId(rosterId);
-    setNbAssignments(nbMap);
-
-    console.log('✅ NB toggle succeeded, UI updated');
-  } catch (error) {
-    console.error('❌ Toggle exception:', error);
-    alert('Fout: ' + error);
-  }
-}
+export {};
