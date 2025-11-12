@@ -39,7 +39,7 @@ function getFirstName(fullName: string): string {
   return fullName.split(' ')[0];
 }
 
-type Roster = { id: string; start_date: string; end_date: string; status: 'draft'|'final'; created_at: string; };
+type Roster = { id: string; start_date: string; end_date: string; status: 'draft'|'in_progress'|'final'; created_at: string; };
 type Cell = { service: string | null; locked: boolean; unavailable?: boolean };
 
 // Sprint 2.2: Fallback employees voor backwards compatibility
