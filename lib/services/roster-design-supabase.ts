@@ -3,7 +3,7 @@ import type { RosterDesignData, RosterEmployee, RosterStatus } from '@/lib/types
 
 export interface RosterDesignRow {
   roster_id: string;
-  employees: RosterEmployee[];
+  employee_snapshot: RosterEmployee[];  // FIX: was 'employees'
   unavailability_data: Record<string, Record<string, boolean>>;
   shift_counts: Record<string, Record<string, number>>;
   status: RosterStatus;
@@ -14,7 +14,7 @@ export interface RosterDesignRow {
 function rowToDesignData(row: RosterDesignRow): RosterDesignData {
   return {
     rosterId: row.roster_id,
-    employees: row.employees,
+    employees: row.employee_snapshot,  // FIX: mapping terug naar employees
     unavailabilityData: row.unavailability_data,
     shiftCounts: row.shift_counts,
     status: row.status,
@@ -26,7 +26,7 @@ function rowToDesignData(row: RosterDesignRow): RosterDesignData {
 function designDataToRow(data: RosterDesignData): Partial<RosterDesignRow> {
   return {
     roster_id: data.rosterId,
-    employees: data.employees,
+    employee_snapshot: data.employees,  // FIX: mapping naar employee_snapshot
     unavailability_data: data.unavailabilityData || {},
     shift_counts: data.shiftCounts || {},
     status: data.status,
