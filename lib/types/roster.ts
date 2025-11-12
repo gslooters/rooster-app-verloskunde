@@ -23,9 +23,10 @@ export interface RosterDesignData {
   rosterId: string;
   employees: RosterEmployee[];
   status: RosterStatus;
-  unavailabilityData: { [employeeId: string]: { [date: string]: boolean } }; // NB markering
-  dailyServiceRequirements?: DailyServiceRequirement[]; // Wordt later toegevoegd
-  planningRules?: PlanningRule[]; // Wordt later toegevoegd
+  unavailabilityData: { [employeeId: string]: { [date: string]: boolean } };
+  shiftCounts?: { [employeeId: string]: { [shiftType: string]: number } }; // Nieuw veld toegevoegd
+  dailyServiceRequirements?: DailyServiceRequirement[];
+  planningRules?: PlanningRule[];
   created_at: string;
   updated_at: string;
 }
@@ -33,7 +34,7 @@ export interface RosterDesignData {
 // Voor toekomstige uitbreiding - diensten per dag
 export interface DailyServiceRequirement {
   date: string; // YYYY-MM-DD format
-  dayType: string; // maandag, dinsdag, etc. of feestdag
+  dayType: string;
   services: {
     [serviceCode: string]: {
       min: number;
@@ -53,7 +54,6 @@ export interface PlanningRule {
   parameters: { [key: string]: any };
 }
 
-// Validatie functies
 export function validateMaxShifts(shifts: number): boolean {
   return shifts >= 0 && shifts <= 35 && Number.isInteger(shifts);
 }
