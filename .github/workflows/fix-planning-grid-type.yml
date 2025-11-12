@@ -1,0 +1,29 @@
+name: Fix PlanningGrid Roster Type
+
+on:
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  fix-type:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Fix Roster type definition
+        run: |
+          # Fix regel 41: voeg 'in_progress' toe aan status union type
+          sed -i "s/status: 'draft'|'final';/status: 'draft'|'in_progress'|'final';/g" app/planning/PlanningGrid.tsx
+          
+      - name: Verify fix
+        run: |
+          echo "Checking if fix was applied..."
+          grep "status: 'draft'|'in_progress'|'final'" app/planning/PlanningGrid.tsx && echo "✅ Fix applied successfully!" || echo "❌ Fix failed"
+          
+      - name: Commit and push
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "<>"
+          git add app/planning/PlanningGrid.tsx
+          git diff --staged --quiet || git commit -m "fix: voeg 'in_progress' toe aan Roster type status (automated fix)"
+          git push
