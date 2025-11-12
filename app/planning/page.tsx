@@ -38,10 +38,18 @@ export default function PlanningPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const allRosters = readRosters();
-    const drafts = allRosters.filter(roster => roster.status === 'draft').sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-    setDraftRosters(drafts);
-    setIsLoading(false);
+    async function fetchRosters() {
+      try {
+        const allRosters = await readRosters();
+        const drafts = allRosters.filter(roster => roster.status === 'draft').sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        setDraftRosters(drafts);
+      } catch (err) {
+        setDraftRosters([]);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    fetchRosters();
   }, []);
 
   // Sluit modal bij route changes naar buiten de planning pagina
