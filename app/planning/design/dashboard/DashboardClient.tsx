@@ -52,13 +52,9 @@ function saveCompletionStatus(rosterId: string, status: CompletionStatus) {
   localStorage.setItem(key, JSON.stringify(status));
 }
 
-// Nieuwe functie om periode-informatie op te halen uit alle mogelijke bronnen
 function extractPeriodInfo(rosterId: string, designData: any): { startDate: string | null; endDate: string | null; periodTitle: string } {
-  // Probeer eerst uit designData
   let startDate = designData?.start_date || designData?.startDate || designData?.roster_start || null;
   let endDate = designData?.end_date || designData?.endDate || designData?.roster_end || null;
-  
-  // Als niet gevonden in designData, probeer uit localStorage rosters lijst
   if ((!startDate || !endDate) && typeof window !== 'undefined') {
     try {
       const rostersRaw = localStorage.getItem('verloskunde_rosters');
@@ -74,10 +70,7 @@ function extractPeriodInfo(rosterId: string, designData: any): { startDate: stri
       console.warn('Fout bij ophalen roster periode uit lijst:', err);
     }
   }
-  
-  // Genereer periodTitle
   const periodTitle = startDate && endDate ? formatWeekRange(startDate, endDate) : 'Onbekende periode';
-  
   return { startDate, endDate, periodTitle };
 }
 
@@ -116,29 +109,29 @@ export default function DashboardClient() {
 
   useEffect(() => {
     if (!rosterId) { setError('Geen roster ID gevonden'); setLoading(false); return; }
-    try {
-      const data = loadRosterDesignData(rosterId);
-      if (data) {
-        setDesignData(data);
-        setCompletionStatus(loadCompletionStatus(rosterId));
-        
-        // Extract period info
-        const extractedPeriod = extractPeriodInfo(rosterId, data);
-        setPeriodInfo(extractedPeriod);
-        
-        if (typeof window !== 'undefined') {
-          const rostersRaw = localStorage.getItem('verloskunde_rosters');
-          if (rostersRaw) {
-            const rosters = JSON.parse(rostersRaw);
-            const sortedRosters = rosters.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-            setIsLastRoster(sortedRosters.length > 0 && sortedRosters[0].id === rosterId);
+    async function fetchData() {
+      try {
+        const data = await loadRosterDesignData(rosterId);
+        if (data) {
+          setDesignData(data);
+          setCompletionStatus(loadCompletionStatus(rosterId));
+          const extractedPeriod = extractPeriodInfo(rosterId, data);
+          setPeriodInfo(extractedPeriod);
+          if (typeof window !== 'undefined') {
+            const rostersRaw = localStorage.getItem('verloskunde_rosters');
+            if (rostersRaw) {
+              const rosters = JSON.parse(rostersRaw);
+              const sortedRosters = rosters.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+              setIsLastRoster(sortedRosters.length > 0 && sortedRosters[0].id === rosterId);
+            }
           }
-        }
-      } else { setError('Geen roster ontwerp data gevonden'); }
-    } catch (err) {
-      console.error('Error loading design data:', err); setError('Fout bij laden van ontwerp data');
+        } else { setError('Geen roster ontwerp data gevonden'); }
+      } catch (err) {
+        console.error('Error loading design data:', err); setError('Fout bij laden van ontwerp data');
+      }
+      setLoading(false);
     }
-    setLoading(false);
+    fetchData();
   }, [rosterId]);
   
   function toggleStep(step: keyof CompletionStatus) {
