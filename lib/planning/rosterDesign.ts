@@ -1,13 +1,8 @@
-// lib/planning/rosterDesign.ts - HERSTRUCTUREERD
-// Complete, correcte implementatie met ALLE exports los, optie A fix, geen cirkel
-
 import { RosterEmployee, RosterStatus, RosterDesignData, validateMaxShifts, createDefaultRosterEmployee, createDefaultRosterStatus } from '@/lib/types/roster';
 import { getAllEmployees } from '@/lib/services/employees-storage';
 import { TeamType, DienstverbandType } from '@/lib/types/employee';
-import { readRosters } from './storage';
+import { getRosterDesignByRosterId, createRosterDesign, updateRosterDesign, updateRosterDesignStatus, bulkUpdateUnavailability } from '@/lib/services/roster-design-supabase';
 import { getWeekdayCode } from '@/lib/utils/date-helpers';
-
-const ROSTER_DESIGN_KEY = 'roster_design_data';
 
 function normalizeDienstverband(value: any): DienstverbandType {
   if (!value) return DienstverbandType.LOONDIENST;
@@ -44,7 +39,7 @@ function sortEmployeesForRoster(list: any[]) {
     });
 }
 
-export function createEmployeeSnapshot(rosterId: string): RosterEmployee[] {
+export async function createEmployeeSnapshot(rosterId: string): Promise<RosterEmployee[]> {
   const employees = sortEmployeesForRoster(getAllEmployees());
   return employees.map(emp => {
     const rosterEmployee = createDefaultRosterEmployee({
@@ -62,37 +57,25 @@ export function createEmployeeSnapshot(rosterId: string): RosterEmployee[] {
   });
 }
 
-export function loadRosterDesignData(rosterId: string): RosterDesignData | null {
+export async function loadRosterDesignData(rosterId: string): Promise<RosterDesignData | null> {
   try {
-    const stored = localStorage.getItem(`${ROSTER_DESIGN_KEY}_${rosterId}`);
-    if (!stored) return null;
-    const data = JSON.parse(stored) as RosterDesignData;
-    if (!(data as any).start_date) {
-      const roster = readRosters().find(r => r.id === rosterId);
-      if (roster?.start_date) {
-        (data as any).start_date = roster.start_date;
-        saveRosterDesignData(data);
-      }
-    }
-    return data;
+    return await getRosterDesignByRosterId(rosterId);
   } catch (error) {
     console.error('Fout bij laden roster ontwerp data:', error);
     return null;
   }
 }
-export function saveRosterDesignData(data: RosterDesignData): boolean {
+export async function saveRosterDesignData(data: RosterDesignData): Promise<boolean> {
   try {
-    const key = `${ROSTER_DESIGN_KEY}_${data.rosterId}`;
-    data.updated_at = new Date().toISOString();
-    localStorage.setItem(key, JSON.stringify(data));
+    await updateRosterDesign(data.rosterId, data);
     return true;
   } catch (error) {
     console.error('Fout bij opslaan roster ontwerp data:', error);
     return false;
   }
 }
-export function initializeRosterDesign(rosterId: string, start_date: string): RosterDesignData {
-  const employees = createEmployeeSnapshot(rosterId);
+export async function initializeRosterDesign(rosterId: string, start_date: string): Promise<RosterDesignData> {
+  const employees = await createEmployeeSnapshot(rosterId);
   const status = createDefaultRosterStatus();
   const designData: RosterDesignData = {
     rosterId,
@@ -103,25 +86,26 @@ export function initializeRosterDesign(rosterId: string, start_date: string): Ro
     updated_at: new Date().toISOString(),
     start_date
   } as RosterDesignData & { start_date: string };
-  saveRosterDesignData(designData);
-  autofillUnavailability(rosterId, start_date); // Belangrijk: direct na init
-  return loadRosterDesignData(rosterId)!;
+  await createRosterDesign(designData);
+  await autofillUnavailability(rosterId, start_date);
+  return (await loadRosterDesignData(rosterId))!;
 }
-export function updateEmployeeMaxShifts(rosterId: string, employeeId: string, maxShifts: number): boolean {
+export async function updateEmployeeMaxShifts(rosterId: string, employeeId: string, maxShifts: number): Promise<boolean> {
   if (!validateMaxShifts(maxShifts)) { console.error(`Ongeldig aantal diensten: ${maxShifts}.`); return false; }
-  const designData = loadRosterDesignData(rosterId); if (!designData) return false;
+  const designData = await loadRosterDesignData(rosterId); if (!designData) return false;
   const employee = designData.employees.find(emp => emp.id === employeeId); if (!employee) return false;
-  employee.maxShifts = maxShifts; return saveRosterDesignData(designData);
-};
-export function toggleUnavailability(rosterId: string, employeeId: string, date: string): boolean {
-  const designData = loadRosterDesignData(rosterId); if (!designData) return false;
+  employee.maxShifts = maxShifts;
+  return await saveRosterDesignData(designData);
+}
+export async function toggleUnavailability(rosterId: string, employeeId: string, date: string): Promise<boolean> {
+  const designData = await loadRosterDesignData(rosterId); if (!designData) return false;
   if (!designData.unavailabilityData[employeeId]) { designData.unavailabilityData[employeeId] = {}; }
   const current = designData.unavailabilityData[employeeId][date] || false;
-  designData.unavailabilityData[employeeId][date] = !current; return saveRosterDesignData(designData);
+  designData.unavailabilityData[employeeId][date] = !current;
+  return await saveRosterDesignData(designData);
 }
-export function autofillUnavailability(rosterId: string, start_date: string): boolean {
-  // Gebruik snapshot.roostervrijDagen per medewerker
-  const designData = loadRosterDesignData(rosterId);
+export async function autofillUnavailability(rosterId: string, start_date: string): Promise<boolean> {
+  const designData = await loadRosterDesignData(rosterId);
   if (!designData) { return false; }
   const startDate = new Date(start_date + 'T00:00:00');
   for (const emp of designData.employees) {
@@ -144,10 +128,10 @@ export function autofillUnavailability(rosterId: string, start_date: string): bo
       }
     }
   }
-  return saveRosterDesignData(designData);
+  return await saveRosterDesignData(designData);
 }
-export function syncRosterDesignWithEmployeeData(rosterId: string): boolean {
-  const designData = loadRosterDesignData(rosterId); if (!designData) return false;
+export async function syncRosterDesignWithEmployeeData(rosterId: string): Promise<boolean> {
+  const designData = await loadRosterDesignData(rosterId); if (!designData) return false;
   const currentEmployees = getAllEmployees();
   const employeeMap = new Map(currentEmployees.map(emp => [emp.id, emp]));
   let updated = false;
@@ -162,19 +146,19 @@ export function syncRosterDesignWithEmployeeData(rosterId: string): boolean {
       (rosterEmp as any).roostervrijDagen = currentEmp.roostervrijDagen;
     }
   }
-  return updated ? saveRosterDesignData(designData) : true;
+  return updated ? await saveRosterDesignData(designData) : true;
 }
-export function isEmployeeUnavailable(rosterId: string, employeeId: string, date: string): boolean {
-  const designData = loadRosterDesignData(rosterId); if (!designData) return false;
+export async function isEmployeeUnavailable(rosterId: string, employeeId: string, date: string): Promise<boolean> {
+  const designData = await loadRosterDesignData(rosterId); if (!designData) return false;
   return !!designData.unavailabilityData?.[employeeId]?.[date];
 }
-export function updateRosterDesignStatus(rosterId: string, updates: Partial<RosterStatus>): boolean {
-  const designData = loadRosterDesignData(rosterId); if (!designData) return false; designData.status = { ...designData.status, ...updates }; return saveRosterDesignData(designData);
+export async function updateRosterDesignStatus(rosterId: string, updates: Partial<RosterStatus>): Promise<boolean> {
+  const designData = await loadRosterDesignData(rosterId); if (!designData) return false; designData.status = { ...designData.status, ...updates }; return await saveRosterDesignData(designData);
 }
-export function validateDesignComplete(rosterId: string): { isValid: boolean; errors: string[] } {
-  const designData = loadRosterDesignData(rosterId); if (!designData) { return { isValid: false, errors: ['Roster ontwerp data niet gevonden'] }; }
+export async function validateDesignComplete(rosterId: string): Promise<{ isValid: boolean; errors: string[] }> {
+  const designData = await loadRosterDesignData(rosterId); if (!designData) { return { isValid: false, errors: ['Roster ontwerp data niet gevonden'] }; }
   const errors: string[] = []; const employeesWithoutShifts = designData.employees.filter(emp => emp.maxShifts === 0); if (employeesWithoutShifts.length > 0) { errors.push(`Volgende medewerkers hebben geen aantal diensten ingevuld: ${employeesWithoutShifts.map(e => e.name).join(', ')}`); }
   if (designData.status.servicesStatus !== 'vastgesteld') { errors.push('Diensten per dag moeten worden vastgesteld voordat AI kan worden gebruikt'); }
   return { isValid: errors.length === 0, errors };
 }
-export function exportRosterDesignData(rosterId: string): string | null { const designData = loadRosterDesignData(rosterId); if (!designData) return null; return JSON.stringify(designData, null, 2); }
+export async function exportRosterDesignData(rosterId: string): Promise<string | null> { const designData = await loadRosterDesignData(rosterId); if (!designData) return null; return JSON.stringify(designData, null, 2); }
