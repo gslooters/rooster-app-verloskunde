@@ -24,58 +24,63 @@ function PeriodStaffingContent() {
       return;
     }
 
-    try {
-      // Haal roster design data op
-      const designData = loadRosterDesignData(rosterId);
-      
-      if (!designData) {
-        setError('Geen roster ontwerp data gevonden');
-        return;
-      }
+    // FIXED: Make the entire function async to properly await loadRosterDesignData
+    async function fetchPeriodInfo() {
+      try {
+        // Haal roster design data op - NOW WITH AWAIT
+        const designData = await loadRosterDesignData(rosterId);
+        
+        if (!designData) {
+          setError('Geen roster ontwerp data gevonden');
+          return;
+        }
 
-      // Haal start en end date op uit designData
-      let startDate = (designData as any).start_date || (designData as any).startDate || (designData as any).roster_start;
-      let endDate = (designData as any).end_date || (designData as any).endDate || (designData as any).roster_end;
+        // Haal start en end date op uit designData
+        let startDate = (designData as any).start_date || (designData as any).startDate || (designData as any).roster_start;
+        let endDate = (designData as any).end_date || (designData as any).endDate || (designData as any).roster_end;
 
-      // Als niet in designData, probeer uit localStorage rosters lijst
-      if (!startDate || !endDate) {
-        const rostersRaw = localStorage.getItem('verloskunde_rosters');
-        if (rostersRaw) {
-          const rosters = JSON.parse(rostersRaw);
-          const currentRoster = rosters.find((r: any) => r.id === rosterId);
-          if (currentRoster) {
-            startDate = startDate || currentRoster.start_date || currentRoster.startDate;
-            endDate = endDate || currentRoster.end_date || currentRoster.endDate;
+        // Als niet in designData, probeer uit localStorage rosters lijst
+        if (!startDate || !endDate) {
+          const rostersRaw = localStorage.getItem('verloskunde_rosters');
+          if (rostersRaw) {
+            const rosters = JSON.parse(rostersRaw);
+            const currentRoster = rosters.find((r: any) => r.id === rosterId);
+            if (currentRoster) {
+              startDate = startDate || currentRoster.start_date || currentRoster.startDate;
+              endDate = endDate || currentRoster.end_date || currentRoster.endDate;
+            }
           }
         }
+
+        // Bereken endDate als 35 dagen vanaf startDate indien niet beschikbaar
+        if (startDate && !endDate) {
+          const start = new Date(startDate);
+          start.setDate(start.getDate() + 34); // 35 dagen totaal (0-34)
+          endDate = start.toISOString().split('T')[0];
+        }
+
+        if (!startDate) {
+          setError('Kan periode informatie niet ophalen uit roster data');
+          return;
+        }
+
+        // Genereer periode informatie
+        const periodTitle = formatWeekRange(startDate, endDate);
+        const dateSubtitle = formatDateRangeNl(startDate, endDate);
+
+        setPeriodInfo({
+          startDate,
+          endDate,
+          periodTitle,
+          dateSubtitle
+        });
+      } catch (err) {
+        console.error('Fout bij ophalen periode informatie:', err);
+        setError('Fout bij laden van rooster gegevens');
       }
-
-      // Bereken endDate als 35 dagen vanaf startDate indien niet beschikbaar
-      if (startDate && !endDate) {
-        const start = new Date(startDate);
-        start.setDate(start.getDate() + 34); // 35 dagen totaal (0-34)
-        endDate = start.toISOString().split('T')[0];
-      }
-
-      if (!startDate) {
-        setError('Kan periode informatie niet ophalen uit roster data');
-        return;
-      }
-
-      // Genereer periode informatie
-      const periodTitle = formatWeekRange(startDate, endDate);
-      const dateSubtitle = formatDateRangeNl(startDate, endDate);
-
-      setPeriodInfo({
-        startDate,
-        endDate,
-        periodTitle,
-        dateSubtitle
-      });
-    } catch (err) {
-      console.error('Fout bij ophalen periode informatie:', err);
-      setError('Fout bij laden van rooster gegevens');
     }
+
+    fetchPeriodInfo();
   }, [rosterId]);
 
   if (error) {
