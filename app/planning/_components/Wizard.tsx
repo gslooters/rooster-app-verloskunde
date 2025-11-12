@@ -1,28 +1,23 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
-  computeDefaultStart, computeEnd, readRosters, writeRosters, type Roster,
   generateFiveWeekPeriods, getPeriodStatus, formatWeekRange, formatDateRangeNl
 } from '@/lib/planning/storage';
+import { createRooster } from '@/lib/services/roosters-supabase';
 import { getAllEmployees } from '@/lib/services/employees-storage';
 import { Employee, TeamType, DienstverbandType, getFullName } from '@/lib/types/employee';
 import { initializeRosterDesign } from '@/lib/planning/rosterDesign';
 import { useRouter } from 'next/navigation';
 import { generateRosterPeriodStaffing } from '@/lib/planning/roster-period-staffing-storage';
 
-// FIX: Gebruik native browser UUID generatie i.p.v. custom format
-// Voorheen: function genId() { return 'r_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
-// Nu: Echte UUID voor Supabase/Postgres compatibiliteit
-function genId() { 
-  return crypto.randomUUID(); 
-}
-
 const FIXED_WEEKS = 5;
 
 type WizardStep = 'period' | 'employees' | 'confirm';
 
-interface WizardProps { onClose?: () => void; }
+interface WizardProps { 
+  onClose?: () => void; 
+}
 
 interface PeriodWithStatus {
   start: string;
@@ -45,7 +40,7 @@ export default function Wizard({ onClose }: WizardProps = {}) {
   const [error, setError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState<boolean>(false);
 
-  // FIX: Async laden van perioden met status
+  // Async laden van perioden met status
   useEffect(() => {
     async function loadPeriods() {
       try {
@@ -94,12 +89,22 @@ export default function Wizard({ onClose }: WizardProps = {}) {
   }, []);
 
   function gotoEmployeesStep() {
-    if (!selectedStart || !selectedEnd) { setError('Geen beschikbare periode gevonden.'); return; }
-    setError(null); setStep('employees');
+    if (!selectedStart || !selectedEnd) { 
+      setError('Geen beschikbare periode gevonden.'); 
+      return; 
+    }
+    setError(null); 
+    setStep('employees');
   }
 
-  function gotoConfirmStep() { setStep('confirm'); }
-  function backToDashboard() { if (onClose) onClose(); router.push('/dashboard'); }
+  function gotoConfirmStep() { 
+    setStep('confirm'); 
+  }
+  
+  function backToDashboard() { 
+    if (onClose) onClose(); 
+    router.push('/dashboard'); 
+  }
 
   async function createRosterConfirmed() {
     setIsCreating(true);
@@ -114,31 +119,29 @@ export default function Wizard({ onClose }: WizardProps = {}) {
       console.log('[Wizard] Periode:', selectedStart, 'tot', selectedEnd);
       console.log('='.repeat(80) + '\n');
       
-      const id = genId();
-      const roster: Roster = {
-        id,
+      // DIRECT DATABASE CALL - GEBRUIK GERETOURNEERDE ID ✅
+      const roster = await createRooster({
         start_date: selectedStart,
         end_date: selectedEnd,
-        status: 'draft',
-        created_at: new Date().toISOString()
-      } as Roster;
+        status: 'draft'
+      });
       
-      const list = (await readRosters()).filter(x => x.id !== roster.id);
-      list.push(roster);
-      await writeRosters(list);
-      rosterId = id;
-      
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('lastRosterId', id);
-        localStorage.setItem('recentDesignRoute', `/planning/design/dashboard?rosterId=${id}`);
-      }
-      
-      // Fix: geef start_date expliciet mee aan initializeRosterDesign
-      await initializeRosterDesign(roster.id, selectedStart);
+      rosterId = roster.id; // GEBRUIK DATABASE UUID
       
       console.log('[Wizard] ✅ Rooster succesvol aangemaakt:', rosterId);
       console.log('[Wizard] Start date:', selectedStart);
       console.log('[Wizard] End date:', selectedEnd);
+      console.log('');
+      
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('lastRosterId', rosterId);
+        localStorage.setItem('recentDesignRoute', `/planning/design/dashboard?rosterId=${rosterId}`);
+      }
+      
+      // NU MET CORRECTE DATABASE ID ✅
+      await initializeRosterDesign(rosterId, selectedStart);
+      
+      console.log('[Wizard] ✅ Roster design geïnitialiseerd');
       console.log('');
       
     } catch (err) {
@@ -158,7 +161,7 @@ export default function Wizard({ onClose }: WizardProps = {}) {
       console.log('[Wizard] RosterId:', rosterId);
       console.log('');
       
-      await generateRosterPeriodStaffing(rosterId, selectedStart, selectedEnd);
+      await generateRosterPeriodStaffing(rosterId!, selectedStart, selectedEnd);
       
       console.log('[Wizard] ✅ Diensten per dag data succesvol gegenereerd');
       console.log('');
@@ -192,8 +195,20 @@ export default function Wizard({ onClose }: WizardProps = {}) {
   }
 
   function statusBadge(period: PeriodWithStatus) {
-    if (period.status === 'in_progress') return (<span className="px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">In bewerking</span>);
-    if (period.status === 'draft') return (<span className="px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">In ontwerp</span>);
+    if (period.status === 'in_progress') {
+      return (
+        <span className="px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">
+          In bewerking
+        </span>
+      );
+    }
+    if (period.status === 'draft') {
+      return (
+        <span className="px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
+          In ontwerp
+        </span>
+      );
+    }
     return null;
   }
 
@@ -209,10 +224,19 @@ export default function Wizard({ onClose }: WizardProps = {}) {
     const selectedCls = isSelected ? 'ring-2 ring-red-300 bg-red-50' : '';
     const selectableCls = selectable ? 'hover:bg-red-50 cursor-pointer' : (isDisabled(p) ? '' : 'opacity-60 cursor-not-allowed');
 
-    const handle = () => { if (selectable) { setSelectedStart(p.start); setSelectedEnd(p.end);} };
+    const handle = () => { 
+      if (selectable) { 
+        setSelectedStart(p.start); 
+        setSelectedEnd(p.end);
+      } 
+    };
 
     return (
-      <div key={`${p.start}-${p.end}`} onClick={handle} className={`${baseCls} ${disabledCls} ${selectedCls} ${selectableCls}`}>
+      <div 
+        key={`${p.start}-${p.end}`} 
+        onClick={handle} 
+        className={`${baseCls} ${disabledCls} ${selectedCls} ${selectableCls}`}
+      >
         <div>
           <div className="font-semibold">{formatWeekRange(p.start,p.end)}</div>
           <div className="text-sm text-gray-600">{formatDateRangeNl(p.start,p.end)}</div>
@@ -261,7 +285,9 @@ export default function Wizard({ onClose }: WizardProps = {}) {
 
       {step === 'period' && (
         <div className="flex flex-col gap-4">
-          <div className="text-sm text-gray-600">Kies de eerstvolgende beschikbare periode. Perioden in ontwerp/bewerking zijn niet kiesbaar.</div>
+          <div className="text-sm text-gray-600">
+            Kies de eerstvolgende beschikbare periode. Perioden in ontwerp/bewerking zijn niet kiesbaar.
+          </div>
           {periods.some(p=>p.status==='in_progress') && (
             <div>
               <div className="text-xs uppercase text-gray-500 mb-1">In bewerking</div>
@@ -285,15 +311,28 @@ export default function Wizard({ onClose }: WizardProps = {}) {
             </div>
           </div>
           <div className="flex gap-2 justify-end">
-            <button onClick={onClose} className="px-3 py-2 border rounded bg-white">Annuleren</button>
-            <button onClick={gotoEmployeesStep} disabled={!selectedStart} className="px-3 py-2 border rounded bg-blue-600 text-white disabled:bg-gray-300">Verder</button>
+            <button 
+              onClick={onClose} 
+              className="px-3 py-2 border rounded bg-white"
+            >
+              Annuleren
+            </button>
+            <button 
+              onClick={gotoEmployeesStep} 
+              disabled={!selectedStart} 
+              className="px-3 py-2 border rounded bg-blue-600 text-white disabled:bg-gray-300"
+            >
+              Verder
+            </button>
           </div>
         </div>
       )}
 
       {step === 'employees' && (
         <div className="flex flex-col gap-4">
-          <div className="text-sm text-gray-600">Controleer of de medewerkers die deelnemen op actief staan.</div>
+          <div className="text-sm text-gray-600">
+            Controleer of de medewerkers die deelnemen op actief staan.
+          </div>
           <div className="border rounded overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-gray-50">
@@ -316,10 +355,22 @@ export default function Wizard({ onClose }: WizardProps = {}) {
           </div>
           <div className="flex items-center gap-2">
             <span>Medewerkerslijst akkoord?</span>
-            <button onClick={()=>gotoConfirmStep()} className="px-3 py-2 border rounded bg-blue-600 text-white">Ja</button>
-            <button onClick={backToDashboard} className="px-3 py-2 border rounded bg-white">Nee</button>
+            <button 
+              onClick={()=>gotoConfirmStep()} 
+              className="px-3 py-2 border rounded bg-blue-600 text-white"
+            >
+              Ja
+            </button>
+            <button 
+              onClick={backToDashboard} 
+              className="px-3 py-2 border rounded bg-white"
+            >
+              Nee
+            </button>
           </div>
-          <div className="text-sm text-gray-600">Bij Nee: Pas medewerkers aan in Medewerkers Beheer.</div>
+          <div className="text-sm text-gray-600">
+            Bij Nee: Pas medewerkers aan in Medewerkers Beheer.
+          </div>
         </div>
       )}
 
@@ -327,11 +378,24 @@ export default function Wizard({ onClose }: WizardProps = {}) {
         <div className="flex flex-col gap-4">
           <div className="text-sm">
             <div className="font-semibold">{formatWeekRange(selectedStart, selectedEnd)}</div>
-            <div className="text-gray-600">{formatDateRangeNl(selectedStart, selectedEnd)} wordt aangemaakt. Is dit akkoord?</div>
+            <div className="text-gray-600">
+              {formatDateRangeNl(selectedStart, selectedEnd)} wordt aangemaakt. Is dit akkoord?
+            </div>
           </div>
           <div className="flex gap-2 justify-end">
-            <button onClick={backToDashboard} className="px-3 py-2 border rounded bg-white">Nee</button>
-            <button onClick={createRosterConfirmed} disabled={isCreating} className="px-3 py-2 border rounded bg-blue-600 text-white disabled:bg-blue-400">{isCreating ? 'Aanmaken…' : 'Ja, aanmaken'}</button>
+            <button 
+              onClick={backToDashboard} 
+              className="px-3 py-2 border rounded bg-white"
+            >
+              Nee
+            </button>
+            <button 
+              onClick={createRosterConfirmed} 
+              disabled={isCreating} 
+              className="px-3 py-2 border rounded bg-blue-600 text-white disabled:bg-blue-400"
+            >
+              {isCreating ? 'Aanmaken…' : 'Ja, aanmaken'}
+            </button>
           </div>
         </div>
       )}
