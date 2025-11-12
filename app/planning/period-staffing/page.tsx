@@ -24,22 +24,21 @@ function PeriodStaffingContent() {
       return;
     }
 
-    // FIXED: Make the entire function async to properly await loadRosterDesignData
     async function fetchPeriodInfo() {
       try {
-        // Haal roster design data op - NOW WITH AWAIT
+        // FIX: rosterId expliciet als string gesafety checken
+        if (typeof rosterId !== 'string') {
+          setError('RosterId ontbreekt of is niet geldig');
+          return;
+        }
         const designData = await loadRosterDesignData(rosterId);
         
         if (!designData) {
           setError('Geen roster ontwerp data gevonden');
           return;
         }
-
-        // Haal start en end date op uit designData
         let startDate = (designData as any).start_date || (designData as any).startDate || (designData as any).roster_start;
         let endDate = (designData as any).end_date || (designData as any).endDate || (designData as any).roster_end;
-
-        // Als niet in designData, probeer uit localStorage rosters lijst
         if (!startDate || !endDate) {
           const rostersRaw = localStorage.getItem('verloskunde_rosters');
           if (rostersRaw) {
@@ -51,23 +50,17 @@ function PeriodStaffingContent() {
             }
           }
         }
-
-        // Bereken endDate als 35 dagen vanaf startDate indien niet beschikbaar
         if (startDate && !endDate) {
           const start = new Date(startDate);
-          start.setDate(start.getDate() + 34); // 35 dagen totaal (0-34)
+          start.setDate(start.getDate() + 34);
           endDate = start.toISOString().split('T')[0];
         }
-
         if (!startDate) {
           setError('Kan periode informatie niet ophalen uit roster data');
           return;
         }
-
-        // Genereer periode informatie
         const periodTitle = formatWeekRange(startDate, endDate);
         const dateSubtitle = formatDateRangeNl(startDate, endDate);
-
         setPeriodInfo({
           startDate,
           endDate,
@@ -79,7 +72,6 @@ function PeriodStaffingContent() {
         setError('Fout bij laden van rooster gegevens');
       }
     }
-
     fetchPeriodInfo();
   }, [rosterId]);
 
@@ -90,7 +82,7 @@ function PeriodStaffingContent() {
           <h2 className="text-lg font-semibold text-red-800 mb-2">Fout</h2>
           <p className="text-red-600 mb-4">{error}</p>
           <button
-            onClick={() => router.push(`/planning/design/dashboard?rosterId=${rosterId}`)}
+            onClick={() => router.push(`/planning/design/dashboard?rosterId=${rosterId || ''}`)}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             Terug naar Dashboard
@@ -99,7 +91,6 @@ function PeriodStaffingContent() {
       </div>
     );
   }
-
   if (!periodInfo) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 flex items-center justify-center">
@@ -110,11 +101,9 @@ function PeriodStaffingContent() {
       </div>
     );
   }
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-4 md:p-8">
       <div className="max-w-[1920px] mx-auto">
-        {/* Header */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
@@ -130,25 +119,22 @@ function PeriodStaffingContent() {
               </div>
             </div>
             <button
-              onClick={() => router.push(`/planning/design/dashboard?rosterId=${rosterId}`)}
+              onClick={() => router.push(`/planning/design/dashboard?rosterId=${rosterId || ''}`)}
               className="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium flex items-center gap-2"
             >
               <span>←</span>
               <span>Terug naar Dashboard</span>
             </button>
           </div>
-
           <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mt-4">
             <p className="text-purple-800 text-sm">
               <strong>Instructie:</strong> Stel per dienst en per dag het minimum en maximum aantal benodigde medewerkers in. Klik in de cellen om de waarden aan te passen.
             </p>
           </div>
         </div>
-
-        {/* Grid */}
         <div className="bg-white rounded-xl shadow-lg p-6">
           <PeriodStaffingGrid
-            rosterId={rosterId!}
+            rosterId={rosterId || ''}
             startDate={periodInfo.startDate}
             endDate={periodInfo.endDate}
           />
