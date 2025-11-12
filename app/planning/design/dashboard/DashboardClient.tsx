@@ -111,6 +111,11 @@ export default function DashboardClient() {
     if (!rosterId) { setError('Geen roster ID gevonden'); setLoading(false); return; }
     async function fetchData() {
       try {
+        // FIXED: Add explicit check that rosterId is not null before calling loadRosterDesignData
+        if (!rosterId) {
+          setError('Geen roster ID gevonden');
+          return;
+        }
         const data = await loadRosterDesignData(rosterId);
         if (data) {
           setDesignData(data);
