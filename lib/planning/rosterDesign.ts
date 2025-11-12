@@ -1,7 +1,7 @@
 import { RosterEmployee, RosterStatus, RosterDesignData, validateMaxShifts, createDefaultRosterEmployee, createDefaultRosterStatus } from '@/lib/types/roster';
 import { getAllEmployees } from '@/lib/services/employees-storage';
 import { TeamType, DienstverbandType } from '@/lib/types/employee';
-import { getRosterDesignByRosterId, createRosterDesign, updateRosterDesign, updateRosterDesignStatus, bulkUpdateUnavailability } from '@/lib/services/roster-design-supabase';
+import { getRosterDesignByRosterId, createRosterDesign, updateRosterDesign, bulkUpdateUnavailability } from '@/lib/services/roster-design-supabase';
 import { getWeekdayCode } from '@/lib/utils/date-helpers';
 
 function normalizeDienstverband(value: any): DienstverbandType {
