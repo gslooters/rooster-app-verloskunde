@@ -4,7 +4,7 @@ import {
   createRooster,
   updateRooster,
   getRosterByDateRange,
-  deleteRoster,
+  deleteRooster,
 } from '@/lib/services/roosters-supabase';
 
 export type Roster = {
@@ -174,7 +174,7 @@ function getISOWeek(date: Date): number {
   const yearStart = new Date(Date.UTC(dt.getUTCFullYear(), 0, 1));
 
   // Bereken aantal volledige weken tot de donderdag + week 1
-  return Math.ceil((dt.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return Math.ceil((((dt.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
 }
 
 /**
