@@ -1,9 +1,10 @@
-// Restored volledige werkende rooster UI uit commit f3ac2d658f2a0b68cc1614f6145388fe78479f0e
-// Alleen router push aangepast naar '/planning/design/dashboard'
+// DRAAD26K: Updated to use roster_assignments for NB toggle
+// Switched from JSON unavailabilityData to database records
 'use client';
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { loadRosterDesignData, updateEmployeeMaxShifts, toggleUnavailability, autofillUnavailability, syncRosterDesignWithEmployeeData } from '@/lib/planning/rosterDesign';
+import { loadRosterDesignData, updateEmployeeMaxShifts, toggleNBAssignment, autofillUnavailability, syncRosterDesignWithEmployeeData } from '@/lib/planning/rosterDesign';
+import { getNBAssignmentsByRosterId } from '@/lib/services/roster-assignments-supabase';
 import { fetchNetherlandsHolidays, createHolidaySet, findHolidayByDate } from '@/lib/services/holidays-api';
 import type { RosterDesignData, RosterEmployee } from '@/lib/types/roster';
 import type { Holiday } from '@/lib/types/holiday';
@@ -71,22 +72,14 @@ function formatDateCell(dateStr: string, holidaySet: Set<string>, holidays: Holi
   const holiday = isHoliday ? findHolidayByDate(holidays, dateStr) : undefined;
   return { day, date: dd, month: mm, isWeekend, isHoliday, holidayName: holiday?.name };
 }
-function columnClasses(dateStr: string, holidaySet: Set<string>): string {
-  const date = new Date(dateStr + 'T00:00:00');
-  const d = date.getDay();
-  const isHoliday = holidaySet.has(dateStr);
-  const leftWeekSep = d === 1 ? ' border-l-4 border-yellow-200' : '';
-  let rim = '';
-  if (d === 0 || d === 6) { rim = isHoliday ? ' border-x-2 border-amber-300' : ' border-x-2 border-yellow-300'; }
-  else if (isHoliday) { rim = ' border-x-2 border-amber-300'; }
-  return leftWeekSep + rim;
-}
+
 export default function DesignPageClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const rosterId = searchParams.get('rosterId');
   const [designData, setDesignData] = useState<RosterDesignData | null>(null);
   const [employees, setEmployees] = useState<RosterEmployee[]>([]);
+  const [nbAssignments, setNbAssignments] = useState<Map<string, Set<string>>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
@@ -120,7 +113,6 @@ export default function DesignPageClient() {
     async function fetchAndInitializeData() {
       try {
         setLoading(true);
-        // CRUCIAL FIX: Only call with string - not string | null
         if (typeof rosterId !== 'string') {
           setError('Geen geldig rooster ID gevonden');
           setLoading(false);
@@ -151,6 +143,12 @@ export default function DesignPageClient() {
           const latest = await loadRosterDesignData(rosterId) || data;
           setDesignData(latest);
           setEmployees(latest.employees);
+          
+          // DRAAD26K: Load NB assignments from roster_assignments table
+          const nbMap = await getNBAssignmentsByRosterId(rosterId);
+          setNbAssignments(nbMap);
+          console.log('✅ Loaded NB assignments:', nbMap.size, 'employees with NB');
+          
           if (startISO) { loadHolidaysForPeriod(startISO); }
         } else { 
           setError('Geen rooster ontwerp data gevonden'); 
@@ -164,6 +162,7 @@ export default function DesignPageClient() {
     }
     fetchAndInitializeData();
   }, [rosterId]);
+  
   async function loadHolidaysForPeriod(startISO: string) {
     setHolidaysLoading(true);
     try {
@@ -177,6 +176,7 @@ export default function DesignPageClient() {
     } catch { /* ignore */ }
     setHolidaysLoading(false);
   }
+  
   async function updateMaxShiftsHandler(empId: string, maxShifts: number) {
     if (!rosterId || !designData) return;
     if (typeof rosterId !== 'string') return;
@@ -187,19 +187,26 @@ export default function DesignPageClient() {
       setEmployees(updated.employees);
     }
   }
+  
+  // DRAAD26K: Updated toggle handler using new toggleNBAssignment
   async function toggleUnavailableHandler(empId: string, date: string) {
     if (!rosterId || !designData) return;
     if (typeof rosterId !== 'string') return;
-    await toggleUnavailability(rosterId, empId, date);
-    const updated = await loadRosterDesignData(rosterId);
-    if (updated) {
-      setDesignData(updated);
-      setEmployees(updated.employees);
-    }
+    
+    // Use new NB toggle function that writes to roster_assignments
+    await toggleNBAssignment(rosterId, empId, date);
+    
+    // Reload NB assignments from database
+    const nbMap = await getNBAssignmentsByRosterId(rosterId);
+    setNbAssignments(nbMap);
+    
+    console.log('✅ NB toggle completed, reloaded assignments');
   }
+  
   function getFirstName(fullName: string): string { 
     return fullName.split(' ')[0]; 
   }
+  
   const computedValues = useMemo(() => {
     if (!designData) {
       return { 
@@ -212,7 +219,6 @@ export default function DesignPageClient() {
       };
     }
     
-    // CRITICAL FIX: Gebruik start_date uit database (komt via JOIN met roosters tabel)
     const startISO = (designData as any).start_date;
     
     if (!startISO) {
@@ -326,13 +332,52 @@ export default function DesignPageClient() {
               {sortedEmployees.map((emp, empIndex) => {
                 const team = (emp as any).team as any;
                 const firstName = (emp as any).voornaam || getFirstName((emp as any).name || '');
-                return (<tr key={(emp as any).id} className={`${empIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'} h-8`}><td className="sticky left-0 bg-inherit border-b px-3 py-1 font-medium text-gray-900 h-8"><TeamBadge team={team} />{firstName}</td><td className="border-b px-3 py-1 text-center h-8"><input type="number" min="0" max="35" value={(emp as any).maxShifts} onChange={(e) => updateMaxShiftsHandler((emp as any).id, parseInt(e.target.value) || 0)} className="w-12 px-1 py-0.5 border border-gray-300 rounded text-center text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent" /></td>{weeks.map(week => week.dates.map(date => {const isUnavailable = (designData as any).unavailabilityData?.[(emp as any).id]?.[date] || false;return (<td key={date} className={`border-b p-0.5 text-center h-8`}><button onClick={() => toggleUnavailableHandler((emp as any).id, date)} className={`w-10 h-6 rounded text-xs font-bold transition-colors ${isUnavailable ? 'bg-red-100 text-red-700 border border-red-300 hover:bg-red-200' : 'bg-gray-100 text-gray-400 border border-gray-300 hover:bg-gray-200'}`} title={isUnavailable ? 'Klik om beschikbaar te maken' : 'Klik om niet-beschikbaar te markeren'}>{isUnavailable ? 'NB' : '—'}</button></td>);}))}</tr>);
+                return (
+                  <tr key={(emp as any).id} className={`${empIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'} h-8`}>
+                    <td className="sticky left-0 bg-inherit border-b px-3 py-1 font-medium text-gray-900 h-8">
+                      <TeamBadge team={team} />{firstName}
+                    </td>
+                    <td className="border-b px-3 py-1 text-center h-8">
+                      <input 
+                        type="number" 
+                        min="0" 
+                        max="35" 
+                        value={(emp as any).maxShifts} 
+                        onChange={(e) => updateMaxShiftsHandler((emp as any).id, parseInt(e.target.value) || 0)} 
+                        className="w-12 px-1 py-0.5 border border-gray-300 rounded text-center text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                      />
+                    </td>
+                    {weeks.map(week => week.dates.map(date => {
+                      // DRAAD26K: Check NB from roster_assignments instead of JSON
+                      const isUnavailable = nbAssignments.get((emp as any).id)?.has(date) || false;
+                      
+                      return (
+                        <td key={date} className={`border-b p-0.5 text-center h-8`}>
+                          <button 
+                            onClick={() => toggleUnavailableHandler((emp as any).id, date)} 
+                            className={`w-10 h-6 rounded text-xs font-bold transition-colors ${
+                              isUnavailable 
+                                ? 'bg-red-100 text-red-700 border border-red-300 hover:bg-red-200' 
+                                : 'bg-gray-100 text-gray-400 border border-gray-300 hover:bg-gray-200'
+                            }`} 
+                            title={isUnavailable ? 'Klik om beschikbaar te maken' : 'Klik om niet-beschikbaar te markeren'}
+                          >
+                            {isUnavailable ? 'NB' : '—'}
+                          </button>
+                        </td>
+                      );
+                    }))}
+                  </tr>
+                );
               })}
             </tbody>
           </table>
         </div>
         <div className="mt-6 flex items-center justify-end">
-          <div className="text-sm text-gray-600">Wijzigingen worden automatisch opgeslagen{holidays.length > 0 && (<span className="ml-2 text-amber-600">• {holidays.length} feestdagen geladen</span>)}</div>
+          <div className="text-sm text-gray-600">
+            Wijzigingen worden automatisch opgeslagen
+            {holidays.length > 0 && (<span className="ml-2 text-amber-600">• {holidays.length} feestdagen geladen</span>)}
+          </div>
         </div>
       </div>
     </div>
