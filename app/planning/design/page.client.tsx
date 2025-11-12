@@ -128,8 +128,23 @@ export default function DesignPageClient() {
         }
         const data = await loadRosterDesignData(rosterId);
         if (data) {
+          console.log('✅ Loaded roster design data:', {
+            rosterId: data.rosterId,
+            start_date: (data as any).start_date,
+            end_date: (data as any).end_date,
+            employees: data.employees.length
+          });
+          
           await syncRosterDesignWithEmployeeData(rosterId);
-          const startISO = (data as any).start_date || (data as any).roster_start;
+          const startISO = (data as any).start_date;
+          
+          if (!startISO) {
+            console.error('❌ CRITICAL: Geen start_date gevonden in roster design data!');
+            setError('Geen periode data beschikbaar voor dit rooster');
+            setLoading(false);
+            return;
+          }
+          
           if (startISO) { 
             await autofillUnavailability(rosterId, startISO); 
           }
@@ -196,7 +211,24 @@ export default function DesignPageClient() {
         dateSubtitle: '' 
       };
     }
-    const startISO = (designData as any).start_date || (designData as any).roster_start || new Date().toISOString().split('T')[0];
+    
+    // CRITICAL FIX: Gebruik start_date uit database (komt via JOIN met roosters tabel)
+    const startISO = (designData as any).start_date;
+    
+    if (!startISO) {
+      console.error('❌ CRITICAL: start_date is undefined in computedValues!', designData);
+      return { 
+        startISO: new Date().toISOString().split('T')[0], 
+        startDate: new Date(), 
+        endDate: new Date(), 
+        weeks: [], 
+        periodTitle: 'ERROR: Geen periode data', 
+        dateSubtitle: 'Neem contact op met support' 
+      };
+    }
+    
+    console.log('🔍 Computing period from start_date:', startISO);
+    
     const startDate = new Date(startISO + 'T00:00:00');
     const endDate = new Date(startDate); 
     endDate.setDate(startDate.getDate() + (4 * 7) + 6);
@@ -217,6 +249,14 @@ export default function DesignPageClient() {
     const lastWeek = weeks[weeks.length - 1];
     const periodTitle = `Rooster Ontwerp : Periode Week ${firstWeek?.number || ''} - Week ${lastWeek?.number || ''} ${startDate.getFullYear()}`;
     const dateSubtitle = `Van ${formatDutchDate(startISO)} tot en met ${formatDutchDate(endDate.toISOString().split('T')[0])}`;
+    
+    console.log('✅ Computed values:', { 
+      startISO, 
+      periodTitle, 
+      dateSubtitle, 
+      weekNumbers: weeks.map(w => w.number) 
+    });
+    
     return { startISO, startDate, endDate, weeks, periodTitle, dateSubtitle };
   }, [designData]);
 

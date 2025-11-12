@@ -12,17 +12,32 @@ export interface RosterDesignRow {
   // GEEN shift_counts - bestaat niet in database!
 }
 
+// Extended row met roster info via JOIN
+export interface RosterDesignWithPeriod extends RosterDesignRow {
+  roosters?: {
+    start_date: string;
+    end_date: string;
+  } | null;
+}
+
 // Convert database row naar app data model
-function rowToDesignData(row: RosterDesignRow): RosterDesignData {
-  return {
+function rowToDesignData(row: RosterDesignWithPeriod): RosterDesignData {
+  const designData: RosterDesignData & { start_date?: string; end_date?: string } = {
     rosterId: row.roster_id,
     employees: row.employee_snapshot,
     unavailabilityData: row.unavailability_data,
     status: row.status,
     created_at: row.created_at,
     updated_at: row.updated_at || '',
-    // shiftCounts verwijderd - niet in database
   };
+  
+  // Voeg start_date en end_date toe uit roosters tabel
+  if (row.roosters) {
+    designData.start_date = row.roosters.start_date;
+    designData.end_date = row.roosters.end_date;
+  }
+  
+  return designData;
 }
 
 // Convert app data model naar database row
@@ -39,9 +54,16 @@ function designDataToRow(data: RosterDesignData): Partial<RosterDesignRow> {
 
 export async function getRosterDesignByRosterId(rosterId: string): Promise<RosterDesignData | null> {
   try {
+    // JOIN met roosters tabel om start_date en end_date op te halen
     const { data, error } = await supabase
       .from('roster_design')
-      .select('*')
+      .select(`
+        *,
+        roosters!inner(
+          start_date,
+          end_date
+        )
+      `)
       .eq('roster_id', rosterId)
       .maybeSingle();
 
@@ -50,7 +72,14 @@ export async function getRosterDesignByRosterId(rosterId: string): Promise<Roste
       throw error;
     }
     if (!data) return null;
-    return rowToDesignData(data as RosterDesignRow);
+    
+    console.log('✅ Roster design opgehaald met periode data:', {
+      roster_id: data.roster_id,
+      start_date: (data as any).roosters?.start_date,
+      end_date: (data as any).roosters?.end_date
+    });
+    
+    return rowToDesignData(data as RosterDesignWithPeriod);
   } catch (error) {
     console.error('❌ Fout bij ophalen roster design:', error);
     throw error;
@@ -67,7 +96,13 @@ export async function createRosterDesign(data: Omit<RosterDesignData, 'created_a
     const { data: result, error } = await supabase
       .from('roster_design')
       .insert(row)
-      .select()
+      .select(`
+        *,
+        roosters!inner(
+          start_date,
+          end_date
+        )
+      `)
       .single();
       
     if (error) { 
@@ -76,7 +111,7 @@ export async function createRosterDesign(data: Omit<RosterDesignData, 'created_a
     }
     
     console.log('✅ Roster design succesvol aangemaakt:', result);
-    return rowToDesignData(result as RosterDesignRow);
+    return rowToDesignData(result as RosterDesignWithPeriod);
   } catch (error) {
     console.error('❌ createRosterDesign failed:', error);
     throw error;
@@ -94,7 +129,13 @@ export async function updateRosterDesign(rosterId: string, updates: Partial<Rost
       .from('roster_design')
       .update(row)
       .eq('roster_id', rosterId)
-      .select()
+      .select(`
+        *,
+        roosters!inner(
+          start_date,
+          end_date
+        )
+      `)
       .single();
       
     if (error) { 
@@ -103,7 +144,7 @@ export async function updateRosterDesign(rosterId: string, updates: Partial<Rost
     }
     
     console.log('✅ Roster design succesvol geüpdatet');
-    return rowToDesignData(data as RosterDesignRow);
+    return rowToDesignData(data as RosterDesignWithPeriod);
   } catch (error) {
     console.error('❌ updateRosterDesign failed:', error);
     throw error;
