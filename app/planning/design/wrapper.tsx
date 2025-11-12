@@ -21,31 +21,76 @@ export default function RosterDesignPageWrapper() {
     let isActive = true;
 
     async function resolveRoute() {
+      // 1. Check URL parameter
       let id = searchParams.get('rosterId');
-      if (id) { if (isActive) { setResolved(true); setReady(true); } return; }
+      if (id) { 
+        if (isActive) { 
+          setResolved(true); 
+          setReady(true); 
+        } 
+        return; 
+      }
 
       await sleep(120);
 
+      // 2. Check localStorage recent route
       if (typeof window !== 'undefined') {
         const recent = localStorage.getItem('recentDesignRoute');
-        if (recent) { router.replace(recent); if (isActive) { setResolved(true); setReady(true); } return; }
+        if (recent) { 
+          router.replace(recent); 
+          if (isActive) { 
+            setResolved(true); 
+            setReady(true); 
+          } 
+          return; 
+        }
       }
 
+      // 3. Check localStorage lastRosterId
       if (typeof window !== 'undefined') {
         const lastId = localStorage.getItem('lastRosterId');
-        if (lastId && lastId.length > 0) { router.replace(`/planning/design?rosterId=${lastId}`); if (isActive) { setResolved(true); setReady(true); } return; }
+        if (lastId && lastId.length > 0) { 
+          router.replace(`/planning/design?rosterId=${lastId}`); 
+          if (isActive) { 
+            setResolved(true); 
+            setReady(true); 
+          } 
+          return; 
+        }
       }
 
-      const rosters = readRosters();
-      if (rosters && rosters.length > 0) {
-        const latest = [...rosters].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
-        if (typeof window !== 'undefined') { localStorage.setItem('lastRosterId', latest.id); localStorage.setItem('recentDesignRoute', `/planning/design?rosterId=${latest.id}`); }
-        router.replace(`/planning/design?rosterId=${latest.id}`);
-        if (isActive) { setResolved(true); setReady(true); } return;
+      // 4. ✅ FIX: Haal roosters op met await
+      try {
+        const rosters = await readRosters();
+        
+        if (rosters && rosters.length > 0) {
+          const latest = [...rosters].sort((a, b) => 
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          )[0];
+          
+          if (typeof window !== 'undefined') { 
+            localStorage.setItem('lastRosterId', latest.id); 
+            localStorage.setItem('recentDesignRoute', `/planning/design?rosterId=${latest.id}`); 
+          }
+          
+          router.replace(`/planning/design?rosterId=${latest.id}`);
+          
+          if (isActive) { 
+            setResolved(true); 
+            setReady(true); 
+          } 
+          return;
+        }
+      } catch (error) {
+        console.error('❌ Fout bij laden roosters in wrapper:', error);
+        // Fall through naar error state
       }
 
-      // Geen context gevonden: blijf op deze pagina met foutkaart
-      if (isActive) { setResolved(false); setReady(true); }
+      // 5. Geen context gevonden: blijf op deze pagina met foutkaart
+      if (isActive) { 
+        setResolved(false); 
+        setReady(true); 
+      }
     }
 
     resolveRoute();
