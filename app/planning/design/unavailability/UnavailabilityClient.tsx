@@ -2,14 +2,14 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { loadRosterDesignData, toggleNBAssignment } from '@/lib/planning/rosterDesign';
-import { getNBAssignmentsByRosterId } from '@/lib/services/roster-assignments-supabase';
+import { getAllAssignmentsByRosterId } from '@/lib/services/roster-assignments-supabase';
 
 export default function UnavailabilityClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const rosterId = searchParams.get('rosterId');
   const [designData, setDesignData] = useState<any>(null);
-  const [nbAssignments, setNbAssignments] = useState<Map<string, Set<string>>>(new Map());
+  const [allAssignments, setAllAssignments] = useState<Map<string, Map<string, string>>>(new Map());
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -22,14 +22,14 @@ export default function UnavailabilityClient() {
         const data = await loadRosterDesignData(rosterId);
         setDesignData(data);
         
-        // ✅ FIX: Laad NB assignments uit database
-        const nbMap = await getNBAssignmentsByRosterId(rosterId);
-        setNbAssignments(nbMap);
+        // ✅ FIX DRAAD 26O: Laad ALLE assignments uit database (niet alleen NB)
+        const assignmentMap = await getAllAssignmentsByRosterId(rosterId);
+        setAllAssignments(assignmentMap);
         
         console.log('✅ Loaded unavailability data:', {
           rosterId,
           employeeCount: data?.employees?.length || 0,
-          nbAssignmentsCount: nbMap.size
+          totalAssignments: Array.from(assignmentMap.values()).reduce((sum, map) => sum + map.size, 0)
         });
       } catch (error) {
         console.error('❌ Error loading unavailability data:', error);
@@ -39,25 +39,51 @@ export default function UnavailabilityClient() {
     })();
   }, [rosterId, router]);
 
-  async function handleToggleUnavailable(empId: string, date: string) {
+  async function handleToggleUnavailable(emp: any, date: string) {
     if (!rosterId) return;
     
-    console.log('🔍 Toggle NB:', { rosterId, empId, date });
+    // ✅ FIX DRAAD 26O: Gebruik originalEmployeeId (emp1) ipv snapshot ID (re_emp1)
+    const employeeId = emp.originalEmployeeId || emp.id;
     
-    const success = await toggleNBAssignment(rosterId, empId, date);
+    console.log('🔍 Toggle NB click:', { 
+      rosterId, 
+      employeeId, 
+      date,
+      empName: emp.voornaam || emp.name
+    });
+    
+    // Check huidige status
+    const currentServiceCode = allAssignments.get(employeeId)?.get(date);
+    
+    console.log('📊 Current service code:', currentServiceCode || 'null (leeg)');
+    
+    // ✅ DRAAD 26O: Logica volgens specificatie
+    if (currentServiceCode && currentServiceCode !== 'NB') {
+      // Er staat een andere dienst dan NB -> NIET TOEGESTAAN
+      alert(
+        `Wijziging is niet mogelijk in dit scherm\n\n` +
+        `Op ${date} staat voor ${emp.voornaam || emp.name} de dienst "${currentServiceCode}" ingepland.\n\n` +
+        `Verwijder eerst deze dienst in het hoofdrooster voordat je NB kunt instellen.`
+      );
+      console.log('⚠️  Toggle geblokkeerd - andere dienst aanwezig:', currentServiceCode);
+      return;
+    }
+    
+    // Als currentServiceCode === null of === 'NB' -> toggle mag
+    const success = await toggleNBAssignment(rosterId, employeeId, date);
     
     if (success) {
       console.log('✅ Toggle succeeded, reloading data');
       
-      // Herlaad NB assignments uit database
-      const nbMap = await getNBAssignmentsByRosterId(rosterId);
-      setNbAssignments(nbMap);
+      // Herlaad ALLE assignments uit database
+      const assignmentMap = await getAllAssignmentsByRosterId(rosterId);
+      setAllAssignments(assignmentMap);
       
       // Ook designData herladen voor synchronisatie
       const updated = await loadRosterDesignData(rosterId);
       setDesignData(updated);
       
-      console.log('✅ UI updated with new NB status');
+      console.log('✅ UI updated with new assignment status');
     } else {
       console.error('❌ Toggle failed');
       alert('Fout bij opslaan niet-beschikbaarheid. Check console voor details.');
@@ -94,6 +120,12 @@ export default function UnavailabilityClient() {
     return d; 
   });
 
+  // Tel totaal aantal NB markeringen
+  const totalNBCount = Array.from(allAssignments.values()).reduce(
+    (sum, dateMap) => sum + Array.from(dateMap.values()).filter(code => code === 'NB').length,
+    0
+  );
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
@@ -113,8 +145,9 @@ export default function UnavailabilityClient() {
         
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
           <p className="text-blue-800 text-sm">
-            <strong>Instructie:</strong> Klik op een dag om een medewerker niet-beschikbaar (NB) te maken. Klik nogmaals om beschikbaar te maken. 
-            Wijzigingen worden direct opgeslagen in de database.
+            <strong>Instructie:</strong> Klik op een <strong>lege cel</strong> om een medewerker niet-beschikbaar (NB) te maken. 
+            Klik op een <strong>rode cel (NB)</strong> om deze beschikbaar te maken. 
+            <strong>Cellen met andere diensten</strong> (zwart op wit) kunnen hier niet worden gewijzigd.
           </p>
         </div>
         
@@ -141,36 +174,63 @@ export default function UnavailabilityClient() {
               </tr>
             </thead>
             <tbody>
-              {designData.employees?.map((emp: any) => (
-                <tr key={emp.id}>
-                  <td className="border border-gray-300 p-3 font-medium bg-gray-50 sticky left-0 z-10">
-                    {emp.voornaam || emp.name || 'Onbekend'}
-                  </td>
-                  {dates.map((date, idx) => {
-                    const dateStr = date.toISOString().split('T')[0];
-                    
-                    // ✅ FIX: Check NB status uit roster_assignments database
-                    const isUnavailable = nbAssignments.get(emp.id)?.has(dateStr) || false;
-                    
-                    return (
-                      <td 
-                        key={idx} 
-                        className={`border border-gray-300 p-2 cursor-pointer text-center transition-colors ${
-                          isUnavailable 
-                            ? 'bg-red-200 hover:bg-red-300' 
-                            : 'bg-white hover:bg-gray-100'
-                        }`} 
-                        onClick={()=>handleToggleUnavailable(emp.id, dateStr)}
-                        title={isUnavailable ? 'Klik om beschikbaar te maken' : 'Klik om niet-beschikbaar te markeren'}
-                      >
-                        <span className="text-lg font-bold">
-                          {isUnavailable ? '✕' : ''}
-                        </span>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
+              {designData.employees?.map((emp: any) => {
+                // ✅ FIX DRAAD 26O: Gebruik originalEmployeeId voor lookup
+                const employeeId = emp.originalEmployeeId || emp.id;
+                const employeeAssignments = allAssignments.get(employeeId) || new Map();
+                
+                return (
+                  <tr key={emp.id}>
+                    <td className="border border-gray-300 p-3 font-medium bg-gray-50 sticky left-0 z-10">
+                      {emp.voornaam || emp.name || 'Onbekend'}
+                    </td>
+                    {dates.map((date, idx) => {
+                      const dateStr = date.toISOString().split('T')[0];
+                      const serviceCode = employeeAssignments.get(dateStr);
+                      
+                      // ✅ DRAAD 26O: 3 states bepalen
+                      const isNB = serviceCode === 'NB';
+                      const hasOtherService = serviceCode && serviceCode !== 'NB';
+                      const isEmpty = !serviceCode;
+                      
+                      // Styling op basis van state
+                      let cellClass = 'border border-gray-300 p-2 text-center transition-colors ';
+                      let cursorClass = '';
+                      let title = '';
+                      
+                      if (isNB) {
+                        cellClass += 'bg-red-200 ';
+                        cursorClass = 'cursor-pointer hover:bg-red-300';
+                        title = 'Klik om beschikbaar te maken';
+                      } else if (hasOtherService) {
+                        cellClass += 'bg-white ';
+                        cursorClass = 'cursor-not-allowed';
+                        title = `Dienst "${serviceCode}" - wijziging niet mogelijk in dit scherm`;
+                      } else {
+                        cellClass += 'bg-white ';
+                        cursorClass = 'cursor-pointer hover:bg-gray-100';
+                        title = 'Klik om niet-beschikbaar te markeren';
+                      }
+                      
+                      return (
+                        <td 
+                          key={idx} 
+                          className={cellClass + cursorClass}
+                          onClick={() => handleToggleUnavailable(emp, dateStr)}
+                          title={title}
+                        >
+                          {isNB && (
+                            <span className="text-lg font-bold text-red-800">✕</span>
+                          )}
+                          {hasOtherService && (
+                            <span className="text-sm font-medium text-gray-900">{serviceCode}</span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -180,24 +240,28 @@ export default function UnavailabilityClient() {
           <div className="flex flex-wrap gap-4 text-sm">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 bg-white border border-gray-300 rounded"></div>
-              <span className="text-gray-700">Beschikbaar</span>
+              <span className="text-gray-700">Beschikbaar (leeg)</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-red-200 border border-gray-300 rounded flex items-center justify-center text-lg font-bold">✕</div>
+              <div className="w-8 h-8 bg-red-200 border border-gray-300 rounded flex items-center justify-center text-lg font-bold text-red-800">✕</div>
               <span className="text-gray-700">Niet Beschikbaar (NB)</span>
             </div>
             <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-white border border-gray-300 rounded flex items-center justify-center text-xs font-medium text-gray-900">DD</div>
+              <span className="text-gray-700">Andere dienst (zwart op wit - niet wijzigbaar)</span>
+            </div>
+            <div className="flex items-center gap-2">
               <div className="w-8 h-8 bg-yellow-100 border border-gray-300 rounded"></div>
-              <span className="text-gray-700">Weekend</span>
+              <span className="text-gray-700">Weekend (header)</span>
             </div>
           </div>
         </div>
         
         <div className="mt-4 text-center text-sm text-gray-600">
           Wijzigingen worden automatisch opgeslagen • 
-          {nbAssignments.size > 0 && (
+          {totalNBCount > 0 && (
             <span className="text-blue-600 font-medium">
-              {Array.from(nbAssignments.values()).reduce((total, dates) => total + dates.size, 0)} NB markering(en) geladen
+              {' '}{totalNBCount} NB markering(en) geladen
             </span>
           )}
         </div>
