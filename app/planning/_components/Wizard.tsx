@@ -133,6 +133,69 @@ export default function Wizard({ onClose }: WizardProps = {}) {
       console.log('[Wizard] End date:', selectedEnd);
       console.log('');
       
+      // === DRAAD26O-FASE1: DIAGNOSE LOGGING ===
+      console.log('\n' + '='.repeat(80));
+      console.log('[DIAGNOSE] 🔍 FASE 1: RoostervrijDagen Data Check');
+      console.log('='.repeat(80));
+      
+      // Haal ALLE medewerkers op (actief + niet-actief voor complete diagnose)
+      const allEmployees = getAllEmployees();
+      console.log(`[DIAGNOSE] Totaal medewerkers in systeem: ${allEmployees.length}`);
+      
+      // Filter alleen actieve medewerkers (deze worden gebruikt in rooster)
+      const activeEmployees = allEmployees.filter(emp => emp.actief);
+      console.log(`[DIAGNOSE] Actieve medewerkers: ${activeEmployees.length}`);
+      
+      // Analyseer roostervrijDagen data
+      const medewerkersMetData = activeEmployees.filter(
+        emp => emp.roostervrijDagen && emp.roostervrijDagen.length > 0
+      );
+      const medewerkersSonderData = activeEmployees.filter(
+        emp => !emp.roostervrijDagen || emp.roostervrijDagen.length === 0
+      );
+      
+      console.log(`[DIAGNOSE] Met roostervrijDagen: ${medewerkersMetData.length}`);
+      console.log(`[DIAGNOSE] Zonder roostervrijDagen: ${medewerkersSonderData.length}`);
+      console.log('');
+      
+      // Log detail per medewerker met data
+      if (medewerkersMetData.length > 0) {
+        console.log('[DIAGNOSE] ✅ Medewerkers MET roostervrijDagen:');
+        medewerkersMetData.forEach(emp => {
+          console.log(`  • ${emp.voornaam} ${emp.achternaam}: [${emp.roostervrijDagen.join(', ')}]`);
+        });
+        console.log('');
+      }
+      
+      // Waarschuwing voor medewerkers zonder data
+      if (medewerkersSonderData.length > 0) {
+        console.warn('[DIAGNOSE] ⚠️  Medewerkers ZONDER roostervrijDagen:');
+        medewerkersSonderData.forEach(emp => {
+          console.warn(`  • ${emp.voornaam} ${emp.achternaam}: GEEN DATA`);
+        });
+        console.warn('');
+        console.warn('[DIAGNOSE] ⚠️  Deze medewerkers krijgen GEEN automatische NB dagen!');
+        console.warn('[DIAGNOSE] → Configureer roostervrijDagen in Medewerkers Beheer');
+        console.warn('');
+      }
+      
+      // Kritieke waarschuwing als NIEMAND data heeft
+      if (medewerkersMetData.length === 0) {
+        console.error('\n' + '='.repeat(80));
+        console.error('[DIAGNOSE] ❌ KRITIEK: GEEN ENKELE MEDEWERKER HEEFT ROOSTERVRIJDAGEN!');
+        console.error('='.repeat(80));
+        console.error('[DIAGNOSE] Gevolg: roster_assignments tabel blijft leeg (0 rijen)');
+        console.error('[DIAGNOSE] Actie: Ga naar Medewerkers Beheer en configureer roostervrijDagen');
+        console.error('[DIAGNOSE] Bijvoorbeeld: ma,di voor medewerker die maandag/dinsdag vrij heeft');
+        console.error('='.repeat(80) + '\n');
+      } else {
+        console.log('[DIAGNOSE] ✅ Data check geslaagd - roostervrijDagen aanwezig');
+        console.log('[DIAGNOSE] Verwacht: autofillUnavailability zal NB records aanmaken');
+      }
+      
+      console.log('='.repeat(80) + '\n');
+      // === EINDE DIAGNOSE LOGGING ===
+      
       if (typeof window !== 'undefined') {
         localStorage.setItem('lastRosterId', rosterId);
         localStorage.setItem('recentDesignRoute', `/planning/design/dashboard?rosterId=${rosterId}`);
