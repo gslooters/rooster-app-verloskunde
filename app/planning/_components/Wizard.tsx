@@ -10,6 +10,7 @@ import { Employee, TeamType, DienstverbandType, getFullName } from '@/lib/types/
 import { initializeRosterDesign } from '@/lib/planning/rosterDesign';
 import { useRouter } from 'next/navigation';
 import { generateRosterPeriodStaffing } from '@/lib/planning/roster-period-staffing-storage';
+import { initializePeriodEmployeeStaffing } from '@/lib/services/period-employee-staffing';
 
 const FIXED_WEEKS = 5;
 
@@ -218,7 +219,38 @@ export default function Wizard({ onClose }: WizardProps = {}) {
       return; // Stop hier volledig
     }
     
-    // === FASE 2: Period staffing genereren (niet-kritiek) ===
+    // === DRAAD27 - FASE 2: Period Employee Staffing Initialiseren ===
+    try {
+      console.log('[Wizard] 🔄 START: Initialiseren period employee staffing...');
+      console.log('[Wizard] RosterId:', rosterId);
+      console.log('');
+      
+      const activeEmployeeIds = employees
+        .filter(emp => emp.actief)
+        .map(emp => emp.id);
+      
+      console.log(`[Wizard] Actieve medewerkers: ${activeEmployeeIds.length}`);
+      console.log('[Wizard] Employee IDs:', activeEmployeeIds.join(', '));
+      console.log('');
+      
+      await initializePeriodEmployeeStaffing(rosterId!, activeEmployeeIds);
+      
+      console.log('[Wizard] ✅ Period employee staffing geïnitialiseerd');
+      console.log('');
+      
+    } catch (err) {
+      console.error('\n' + '='.repeat(80));
+      console.error('[Wizard] ⚠️  WAARSCHUWING: Fout bij initialiseren period employee staffing');
+      console.error('[Wizard] Error:', err);
+      console.error('[Wizard] ⚠️  Rooster is WEL aangemaakt maar Dst data ontbreekt.');
+      console.error('[Wizard] Gebruiker kan later handmatig corrigeren in scherm.');
+      console.error('='.repeat(80) + '\n');
+      
+      // Ga WEL door - niet kritiek voor rooster aanmaken
+    }
+    // === EINDE DRAAD27 - FASE 2 ===
+    
+    // === FASE 3: Period staffing genereren (niet-kritiek) ===
     try {
       console.log('[Wizard] 🔄 START: Genereren diensten per dag data...');
       console.log('[Wizard] RosterId:', rosterId);
@@ -241,7 +273,7 @@ export default function Wizard({ onClose }: WizardProps = {}) {
       // Geen error message tonen aan gebruiker - niet kritiek
     }
     
-    // === FASE 3: Navigeer naar dashboard ===
+    // === FASE 4: Navigeer naar dashboard ===
     console.log('[Wizard] 🔄 Navigeren naar dashboard...');
     console.log('[Wizard] Route:', `/planning/design/dashboard?rosterId=${rosterId}`);
     console.log('\n' + '='.repeat(80));
