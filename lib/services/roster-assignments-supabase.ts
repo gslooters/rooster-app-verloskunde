@@ -60,12 +60,15 @@ export async function isEmployeeUnavailableOnDate(
 }
 
 /**
- * GEFIXTE VERSIE MET UITGEBREIDE ERROR HANDLING
+ * GEFIXTE VERSIE - FASE 1D: UUID VALIDATIE VERWIJDERD VOOR EMPLOYEE_ID
  * 
  * Upsert NB assignment (insert/update met constraint)
  * 
+ * FIX: employees.id is TEXT type (emp1, emp3, etc.), GEEN UUID!
+ *      Verwijder UUID check voor employeeId, behoud voor rosterId
+ * 
  * @param rosterId - UUID van het rooster
- * @param employeeId - UUID van de medewerker
+ * @param employeeId - TEXT ID van de medewerker (emp1, emp2, etc.)
  * @param date - Datum in ISO formaat (YYYY-MM-DD)
  * @returns RosterAssignment object of null bij fout
  */
@@ -84,14 +87,17 @@ export async function upsertNBAssignment(
       return null;
     }
     
-    // Valideer UUID format (basic check)
+    // Valideer UUID format ALLEEN voor rosterId
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(rosterId)) {
       console.error('🛑 Ongeldige rosterId UUID:', rosterId);
       return null;
     }
-    if (!uuidRegex.test(employeeId)) {
-      console.error('🛑 Ongeldige employeeId UUID:', employeeId);
+    
+    // ✅ FIX FASE 1D: employeeId is TEXT, geen UUID!
+    // Valideer alleen dat het een niet-lege string is
+    if (typeof employeeId !== 'string' || employeeId.trim() === '') {
+      console.error('🛑 Ongeldige employeeId (moet niet-lege string zijn):', employeeId);
       return null;
     }
     
@@ -136,6 +142,7 @@ export async function upsertNBAssignment(
         console.error('   1. service_code "NB" bestaat niet in service_types tabel');
         console.error('   2. rosterId bestaat niet in roosters tabel');
         console.error('   3. employeeId bestaat niet in employees tabel');
+        console.error('   4. Check of employeeId correct is:', employeeId);
       } else if (error.code === '42501') {
         console.error('⚠️  PERMISSION DENIED');
         console.error('   Database permissions zijn niet correct ingesteld');
