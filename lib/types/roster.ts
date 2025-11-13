@@ -24,6 +24,7 @@ export interface RosterDesignData {
   employees: RosterEmployee[];
   status: RosterStatus;
   unavailabilityData: { [employeeId: string]: { [date: string]: boolean } };
+  assignments?: any[]; // DRAAD27C: Loaded assignments from rooster_assignments table
   shiftCounts?: { [employeeId: string]: { [shiftType: string]: number } }; // Nieuw veld toegevoegd
   dailyServiceRequirements?: DailyServiceRequirement[];
   planningRules?: PlanningRule[];
