@@ -29,6 +29,8 @@ export interface RosterDesignData {
   planningRules?: PlanningRule[];
   created_at: string;
   updated_at: string;
+  start_date?: string;
+  end_date?: string;
 }
 
 // Voor toekomstige uitbreiding - diensten per dag
