@@ -61,6 +61,47 @@ function getDaysInRangeStartingMonday(referenceDate: Date): Date[] {
   return dates;
 }
 
+/**
+ * ✨ Helper: Team kleur bepalen voor indicator cirkel
+ */
+function getTeamColor(team: string): string {
+  if (team === 'Groen') return 'bg-green-500';
+  if (team === 'Oranje') return 'bg-orange-500';
+  return 'bg-blue-600'; // Overig
+}
+
+/**
+ * ✨ Helper: Medewerkers sorteren volgens specificatie
+ * 1. Team (Groen → Oranje → Overig)
+ * 2. Dienstverband (Maat → Loondienst → ZZP)
+ * 3. Voornaam (alfabetisch A-Z)
+ */
+function sortEmployees(empArray: any[]): any[] {
+  const teamOrder: Record<string, number> = { 'Groen': 0, 'Oranje': 1, 'Overig': 2 };
+  const dienstOrder: Record<string, number> = { 'Maat': 0, 'Loondienst': 1, 'ZZP': 2 };
+  
+  return empArray.slice().sort((a, b) => {
+    // 1. Team sortering
+    const teamA = teamOrder[a.team] ?? 999;
+    const teamB = teamOrder[b.team] ?? 999;
+    if (teamA !== teamB) {
+      return teamA - teamB;
+    }
+    
+    // 2. Dienstverband sortering
+    const dienstA = dienstOrder[a.dienstverband] ?? 999;
+    const dienstB = dienstOrder[b.dienstverband] ?? 999;
+    if (dienstA !== dienstB) {
+      return dienstA - dienstB;
+    }
+    
+    // 3. Voornaam alfabetisch
+    const nameA = a.voornaam || a.name || '';
+    const nameB = b.voornaam || b.name || '';
+    return nameA.localeCompare(nameB, 'nl');
+  });
+}
+
 export default function UnavailabilityClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -209,8 +250,9 @@ export default function UnavailabilityClient() {
           </p>
         </div>
         
-        <div className="bg-white rounded-xl shadow-lg p-6 overflow-x-auto">
-          <table className="w-full border-collapse">
+        {/* ✨ Responsive container met overflow-x */}
+        <div className="bg-white rounded-xl shadow-lg p-6 overflow-x-auto" style={{ maxWidth: '100vw' }}>
+          <table className="w-full border-collapse" style={{ minWidth: '600px' }}>
             <thead>
               <tr>
                 <th className="border border-gray-300 p-3 bg-gray-100 sticky left-0 z-10 font-semibold text-gray-900">Medewerker</th>
@@ -232,15 +274,35 @@ export default function UnavailabilityClient() {
               </tr>
             </thead>
             <tbody>
-              {designData.employees?.map((emp: any) => {
+              {/* ✨ Gesorteerde medewerkers met team-indicator en naam-truncatie */}
+              {sortEmployees(designData.employees || []).map((emp: any) => {
                 // ✅ FIX DRAAD 26O: Gebruik originalEmployeeId voor lookup
                 const employeeId = emp.originalEmployeeId || emp.id;
                 const employeeAssignments = allAssignments.get(employeeId) || new Map();
                 
+                // ✨ Naam truncatie bij >10 tekens
+                const fullName = emp.voornaam || emp.name || 'Onbekend';
+                const shortName = fullName.length > 10 ? fullName.slice(0, 10) + '...' : fullName;
+                
+                // ✨ Team kleur voor indicator
+                const teamColor = getTeamColor(emp.team || 'Overig');
+                
                 return (
                   <tr key={emp.id}>
-                    <td className="border border-gray-300 p-3 font-medium bg-gray-50 sticky left-0 z-10">
-                      {emp.voornaam || emp.name || 'Onbekend'}
+                    <td 
+                      className="border border-gray-300 p-3 font-medium bg-gray-50 sticky left-0 z-10"
+                      style={{ maxWidth: '140px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                      title={`${fullName} - Team ${emp.team || 'Overig'} - ${emp.dienstverband || 'Onbekend'}`}
+                    >
+                      <div className="flex items-center gap-2">
+                        {/* ✨ Team indicator cirkel */}
+                        <span 
+                          className={`inline-block w-3 h-3 rounded-full flex-shrink-0 ${teamColor}`} 
+                          title={`Team ${emp.team || 'Overig'}`}
+                        ></span>
+                        {/* ✨ Truncated naam met tooltip */}
+                        <span>{shortName}</span>
+                      </div>
                     </td>
                     {dates.map((date, idx) => {
                       const dateStr = date.toISOString().split('T')[0];
@@ -311,6 +373,19 @@ export default function UnavailabilityClient() {
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 bg-yellow-100 border border-gray-300 rounded"></div>
               <span className="text-gray-700">Weekend (header)</span>
+            </div>
+            {/* ✨ Team kleuren legenda */}
+            <div className="flex items-center gap-2">
+              <span className="inline-block w-3 h-3 rounded-full bg-green-500"></span>
+              <span className="text-gray-700">Team Groen</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="inline-block w-3 h-3 rounded-full bg-orange-500"></span>
+              <span className="text-gray-700">Team Oranje</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="inline-block w-3 h-3 rounded-full bg-blue-600"></span>
+              <span className="text-gray-700">Team Overig</span>
             </div>
           </div>
         </div>
