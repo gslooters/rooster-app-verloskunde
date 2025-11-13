@@ -1,7 +1,8 @@
 'use client';
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createRoster, formatWeekRange } from '@/lib/planning/storage';
+import { formatWeekRange, computeEnd } from '@/lib/planning/storage';
+import { createRooster } from '@/lib/services/roosters-supabase';
 import { initializeRosterDesign } from '@/lib/planning/rosterDesign';
 import { initializePeriodEmployeeStaffing } from '@/lib/services/period-employee-staffing';
 import { getAllEmployees } from '@/lib/services/employees-storage';
@@ -31,16 +32,15 @@ export default function Wizard({ onClose }: WizardProps) {
       setError('Selecteer een startdatum');
       return;
     }
-
     setIsCreating(true);
     setError('');
-
     try {
-      console.log('[Wizard] Start rooster creatie met start:', selectedStart);
-      
+      const endDate = computeEnd(selectedStart);
+      console.log('[Wizard] Start rooster creatie met start:', selectedStart, 'end:', endDate);
+
       // 1. Maak rooster aan in database
-      const roster = await createRoster(selectedStart);
-      const rosterId = roster.id;
+      const rooster = await createRooster({ start_date: selectedStart, end_date: endDate });
+      const rosterId = rooster.id;
       console.log('[Wizard] Rooster aangemaakt met ID:', rosterId);
 
       // 2. Initialiseer roster design
@@ -48,25 +48,20 @@ export default function Wizard({ onClose }: WizardProps) {
       console.log('[Wizard] Roster design geïnitialiseerd');
 
       // 3. Initialiseer period_employee_staffing
-      console.log('[DRAAD26T] Initialiseer period employee staffing');
       try {
         const allEmployees = getAllEmployees();
         const activeEmployeeIds = allEmployees
           .filter(emp => emp.actief)
           .map(emp => emp.id);
-        
         await initializePeriodEmployeeStaffing(rosterId, activeEmployeeIds);
         console.log('[Wizard] Period employee staffing geïnitialiseerd');
       } catch (err) {
         console.error('[Wizard] Fout bij initialiseren period employee staffing:', err);
         // Ga door - niet kritiek voor rooster aanmaak
       }
-
       // 4. Navigeer naar dashboard
-      console.log('[Wizard] Navigeer naar dashboard');
       if (onClose) onClose();
       router.push(`/planning/design/dashboard?rosterId=${rosterId}`);
-      
     } catch (err) {
       console.error('[Wizard] Fout bij rooster creatie:', err);
       setError('Er is een fout opgetreden bij het aanmaken van het rooster. Probeer het opnieuw.');
@@ -75,13 +70,8 @@ export default function Wizard({ onClose }: WizardProps) {
   }
 
   // Bereken eind datum (start + 34 dagen = 5 weken)
-  const endDate = selectedStart 
-    ? new Date(new Date(selectedStart).getTime() + 34 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-    : '';
-
-  const weekRange = selectedStart && endDate 
-    ? formatWeekRange(selectedStart, endDate)
-    : '';
+  const endDate = selectedStart ? computeEnd(selectedStart) : '';
+  const weekRange = selectedStart && endDate ? formatWeekRange(selectedStart, endDate) : '';
 
   return (
     <div className="space-y-6">
@@ -102,13 +92,11 @@ export default function Wizard({ onClose }: WizardProps) {
           </p>
         )}
       </div>
-
       {error && (
         <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
           {error}
         </div>
       )}
-
       <div className="flex gap-3 justify-end">
         {onClose && (
           <button
