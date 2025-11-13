@@ -5,7 +5,7 @@ import { formatWeekRange, computeEnd } from '@/lib/planning/storage';
 import { createRooster } from '@/lib/services/roosters-supabase';
 import { initializeRosterDesign } from '@/lib/planning/rosterDesign';
 import { initializePeriodEmployeeStaffing } from '@/lib/services/period-employee-staffing';
-import { getAllEmployees } from '@/lib/services/employees-storage';
+import { getActiveEmployees } from '@/lib/services/employees-storage';
 
 interface WizardProps {
   onClose?: () => void;
@@ -32,38 +32,58 @@ export default function Wizard({ onClose }: WizardProps) {
       setError('Selecteer een startdatum');
       return;
     }
+
     setIsCreating(true);
     setError('');
+
     try {
       const endDate = computeEnd(selectedStart);
       console.log('[Wizard] Start rooster creatie met start:', selectedStart, 'end:', endDate);
+      console.log('');
 
       // 1. Maak rooster aan in database
       const rooster = await createRooster({ start_date: selectedStart, end_date: endDate });
       const rosterId = rooster.id;
-      console.log('[Wizard] Rooster aangemaakt met ID:', rosterId);
+      console.log('[Wizard] ✅ Rooster aangemaakt met ID:', rosterId);
+      console.log('');
 
       // 2. Initialiseer roster design
       await initializeRosterDesign(rosterId, selectedStart);
-      console.log('[Wizard] Roster design geïnitialiseerd');
+      console.log('[Wizard] ✅ Roster design geïnitialiseerd');
+      console.log('');
 
-      // 3. Initialiseer period_employee_staffing
+      // 3. 🆕 DRAAD26T: Initialiseer period employee staffing
       try {
-        const allEmployees = getAllEmployees();
-        const activeEmployeeIds = allEmployees
-          .filter(emp => emp.actief)
-          .map(emp => emp.id);
-        await initializePeriodEmployeeStaffing(rosterId, activeEmployeeIds);
-        console.log('[Wizard] Period employee staffing geïnitialiseerd');
+        const activeEmployees = getActiveEmployees();
+        const activeEmployeeIds = activeEmployees.map(emp => emp.id);
+        
+        // Maak Map met aantalWerkdagen als default waarde
+        const defaultShiftsMap = new Map<string, number>();
+        activeEmployees.forEach(emp => {
+          defaultShiftsMap.set(emp.id, emp.aantalWerkdagen || 0);
+        });
+        
+        await initializePeriodEmployeeStaffing(
+          rosterId, 
+          activeEmployeeIds,
+          defaultShiftsMap
+        );
+        
+        console.log('[Wizard] ✅ Period employee staffing geïnitialiseerd');
+        console.log(`[Wizard]    → ${activeEmployeeIds.length} medewerkers met default shifts`);
+        console.log('');
       } catch (err) {
-        console.error('[Wizard] Fout bij initialiseren period employee staffing:', err);
+        console.error('[Wizard] ⚠️  Fout bij initialiseren period employee staffing:', err);
+        console.log('');
         // Ga door - niet kritiek voor rooster aanmaak
       }
+
       // 4. Navigeer naar dashboard
       if (onClose) onClose();
       router.push(`/planning/design/dashboard?rosterId=${rosterId}`);
     } catch (err) {
-      console.error('[Wizard] Fout bij rooster creatie:', err);
+      console.error('[Wizard] ❌ Fout bij rooster creatie:', err);
+      console.log('');
       setError('Er is een fout opgetreden bij het aanmaken van het rooster. Probeer het opnieuw.');
       setIsCreating(false);
     }
@@ -92,11 +112,13 @@ export default function Wizard({ onClose }: WizardProps) {
           </p>
         )}
       </div>
+
       {error && (
         <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
           {error}
         </div>
       )}
+
       <div className="flex gap-3 justify-end">
         {onClose && (
           <button
