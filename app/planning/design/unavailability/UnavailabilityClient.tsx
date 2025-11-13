@@ -4,6 +4,63 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { loadRosterDesignData, toggleNBAssignment } from '@/lib/planning/rosterDesign';
 import { getAllAssignmentsByRosterId } from '@/lib/services/roster-assignments-supabase';
 
+/**
+ * ✅ FIX DRAAD26R: Genereer 35 dagen beginnend op MAANDAG
+ * 
+ * Probleem: Het rooster begint altijd op maandag (bijv. 24-11-2025),
+ * maar de oude code gebruikte simpelweg start_date uit database (vaak zondag 23-11).
+ * 
+ * Oplossing: Forceer altijd de eerste maandag als startdatum
+ * 
+ * @param referenceDate - Referentie datum (meestal uit database)
+ * @returns Array van 35 Date objecten, beginnend op de eerste maandag
+ */
+function getDaysInRangeStartingMonday(referenceDate: Date): Date[] {
+  // Clone de datum om mutatie te voorkomen
+  const refDate = new Date(referenceDate);
+  
+  // Vind de eerste maandag (dag 1 in JS Date, zondag = 0)
+  const dayOfWeek = refDate.getDay(); // 0 = zo, 1 = ma, 2 = di, etc.
+  
+  let daysToAdd = 0;
+  if (dayOfWeek === 0) {
+    // Als het zondag is, ga 1 dag vooruit naar maandag
+    daysToAdd = 1;
+  } else if (dayOfWeek > 1) {
+    // Als het dinsdag of later is, ga terug naar vorige maandag
+    daysToAdd = 1 - dayOfWeek; // negatief getal
+  }
+  // Als dayOfWeek === 1 (maandag), blijft daysToAdd 0
+  
+  const firstMonday = new Date(refDate);
+  firstMonday.setDate(refDate.getDate() + daysToAdd);
+  firstMonday.setHours(0, 0, 0, 0); // Reset tijd naar middernacht
+  
+  console.log('📅 getDaysInRangeStartingMonday:', {
+    inputDate: referenceDate.toISOString().split('T')[0],
+    inputDayOfWeek: ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag'][dayOfWeek],
+    daysToAdd,
+    firstMonday: firstMonday.toISOString().split('T')[0],
+    firstMondayDayOfWeek: firstMonday.getDay() === 1 ? 'maandag ✅' : `FOUT: ${firstMonday.getDay()}`
+  });
+  
+  // Genereer 35 dagen vanaf deze eerste maandag
+  const dates: Date[] = [];
+  for (let i = 0; i < 35; i++) {
+    const date = new Date(firstMonday);
+    date.setDate(firstMonday.getDate() + i);
+    dates.push(date);
+  }
+  
+  console.log('📊 Gegenereerde periode:', {
+    start: dates[0].toISOString().split('T')[0],
+    eind: dates[34].toISOString().split('T')[0],
+    totaalDagen: dates.length
+  });
+  
+  return dates;
+}
+
 export default function UnavailabilityClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -29,7 +86,8 @@ export default function UnavailabilityClient() {
         console.log('✅ Loaded unavailability data:', {
           rosterId,
           employeeCount: data?.employees?.length || 0,
-          totalAssignments: Array.from(assignmentMap.values()).reduce((sum, map) => sum + map.size, 0)
+          totalAssignments: Array.from(assignmentMap.values()).reduce((sum, map) => sum + map.size, 0),
+          startDate: data?.start_date
         });
       } catch (error) {
         console.error('❌ Error loading unavailability data:', error);
@@ -113,12 +171,12 @@ export default function UnavailabilityClient() {
     );
   }
   
-  const startDate = new Date(designData.start_date || Date.now());
-  const dates: Date[] = Array(35).fill(0).map((_, i) => { 
-    let d = new Date(startDate); 
-    d.setDate(startDate.getDate() + i); 
-    return d; 
-  });
+  // ✅ FIX DRAAD26R: Gebruik getDaysInRangeStartingMonday() voor correcte startdatum
+  const referenceDate = designData.start_date 
+    ? new Date(designData.start_date + 'T00:00:00')
+    : new Date();
+  
+  const dates = getDaysInRangeStartingMonday(referenceDate);
 
   // Tel totaal aantal NB markeringen
   const totalNBCount = Array.from(allAssignments.values()).reduce(
