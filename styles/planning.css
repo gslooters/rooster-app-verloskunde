@@ -17,3 +17,25 @@
 
 /* Sticky kolombreedtes compacter */
 th[role="columnheader"], th { white-space: nowrap; }
+
+/* ✨ Team indicator kleuren (cirkel voor naam) */
+.bg-green-500 {
+  background-color: #10B981;
+}
+
+.bg-orange-500 {
+  background-color: #F97316;
+}
+
+.bg-blue-600 {
+  background-color: #2563EB;
+}
+
+/* ✨ Responsive rooster tabel container */
+@media (max-width: 900px) {
+  table th,
+  table td {
+    font-size: 0.85rem;
+    padding: 6px 4px;
+  }
+}
