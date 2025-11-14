@@ -6,8 +6,9 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { readRosters } from '@/lib/planning/storage';
 
 // CSR-only: direct lazy import van DesignPageClient, zonder extra wrappers of children props
-const DesignPageClient = dynamic(() => import('./page.client'), { ssr: false });
-const DesignErrorCard = dynamic(() => import('./DesignErrorCard'), { ssr: false });
+// FIX: Explicitly return module.default to satisfy TypeScript
+const DesignPageClient = dynamic(() => import('./page.client').then(mod => mod.default), { ssr: false });
+const DesignErrorCard = dynamic(() => import('./DesignErrorCard').then(mod => mod.default), { ssr: false });
 
 function sleep(ms: number) { return new Promise(res => setTimeout(res, ms)); }
 
@@ -102,7 +103,6 @@ export default function RosterDesignPageWrapper() {
   if (!resolved) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 flex items-center justify-center">
-        {/* @ts-ignore */}
         <DesignErrorCard message="Geen roster ID gevonden" />
       </div>
     );
