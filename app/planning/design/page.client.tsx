@@ -1,14 +1,16 @@
-// DRAAD27E FASE 5 - Performance Fix: Optimistische Updates
+// DRAAD27F - FASE 1+2: Performance Optimalisatie
 'use client';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, memo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { loadRosterDesignData, updateEmployeeMaxShifts, syncRosterDesignWithEmployeeData } from '@/lib/planning/rosterDesign';
 import { fetchNetherlandsHolidays, createHolidaySet, findHolidayByDate } from '@/lib/services/holidays-api';
+import { loadServiceTypes } from '@/lib/services/service-types-loader';
 import type { RosterDesignData, RosterEmployee } from '@/lib/types/roster';
 import type { Holiday } from '@/lib/types/holiday';
 import { TeamType, DienstverbandType } from '@/lib/types/employee';
-import { getServiceTypeOrDefault, getContrastColor, darkenColor } from '@/lib/services/service-types-loader';
+import { getContrastColor, darkenColor } from '@/lib/services/service-types-loader';
 import findAssignmentForCell from '@/lib/planning/assignment-matcher';
+import type { ServiceTypeWithColor } from '@/lib/services/service-types-loader';
 
 function extractTeamRaw(team: unknown): string {
   if (team && typeof team === 'object') {
@@ -101,19 +103,31 @@ function EmptyCell() {
   );
 }
 
-function ServiceCell({ assignment }: { assignment: any }) {
-  const [svc, setSvc] = useState<{ code: string, naam: string, kleur: string } | null>(null);
+// ✅ FASE 2: Memoized ServiceCell met direct map lookup (geen async!)
+const ServiceCell = memo(({ 
+  assignment, 
+  serviceTypesMap 
+}: { 
+  assignment: any, 
+  serviceTypesMap: Record<string, ServiceTypeWithColor> 
+}) => {
+  if (!assignment?.service_code) return <EmptyCell />;
   
-  useEffect(() => {
-    if (!assignment?.service_code) return;
-    getServiceTypeOrDefault(assignment.service_code).then(st => {
-      setSvc({ code: st.code, naam: st.naam, kleur: st.kleur });
-    });
-  }, [assignment]);
+  // ✅ Direct lookup - geen async nodig!
+  const serviceType = serviceTypesMap[assignment.service_code] || {
+    code: assignment.service_code,
+    naam: assignment.service_code,
+    kleur: '#94a3b8',
+    id: 'unknown',
+    dienstwaarde: 0
+  };
   
-  if (!svc) return <EmptyCell />;
-  return <ServiceBadgeReadonly code={svc.code} naam={svc.naam} kleur={svc.kleur} />;
-}
+  return <ServiceBadgeReadonly code={serviceType.code} naam={serviceType.naam} kleur={serviceType.kleur} />;
+}, (prev, next) => {
+  // Alleen re-render als assignment of map verandert
+  return prev.assignment?.service_code === next.assignment?.service_code &&
+         prev.serviceTypesMap === next.serviceTypesMap;
+});
 
 export default function DesignPageClient() {
   const searchParams = useSearchParams();
@@ -122,11 +136,22 @@ export default function DesignPageClient() {
   
   const [designData, setDesignData] = useState<RosterDesignData | null>(null);
   const [employees, setEmployees] = useState<RosterEmployee[]>([]);
+  const [serviceTypes, setServiceTypes] = useState<ServiceTypeWithColor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [holidaysLoading, setHolidaysLoading] = useState(false);
   const holidaySet = useMemo(() => createHolidaySet(holidays), [holidays]);
+  
+  // ✅ FASE 2: Create service types lookup map
+  const serviceTypesMap = useMemo(() => {
+    const map: Record<string, ServiceTypeWithColor> = {};
+    serviceTypes.forEach(st => {
+      map[st.code] = st;
+    });
+    console.log(`✅ Service types map created with ${Object.keys(map).length} entries`);
+    return map;
+  }, [serviceTypes]);
   
   const sortedEmployees = useMemo(() => {
     const teamOrder: Record<'Groen'|'Oranje'|'Overig', number> = { Groen: 0, Oranje: 1, Overig: 2 };
@@ -146,6 +171,7 @@ export default function DesignPageClient() {
     });
   }, [employees]);
   
+  // ✅ FASE 1: Parallel loading van data
   useEffect(() => {
     if (!rosterId) { 
       setError('Geen roster ID gevonden'); 
@@ -161,30 +187,58 @@ export default function DesignPageClient() {
           setLoading(false);
           return;
         }
-        const data = await loadRosterDesignData(rosterId);
-        if (data) {
-          await syncRosterDesignWithEmployeeData(rosterId);
-          const startISO = (data as any).start_date;
-          
-          if (!startISO) {
-            console.error('❌ CRITICAL: Geen start_date gevonden in roster design data!');
-            setError('Geen periode data beschikbaar voor dit rooster');
-            setLoading(false);
-            return;
-          }
-          
-          const { getAssignmentsByRosterId } = await import('@/lib/services/roster-assignments-supabase');
-          const assignments = await getAssignmentsByRosterId(rosterId);
-          
-          const latest = await loadRosterDesignData(rosterId) || data;
-          setDesignData({ ...latest, assignments });
-          setEmployees(latest.employees);
-          if (startISO) { loadHolidaysForPeriod(startISO); }
-        } else { 
-          setError('Geen rooster ontwerp data gevonden'); 
+        
+        console.log('🚀 DRAAD27F: Starting parallel data load...');
+        const startTime = performance.now();
+        
+        // ✅ FASE 1: Parallel execution met Promise.all()
+        const [designData, serviceTypesData] = await Promise.all([
+          loadRosterDesignData(rosterId),
+          loadServiceTypes()
+        ]);
+        
+        const parallelTime = performance.now() - startTime;
+        console.log(`⚡ Parallel load completed in ${parallelTime.toFixed(0)}ms`);
+        
+        if (!designData) {
+          setError('Geen rooster ontwerp data gevonden');
+          setLoading(false);
+          return;
+        }
+        
+        // Sync employee data
+        await syncRosterDesignWithEmployeeData(rosterId);
+        
+        const startISO = (designData as any).start_date;
+        
+        if (!startISO) {
+          console.error('❌ CRITICAL: Geen start_date gevonden in roster design data!');
+          setError('Geen periode data beschikbaar voor dit rooster');
+          setLoading(false);
+          return;
+        }
+        
+        // Load assignments
+        const { getAssignmentsByRosterId } = await import('@/lib/services/roster-assignments-supabase');
+        const assignments = await getAssignmentsByRosterId(rosterId);
+        
+        // Reload design data om laatste wijzigingen op te halen
+        const latest = await loadRosterDesignData(rosterId) || designData;
+        
+        // ✅ Update alle state
+        setDesignData({ ...latest, assignments });
+        setEmployees(latest.employees);
+        setServiceTypes(serviceTypesData);
+        
+        const totalTime = performance.now() - startTime;
+        console.log(`✅ Total load time: ${totalTime.toFixed(0)}ms`);
+        console.log(`✅ Loaded ${latest.employees.length} employees, ${serviceTypesData.length} service types, ${assignments.length} assignments`);
+        
+        if (startISO) { 
+          loadHolidaysForPeriod(startISO); 
         }
       } catch (err) { 
-        console.error('Error loading design data:', err);
+        console.error('❌ Error loading design data:', err);
         setError('Fout bij laden van ontwerp data'); 
       } finally {
         setLoading(false);
@@ -274,12 +328,23 @@ export default function DesignPageClient() {
     return { startISO, startDate, endDate, weeks, periodTitle, dateSubtitle };
   }, [designData]);
 
+  // ✅ Loading skeleton voor betere UX
   if (loading) { 
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Ontwerp wordt geladen...</p>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-4">
+        <div className="max-w-full mx-auto">
+          <div className="animate-pulse">
+            <div className="h-8 bg-gray-200 rounded w-2/3 mb-4"></div>
+            <div className="h-4 bg-gray-200 rounded w-1/3 mb-8"></div>
+            <div className="bg-white rounded-lg shadow-sm border p-4">
+              <div className="grid grid-cols-8 gap-2">
+                {Array.from({ length: 80 }).map((_, i) => (
+                  <div key={i} className="h-16 bg-gray-100 rounded"></div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <p className="text-center text-gray-600 mt-4">⚡ Laden geoptimaliseerd met parallel queries...</p>
         </div>
       </div>
     ); 
@@ -362,7 +427,7 @@ export default function DesignPageClient() {
                       const assignment = findAssignmentForCell((designData as any).assignments || [], emp, date);
                       return (
                         <td key={date} className={`border-b p-0.5 text-center h-8 ${columnClasses(date, holidaySet)}`}>
-                          <ServiceCell assignment={assignment} />
+                          <ServiceCell assignment={assignment} serviceTypesMap={serviceTypesMap} />
                         </td>
                       );
                     }))}
