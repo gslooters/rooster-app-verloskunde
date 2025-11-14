@@ -343,25 +343,19 @@ export default function DesignPageClient() {
                 <th className="border-b px-3 py-2 text-center font-semibold text-gray-900 w-16">Dst</th>
                 {weeks.map(week => (<th key={week.number} colSpan={7} className="border-b px-2 py-2 text-center font-semibold text-gray-900 bg-yellow-50">Week {week.number}</th>))}
               </tr>
-              {/* NIEUW: Totaal rij direct onder Dst header */}
-              <tr className="bg-gradient-to-br from-green-50 to-blue-50">
-                <th className="sticky left-0 bg-gradient-to-br from-green-50 to-blue-50 border-b px-3 py-2"></th>
-                <th className="border-b px-3 py-2">
-                  <div className="flex flex-col items-center justify-center">
-                    <span className="text-[10px] text-gray-600 font-normal mb-0.5">Totaal</span>
-                    <span className="text-xl font-bold text-green-700 tabular-nums" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                      {totalMaxShifts}
-                    </span>
-                  </div>
-                </th>
-                {weeks.map(week => week.dates.map(date => (
-                  <th key={`total-${date}`} className="border-b"></th>
-                )))}
-              </tr>
-              {['day','date','month'].map((rowType) => (
+              {['day','date','month'].map((rowType, rowIndex) => (
                 <tr key={rowType}>
                   <th className="sticky left-0 bg-white border-b"></th>
-                  <th className="border-b"></th>
+                  {rowIndex === 0 && (
+                    <th rowSpan={3} className="border-b px-3 py-2 bg-gradient-to-br from-green-50 to-blue-50">
+                      <div className="flex flex-col items-center justify-center h-full">
+                        <span className="text-[10px] text-gray-600 font-normal">Totaal</span>
+                        <span className="text-xl font-bold text-green-700 tabular-nums" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                          {totalMaxShifts}
+                        </span>
+                      </div>
+                    </th>
+                  )}
                   {weeks.map(week => week.dates.map(date => {
                     const { day, date: dd, month, isWeekend, isHoliday, holidayName } = formatDateCell(date, holidaySet, holidays);
                     return (<th key={`${rowType}-${date}`} className={`border-b px-1 py-1 text-xs ${rowType==='day'?'font-medium text-gray-700':rowType==='date'?'text-gray-600':'text-gray-500'} min-w-[50px] ${rowType==='day'?'relative':''}`} title={rowType==='date' ? (holidayName || undefined) : undefined}>{rowType==='day'? day : rowType==='date'? dd : month}{rowType==='day' && isHoliday && (<span className="absolute top-0 right-0 bg-amber-600 text-white text-xs px-1 rounded-bl text-[10px] font-bold leading-none" style={{ fontSize: '8px', padding: '1px 2px' }}>FD</span>)}</th>);
