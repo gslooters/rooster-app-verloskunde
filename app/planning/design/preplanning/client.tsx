@@ -58,8 +58,8 @@ export default function PrePlanningClient() {
           return;
         }
 
-        // Genereer datums voor 35 dagen vanaf start_date
-        const start = designData.start_date || designData.startDate || designData.roster_start;
+        // FIXED: Gebruik alleen start_date (correct property naam)
+        const start = designData.start_date;
         if (!start) {
           alert('Geen startdatum gevonden voor rooster');
           return;
