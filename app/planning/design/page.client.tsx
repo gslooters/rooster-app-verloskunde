@@ -143,6 +143,15 @@ export default function DesignPageClient() {
     });
     return map;
   }, [serviceTypes]);
+  
+  // NIEUW: Bereken totaal van alle Dst waarden (real-time)
+  const totalMaxShifts = useMemo(() => {
+    return employees.reduce((sum, emp) => {
+      const maxShifts = (emp as any).maxShifts || 0;
+      return sum + maxShifts;
+    }, 0);
+  }, [employees]);
+  
   const sortedEmployees = useMemo(() => {
     const teamOrder: Record<'Groen'|'Oranje'|'Overig', number> = { Groen: 0, Oranje: 1, Overig: 2 };
     const dienstOrder = [DienstverbandType.MAAT, DienstverbandType.LOONDIENST, DienstverbandType.ZZP];
@@ -333,6 +342,21 @@ export default function DesignPageClient() {
                 <th className="sticky left-0 bg-white border-b px-3 py-2 text-left font-semibold text-gray-900 w-40">Medewerker</th>
                 <th className="border-b px-3 py-2 text-center font-semibold text-gray-900 w-16">Dst</th>
                 {weeks.map(week => (<th key={week.number} colSpan={7} className="border-b px-2 py-2 text-center font-semibold text-gray-900 bg-yellow-50">Week {week.number}</th>))}
+              </tr>
+              {/* NIEUW: Totaal rij direct onder Dst header */}
+              <tr className="bg-gradient-to-br from-green-50 to-blue-50">
+                <th className="sticky left-0 bg-gradient-to-br from-green-50 to-blue-50 border-b px-3 py-2"></th>
+                <th className="border-b px-3 py-2">
+                  <div className="flex flex-col items-center justify-center">
+                    <span className="text-[10px] text-gray-600 font-normal mb-0.5">Totaal</span>
+                    <span className="text-xl font-bold text-green-700 tabular-nums" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                      {totalMaxShifts}
+                    </span>
+                  </div>
+                </th>
+                {weeks.map(week => week.dates.map(date => (
+                  <th key={`total-${date}`} className="border-b"></th>
+                )))}
               </tr>
               {['day','date','month'].map((rowType) => (
                 <tr key={rowType}>
