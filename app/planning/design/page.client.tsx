@@ -68,6 +68,7 @@ function formatDateCell(dateStr: string, holidaySet: Set<string>, holidays: Holi
   const day = dayNames[dayIndex];
   const dd = String(date.getDate()).padStart(2,'0');
   const mm = String(date.getMonth() + 1).padStart(2,'0');
+  const month = mm;
   const isWeekend = dayIndex === 0 || dayIndex === 6;
   const isHoliday = holidaySet.has(dateStr);
   const holiday = isHoliday ? findHolidayByDate(holidays, dateStr) : undefined;
