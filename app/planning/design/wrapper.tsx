@@ -6,9 +6,9 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { readRosters } from '@/lib/planning/storage';
 
 // CSR-only: direct lazy import van DesignPageClient, zonder extra wrappers of children props
-// FIX: Explicitly return module.default to satisfy TypeScript
-const DesignPageClient = dynamic(() => import('./page.client').then(mod => mod.default), { ssr: false });
-const DesignErrorCard = dynamic(() => import('./DesignErrorCard').then(mod => mod.default), { ssr: false });
+// FIX: Return the entire module object to satisfy TypeScript's LoaderComponent type
+const DesignPageClient = dynamic(() => import('./page.client'), { ssr: false });
+const DesignErrorCard = dynamic(() => import('./DesignErrorCard'), { ssr: false });
 
 function sleep(ms: number) { return new Promise(res => setTimeout(res, ms)); }
 
