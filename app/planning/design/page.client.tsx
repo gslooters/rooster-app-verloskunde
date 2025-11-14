@@ -1,4 +1,4 @@
-// DRAAD27E STAP 3 - Read-Only Roster Grid met Database Kleuren
+// DRAAD27E FASE 5 - Performance Fix: Optimistische Updates
 'use client';
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -207,15 +207,18 @@ export default function DesignPageClient() {
     setHolidaysLoading(false);
   }
   
+  // ✅ FASE 5.2 FIX: Optimistische update ipv database herlaad
   async function updateMaxShiftsHandler(empId: string, maxShifts: number) {
     if (!rosterId || !designData) return;
     if (typeof rosterId !== 'string') return;
+    
+    // Update in database
     await updateEmployeeMaxShifts(rosterId, empId, maxShifts);
-    const updated = await loadRosterDesignData(rosterId);
-    if (updated) {
-      setDesignData(updated);
-      setEmployees(updated.employees);
-    }
+    
+    // ✅ Optimistische state update (geen herlaad nodig)
+    setEmployees(prev => prev.map(e => 
+      (e as any).id === empId ? { ...e as any, maxShifts } : e
+    ));
   }
   
   function getFirstName(fullName: string): string { 
