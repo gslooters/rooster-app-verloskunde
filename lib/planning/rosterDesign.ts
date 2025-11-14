@@ -4,7 +4,8 @@ import { getAllEmployees } from '@/lib/services/employees-storage';
 import { TeamType, DienstverbandType } from '@/lib/types/employee';
 import { getRosterDesignByRosterId, createRosterDesign, updateRosterDesign, bulkUpdateUnavailability } from '@/lib/services/roster-design-supabase';
 import { getWeekdayCode } from '@/lib/utils/date-helpers';
-import { isEmployeeUnavailableOnDate, deleteAssignmentByDate } from '@/lib/services/roster-assignments-supabase';
+import { getAssignmentByDate, deleteAssignmentByDate } from '@/lib/services/roster-assignments-supabase';
+import { supabase } from '@/lib/supabase';
 
 export async function updateEmployeeMaxShifts(rosterId: string, employeeId: string, maxShifts: number): Promise<boolean> {
   // Simpele update van maxShifts, zonder dubbele DB calls
@@ -59,4 +60,74 @@ export async function initializeRosterDesign(rosterId: string, start_date: strin
 
 export async function autofillUnavailability(rosterId: string, start_date: string): Promise<boolean> {
   return true;
+}
+
+/**
+ * ✅ NIEUWE FUNCTIE - DRAAD 27E
+ * 
+ * Toggle NB (Niet Beschikbaar) assignment voor een medewerker op een specifieke datum
+ * 
+ * Logica:
+ * - Als er GEEN assignment is -> Voeg NB toe
+ * - Als er WEL een NB assignment is -> Verwijder deze
+ * - Als er een ANDERE dienst is -> Doe NIETS (wordt afgehandeld in UI)
+ * 
+ * @param rosterId - UUID van het rooster
+ * @param employeeId - TEXT ID van de medewerker (gebruik originalEmployeeId uit snapshot)
+ * @param date - Datum in ISO formaat (YYYY-MM-DD)
+ * @returns true als succesvol, false bij fout
+ */
+export async function toggleNBAssignment(
+  rosterId: string,
+  employeeId: string,
+  date: string
+): Promise<boolean> {
+  try {
+    console.log('🔄 Toggle NB assignment:', { rosterId, employeeId, date });
+    
+    // Check of er al een assignment bestaat voor deze datum
+    const existingAssignment = await getAssignmentByDate(rosterId, employeeId, date);
+    
+    if (!existingAssignment) {
+      // Geen assignment -> Voeg NB toe
+      console.log('➕ Geen assignment gevonden, voeg NB toe');
+      
+      const { error } = await supabase
+        .from('roster_assignments')
+        .insert({
+          roster_id: rosterId,
+          employee_id: employeeId,
+          service_code: 'NB',
+          date: date
+        });
+      
+      if (error) {
+        console.error('❌ Fout bij toevoegen NB:', error);
+        return false;
+      }
+      
+      console.log('✅ NB succesvol toegevoegd');
+      return true;
+    } else if (existingAssignment.service_code === 'NB') {
+      // NB assignment bestaat -> Verwijder deze
+      console.log('➖ NB assignment gevonden, verwijder deze');
+      
+      const success = await deleteAssignmentByDate(rosterId, employeeId, date);
+      
+      if (success) {
+        console.log('✅ NB succesvol verwijderd');
+        return true;
+      } else {
+        console.error('❌ Fout bij verwijderen NB');
+        return false;
+      }
+    } else {
+      // Andere dienst -> Niet toegestaan (wordt in UI afgehandeld)
+      console.warn('⚠️  Andere dienst aanwezig, toggle niet toegestaan:', existingAssignment.service_code);
+      return false;
+    }
+  } catch (error) {
+    console.error('❌ Exception in toggleNBAssignment:', error);
+    return false;
+  }
 }
