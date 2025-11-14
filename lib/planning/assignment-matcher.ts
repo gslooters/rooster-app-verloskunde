@@ -11,7 +11,7 @@ import { ServiceTypeWithColor, getServiceTypeOrDefault } from '@/lib/services/se
  *
  * Logt alle matches voor debugging.
  */
-export function findAssignmentForCell(assignments, emp, date) {
+export function findAssignmentForCell(assignments: any[], emp: { id: string; originalEmployeeId?: string }, date: string) {
   // Strategie 1: Exact match
   let assignment = assignments?.find(
     (a) => a.employee_id === emp.id && a.date === date
