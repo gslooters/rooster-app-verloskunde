@@ -256,7 +256,8 @@ export default function PrePlanningClient() {
                           </div>
                         </td>
                         {dateInfo.map((d, idx) => {
-                          const assignmentKey = `${employee.id}_${d.dateISO}`;
+                          // FIXED: Gebruik d.date i.p.v. d.dateISO!
+                          const assignmentKey = `${employee.id}_${d.date}`;
                           const currentService = assignmentMap.get(assignmentKey) || '';
                           
                           return (
@@ -266,7 +267,7 @@ export default function PrePlanningClient() {
                             >
                               <select
                                 value={currentService}
-                                onChange={(e) => handleServiceChange(employee.id, d.dateISO, e.target.value)}
+                                onChange={(e) => handleServiceChange(employee.id, d.date, e.target.value)}
                                 disabled={isSaving}
                                 className="w-full px-2 py-1 text-center border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                               >
