@@ -264,7 +264,7 @@ export default function DashboardClient() {
                 </div>
                 <div className="flex items-center gap-3 sm:flex-row flex-col">
                   <StatusBadgeToggle completed={completionStatus.preplanning} onToggle={()=>toggleStep('preplanning')} label="Pre-planning"/>
-                  <button onClick={()=>alert('Deze functie wordt binnenkort toegevoegd')} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium whitespace-nowrap">Openen →</button>
+                  <button onClick={()=>router.push(`/planning/design/preplanning?id=${rosterId}`)} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium whitespace-nowrap">Openen →</button>
                 </div>
               </div>
             </div>
