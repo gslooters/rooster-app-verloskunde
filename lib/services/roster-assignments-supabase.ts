@@ -94,7 +94,7 @@ export async function isEmployeeUnavailableOnDate(
       .eq('roster_id', rosterId)
       .eq('employee_id', employeeId)
       .eq('date', date)
-      .single();
+      .maybeSingle();
     if (error) {
       if (error.code === 'PGRST116') return false;
       console.error('❌ Fout bij check unavailability:', error);
@@ -104,129 +104,6 @@ export async function isEmployeeUnavailableOnDate(
   } catch (error) {
     console.error('❌ Fout bij unavailability check:', error);
     return false;
-  }
-}
-
-/**
- * GEFIXTE VERSIE - FASE 1D: UUID VALIDATIE VERWIJDERD VOOR EMPLOYEE_ID
- * 
- * Upsert NB assignment (insert/update met constraint)
- * 
- * FIX: employees.id is TEXT type (emp1, emp3, etc.), GEEN UUID!
- *      Verwijder UUID check voor employeeId, behoud voor rosterId
- * 
- * @param rosterId - UUID van het rooster
- * @param employeeId - TEXT ID van de medewerker (emp1, emp2, etc.)
- * @param date - Datum in ISO formaat (YYYY-MM-DD)
- * @returns RosterAssignment object of null bij fout
- */
-export async function upsertNBAssignment(
-  rosterId: string,
-  employeeId: string,
-  date: string
-): Promise<RosterAssignment | null> {
-  try {
-    // Validatie input parameters
-    if (!rosterId || !employeeId || !date) {
-      console.error('🛑 upsertNBAssignment: Ongeldige input parameters');
-      console.error('   rosterId:', rosterId);
-      console.error('   employeeId:', employeeId);
-      console.error('   date:', date);
-      return null;
-    }
-    
-    // Valideer UUID format ALLEEN voor rosterId
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(rosterId)) {
-      console.error('🛑 Ongeldige rosterId UUID:', rosterId);
-      return null;
-    }
-    
-    // ✅ FIX FASE 1D: employeeId is TEXT, geen UUID!
-    // Valideer alleen dat het een niet-lege string is
-    if (typeof employeeId !== 'string' || employeeId.trim() === '') {
-      console.error('🛑 Ongeldige employeeId (moet niet-lege string zijn):', employeeId);
-      return null;
-    }
-    
-    // Valideer datum format
-    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-    if (!dateRegex.test(date)) {
-      console.error('🛑 Ongeldige datum format:', date, '(verwacht: YYYY-MM-DD)');
-      return null;
-    }
-    
-    console.log('🔍 Upsert NB assignment:', { rosterId, employeeId, date });
-    
-    // Supabase upsert call
-    const { data, error } = await supabase
-      .from('roster_assignments')
-      .upsert({
-        roster_id: rosterId,
-        employee_id: employeeId,
-        date: date,
-        service_code: 'NB'
-      }, {
-        onConflict: 'roster_id,employee_id,date'
-      })
-      .select()
-      .single();
-    
-    if (error) {
-      console.error('\n' + '='.repeat(80));
-      console.error('❌ SUPABASE ERROR in upsertNBAssignment');
-      console.error('='.repeat(80));
-      console.error('Error code:', error.code);
-      console.error('Error message:', error.message);
-      console.error('Error details:', error.details);
-      console.error('Error hint:', error.hint);
-      console.error('Full error object:', JSON.stringify(error, null, 2));
-      console.error('='.repeat(80) + '\n');
-      
-      // Specifieke error messages
-      if (error.code === '23503') {
-        console.error('⚠️  FOREIGN KEY CONSTRAINT VIOLATION');
-        console.error('   Mogelijke oorzaken:');
-        console.error('   1. service_code "NB" bestaat niet in service_types tabel');
-        console.error('   2. rosterId bestaat niet in roosters tabel');
-        console.error('   3. employeeId bestaat niet in employees tabel');
-        console.error('   4. Check of employeeId correct is:', employeeId);
-      } else if (error.code === '42501') {
-        console.error('⚠️  PERMISSION DENIED');
-        console.error('   Database permissions zijn niet correct ingesteld');
-        console.error('   Check Supabase RLS policies voor roster_assignments');
-      } else if (error.code === '23505') {
-        console.error('⚠️  UNIQUE CONSTRAINT VIOLATION');
-        console.error('   Record bestaat al (onConflict werkt niet correct)');
-      }
-      
-      return null;
-    }
-    
-    if (!data) {
-      console.error('🛑 upsertNBAssignment: Geen data returned (maar ook geen error)');
-      console.error('   Dit zou niet mogen gebeuren');
-      return null;
-    }
-    
-    console.log('✅ NB assignment succesvol aangemaakt:', {
-      id: data.id,
-      roster_id: data.roster_id,
-      employee_id: data.employee_id,
-      date: data.date,
-      service_code: data.service_code
-    });
-    
-    return data;
-    
-  } catch (error) {
-    console.error('\n' + '='.repeat(80));
-    console.error('❌ EXCEPTION in upsertNBAssignment');
-    console.error('='.repeat(80));
-    console.error('Exception:', error);
-    console.error('Stack:', (error as Error).stack);
-    console.error('='.repeat(80) + '\n');
-    return null;
   }
 }
 
