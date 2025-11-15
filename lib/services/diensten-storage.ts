@@ -6,12 +6,56 @@ import { Dienst, validateDienstwaarde, calculateDuration } from "../types/dienst
 import { teamRegelsFromJSON, teamRegelsToJSON, DEFAULT_TEAM_REGELS } from '../validators/service';
 import { supabase } from '../supabase';
 
-// ... overige imports/constanties ongewijzigd ...
+// ============================================================================
+// CONSTANTS & CACHE
+// ============================================================================
 const CACHE_KEY = "diensten_cache";
 const HEALTH_CHECK_KEY = "supabase_health_diensten";
 const HEALTH_CHECK_INTERVAL = 60000; // 1 minuut
 const SYSTEM_CODES = ['NB', '==='];
-// ... healthcheck functies ongewijzigd ...
+
+// ============================================================================
+// HEALTH CHECK
+// ============================================================================
+let lastHealthCheck = 0;
+let lastHealthStatus = false;
+
+/**
+ * Check Supabase health voor diensten tabel
+ */
+export async function checkSupabaseHealth(): Promise<boolean> {
+  const now = Date.now();
+  
+  // Return cached status als recent gecheck
+  if (now - lastHealthCheck < HEALTH_CHECK_INTERVAL) {
+    return lastHealthStatus;
+  }
+  
+  try {
+    const { error } = await supabase
+      .from('service_types')
+      .select('id')
+      .limit(1);
+    
+    lastHealthStatus = !error;
+    lastHealthCheck = now;
+    
+    if (error) {
+      console.error('❌ Supabase health check failed:', error);
+    }
+    
+    return lastHealthStatus;
+  } catch (err) {
+    console.error('❌ Supabase health check exception:', err);
+    lastHealthStatus = false;
+    lastHealthCheck = now;
+    return false;
+  }
+}
+
+// ============================================================================
+// DATABASE MAPPING
+// ============================================================================
 
 function fromDatabase(row: any): Dienst {
   return {
@@ -63,14 +107,260 @@ function toDatabase(dienst: Partial<Dienst>) {
   return data;
 }
 
-// Legacy functies en alles voor day staffing, team scope, etc. ---
-// zijn verwijderd/deprecated (DRAAD30B).
+// ============================================================================
+// CACHE MANAGEMENT
+// ============================================================================
 
-// ... overige CRUD, cache, healthcheck, subscriptions, verwijder ongewijzigd ...
+let servicesCache: Dienst[] | null = null;
+let cacheTimestamp = 0;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minuten
 
-// exports etc ongewijzigd
+/**
+ * Get cached services als geldig
+ */
+export function getCachedServices(): Dienst[] | null {
+  const now = Date.now();
+  
+  if (servicesCache && (now - cacheTimestamp) < CACHE_TTL) {
+    return servicesCache;
+  }
+  
+  return null;
+}
+
+/**
+ * Update cache
+ */
+function updateCache(services: Dienst[]): void {
+  servicesCache = services;
+  cacheTimestamp = Date.now();
+}
+
+/**
+ * Clear cache
+ */
+export function clearServicesCache(): void {
+  servicesCache = null;
+  cacheTimestamp = 0;
+}
+
+// ============================================================================
+// CRUD OPERATIONS
+// ============================================================================
+
+/**
+ * Get all active services from database
+ */
+export async function getAllServices(): Promise<Dienst[]> {
+  try {
+    // Check cache eerst
+    const cached = getCachedServices();
+    if (cached) {
+      console.log('✅ Using cached services');
+      return cached;
+    }
+    
+    console.log('🔄 Loading services from database...');
+    
+    const { data, error } = await supabase
+      .from('service_types')
+      .select('*')
+      .eq('actief', true)
+      .order('code', { ascending: true });
+    
+    if (error) {
+      console.error('❌ Error loading services:', error);
+      throw error;
+    }
+    
+    const services = (data || []).map(fromDatabase);
+    
+    // Update cache
+    updateCache(services);
+    
+    console.log(`✅ Loaded ${services.length} services from database`);
+    
+    return services;
+  } catch (error) {
+    console.error('❌ Failed to load services:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get service by ID
+ */
+export async function getServiceById(id: string): Promise<Dienst | null> {
+  try {
+    const { data, error } = await supabase
+      .from('service_types')
+      .select('*')
+      .eq('id', id)
+      .single();
+    
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return null;
+      }
+      throw error;
+    }
+    
+    return data ? fromDatabase(data) : null;
+  } catch (error) {
+    console.error('❌ Failed to get service:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get service by code
+ */
+export async function getServiceByCode(code: string): Promise<Dienst | null> {
+  try {
+    const { data, error } = await supabase
+      .from('service_types')
+      .select('*')
+      .eq('code', code)
+      .single();
+    
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return null;
+      }
+      throw error;
+    }
+    
+    return data ? fromDatabase(data) : null;
+  } catch (error) {
+    console.error('❌ Failed to get service by code:', error);
+    throw error;
+  }
+}
+
+/**
+ * Create new service
+ */
+export async function createService(dienst: Omit<Dienst, 'id' | 'created_at' | 'updated_at'>): Promise<Dienst> {
+  try {
+    // Validate
+    if (!dienst.code || !dienst.naam) {
+      throw new Error('Code en naam zijn verplicht');
+    }
+    
+    const dbData = toDatabase(dienst);
+    
+    const { data, error } = await supabase
+      .from('service_types')
+      .insert(dbData)
+      .select()
+      .single();
+    
+    if (error) {
+      throw error;
+    }
+    
+    // Clear cache
+    clearServicesCache();
+    
+    return fromDatabase(data);
+  } catch (error) {
+    console.error('❌ Failed to create service:', error);
+    throw error;
+  }
+}
+
+/**
+ * Update existing service
+ */
+export async function updateService(id: string, updates: Partial<Dienst>): Promise<Dienst> {
+  try {
+    const dbData = toDatabase(updates);
+    delete dbData.id;
+    delete dbData.created_at;
+    
+    const { data, error } = await supabase
+      .from('service_types')
+      .update(dbData)
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) {
+      throw error;
+    }
+    
+    // Clear cache
+    clearServicesCache();
+    
+    return fromDatabase(data);
+  } catch (error) {
+    console.error('❌ Failed to update service:', error);
+    throw error;
+  }
+}
+
+/**
+ * Delete service (soft delete by setting actief = false)
+ */
+export async function deleteService(id: string): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from('service_types')
+      .update({ actief: false })
+      .eq('id', id);
+    
+    if (error) {
+      throw error;
+    }
+    
+    // Clear cache
+    clearServicesCache();
+  } catch (error) {
+    console.error('❌ Failed to delete service:', error);
+    throw error;
+  }
+}
+
+// ============================================================================
+// REAL-TIME SUBSCRIPTIONS
+// ============================================================================
+
+/**
+ * Subscribe to service changes
+ */
+export function subscribeToServices(callback: (services: Dienst[]) => void): () => void {
+  const channel = supabase
+    .channel('service_types_changes')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'service_types'
+      },
+      async () => {
+        // Clear cache and reload
+        clearServicesCache();
+        try {
+          const services = await getAllServices();
+          callback(services);
+        } catch (error) {
+          console.error('❌ Failed to reload services after change:', error);
+        }
+      }
+    )
+    .subscribe();
+  
+  // Return unsubscribe function
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+// ============================================================================
+// EXPORTS
+// ============================================================================
+
 export {
-  checkSupabaseHealth,
-  getCachedServices,
   SYSTEM_CODES
 };
