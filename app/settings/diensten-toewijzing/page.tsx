@@ -21,7 +21,7 @@ export default function DienstenToewijzingPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [data, setData] = useState<EmployeeServiceRow[]>([]);
-  const [serviceTypes, setServiceTypes] = useState<string[]>([]);
+  const [serviceTypes, setServiceTypes] = useState<{code: string; dienstwaarde: number}[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -36,10 +36,10 @@ export default function DienstenToewijzingPage() {
       
       console.log('🔄 Starting loadData...');
       
-      // Haal diensten op
+      // Haal diensten op MET dienstwaarde
       const { data: services, error: servError } = await supabase
         .from('service_types')
-        .select('code')
+        .select('code, dienstwaarde')
         .eq('actief', true)
         .order('code', { ascending: true });
       
@@ -48,9 +48,12 @@ export default function DienstenToewijzingPage() {
         throw servError;
       }
       
-      const serviceCodes = services?.map(s => s.code) || [];
-      console.log('✅ Service types loaded:', serviceCodes);
-      setServiceTypes(serviceCodes);
+      const serviceInfo = services?.map(s => ({
+        code: s.code,
+        dienstwaarde: s.dienstwaarde || 1.0
+      })) || [];
+      console.log('✅ Service types loaded:', serviceInfo);
+      setServiceTypes(serviceInfo);
 
       // Haal employee overview op
       const overview = await getEmployeeServicesOverview();
@@ -94,7 +97,7 @@ export default function DienstenToewijzingPage() {
             count: currentEnabled ? 0 : (currentCount || 1)
           };
           
-          // Herbereken totaal
+          // Herbereken totaal (gewogen: count * dienstwaarde)
           let newTotal = 0;
           Object.values(newServices).forEach((s: any) => {
             if (s.enabled && s.count > 0) {
@@ -122,6 +125,12 @@ export default function DienstenToewijzingPage() {
 
   async function handleCountChange(employeeId: string, serviceCode: string, newCount: number) {
     try {
+      // Valideer input
+      if (newCount < 0 || newCount > 35) {
+        setError('Aantal moet tussen 0 en 35 liggen');
+        return;
+      }
+
       const serviceId = await getServiceIdByCode(serviceCode);
       if (!serviceId) throw new Error(`Dienst ${serviceCode} niet gevonden`);
 
@@ -143,7 +152,7 @@ export default function DienstenToewijzingPage() {
             enabled: true
           };
           
-          // Herbereken totaal
+          // Herbereken totaal (gewogen: count * dienstwaarde)
           let newTotal = 0;
           Object.values(newServices).forEach((s: any) => {
             if (s.enabled && s.count > 0) {
@@ -197,7 +206,7 @@ export default function DienstenToewijzingPage() {
               <ArrowLeft className="w-4 h-4 mr-2" />
               Terug naar Dashboard
             </Button>
-            <h1 className="text-3xl font-bold text-gray-900">Diensten Toewijzing</h1>
+            <h1 className="text-3xl font-bold text-gray-900">🎯 Diensten Toewijzing</h1>
           </div>
           <Button
             onClick={() => loadData()}
@@ -208,13 +217,6 @@ export default function DienstenToewijzingPage() {
             <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Vernieuwen
           </Button>
-        </div>
-
-        {/* Debug info */}
-        <div className="mb-4 p-3 bg-blue-50 rounded text-xs">
-          <p><strong>Debug Info:</strong></p>
-          <p>Medewerkers geladen: {data.length}</p>
-          <p>Dienst types: {serviceTypes.join(', ')}</p>
         </div>
 
         {/* Alerts */}
@@ -237,12 +239,17 @@ export default function DienstenToewijzingPage() {
                 <tr className="bg-gray-100">
                   <th className="border p-3 text-left font-semibold text-gray-700">Team</th>
                   <th className="border p-3 text-left font-semibold text-gray-700">Naam</th>
-                  {serviceTypes.map(code => (
-                    <th key={code} className="border p-3 text-center font-semibold text-gray-700">
-                      {code}
+                  <th className="border p-3 text-center font-semibold text-gray-700 bg-blue-50">Totaal</th>
+                  {serviceTypes.map(service => (
+                    <th key={service.code} className="border p-3 text-center font-semibold text-gray-700">
+                      <div className="flex flex-col items-center">
+                        <span>{service.code}</span>
+                        {service.dienstwaarde !== 1.0 && (
+                          <span className="text-xs text-gray-500 mt-1">×{service.dienstwaarde}</span>
+                        )}
+                      </div>
                     </th>
                   ))}
-                  <th className="border p-3 text-center font-semibold text-gray-700">Totaal</th>
                 </tr>
               </thead>
               <tbody>
@@ -269,45 +276,48 @@ export default function DienstenToewijzingPage() {
                         </span>
                       </td>
                       <td className="border p-3 font-medium">{employee.employeeName}</td>
-                      {serviceTypes.map(code => {
-                        const service = employee.services?.[code];
-                        const enabled = service?.enabled || false;
-                        const count = service?.count || 0;
+                      <td className="border p-3 text-center font-bold bg-blue-50">
+                        <span className={employee.isOnTarget ? 'text-green-600' : 'text-gray-900'}>
+                          {employee.totalDiensten} / {employee.dienstenperiode}
+                        </span>
+                      </td>
+                      {serviceTypes.map(service => {
+                        const serviceData = employee.services?.[service.code];
+                        const enabled = serviceData?.enabled || false;
+                        const count = serviceData?.count || 0;
 
                         return (
-                          <td key={code} className="border p-2 text-center">
+                          <td key={service.code} className="border p-2 text-center">
                             <div className="flex items-center justify-center gap-2">
                               <Checkbox
                                 checked={enabled}
                                 onCheckedChange={() => handleToggle(
                                   employee.employeeId,
-                                  code,
+                                  service.code,
                                   enabled
                                 )}
                               />
-                              {enabled && (
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  max="35"
-                                  value={count}
-                                  onChange={(e) => handleCountChange(
+                              <Input
+                                type="number"
+                                min="0"
+                                max="35"
+                                value={enabled ? count : ''}
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value) || 0;
+                                  handleCountChange(
                                     employee.employeeId,
-                                    code,
-                                    parseInt(e.target.value) || 0
-                                  )}
-                                  className="w-16 h-8 text-center"
-                                />
-                              )}
+                                    service.code,
+                                    val
+                                  );
+                                }}
+                                disabled={!enabled}
+                                className="w-16 h-8 text-center"
+                                placeholder="0"
+                              />
                             </div>
                           </td>
                         );
                       })}
-                      <td className="border p-3 text-center font-semibold">
-                        <span className={employee.isOnTarget ? 'text-green-600' : 'text-gray-900'}>
-                          {employee.totalDiensten} / {employee.dienstenperiode}
-                        </span>
-                      </td>
                     </tr>
                   ))
                 )}
@@ -317,9 +327,9 @@ export default function DienstenToewijzingPage() {
         </Card>
 
         {/* Footer info */}
-        <div className="mt-4 text-sm text-gray-600">
-          <p>💡 <strong>Tip:</strong> Vink een dienst aan om deze toe te wijzen. Het getal geeft het aantal keer per periode aan.</p>
-          <p className="mt-1">🎯 Groene getallen betekenen dat de medewerker op target is (totaal diensten = dienstenperiode).</p>
+        <div className="mt-4 space-y-2 text-sm text-gray-600 bg-blue-50 p-4 rounded">
+          <p>💡 <strong>Gebruik:</strong> Vink een dienst aan om deze toe te wijzen. Het getal geeft het aantal keer per periode aan.</p>
+          <p>🎯 <strong>Doel:</strong> Groene getallen betekenen dat de medewerker op target is (totaal diensten = dienstenperiode).</p>
         </div>
       </div>
     </div>
