@@ -12,6 +12,7 @@ import { useRouter } from 'next/navigation';
 import { generateRosterPeriodStaffing } from '@/lib/planning/roster-period-staffing-storage';
 import { initializePeriodEmployeeStaffing } from '@/lib/services/period-employee-staffing';
 import { loadRosterDesignData } from '@/lib/planning/rosterDesign';
+import { supabase } from '@/lib/supabase';
 
 const FIXED_WEEKS = 5;
 
@@ -110,38 +111,92 @@ export default function Wizard({ onClose }: WizardProps = {}) {
   }
 
   /**
-   * DRAAD00 FIX: Verificatie functie die controleert of roster data beschikbaar is
-   * Retry mechanisme met 500ms delay tussen pogingen (max 10 pogingen = 5 seconden)
+   * ✅ DRAAD001 VERBETERDE VERIFICATIE
+   * 
+   * Verificatie functie die controleert of roster data beschikbaar is
+   * Met betere diagnostics en minder pogingen (5 i.p.v. 10)
    */
-  async function verifyRosterDataExists(rosterId: string, maxAttempts: number = 10): Promise<boolean> {
+  async function verifyRosterDataExists(rosterId: string, maxAttempts: number = 5): Promise<{
+    success: boolean;
+    details: string;
+  }> {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       setVerifyAttempt(attempt);
       
       console.log(`[Wizard] 🔍 Verificatie poging ${attempt}/${maxAttempts}...`);
       
       try {
-        // Probeer roster design data op te halen
-        const data = await loadRosterDesignData(rosterId);
+        // CHECK 1: Roster design data
+        const designData = await loadRosterDesignData(rosterId);
         
-        if (data && data.employees && data.employees.length > 0) {
-          console.log('[Wizard] ✅ Roster data geverifieerd - navigatie veilig');
-          console.log(`[Wizard] Gevonden: ${data.employees.length} medewerkers`);
-          return true;
+        if (!designData) {
+          console.log(`[Wizard] ⏳ roster_design record nog niet beschikbaar`);
+          
+          if (attempt < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+            continue;
+          } else {
+            return {
+              success: false,
+              details: 'Roster design record niet gevonden na 5 pogingen'
+            };
+          }
         }
         
-        console.log(`[Wizard] ⏳ Data nog niet beschikbaar, wacht 500ms...`);
+        console.log(`[Wizard] ✅ roster_design gevonden`);
+        console.log(`[Wizard]    - Employees: ${designData.employees?.length || 0}`);
+        
+        if (!designData.employees || designData.employees.length === 0) {
+          console.log(`[Wizard] ⏳ Employee snapshot nog leeg`);
+          
+          if (attempt < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+            continue;
+          } else {
+            return {
+              success: false,
+              details: 'Employee snapshot is leeg'
+            };
+          }
+        }
+        
+        // CHECK 2: Roster assignments (NB dagen)
+        const { data: assignments, error: assignError } = await supabase
+          .from('roster_assignments')
+          .select('id')
+          .eq('roster_id', rosterId)
+          .limit(1);
+        
+        if (assignError) {
+          console.warn(`[Wizard] ⚠️  Fout bij checken assignments:`, assignError);
+          // Niet kritiek, ga door
+        } else {
+          console.log(`[Wizard] ✅ roster_assignments check: ${assignments?.length || 0} records`);
+        }
+        
+        // SUCCESS: Alle checks geslaagd
+        console.log('[Wizard] ✅ Roster data volledig geverifieerd - navigatie veilig');
+        console.log(`[Wizard] Verificatie geslaagd na ${attempt} poging(en)`);
+        
+        return {
+          success: true,
+          details: `Data beschikbaar na ${attempt} poging(en)`
+        };
+        
       } catch (err) {
         console.log(`[Wizard] ⚠️  Verificatie fout (poging ${attempt}):`, err);
-      }
-      
-      // Wacht 500ms voor volgende poging
-      if (attempt < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        if (attempt < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
       }
     }
     
     console.error('[Wizard] ❌ Verificatie gefaald na maximaal aantal pogingen');
-    return false;
+    return {
+      success: false,
+      details: 'Maximum aantal verificatie pogingen bereikt (2.5 seconden timeout)'
+    };
   }
 
   async function createRosterConfirmed() {
@@ -240,8 +295,12 @@ export default function Wizard({ onClose }: WizardProps = {}) {
         localStorage.setItem('recentDesignRoute', `/planning/design/dashboard?rosterId=${rosterId}`);
       }
       
-      // NU MET CORRECTE DATABASE ID ✅
-      await initializeRosterDesign(rosterId, selectedStart);
+      // ✅ DRAAD001 FIX: initializeRosterDesign is nu volledig geïmplementeerd!
+      const designData = await initializeRosterDesign(rosterId, selectedStart);
+      
+      if (!designData) {
+        throw new Error('Kon roster design niet initialiseren');
+      }
       
       console.log('[Wizard] ✅ Roster design geïnitialiseerd');
       console.log('');
@@ -311,31 +370,34 @@ export default function Wizard({ onClose }: WizardProps = {}) {
       // Geen error message tonen aan gebruiker - niet kritiek
     }
     
-    // === DRAAD00 FIX - FASE 4: Verificatie voor navigatie ===
+    // === DRAAD001 VERBETERDE VERIFICATIE - FASE 4 ===
     console.log('\n' + '='.repeat(80));
     console.log('[Wizard] 🔍 START: Database commit verificatie');
     console.log('='.repeat(80) + '\n');
     
-    const dataVerified = await verifyRosterDataExists(rosterId!);
+    const verificationResult = await verifyRosterDataExists(rosterId!);
     
-    if (!dataVerified) {
+    if (!verificationResult.success) {
       console.error('\n' + '='.repeat(80));
-      console.error('[Wizard] ❌ FOUT: Data verificatie gefaald na 5 seconden');
-      console.error('[Wizard] Rooster is aangemaakt maar data nog niet beschikbaar');
+      console.error('[Wizard] ❌ FOUT: Data verificatie gefaald');
+      console.error('[Wizard] Details:', verificationResult.details);
+      console.error('[Wizard] Rooster is aangemaakt maar data nog niet volledig beschikbaar');
       console.error('[Wizard] Gebruiker wordt teruggeleid naar planning overzicht');
       console.error('='.repeat(80) + '\n');
       
-      setError('Rooster is aangemaakt maar data nog niet beschikbaar. Probeer de pagina opnieuw te laden.');
+      setError(`Rooster is aangemaakt maar data nog niet beschikbaar. Details: ${verificationResult.details}`);
       setIsCreating(false);
       
       // Navigeer naar planning overzicht als fallback
       setTimeout(() => {
         if (onClose) onClose();
         router.push('/planning');
-      }, 2000);
+      }, 3000); // 3 seconden om error te lezen
       
       return;
     }
+    
+    console.log('[Wizard] ✅ Verificatie geslaagd:', verificationResult.details);
     
     // === FASE 5: Navigeer naar dashboard (alleen na succesvolle verificatie) ===
     console.log('[Wizard] 🔄 Navigeren naar dashboard...');
@@ -440,7 +502,7 @@ export default function Wizard({ onClose }: WizardProps = {}) {
   return (
     <section className={onClose ? '' : 'p-4 border rounded bg-white'}>
       {!onClose && <h2 className="text-lg font-semibold mb-3">Nieuw rooster</h2>}
-      {error && <p className="text-red-600 mb-2">{error}</p>}
+      {error && <p className="text-red-600 mb-2 text-sm">{error}</p>}
 
       {step === 'period' && (
         <div className="flex flex-col gap-4">
@@ -542,14 +604,14 @@ export default function Wizard({ onClose }: WizardProps = {}) {
             </div>
           </div>
           
-          {/* DRAAD00 FIX: Verificatie progress indicator */}
+          {/* DRAAD001: Verbeterde verificatie progress indicator */}
           {isCreating && verifyAttempt > 0 && (
             <div className="bg-blue-50 border border-blue-200 rounded p-3">
               <div className="flex items-center gap-3">
                 <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
                 <div className="text-sm text-blue-800">
                   <div className="font-semibold">Database verificatie...</div>
-                  <div className="text-xs">Poging {verifyAttempt} van 10 (wacht op commit)</div>
+                  <div className="text-xs">Poging {verifyAttempt} van 5 (max 2.5 sec)</div>
                 </div>
               </div>
             </div>
