@@ -1,0 +1,5 @@
+# Railway rebuild trigger
+# Dit bestand forceert een complete rebuild
+TIMESTAMP=2025-11-15T23:21:00Z
+REBUILD=FORCE
+CACHE_BUST=af2640fc575dc5513e672c36f99f12f6909f5444
