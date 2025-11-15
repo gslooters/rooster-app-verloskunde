@@ -5,9 +5,14 @@ import {
   Employee, 
   DienstverbandType,
   TeamType,
+  DagblokType,
+  StructureelNBH,
   getFullName, 
   getRosterDisplayName,
+  getStructureelNBHDescription,
+  convertRoostervrijdagenToNBH,
   DAGEN_VAN_WEEK,
+  DAGBLOKKEN,
   DIENSTVERBAND_OPTIONS,
   TEAM_OPTIONS,
   validateAantalWerkdagen,
@@ -28,7 +33,8 @@ export default function MedewerkersPage() {
     dienstverband: DienstverbandType.LOONDIENST,
     team: TeamType.OVERIG,
     aantalWerkdagen: 24,
-    roostervrijDagen: [] as string[]
+    roostervrijDagen: [] as string[], // LEGACY (behouden voor backward compatibility)
+    structureel_nbh: undefined as StructureelNBH | undefined // NIEUW AP41
   });
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -49,7 +55,15 @@ export default function MedewerkersPage() {
 
   const openEmployeeModal = (employee?: Employee) => {
     if (employee) { 
-      setEditingEmployee(employee); 
+      setEditingEmployee(employee);
+      
+      // AP41: Converteer oude roostervrijdagen naar structureel_nbh indien nodig
+      let structureelNBH = employee.structureel_nbh;
+      if (!structureelNBH && employee.roostervrijDagen && employee.roostervrijDagen.length > 0) {
+        // Automatische migratie: hele dag vrij = alle dagblokken
+        structureelNBH = convertRoostervrijdagenToNBH(employee.roostervrijDagen);
+      }
+      
       setEmployeeFormData({ 
         voornaam: employee.voornaam,
         achternaam: employee.achternaam,
@@ -59,7 +73,8 @@ export default function MedewerkersPage() {
         dienstverband: employee.dienstverband,
         team: employee.team,
         aantalWerkdagen: employee.aantalWerkdagen,
-        roostervrijDagen: [...employee.roostervrijDagen]
+        roostervrijDagen: [...employee.roostervrijDagen], // LEGACY
+        structureel_nbh: structureelNBH // NIEUW
       }); 
     } else { 
       setEditingEmployee(null); 
@@ -72,7 +87,8 @@ export default function MedewerkersPage() {
         dienstverband: DienstverbandType.LOONDIENST,
         team: TeamType.OVERIG,
         aantalWerkdagen: 24,
-        roostervrijDagen: []
+        roostervrijDagen: [],
+        structureel_nbh: undefined
       }); 
     }
     setError(''); 
@@ -83,6 +99,36 @@ export default function MedewerkersPage() {
     setShowEmployeeModal(false); 
     setEditingEmployee(null); 
     setError(''); 
+  };
+
+  // AP41: Nieuwe handler voor dagblok toggle
+  const handleDagblokToggle = (dagCode: string, dagblok: DagblokType, checked: boolean) => {
+    const current = { ...employeeFormData.structureel_nbh } || {};
+    const dagLower = dagCode.toLowerCase();
+    
+    if (!current[dagLower]) {
+      current[dagLower] = [];
+    }
+    
+    if (checked) {
+      // Voeg dagblok toe
+      if (!current[dagLower].includes(dagblok)) {
+        current[dagLower] = [...current[dagLower], dagblok].sort();
+      }
+    } else {
+      // Verwijder dagblok
+      current[dagLower] = current[dagLower].filter(b => b !== dagblok);
+      
+      // Als geen blokken meer: verwijder dag
+      if (current[dagLower].length === 0) {
+        delete current[dagLower];
+      }
+    }
+    
+    setEmployeeFormData({
+      ...employeeFormData,
+      structureel_nbh: Object.keys(current).length > 0 ? current : undefined
+    });
   };
 
   const handleEmployeeSubmit = async (e?: React.FormEvent) => {
@@ -231,8 +277,9 @@ export default function MedewerkersPage() {
                       
                       <div className="text-xs text-gray-600 mt-1 min-h-[32px]">
                         <div>{employee.aantalWerkdagen} werkdagen/periode</div>
-                        <div>
-                          Niet Beschikbaar: {employee.roostervrijDagen.length > 0 ? employee.roostervrijDagen.join(', ') : '—'}
+                        {/* AP41: Toon structurele NBH beschrijving */}
+                        <div className="text-xs text-gray-600 mt-1">
+                          <strong>Structureel NBH:</strong> {getStructureelNBHDescription(employee.structureel_nbh)}
                         </div>
                       </div>
                       
@@ -421,20 +468,32 @@ export default function MedewerkersPage() {
                         <span className="text-sm text-gray-600">*</span>
                       </div>
 
-                      {/* Standaard Niet Beschikbaar */}
+                      {/* AP41: Structureel NBH per Dagblok */}
                       <div className="border-t pt-4">
-                        <label className="block text-sm font-medium text-gray-700 mb-3">Standaard Niet Beschikbaar</label>
-                        <div className="grid grid-cols-7 gap-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-3">
+                          Structureel Niet Beschikbaar (per dagblok)
+                        </label>
+                        <div className="text-xs text-gray-500 mb-3">
+                          Selecteer per dag welke dagblokken deze medewerker structureel niet beschikbaar is.
+                        </div>
+                        <div className="space-y-2">
                           {DAGEN_VAN_WEEK.map(dag => (
-                            <div key={dag.code} className="text-center">
-                              <div className="text-xs font-medium text-gray-600 mb-1">{dag.code.toUpperCase()}</div>
-                              <div className="flex justify-center">
-                                <input 
-                                  type="checkbox" 
-                                  id={`dag-${dag.code}`}
-                                  checked={employeeFormData.roostervrijDagen.includes(dag.code)}
-                                  onChange={(e) => handleRoostervrijDagChange(dag.code, e.target.checked)} 
-                                />
+                            <div key={dag.code} className="flex items-center gap-3 py-1">
+                              <span className="w-12 text-sm font-medium text-gray-700">{dag.code.toUpperCase()}</span>
+                              <div className="flex gap-4">
+                                {DAGBLOKKEN.map(blok => (
+                                  <label key={blok.code} className="flex items-center gap-1 cursor-pointer">
+                                    <input 
+                                      type="checkbox" 
+                                      checked={employeeFormData.structureel_nbh?.[dag.code]?.includes(blok.code) || false}
+                                      onChange={(e) => handleDagblokToggle(dag.code, blok.code, e.target.checked)}
+                                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    />
+                                    <span className="text-xs text-gray-600">
+                                      {blok.label} <span className="text-gray-400">({blok.tijden})</span>
+                                    </span>
+                                  </label>
+                                ))}
                               </div>
                             </div>
                           ))}
