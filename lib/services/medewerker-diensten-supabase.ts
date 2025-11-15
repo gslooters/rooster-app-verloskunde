@@ -19,10 +19,10 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 export async function getEmployeeServicesOverview(): Promise<EmployeeServiceRow[]> {
   console.log('🔄 Loading employee services overview...');
 
-  // Haal medewerkers op (let OP: kolom "voornaam")
+  // Haal medewerkers op (let op: aantalwerkdagen)
   const { data: employees, error: empError } = await supabase
     .from('employees')
-    .select('id, voornaam, team, dienstenperiode')
+    .select('id, voornaam, team, aantalwerkdagen')
     .order('team', { ascending: true })
     .order('voornaam', { ascending: true });
   
@@ -104,10 +104,10 @@ export async function getEmployeeServicesOverview(): Promise<EmployeeServiceRow[
       employeeId: emp.id,
       employeeName: emp.voornaam, // Gebruik voornaam ipv naam
       team: emp.team,
-      dienstenperiode: emp.dienstenperiode || 0,
+      dienstenperiode: emp.aantalwerkdagen || 0,   // FIX HIER
       services: servicesObj,
       totalDiensten: Math.round(totalDiensten * 10) / 10,
-      isOnTarget: Math.abs(totalDiensten - (emp.dienstenperiode || 0)) < 0.1
+      isOnTarget: Math.abs(totalDiensten - (emp.aantalwerkdagen || 0)) < 0.1 // FIX HIER
     };
   });
 
