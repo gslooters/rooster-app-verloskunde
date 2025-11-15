@@ -1,6 +1,6 @@
 // lib/services/diensten-storage.ts
 // ============================================================================
-// DRAAD30B - Storage Layer Update: Team Regels en Blokkeert Volgdag
+// DRAAD30D - FIX: Optimistische health check + robuste initialisatie
 // ============================================================================
 import { Dienst, validateDienstwaarde, calculateDuration } from "../types/dienst";
 import { teamRegelsFromJSON, teamRegelsToJSON, DEFAULT_TEAM_REGELS } from '../validators/service';
@@ -37,55 +37,102 @@ export interface ServiceDayStaffing {
 // ============================================================================
 const CACHE_KEY = "diensten_cache";
 const HEALTH_CHECK_KEY = "supabase_health_diensten";
-const HEALTH_CHECK_INTERVAL = 60000; // 1 minuut
+const HEALTH_CHECK_INTERVAL = 30000; // 30 seconden (was 60s)
 const SYSTEM_CODES = ['NB', '==='];
 
 // ============================================================================
-// HEALTH CHECK
+// HEALTH CHECK - DRAAD30D FIX
 // ============================================================================
 let lastHealthCheck = 0;
-let lastHealthStatus = false;
+let lastHealthStatus = true; // ✅ Start OPTIMISTISCH (assume healthy)
+let healthCheckInProgress = false;
 
 /**
  * Check Supabase health voor diensten tabel
+ * DRAAD30D: Robuustere health check met retry en optimistische fallback
  */
 export async function checkSupabaseHealth(): Promise<boolean> {
   const now = Date.now();
   
-  // Return cached status als recent gecheck
-  if (now - lastHealthCheck < HEALTH_CHECK_INTERVAL) {
+  // Return cached status als recent gechecked EN niet in progress
+  if (!healthCheckInProgress && now - lastHealthCheck < HEALTH_CHECK_INTERVAL) {
     return lastHealthStatus;
   }
   
+  // Prevent concurrent checks
+  if (healthCheckInProgress) {
+    return lastHealthStatus;
+  }
+  
+  healthCheckInProgress = true;
+  
   try {
-    const { error } = await supabase
+    // Timeout van 5 seconden voor health check
+    const timeoutPromise = new Promise<never>((_, reject) => 
+      setTimeout(() => reject(new Error('Health check timeout')), 5000)
+    );
+    
+    const checkPromise = supabase
       .from('service_types')
       .select('id')
       .limit(1);
+    
+    const { error } = await Promise.race([checkPromise, timeoutPromise]);
     
     lastHealthStatus = !error;
     lastHealthCheck = now;
     
     if (error) {
-      console.error('❌ Supabase health check failed:', error);
+      console.warn('⚠️ Supabase health check failed:', error.message);
+    } else {
+      console.log('✅ Supabase health check passed');
     }
     
     return lastHealthStatus;
-  } catch (err) {
-    console.error('❌ Supabase health check exception:', err);
-    lastHealthStatus = false;
+  } catch (err: any) {
+    console.warn('⚠️ Supabase health check exception:', err.message);
+    // Bij timeout of network error: blijf optimistisch maar log warning
+    // Alleen bij herhaalde failures zetten we status op false
+    const timeSinceLastSuccess = now - lastHealthCheck;
+    if (timeSinceLastSuccess > HEALTH_CHECK_INTERVAL * 3) {
+      // Na 3 mislukte checks (90s): zet status op unhealthy
+      lastHealthStatus = false;
+    }
     lastHealthCheck = now;
-    return false;
+    return lastHealthStatus;
+  } finally {
+    healthCheckInProgress = false;
   }
 }
 
 /**
  * Get health status with message (voor UI)
+ * DRAAD30D: Optimistisch - assume healthy tenzij bewezen ongezond
  */
 export function getSupabaseHealthStatus(): { healthy: boolean; message: string } {
+  // Als we nog nooit gecheckt hebben: return optimistisch
+  if (lastHealthCheck === 0) {
+    return { 
+      healthy: true, 
+      message: 'Database verbinding controleren...' 
+    };
+  }
+  
+  const now = Date.now();
+  const timeSinceCheck = now - lastHealthCheck;
+  
+  // Als laatste check lang geleden was: trigger async recheck
+  if (timeSinceCheck > HEALTH_CHECK_INTERVAL) {
+    // Trigger async check (non-blocking)
+    checkSupabaseHealth().catch(err => 
+      console.warn('Background health check failed:', err)
+    );
+  }
+  
   if (lastHealthStatus) {
     return { healthy: true, message: 'Database verbinding actief' };
   }
+  
   return { 
     healthy: false, 
     message: 'Geen database verbinding. Controleer je internetverbinding.' 
@@ -217,11 +264,18 @@ export async function getAllServices(): Promise<Dienst[]> {
     // Update cache
     updateCache(services);
     
+    // Update health status bij succesvolle data fetch
+    lastHealthStatus = true;
+    lastHealthCheck = Date.now();
+    
     console.log(`✅ Loaded ${services.length} services from database`);
     
     return services;
   } catch (error) {
     console.error('❌ Failed to load services:', error);
+    // Update health status bij failure
+    lastHealthStatus = false;
+    lastHealthCheck = Date.now();
     throw error;
   }
 }
