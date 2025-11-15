@@ -10,15 +10,54 @@ import {
   subscribeToServiceChanges,
   getSupabaseHealthStatus
 } from '@/lib/services/diensten-storage';
+import DagblokMatrix from '@/components/diensten/DagblokMatrix';
+import { 
+  TeamRegels, 
+  DEFAULT_TEAM_REGELS,
+  TeamCode
+} from '@/lib/types/service';
+import { 
+  normalizeTeamRegels,
+  telVerplichteDagblokken,
+  beschrijfTeamRegels
+} from '@/lib/validators/service';
+
+interface ExtendedFormData {
+  code: string;
+  naam: string;
+  beschrijving: string;
+  begintijd: string;
+  eindtijd: string;
+  kleur: string;
+  dienstwaarde: number;
+  actief: boolean;
+  planregels: string;
+  blokkeert_volgdag: boolean;
+  team_groen_regels: TeamRegels;
+  team_oranje_regels: TeamRegels;
+  team_totaal_regels: TeamRegels;
+}
 
 export default function ServiceTypesPage() {
   const [diensten, setDiensten] = useState<Dienst[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingDienst, setEditingDienst] = useState<Dienst | null>(null);
-  const [formData, setFormData] = useState({ 
-    code: '', naam: '', beschrijving: '', begintijd: '08:00', eindtijd: '16:00',
-    kleur: '#3B82F6', dienstwaarde: 1, actief: true, planregels: ''
+  const [activeTab, setActiveTab] = useState<'basis' | 'teams'>('basis');
+  const [formData, setFormData] = useState<ExtendedFormData>({ 
+    code: '', 
+    naam: '', 
+    beschrijving: '', 
+    begintijd: '08:00', 
+    eindtijd: '16:00',
+    kleur: '#3B82F6', 
+    dienstwaarde: 1, 
+    actief: true, 
+    planregels: '',
+    blokkeert_volgdag: false,
+    team_groen_regels: { ...DEFAULT_TEAM_REGELS },
+    team_oranje_regels: { ...DEFAULT_TEAM_REGELS },
+    team_totaal_regels: { ...DEFAULT_TEAM_REGELS }
   });
   const [error, setError] = useState('');
   const [validationWarnings, setValidationWarnings] = useState('');
@@ -76,15 +115,39 @@ export default function ServiceTypesPage() {
     if (dienst) {
       setEditingDienst(dienst);
       setFormData({ 
-        code: dienst.code, naam: dienst.naam, beschrijving: dienst.beschrijving, 
-        begintijd: dienst.begintijd, eindtijd: dienst.eindtijd, kleur: dienst.kleur, 
-        dienstwaarde: dienst.dienstwaarde ?? 1, actief: dienst.actief,
-        planregels: dienst.planregels || ''
+        code: dienst.code, 
+        naam: dienst.naam, 
+        beschrijving: dienst.beschrijving, 
+        begintijd: dienst.begintijd, 
+        eindtijd: dienst.eindtijd, 
+        kleur: dienst.kleur, 
+        dienstwaarde: dienst.dienstwaarde ?? 1, 
+        actief: dienst.actief,
+        planregels: dienst.planregels || '',
+        blokkeert_volgdag: dienst.blokkeert_volgdag || false,
+        team_groen_regels: normalizeTeamRegels(dienst.team_groen_regels),
+        team_oranje_regels: normalizeTeamRegels(dienst.team_oranje_regels),
+        team_totaal_regels: normalizeTeamRegels(dienst.team_totaal_regels)
       });
     } else {
       setEditingDienst(null);
-      setFormData({ code: '', naam: '', beschrijving: '', begintijd: '08:00', eindtijd: '16:00', kleur: '#3B82F6', dienstwaarde: 1, actief: true, planregels: '' });
+      setFormData({ 
+        code: '', 
+        naam: '', 
+        beschrijving: '', 
+        begintijd: '08:00', 
+        eindtijd: '16:00', 
+        kleur: '#3B82F6', 
+        dienstwaarde: 1, 
+        actief: true, 
+        planregels: '',
+        blokkeert_volgdag: false,
+        team_groen_regels: { ...DEFAULT_TEAM_REGELS },
+        team_oranje_regels: { ...DEFAULT_TEAM_REGELS },
+        team_totaal_regels: { ...DEFAULT_TEAM_REGELS }
+      });
     }
+    setActiveTab('basis');
     setError(''); 
     setValidationWarnings(''); 
     setShowModal(true);
@@ -109,6 +172,13 @@ export default function ServiceTypesPage() {
 
   const handleTimeChange = () => { 
     validateTimes(formData.begintijd, formData.eindtijd); 
+  };
+
+  const handleTeamRegelsChange = (team: TeamCode, regels: TeamRegels) => {
+    setFormData(prev => ({
+      ...prev,
+      [`team_${team}_regels`]: regels
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -208,10 +278,16 @@ export default function ServiceTypesPage() {
       .service-description { color: #718096; font-size: 14px; margin: 4px 0; }
       .system-service { background-color: #f7fafc; } 
       .field-label { font-weight: bold; }
+      .team-rules { margin-top: 8px; padding: 8px; background: #f8f9fa; border-radius: 4px; }
     </style></head><body>
       <h1>Diensten Overzicht</h1>
       <p>Gegenereerd op: ${new Date().toLocaleDateString('nl-NL')}</p>
-      ${diensten.map(dienst => `
+      ${diensten.map(dienst => {
+        const groenVerplicht = telVerplichteDagblokken(dienst.team_groen_regels);
+        const oranjeVerplicht = telVerplichteDagblokken(dienst.team_oranje_regels);
+        const totaalVerplicht = telVerplichteDagblokken(dienst.team_totaal_regels);
+        
+        return `
         <div class="service ${dienst.system ? 'system-service' : ''}">
           <div class="service-header">
             <div class="color-box" style="background-color: ${dienst.kleur}"></div>
@@ -221,14 +297,23 @@ export default function ServiceTypesPage() {
           </div>
           <div class="service-time">Tijd: ${dienst.begintijd} - ${dienst.eindtijd} (${dienst.duur}u)</div>
           <div class="service-time">Waarde: ${dienst.dienstwaarde}</div>
+          ${dienst.blokkeert_volgdag ? '<div class="service-time">Blokkeert volgende dag: JA</div>' : ''}
           <div class="service-description">
             <span class="field-label">Beschrijving:</span> ${dienst.beschrijving}
           </div>
           <div class="service-description">
             <span class="field-label">Planregels:</span> ${dienst.planregels || 'geen'}
           </div>
+          ${(groenVerplicht > 0 || oranjeVerplicht > 0 || totaalVerplicht > 0) ? `
+            <div class="team-rules">
+              <span class="field-label">Team regels:</span><br/>
+              ${groenVerplicht > 0 ? `Groen: ${groenVerplicht} verplichte dagblokken<br/>` : ''}
+              ${oranjeVerplicht > 0 ? `Oranje: ${oranjeVerplicht} verplichte dagblokken<br/>` : ''}
+              ${totaalVerplicht > 0 ? `Totaal: ${totaalVerplicht} verplichte dagblokken` : ''}
+            </div>
+          ` : ''}
         </div>
-      `).join('')}
+      `}).join('')}
     </body></html>`;
     
     const newWindow = window.open('', '_blank');
@@ -289,10 +374,10 @@ export default function ServiceTypesPage() {
               <div>
                 <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-2 flex items-center">
                   <span className="text-2xl mr-3">⚙️</span>
-                  Diensten beheren - Finaal
+                  Diensten beheren - Met Team Regels
                 </h1>
                 <p className="text-gray-600">
-                  Configureer diensttypes met tijdsinformatie, kleurcodering en planregels.
+                  Configureer diensttypes met tijdsinformatie, kleurcodering en team-specifieke dagblok regels.
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
                   📡 Live sync actief - wijzigingen worden automatisch bijgewerkt
@@ -325,6 +410,11 @@ export default function ServiceTypesPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 max-h-[65vh] overflow-y-auto pr-2 pb-4">
             {diensten.map((dienst) => {
+              const groenVerplicht = telVerplichteDagblokken(dienst.team_groen_regels);
+              const oranjeVerplicht = telVerplichteDagblokken(dienst.team_oranje_regels);
+              const totaalVerplicht = telVerplichteDagblokken(dienst.team_totaal_regels);
+              const heeftTeamRegels = groenVerplicht > 0 || oranjeVerplicht > 0 || totaalVerplicht > 0;
+              
               return (
                 <div 
                   key={dienst.id} 
@@ -346,10 +436,22 @@ export default function ServiceTypesPage() {
                           </span>
                         )}
                       </h3>
-                      <div className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${
-                        dienst.actief ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                      }`}>
-                        {dienst.actief ? 'Actief' : 'Inactief'}
+                      <div className="flex items-center gap-2 mt-1">
+                        <div className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${
+                          dienst.actief ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                        }`}>
+                          {dienst.actief ? 'Actief' : 'Inactief'}
+                        </div>
+                        {dienst.blokkeert_volgdag && (
+                          <div className="inline-block px-2 py-1 text-xs font-medium rounded-full bg-orange-100 text-orange-700">
+                            🚫 Blokkeert volgdag
+                          </div>
+                        )}
+                        {heeftTeamRegels && (
+                          <div className="inline-block px-2 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-700">
+                            🎯 Team regels
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -371,6 +473,21 @@ export default function ServiceTypesPage() {
                   <div className="text-xs text-blue-600 mb-3">
                     <strong>Planregels:</strong> {dienst.planregels || 'geen'}
                   </div>
+
+                  {heeftTeamRegels && (
+                    <div className="text-xs bg-purple-50 rounded p-2 mb-3">
+                      <strong className="text-purple-700">Team regels:</strong>
+                      {groenVerplicht > 0 && (
+                        <div className="text-green-600">Groen: {groenVerplicht} verplicht</div>
+                      )}
+                      {oranjeVerplicht > 0 && (
+                        <div className="text-orange-600">Oranje: {oranjeVerplicht} verplicht</div>
+                      )}
+                      {totaalVerplicht > 0 && (
+                        <div className="text-blue-600">Totaal: {totaalVerplicht} verplicht</div>
+                      )}
+                    </div>
+                  )}
 
                   <div className="flex gap-2 mt-auto">
                     {!dienst.system ? (
@@ -403,182 +520,264 @@ export default function ServiceTypesPage() {
 
           {showModal && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-              <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-                <div className="flex items-center justify-between mb-6">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+                {/* Modal header */}
+                <div className="flex items-center justify-between p-6 border-b">
                   <h2 className="text-xl font-semibold text-gray-900">
                     {editingDienst ? 'Dienst Bewerken' : 'Nieuwe Dienst'}
                   </h2>
                   <button 
                     onClick={closeModal} 
-                    className="text-gray-400 hover:text-gray-600 text-xl"
+                    className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
                     disabled={submitting}
                   >
                     ×
                   </button>
                 </div>
 
-                <form onSubmit={handleSubmit}>
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Code (2-3 tekens)
-                        </label>
-                        <input 
-                          type="text" 
-                          value={formData.code} 
-                          onChange={(e) => setFormData({...formData, code: e.target.value.toUpperCase()})} 
-                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent uppercase" 
-                          placeholder="bijv. D, ND" 
-                          maxLength={4} 
-                          required 
-                          disabled={editingDienst?.system || submitting}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Naam
-                        </label>
-                        <input 
-                          type="text" 
-                          value={formData.naam} 
-                          onChange={(e) => setFormData({...formData, naam: e.target.value})} 
-                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
-                          placeholder="bijv. Dagdienst" 
-                          required 
-                          disabled={editingDienst?.system || submitting}
-                        />
-                      </div>
-                    </div>
+                {/* Tab navigation */}
+                <div className="border-b px-6">
+                  <div className="flex gap-4">
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('basis')}
+                      className={`pb-3 px-1 border-b-2 font-medium text-sm transition-colors ${
+                        activeTab === 'basis'
+                          ? 'border-blue-500 text-blue-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      📄 Basis instellingen
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('teams')}
+                      className={`pb-3 px-1 border-b-2 font-medium text-sm transition-colors ${
+                        activeTab === 'teams'
+                          ? 'border-blue-500 text-blue-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      🎯 Team regels
+                    </button>
+                  </div>
+                </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Beschrijving
-                      </label>
-                      <textarea 
-                        value={formData.beschrijving} 
-                        onChange={(e) => setFormData({...formData, beschrijving: e.target.value})} 
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
-                        placeholder="Uitleg van de dienst" 
-                        rows={2} 
-                        disabled={editingDienst?.system || submitting}
-                      />
-                    </div>
+                {/* Modal content */}
+                <form onSubmit={handleSubmit} className="flex-1 overflow-hidden flex flex-col">
+                  <div className="flex-1 overflow-y-auto p-6">
+                    {activeTab === 'basis' ? (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Code (2-3 tekens)
+                            </label>
+                            <input 
+                              type="text" 
+                              value={formData.code} 
+                              onChange={(e) => setFormData({...formData, code: e.target.value.toUpperCase()})} 
+                              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent uppercase" 
+                              placeholder="bijv. D, ND" 
+                              maxLength={4} 
+                              required 
+                              disabled={editingDienst?.system || submitting}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Naam
+                            </label>
+                            <input 
+                              type="text" 
+                              value={formData.naam} 
+                              onChange={(e) => setFormData({...formData, naam: e.target.value})} 
+                              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                              placeholder="bijv. Dagdienst" 
+                              required 
+                              disabled={editingDienst?.system || submitting}
+                            />
+                          </div>
+                        </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Planregels
-                      </label>
-                      <textarea 
-                        value={formData.planregels} 
-                        onChange={(e) => setFormData({...formData, planregels: e.target.value})} 
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
-                        placeholder="Bijv: na deze dienst altijd een Uitnacht inplannen" 
-                        rows={2} 
-                        disabled={editingDienst?.system || submitting}
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Begintijd
-                        </label>
-                        <input 
-                          type="time" 
-                          value={formData.begintijd} 
-                          onChange={(e) => { 
-                            setFormData({...formData, begintijd: e.target.value}); 
-                            setTimeout(handleTimeChange, 100); 
-                          }} 
-                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
-                          disabled={editingDienst?.system || submitting}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Eindtijd
-                        </label>
-                        <input 
-                          type="time" 
-                          value={formData.eindtijd} 
-                          onChange={(e) => { 
-                            setFormData({...formData, eindtijd: e.target.value}); 
-                            setTimeout(handleTimeChange, 100); 
-                          }} 
-                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent" 
-                          disabled={editingDienst?.system || submitting}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Kleur
-                        </label>
-                        <div className="flex items-center gap-3">
-                          <input 
-                            type="color" 
-                            value={formData.kleur} 
-                            onChange={(e) => setFormData({...formData, kleur: e.target.value})} 
-                            className="w-12 h-12 rounded-lg border border-gray-300" 
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Beschrijving
+                          </label>
+                          <textarea 
+                            value={formData.beschrijving} 
+                            onChange={(e) => setFormData({...formData, beschrijving: e.target.value})} 
+                            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                            placeholder="Uitleg van de dienst" 
+                            rows={2} 
                             disabled={editingDienst?.system || submitting}
                           />
-                          <div 
-                            className="w-12 h-12 rounded-lg border border-gray-300 flex items-center justify-center text-white font-bold text-sm" 
-                            style={{ backgroundColor: formData.kleur }}
-                          >
-                            {formData.code.toUpperCase() || 'XX'}
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Planregels
+                          </label>
+                          <textarea 
+                            value={formData.planregels} 
+                            onChange={(e) => setFormData({...formData, planregels: e.target.value})} 
+                            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                            placeholder="Bijv: na deze dienst altijd een Uitnacht inplannen" 
+                            rows={2} 
+                            disabled={editingDienst?.system || submitting}
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Begintijd
+                            </label>
+                            <input 
+                              type="time" 
+                              value={formData.begintijd} 
+                              onChange={(e) => { 
+                                setFormData({...formData, begintijd: e.target.value}); 
+                                setTimeout(handleTimeChange, 100); 
+                              }} 
+                              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                              disabled={editingDienst?.system || submitting}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Eindtijd
+                            </label>
+                            <input 
+                              type="time" 
+                              value={formData.eindtijd} 
+                              onChange={(e) => { 
+                                setFormData({...formData, eindtijd: e.target.value}); 
+                                setTimeout(handleTimeChange, 100); 
+                              }} 
+                              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent" 
+                              disabled={editingDienst?.system || submitting}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Kleur
+                            </label>
+                            <div className="flex items-center gap-3">
+                              <input 
+                                type="color" 
+                                value={formData.kleur} 
+                                onChange={(e) => setFormData({...formData, kleur: e.target.value})} 
+                                className="w-12 h-12 rounded-lg border border-gray-300" 
+                                disabled={editingDienst?.system || submitting}
+                              />
+                              <div 
+                                className="w-12 h-12 rounded-lg border border-gray-300 flex items-center justify-center text-white font-bold text-sm" 
+                                style={{ backgroundColor: formData.kleur }}
+                              >
+                                {formData.code.toUpperCase() || 'XX'}
+                              </div>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Dienstwaarde (0–6)
+                            </label>
+                            <input 
+                              type="number" 
+                              min={0} 
+                              max={6} 
+                              step={0.5} 
+                              value={formData.dienstwaarde} 
+                              onChange={(e) => setFormData({...formData, dienstwaarde: parseFloat(e.target.value) || 0})} 
+                              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                              required 
+                              disabled={editingDienst?.system || submitting}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="flex items-center">
+                            <input 
+                              type="checkbox" 
+                              id="actief" 
+                              checked={formData.actief} 
+                              onChange={(e) => setFormData({...formData, actief: e.target.checked})} 
+                              className="mr-2" 
+                              disabled={submitting}
+                            />
+                            <label htmlFor="actief" className="text-sm font-medium text-gray-700">
+                              Actief (beschikbaar in roosters)
+                            </label>
+                          </div>
+                          
+                          <div className="flex items-center">
+                            <input 
+                              type="checkbox" 
+                              id="blokkeert_volgdag" 
+                              checked={formData.blokkeert_volgdag} 
+                              onChange={(e) => setFormData({...formData, blokkeert_volgdag: e.target.checked})} 
+                              className="mr-2" 
+                              disabled={editingDienst?.system || submitting}
+                            />
+                            <label htmlFor="blokkeert_volgdag" className="text-sm font-medium text-gray-700">
+                              🚫 Blokkeert volgende dag (bijv. na nachtdienst)
+                            </label>
                           </div>
                         </div>
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Dienstwaarde (0–6)
-                        </label>
-                        <input 
-                          type="number" 
-                          min={0} 
-                          max={6} 
-                          step={0.5} 
-                          value={formData.dienstwaarde} 
-                          onChange={(e) => setFormData({...formData, dienstwaarde: parseFloat(e.target.value) || 0})} 
-                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
-                          required 
+                    ) : (
+                      <div className="space-y-6">
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                          <h3 className="font-medium text-blue-900 mb-2">📌 Team regels instellen</h3>
+                          <p className="text-sm text-blue-700">
+                            Configureer per team wanneer deze dienst verplicht (MOET), optioneel (MAG) of niet toegestaan (MAG_NIET) is.
+                            Stel in per dag en dagblok (Ochtend/Middag/Avond) wat de regels zijn.
+                          </p>
+                        </div>
+
+                        <DagblokMatrix
+                          teamRegels={formData.team_groen_regels}
+                          onChange={(regels) => handleTeamRegelsChange('groen', regels)}
+                          teamNaam="Groen"
+                          disabled={editingDienst?.system || submitting}
+                        />
+
+                        <DagblokMatrix
+                          teamRegels={formData.team_oranje_regels}
+                          onChange={(regels) => handleTeamRegelsChange('oranje', regels)}
+                          teamNaam="Oranje"
+                          disabled={editingDienst?.system || submitting}
+                        />
+
+                        <DagblokMatrix
+                          teamRegels={formData.team_totaal_regels}
+                          onChange={(regels) => handleTeamRegelsChange('totaal', regels)}
+                          teamNaam="Totaal"
                           disabled={editingDienst?.system || submitting}
                         />
                       </div>
-                    </div>
-
-                    <div className="flex items-center">
-                      <input 
-                        type="checkbox" 
-                        id="actief" 
-                        checked={formData.actief} 
-                        onChange={(e) => setFormData({...formData, actief: e.target.checked})} 
-                        className="mr-2" 
-                        disabled={submitting}
-                      />
-                      <label htmlFor="actief" className="text-sm font-medium text-gray-700">
-                        Actief (beschikbaar in roosters)
-                      </label>
-                    </div>
+                    )}
                   </div>
 
                   {validationWarnings && (
-                    <div className="mt-4 p-3 bg-yellow-100 border border-yellow-200 text-yellow-700 rounded-lg text-sm">
+                    <div className="px-6 py-3 bg-yellow-100 border-t border-yellow-200 text-yellow-700 text-sm">
                       {validationWarnings}
                     </div>
                   )}
                   
                   {error && (
-                    <div className="mt-4 p-3 bg-red-100 border border-red-200 text-red-700 rounded-lg text-sm">
+                    <div className="px-6 py-3 bg-red-100 border-t border-red-200 text-red-700 text-sm">
                       {error}
                     </div>
                   )}
 
-                  <div className="flex gap-3 mt-6">
+                  {/* Modal footer */}
+                  <div className="flex gap-3 p-6 border-t bg-gray-50">
                     <button 
                       type="button" 
                       onClick={closeModal} 
