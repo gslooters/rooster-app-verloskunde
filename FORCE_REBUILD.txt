@@ -1,0 +1,2 @@
+Force rebuild timestamp: 2025-11-15T23:03:00Z
+This file forces Railway to rebuild from scratch.
