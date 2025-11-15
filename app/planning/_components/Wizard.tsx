@@ -17,6 +17,7 @@ import { supabase } from '@/lib/supabase';
 const FIXED_WEEKS = 5;
 
 type WizardStep = 'period' | 'employees' | 'confirm';
+type CreationPhase = 'idle' | 'creating' | 'initializing' | 'staffing' | 'generating' | 'verifying' | 'done';
 
 interface WizardProps { 
   onClose?: () => void; 
@@ -44,16 +45,19 @@ export default function Wizard({ onClose }: WizardProps = {}) {
   const [isCreating, setIsCreating] = useState<boolean>(false);
   const [verifyAttempt, setVerifyAttempt] = useState<number>(0);
 
+  // DRAAD002: Nieuwe state voor multi-layer feedback
+  const [creationPhase, setCreationPhase] = useState<CreationPhase>('idle');
+  const [creationProgress, setCreationProgress] = useState(0);
+  const [creationMessage, setCreationMessage] = useState('');
+
   // Async laden van perioden met status
   useEffect(() => {
     async function loadPeriods() {
       try {
         setIsLoadingPeriods(true);
         
-        // Genereer basisperioden
         const base = generateFiveWeekPeriods(30);
         
-        // Haal async status op voor elke periode
         const periodsWithStatus = await Promise.all(
           base.map(async (p) => ({
             ...p,
@@ -61,7 +65,6 @@ export default function Wizard({ onClose }: WizardProps = {}) {
           }))
         );
 
-        // Sorteer: in_progress eerst, dan draft, dan free
         const inProg = periodsWithStatus
           .filter(p => p.status === 'in_progress')
           .sort((a,b) => a.start.localeCompare(b.start));
@@ -74,7 +77,6 @@ export default function Wizard({ onClose }: WizardProps = {}) {
         const ordered = [...inProg, ...drafts, ...free];
         setPeriods(ordered);
 
-        // Selecteer eerste vrije periode
         const firstFree = free[0];
         if (firstFree) { 
           setSelectedStart(firstFree.start); 
@@ -110,12 +112,6 @@ export default function Wizard({ onClose }: WizardProps = {}) {
     router.push('/dashboard'); 
   }
 
-  /**
-   * ✅ DRAAD001 VERBETERDE VERIFICATIE
-   * 
-   * Verificatie functie die controleert of roster data beschikbaar is
-   * Met betere diagnostics en minder pogingen (5 i.p.v. 10)
-   */
   async function verifyRosterDataExists(rosterId: string, maxAttempts: number = 5): Promise<{
     success: boolean;
     details: string;
@@ -126,7 +122,6 @@ export default function Wizard({ onClose }: WizardProps = {}) {
       console.log(`[Wizard] 🔍 Verificatie poging ${attempt}/${maxAttempts}...`);
       
       try {
-        // CHECK 1: Roster design data
         const designData = await loadRosterDesignData(rosterId);
         
         if (!designData) {
@@ -160,7 +155,6 @@ export default function Wizard({ onClose }: WizardProps = {}) {
           }
         }
         
-        // CHECK 2: Roster assignments (NB dagen)
         const { data: assignments, error: assignError } = await supabase
           .from('roster_assignments')
           .select('id')
@@ -169,12 +163,10 @@ export default function Wizard({ onClose }: WizardProps = {}) {
         
         if (assignError) {
           console.warn(`[Wizard] ⚠️  Fout bij checken assignments:`, assignError);
-          // Niet kritiek, ga door
         } else {
           console.log(`[Wizard] ✅ roster_assignments check: ${assignments?.length || 0} records`);
         }
         
-        // SUCCESS: Alle checks geslaagd
         console.log('[Wizard] ✅ Roster data volledig geverifieerd - navigatie veilig');
         console.log(`[Wizard] Verificatie geslaagd na ${attempt} poging(en)`);
         
@@ -203,107 +195,39 @@ export default function Wizard({ onClose }: WizardProps = {}) {
     setIsCreating(true);
     setError(null);
     setVerifyAttempt(0);
+    setCreationPhase('creating');
+    setCreationProgress(0);
     
     let rosterId: string | null = null;
     
-    // === FASE 1: Rooster aanmaken (kritiek) ===
+    // === FASE 1: Rooster aanmaken (0-25%) ===
     try {
+      setCreationMessage('Rooster wordt aangemaakt...');
+      setCreationProgress(10);
+      
       console.log('\n' + '='.repeat(80));
       console.log('[Wizard] 🚀 START: Rooster aanmaken');
       console.log('[Wizard] Periode:', selectedStart, 'tot', selectedEnd);
       console.log('='.repeat(80) + '\n');
       
-      // DIRECT DATABASE CALL - GEBRUIK GERETOURNEERDE ID ✅
       const roster = await createRooster({
         start_date: selectedStart,
         end_date: selectedEnd,
         status: 'draft'
       });
       
-      rosterId = roster.id; // GEBRUIK DATABASE UUID
+      rosterId = roster.id;
+      setCreationProgress(25);
       
       console.log('[Wizard] ✅ Rooster succesvol aangemaakt:', rosterId);
       console.log('[Wizard] Start date:', selectedStart);
       console.log('[Wizard] End date:', selectedEnd);
       console.log('');
       
-      // === DRAAD26O-FASE1: DIAGNOSE LOGGING ===
-      console.log('\n' + '='.repeat(80));
-      console.log('[DIAGNOSE] 🔍 FASE 1: RoostervrijDagen Data Check');
-      console.log('='.repeat(80));
-      
-      // Haal ALLE medewerkers op (actief + niet-actief voor complete diagnose)
-      const allEmployees = getAllEmployees();
-      console.log(`[DIAGNOSE] Totaal medewerkers in systeem: ${allEmployees.length}`);
-      
-      // Filter alleen actieve medewerkers (deze worden gebruikt in rooster)
-      const activeEmployees = allEmployees.filter(emp => emp.actief);
-      console.log(`[DIAGNOSE] Actieve medewerkers: ${activeEmployees.length}`);
-      
-      // Analyseer roostervrijDagen data
-      const medewerkersMetData = activeEmployees.filter(
-        emp => emp.roostervrijDagen && emp.roostervrijDagen.length > 0
-      );
-      const medewerkersSonderData = activeEmployees.filter(
-        emp => !emp.roostervrijDagen || emp.roostervrijDagen.length === 0
-      );
-      
-      console.log(`[DIAGNOSE] Met roostervrijDagen: ${medewerkersMetData.length}`);
-      console.log(`[DIAGNOSE] Zonder roostervrijDagen: ${medewerkersSonderData.length}`);
-      console.log('');
-      
-      // Log detail per medewerker met data
-      if (medewerkersMetData.length > 0) {
-        console.log('[DIAGNOSE] ✅ Medewerkers MET roostervrijDagen:');
-        medewerkersMetData.forEach(emp => {
-          console.log(`  • ${emp.voornaam} ${emp.achternaam}: [${emp.roostervrijDagen.join(', ')}]`);
-        });
-        console.log('');
-      }
-      
-      // Waarschuwing voor medewerkers zonder data
-      if (medewerkersSonderData.length > 0) {
-        console.warn('[DIAGNOSE] ⚠️  Medewerkers ZONDER roostervrijDagen:');
-        medewerkersSonderData.forEach(emp => {
-          console.warn(`  • ${emp.voornaam} ${emp.achternaam}: GEEN DATA`);
-        });
-        console.warn('');
-        console.warn('[DIAGNOSE] ⚠️  Deze medewerkers krijgen GEEN automatische NB dagen!');
-        console.warn('[DIAGNOSE] → Configureer roostervrijDagen in Medewerkers Beheer');
-        console.warn('');
-      }
-      
-      // Kritieke waarschuwing als NIEMAND data heeft
-      if (medewerkersMetData.length === 0) {
-        console.error('\n' + '='.repeat(80));
-        console.error('[DIAGNOSE] ❌ KRITIEK: GEEN ENKELE MEDEWERKER HEEFT ROOSTERVRIJDAGEN!');
-        console.error('='.repeat(80));
-        console.error('[DIAGNOSE] Gevolg: roster_assignments tabel blijft leeg (0 rijen)');
-        console.error('[DIAGNOSE] Actie: Ga naar Medewerkers Beheer en configureer roostervrijDagen');
-        console.error('[DIAGNOSE] Bijvoorbeeld: ma,di voor medewerker die maandag/dinsdag vrij heeft');
-        console.error('='.repeat(80) + '\n');
-      } else {
-        console.log('[DIAGNOSE] ✅ Data check geslaagd - roostervrijDagen aanwezig');
-        console.log('[DIAGNOSE] Verwacht: autofillUnavailability zal NB records aanmaken');
-      }
-      
-      console.log('='.repeat(80) + '\n');
-      // === EINDE DIAGNOSE LOGGING ===
-      
       if (typeof window !== 'undefined') {
         localStorage.setItem('lastRosterId', rosterId);
         localStorage.setItem('recentDesignRoute', `/planning/design/dashboard?rosterId=${rosterId}`);
       }
-      
-      // ✅ DRAAD001 FIX: initializeRosterDesign is nu volledig geïmplementeerd!
-      const designData = await initializeRosterDesign(rosterId, selectedStart);
-      
-      if (!designData) {
-        throw new Error('Kon roster design niet initialiseren');
-      }
-      
-      console.log('[Wizard] ✅ Roster design geïnitialiseerd');
-      console.log('');
       
     } catch (err) {
       console.error('\n' + '='.repeat(80));
@@ -313,95 +237,109 @@ export default function Wizard({ onClose }: WizardProps = {}) {
       
       setError('Kon rooster niet aanmaken. Probeer opnieuw.');
       setIsCreating(false);
-      return; // Stop hier volledig
+      setCreationPhase('idle');
+      return;
     }
     
-    // === DRAAD27 - FASE 2: Period Employee Staffing Initialiseren ===
+    // === FASE 2: Design initialiseren (25-50%) ===
     try {
-      console.log('[Wizard] 🔄 START: Initialiseren period employee staffing...');
-      console.log('[Wizard] RosterId:', rosterId);
+      setCreationPhase('initializing');
+      setCreationMessage('Rooster design wordt geïnitialiseerd...');
+      setCreationProgress(30);
+      
+      const designData = await initializeRosterDesign(rosterId, selectedStart);
+      
+      if (!designData) {
+        throw new Error('Kon roster design niet initialiseren');
+      }
+      
+      setCreationProgress(50);
+      console.log('[Wizard] ✅ Roster design geïnitialiseerd');
       console.log('');
+      
+    } catch (err) {
+      console.error('[Wizard] ❌ FOUT BIJ INITIALISEREN DESIGN');
+      console.error('[Wizard] Error:', err);
+      setError('Kon roster design niet initialiseren.');
+      setIsCreating(false);
+      setCreationPhase('idle');
+      return;
+    }
+    
+    // === FASE 3: Period Employee Staffing (50-70%) ===
+    try {
+      setCreationPhase('staffing');
+      setCreationMessage('Diensten per medewerker worden voorbereid...');
+      setCreationProgress(55);
       
       const activeEmployeeIds = employees
         .filter(emp => emp.actief)
         .map(emp => emp.id);
       
       console.log(`[Wizard] Actieve medewerkers: ${activeEmployeeIds.length}`);
-      console.log('[Wizard] Employee IDs:', activeEmployeeIds.join(', '));
-      console.log('');
       
       await initializePeriodEmployeeStaffing(rosterId!, activeEmployeeIds);
       
+      setCreationProgress(70);
       console.log('[Wizard] ✅ Period employee staffing geïnitialiseerd');
       console.log('');
       
     } catch (err) {
-      console.error('\n' + '='.repeat(80));
-      console.error('[Wizard] ⚠️  WAARSCHUWING: Fout bij initialiseren period employee staffing');
-      console.error('[Wizard] Error:', err);
-      console.error('[Wizard] ⚠️  Rooster is WEL aangemaakt maar Dst data ontbreekt.');
-      console.error('[Wizard] Gebruiker kan later handmatig corrigeren in scherm.');
-      console.error('='.repeat(80) + '\n');
-      
-      // Ga WEL door - niet kritiek voor rooster aanmaken
+      console.warn('[Wizard] ⚠️ Waarschuwing bij period employee staffing:', err);
+      // Niet kritiek - ga door
     }
-    // === EINDE DRAAD27 - FASE 2 ===
     
-    // === FASE 3: Period staffing genereren (niet-kritiek) ===
+    // === FASE 4: Diensten per dag genereren (70-85%) ===
     try {
-      console.log('[Wizard] 🔄 START: Genereren diensten per dag data...');
-      console.log('[Wizard] RosterId:', rosterId);
-      console.log('');
+      setCreationPhase('generating');
+      setCreationMessage('Diensten per dag worden gegenereerd...');
+      setCreationProgress(75);
       
       await generateRosterPeriodStaffing(rosterId!, selectedStart, selectedEnd);
       
-      console.log('[Wizard] ✅ Diensten per dag data succesvol gegenereerd');
+      setCreationProgress(85);
+      console.log('[Wizard] ✅ Diensten per dag data gegenereerd');
       console.log('');
       
     } catch (err) {
-      console.error('\n' + '='.repeat(80));
-      console.error('[Wizard] ⚠️  WAARSCHUWING: Fout bij genereren diensten per dag');
-      console.error('[Wizard] Error:', err);
-      console.error('[Wizard] ⚠️  Rooster is WEL aangemaakt maar diensten per dag data ontbreekt.');
-      console.error('[Wizard] Gebruiker kan later handmatig genereren vanuit dashboard.');
-      console.error('='.repeat(80) + '\n');
-      
-      // Ga WEL door naar dashboard (rooster bestaat al)
-      // Geen error message tonen aan gebruiker - niet kritiek
+      console.warn('[Wizard] ⚠️ Waarschuwing bij diensten per dag:', err);
+      // Niet kritiek - ga door
     }
     
-    // === DRAAD001 VERBETERDE VERIFICATIE - FASE 4 ===
+    // === FASE 5: Verificatie (85-100%) ===
+    setCreationPhase('verifying');
+    setCreationMessage('Database wordt geverifieerd...');
+    setCreationProgress(90);
+    
     console.log('\n' + '='.repeat(80));
-    console.log('[Wizard] 🔍 START: Database commit verificatie');
+    console.log('[Wizard] 🔍 START: Database verificatie');
     console.log('='.repeat(80) + '\n');
     
     const verificationResult = await verifyRosterDataExists(rosterId!);
     
     if (!verificationResult.success) {
-      console.error('\n' + '='.repeat(80));
-      console.error('[Wizard] ❌ FOUT: Data verificatie gefaald');
-      console.error('[Wizard] Details:', verificationResult.details);
-      console.error('[Wizard] Rooster is aangemaakt maar data nog niet volledig beschikbaar');
-      console.error('[Wizard] Gebruiker wordt teruggeleid naar planning overzicht');
-      console.error('='.repeat(80) + '\n');
-      
-      setError(`Rooster is aangemaakt maar data nog niet beschikbaar. Details: ${verificationResult.details}`);
+      console.error('[Wizard] ❌ Data verificatie gefaald');
+      setError(`Rooster aangemaakt maar data nog niet beschikbaar: ${verificationResult.details}`);
       setIsCreating(false);
+      setCreationPhase('idle');
       
-      // Navigeer naar planning overzicht als fallback
       setTimeout(() => {
         if (onClose) onClose();
         router.push('/planning');
-      }, 3000); // 3 seconden om error te lezen
+      }, 3000);
       
       return;
     }
     
-    console.log('[Wizard] ✅ Verificatie geslaagd:', verificationResult.details);
+    setCreationProgress(100);
+    setCreationPhase('done');
+    setCreationMessage('Rooster succesvol aangemaakt!');
+    console.log('[Wizard] ✅ Verificatie geslaagd');
     
-    // === FASE 5: Navigeer naar dashboard (alleen na succesvolle verificatie) ===
+    // Korte delay voor visuele feedback
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
     console.log('[Wizard] 🔄 Navigeren naar dashboard...');
-    console.log('[Wizard] Route:', `/planning/design/dashboard?rosterId=${rosterId}`);
     console.log('\n' + '='.repeat(80));
     console.log('[Wizard] ✅ WIZARD VOLTOOID');
     console.log('='.repeat(80) + '\n');
@@ -410,9 +348,9 @@ export default function Wizard({ onClose }: WizardProps = {}) {
       onClose();
     }
     
-    // Direct navigeren (data is nu geverifieerd beschikbaar)
     router.push(`/planning/design/dashboard?rosterId=${rosterId}`);
     setIsCreating(false);
+    setCreationPhase('idle');
   }
 
   function statusBadge(period: PeriodWithStatus) {
@@ -484,7 +422,6 @@ export default function Wizard({ onClose }: WizardProps = {}) {
     });
   }
 
-  // Loading state voor perioden
   if (isLoadingPeriods) {
     return (
       <section className={onClose ? '' : 'p-4 border rounded bg-white'}>
@@ -604,16 +541,105 @@ export default function Wizard({ onClose }: WizardProps = {}) {
             </div>
           </div>
           
-          {/* DRAAD001: Verbeterde verificatie progress indicator */}
-          {isCreating && verifyAttempt > 0 && (
-            <div className="bg-blue-50 border border-blue-200 rounded p-3">
-              <div className="flex items-center gap-3">
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
-                <div className="text-sm text-blue-800">
-                  <div className="font-semibold">Database verificatie...</div>
-                  <div className="text-xs">Poging {verifyAttempt} van 5 (max 2.5 sec)</div>
+          {/* DRAAD002: Verbeterde multi-layer loading feedback */}
+          {isCreating && (
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6">
+              {/* Progress Bar */}
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-semibold text-blue-900">
+                    {creationMessage}
+                  </span>
+                  <span className="text-sm font-mono text-blue-700">
+                    {creationProgress}%
+                  </span>
+                </div>
+                
+                {/* Animated Progress Bar met shimmer */}
+                <div className="w-full bg-blue-100 rounded-full h-3 overflow-hidden">
+                  <div 
+                    className="bg-gradient-to-r from-blue-500 to-indigo-600 h-full rounded-full transition-all duration-500 ease-out relative"
+                    style={{ width: `${creationProgress}%` }}
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer"></div>
+                  </div>
                 </div>
               </div>
+              
+              {/* Phase Indicators */}
+              <div className="grid grid-cols-5 gap-2 mb-4">
+                {[
+                  { phase: 'creating', label: 'Aanmaken', icon: '📋' },
+                  { phase: 'initializing', label: 'Design', icon: '🎨' },
+                  { phase: 'staffing', label: 'Medewerkers', icon: '👥' },
+                  { phase: 'generating', label: 'Diensten', icon: '📅' },
+                  { phase: 'verifying', label: 'Verifiëren', icon: '🔍' }
+                ].map((item) => {
+                  const phaseOrder = ['creating', 'initializing', 'staffing', 'generating', 'verifying'];
+                  const currentIndex = phaseOrder.indexOf(creationPhase);
+                  const itemIndex = phaseOrder.indexOf(item.phase);
+                  const isActive = creationPhase === item.phase;
+                  const isDone = itemIndex < currentIndex;
+                  
+                  return (
+                    <div 
+                      key={item.phase}
+                      className={`
+                        text-center p-2 rounded-lg border-2 transition-all duration-300
+                        ${isActive ? 'bg-blue-600 border-blue-700 text-white scale-105 shadow-lg' : ''}
+                        ${isDone ? 'bg-green-100 border-green-300 text-green-800' : ''}
+                        ${!isActive && !isDone ? 'bg-gray-50 border-gray-200 text-gray-400' : ''}
+                      `}
+                    >
+                      <div className="text-xl mb-1">{item.icon}</div>
+                      <div className="text-xs font-medium">{item.label}</div>
+                    </div>
+                  );
+                })}
+              </div>
+              
+              {/* Spinning Loader + Detail Text */}
+              <div className="flex items-start gap-3 bg-white/60 rounded-lg p-3">
+                <div className="flex-shrink-0">
+                  <div className="animate-spin rounded-full h-6 w-6 border-3 border-blue-600 border-t-transparent"></div>
+                </div>
+                <div className="flex-1 text-sm">
+                  <div className="font-medium text-gray-900 mb-1">
+                    {creationPhase === 'creating' && 'Rooster record wordt aangemaakt in database...'}
+                    {creationPhase === 'initializing' && 'Medewerker snapshot en basis structuur worden ingesteld...'}
+                    {creationPhase === 'staffing' && 'Beschikbaarheid en voorkeuren worden verwerkt...'}
+                    {creationPhase === 'generating' && 'Diensten per dag worden berekend en opgeslagen...'}
+                    {creationPhase === 'verifying' && `Database commit wordt geverifieerd (poging ${verifyAttempt}/5)...`}
+                    {creationPhase === 'done' && 'Alles gereed! Dashboard wordt geladen...'}
+                  </div>
+                  <div className="text-xs text-gray-600">
+                    Even geduld, dit kan enkele seconden duren
+                  </div>
+                </div>
+              </div>
+              
+              {/* Verification Progress Detail */}
+              {creationPhase === 'verifying' && verifyAttempt > 0 && (
+                <div className="mt-3 bg-white/80 rounded-lg p-3 border border-blue-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-sm font-semibold text-blue-900">Verificatie details:</span>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-xs">
+                      <div className={`w-2 h-2 rounded-full ${verifyAttempt >= 1 ? 'bg-blue-500 animate-pulse' : 'bg-gray-300'}`}></div>
+                      <span className="text-gray-700">Roster design record controleren...</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                      <div className={`w-2 h-2 rounded-full ${verifyAttempt >= 2 ? 'bg-blue-500 animate-pulse' : 'bg-gray-300'}`}></div>
+                      <span className="text-gray-700">Employee snapshot valideren...</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                      <div className={`w-2 h-2 rounded-full ${verifyAttempt >= 3 ? 'bg-blue-500 animate-pulse' : 'bg-gray-300'}`}></div>
+                      <span className="text-gray-700">Roster assignments checken...</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
           
@@ -621,16 +647,23 @@ export default function Wizard({ onClose }: WizardProps = {}) {
             <button 
               onClick={backToDashboard} 
               disabled={isCreating}
-              className="px-3 py-2 border rounded bg-white disabled:opacity-50"
+              className="px-3 py-2 border rounded bg-white disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Nee
             </button>
             <button 
               onClick={createRosterConfirmed} 
               disabled={isCreating} 
-              className="px-3 py-2 border rounded bg-blue-600 text-white disabled:bg-blue-400"
+              className="px-3 py-2 border rounded bg-blue-600 text-white disabled:bg-blue-400 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              {isCreating ? (verifyAttempt > 0 ? 'Verifiëren…' : 'Aanmaken…') : 'Ja, aanmaken'}
+              {isCreating ? (
+                <>
+                  <span className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></span>
+                  {creationPhase === 'verifying' ? 'Verifiëren...' : 'Bezig...'}
+                </>
+              ) : (
+                'Ja, aanmaken'
+              )}
             </button>
           </div>
         </div>
