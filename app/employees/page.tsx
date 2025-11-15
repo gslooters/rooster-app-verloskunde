@@ -277,7 +277,7 @@ export default function MedewerkersPage() {
                       </div>
                       
                       <div className="text-xs text-gray-600 mt-1 min-h-[32px]">
-                        <div>{employee.aantalWerkdagen} werkdagen/periode</div>
+                        <div>{employee.aantalWerkdagen} diensten/periode</div>
                         {/* AP41: Toon structurele NBH beschrijving */}
                         <div className="text-xs text-gray-600 mt-1">
                           <strong>Structureel NBH:</strong> {getStructureelNBHDescription(employee.structureel_nbh)}
@@ -451,10 +451,10 @@ export default function MedewerkersPage() {
                         </div>
                       </div>
 
-                      {/* Aantal werkdagen */}
+                      {/* Aantal diensten - TERMINOLOGIE AANGEPAST */}
                       <div className="flex items-center gap-3">
                         <label className="text-sm font-medium text-gray-700 flex-1">
-                          Basis aantal werkdagen per periode:
+                          Basis aantal diensten per periode:
                         </label>
                         <input 
                           type="number" 
