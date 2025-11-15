@@ -5,10 +5,6 @@ const nextConfig = {
     // Unique build ID every time to force Railway fresh build
     return `build-force-${Date.now()}-${Math.random().toString(36).substring(7)}`
   },
-  // Force dynamic rendering - no static optimization
-  experimental: {
-    isrMemoryCacheSize: 0, // Disable ISR cache
-  },
   // Disable static page generation
   output: 'standalone',
   // Force fresh data fetching
