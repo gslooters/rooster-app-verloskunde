@@ -103,7 +103,8 @@ export default function MedewerkersPage() {
 
   // AP41: Nieuwe handler voor dagblok toggle
   const handleDagblokToggle = (dagCode: string, dagblok: DagblokType, checked: boolean) => {
-    const current = { ...employeeFormData.structureel_nbh } || {};
+    // FIX: Expliciete null-check voordat we spreaden (TypeScript error opgelost)
+    const current = employeeFormData.structureel_nbh ? { ...employeeFormData.structureel_nbh } : {};
     const dagLower = dagCode.toLowerCase();
     
     if (!current[dagLower]) {
