@@ -1,6 +1,6 @@
 // lib/services/diensten-storage.ts
 // ============================================================================
-// DRAAD30D - FIX: Optimistische health check + robuste initialisatie
+// DRAAD30D-v2 - FIX: Uppercase code constraint + Optimistische health check
 // ============================================================================
 import { Dienst, validateDienstwaarde, calculateDuration } from "../types/dienst";
 import { teamRegelsFromJSON, teamRegelsToJSON, DEFAULT_TEAM_REGELS } from '../validators/service';
@@ -37,7 +37,7 @@ export interface ServiceDayStaffing {
 // ============================================================================
 const CACHE_KEY = "diensten_cache";
 const HEALTH_CHECK_KEY = "supabase_health_diensten";
-const HEALTH_CHECK_INTERVAL = 30000; // 30 seconden (was 60s)
+const HEALTH_CHECK_INTERVAL = 30000; // 30 seconden
 const SYSTEM_CODES = ['NB', '==='];
 
 // ============================================================================
@@ -170,7 +170,8 @@ function fromDatabase(row: any): Dienst {
 
 function toDatabase(dienst: Partial<Dienst>) {
   const data: any = {
-    code: dienst.code,
+    // DRAAD30D-v2: Force code naar UPPERCASE (voldoet aan DB constraint)
+    code: dienst.code ? dienst.code.toUpperCase() : '',
     naam: dienst.naam,
     beschrijving: dienst.beschrijving,
     begintijd: dienst.begintijd,
@@ -313,7 +314,7 @@ export async function getServiceByCode(code: string): Promise<Dienst | null> {
     const { data, error } = await supabase
       .from('service_types')
       .select('*')
-      .eq('code', code)
+      .eq('code', code.toUpperCase()) // DRAAD30D-v2: Force uppercase voor lookup
       .single();
     
     if (error) {
@@ -397,8 +398,11 @@ export async function updateService(id: string, updates: Partial<Dienst>): Promi
  */
 export async function canDeleteService(code: string): Promise<{ canDelete: boolean; reason?: string }> {
   try {
+    // DRAAD30D-v2: Force uppercase voor SYSTEM_CODES check
+    const upperCode = code.toUpperCase();
+    
     // System codes cannot be deleted
-    if (SYSTEM_CODES.includes(code)) {
+    if (SYSTEM_CODES.includes(upperCode)) {
       return { 
         canDelete: false, 
         reason: 'Systeemdiensten kunnen niet verwijderd worden' 
@@ -409,7 +413,7 @@ export async function canDeleteService(code: string): Promise<{ canDelete: boole
     const { data: assignments, error } = await supabase
       .from('roster_assignments')
       .select('id')
-      .eq('service_code', code)
+      .eq('service_code', upperCode)
       .limit(1);
     
     if (error) {
