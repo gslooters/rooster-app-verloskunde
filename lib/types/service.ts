@@ -94,6 +94,16 @@ export interface ServiceType {
 // ============================================================================
 
 /**
+ * Lijst van alle dagen (alleen codes)
+ */
+export const ALLE_DAGEN: DagCode[] = ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo'];
+
+/**
+ * Lijst van alle dagblokken (alleen codes)
+ */
+export const ALLE_DAGBLOKKEN: DagblokCode[] = ['O', 'M', 'A'];
+
+/**
  * Lijst van alle dagen met volledige namen
  */
 export const DAGEN_VAN_WEEK: Array<{ code: DagCode; label: string; kort: string }> = [
@@ -107,6 +117,19 @@ export const DAGEN_VAN_WEEK: Array<{ code: DagCode; label: string; kort: string 
 ];
 
 /**
+ * Korte dag labels (voor in tabellen)
+ */
+export const DAG_KORT: Record<DagCode, string> = {
+  ma: 'Ma',
+  di: 'Di',
+  wo: 'Wo',
+  do: 'Do',
+  vr: 'Vr',
+  za: 'Za',
+  zo: 'Zo'
+};
+
+/**
  * Lijst van alle dagblokken met tijden
  */
 export const DAGBLOKKEN: Array<{ code: DagblokCode; label: string; tijden: string }> = [
@@ -114,6 +137,15 @@ export const DAGBLOKKEN: Array<{ code: DagblokCode; label: string; tijden: strin
   { code: 'M', label: 'Middag', tijden: '13:00-18:00' },
   { code: 'A', label: 'Avond', tijden: '18:00-09:00' }
 ];
+
+/**
+ * Dagblok namen (voor in tabellen)
+ */
+export const DAGBLOK_NAMEN: Record<DagblokCode, string> = {
+  O: 'Ochtend',
+  M: 'Middag',
+  A: 'Avond'
+};
 
 /**
  * Labels voor dagblok status
@@ -149,6 +181,41 @@ export const DAGBLOK_STATUS_HEX: Record<DagblokStatus, string> = {
   [DagblokStatus.MOET]: '#EF4444',
   [DagblokStatus.MAG]: '#10B981',
   [DagblokStatus.MAG_NIET]: '#6B7280'
+};
+
+/**
+ * STATUS_KLEUREN - alias voor DAGBLOK_STATUS_HEX (voor backwards compatibility)
+ */
+export const STATUS_KLEUREN = DAGBLOK_STATUS_HEX;
+
+/**
+ * STATUS_EMOJI - alias voor DAGBLOK_STATUS_EMOJI (voor backwards compatibility)
+ */
+export const STATUS_EMOJI = DAGBLOK_STATUS_EMOJI;
+
+/**
+ * DEFAULT_DAGBLOK_REGELS - standaard regels voor één dag
+ * Alles MAG, behalve avond MAG_NIET
+ */
+export const DEFAULT_DAGBLOK_REGELS: DagblokRegels = {
+  O: DagblokStatus.MAG,
+  M: DagblokStatus.MAG,
+  A: DagblokStatus.MAG_NIET
+};
+
+/**
+ * DEFAULT_TEAM_REGELS - standaard team regels voor alle 7 dagen
+ * Ma-Vr: ochtend/middag MAG, avond MAG_NIET
+ * Za-Zo: alles MAG_NIET
+ */
+export const DEFAULT_TEAM_REGELS: TeamRegels = {
+  ma: { O: DagblokStatus.MAG, M: DagblokStatus.MAG, A: DagblokStatus.MAG_NIET },
+  di: { O: DagblokStatus.MAG, M: DagblokStatus.MAG, A: DagblokStatus.MAG_NIET },
+  wo: { O: DagblokStatus.MAG, M: DagblokStatus.MAG, A: DagblokStatus.MAG_NIET },
+  do: { O: DagblokStatus.MAG, M: DagblokStatus.MAG, A: DagblokStatus.MAG_NIET },
+  vr: { O: DagblokStatus.MAG, M: DagblokStatus.MAG, A: DagblokStatus.MAG_NIET },
+  za: { O: DagblokStatus.MAG_NIET, M: DagblokStatus.MAG_NIET, A: DagblokStatus.MAG_NIET },
+  zo: { O: DagblokStatus.MAG_NIET, M: DagblokStatus.MAG_NIET, A: DagblokStatus.MAG_NIET }
 };
 
 // ============================================================================
@@ -191,11 +258,7 @@ export function getTeamScopeLabel(service: ServiceType): string {
  * Maak standaard dagblok regels (alles MAG, behalve avond MAG_NIET)
  */
 export function createDefaultDagblokRegels(): DagblokRegels {
-  return {
-    O: DagblokStatus.MAG,
-    M: DagblokStatus.MAG,
-    A: DagblokStatus.MAG_NIET  // Standaard geen avonddiensten
-  };
+  return { ...DEFAULT_DAGBLOK_REGELS };
 }
 
 /**
@@ -204,22 +267,7 @@ export function createDefaultDagblokRegels(): DagblokRegels {
  * Za-Zo: alles MAG_NIET
  */
 export function createDefaultTeamRegels(): TeamRegels {
-  const weekdagRegels = createDefaultDagblokRegels();
-  const weekendRegels: DagblokRegels = {
-    O: DagblokStatus.MAG_NIET,
-    M: DagblokStatus.MAG_NIET,
-    A: DagblokStatus.MAG_NIET
-  };
-  
-  return {
-    ma: { ...weekdagRegels },
-    di: { ...weekdagRegels },
-    wo: { ...weekdagRegels },
-    do: { ...weekdagRegels },
-    vr: { ...weekdagRegels },
-    za: { ...weekendRegels },
-    zo: { ...weekendRegels }
-  };
+  return { ...DEFAULT_TEAM_REGELS };
 }
 
 /**
