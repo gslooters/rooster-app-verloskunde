@@ -7,6 +7,32 @@ import { teamRegelsFromJSON, teamRegelsToJSON, DEFAULT_TEAM_REGELS } from '../va
 import { supabase } from '../supabase';
 
 // ============================================================================
+// TYPES
+// ============================================================================
+
+// Legacy type voor backward compatibility
+export interface ServiceDayStaffing {
+  service_id: string;
+  ma_min: number;
+  ma_max: number;
+  di_min: number;
+  di_max: number;
+  wo_min: number;
+  wo_max: number;
+  do_min: number;
+  do_max: number;
+  vr_min: number;
+  vr_max: number;
+  za_min: number;
+  za_max: number;
+  zo_min: number;
+  zo_max: number;
+  tot_enabled: boolean;
+  gro_enabled: boolean;
+  ora_enabled: boolean;
+}
+
+// ============================================================================
 // CONSTANTS & CACHE
 // ============================================================================
 const CACHE_KEY = "diensten_cache";
@@ -51,6 +77,19 @@ export async function checkSupabaseHealth(): Promise<boolean> {
     lastHealthCheck = now;
     return false;
   }
+}
+
+/**
+ * Get health status with message (voor UI)
+ */
+export function getSupabaseHealthStatus(): { healthy: boolean; message: string } {
+  if (lastHealthStatus) {
+    return { healthy: true, message: 'Database verbinding actief' };
+  }
+  return { 
+    healthy: false, 
+    message: 'Geen database verbinding. Controleer je internetverbinding.' 
+  };
 }
 
 // ============================================================================
@@ -300,6 +339,51 @@ export async function updateService(id: string, updates: Partial<Dienst>): Promi
 }
 
 /**
+ * Check if service can be deleted
+ */
+export async function canDeleteService(code: string): Promise<{ canDelete: boolean; reason?: string }> {
+  try {
+    // System codes cannot be deleted
+    if (SYSTEM_CODES.includes(code)) {
+      return { 
+        canDelete: false, 
+        reason: 'Systeemdiensten kunnen niet verwijderd worden' 
+      };
+    }
+    
+    // Check if service is used in any roster assignments
+    const { data: assignments, error } = await supabase
+      .from('roster_assignments')
+      .select('id')
+      .eq('service_code', code)
+      .limit(1);
+    
+    if (error) {
+      console.error('❌ Error checking assignments:', error);
+      return { 
+        canDelete: false, 
+        reason: 'Kon niet controleren of dienst in gebruik is' 
+      };
+    }
+    
+    if (assignments && assignments.length > 0) {
+      return { 
+        canDelete: false, 
+        reason: 'Dienst is in gebruik in een of meer roosters' 
+      };
+    }
+    
+    return { canDelete: true };
+  } catch (error) {
+    console.error('❌ Failed to check if service can be deleted:', error);
+    return { 
+      canDelete: false, 
+      reason: 'Fout bij controleren' 
+    };
+  }
+}
+
+/**
  * Delete service (soft delete by setting actief = false)
  */
 export async function deleteService(id: string): Promise<void> {
@@ -319,6 +403,71 @@ export async function deleteService(id: string): Promise<void> {
     console.error('❌ Failed to delete service:', error);
     throw error;
   }
+}
+
+/**
+ * Remove service (alias for deleteService for backward compatibility)
+ */
+export async function removeService(code: string): Promise<void> {
+  try {
+    const service = await getServiceByCode(code);
+    if (!service) {
+      throw new Error('Dienst niet gevonden');
+    }
+    await deleteService(service.id);
+  } catch (error) {
+    console.error('❌ Failed to remove service:', error);
+    throw error;
+  }
+}
+
+// ============================================================================
+// LEGACY DAY STAFFING FUNCTIONS (DEPRECATED)
+// ============================================================================
+
+/**
+ * @deprecated Deze functie is deprecated en wordt vervangen door team_regels
+ * Get all services with day staffing data
+ */
+export async function getAllServicesDayStaffing(): Promise<ServiceDayStaffing[]> {
+  console.warn('⚠️ getAllServicesDayStaffing is deprecated - gebruik team_regels in plaats daarvan');
+  
+  try {
+    const services = await getAllServices();
+    
+    // Return mock data for backward compatibility
+    return services.map(service => ({
+      service_id: service.id,
+      ma_min: 0, ma_max: 0,
+      di_min: 0, di_max: 0,
+      wo_min: 0, wo_max: 0,
+      do_min: 0, do_max: 0,
+      vr_min: 0, vr_max: 0,
+      za_min: 0, za_max: 0,
+      zo_min: 0, zo_max: 0,
+      tot_enabled: true,
+      gro_enabled: false,
+      ora_enabled: false
+    }));
+  } catch (error) {
+    console.error('❌ Failed to get day staffing:', error);
+    return [];
+  }
+}
+
+/**
+ * @deprecated Deze functie is deprecated en wordt vervangen door team_regels
+ * Update service day staffing and team
+ */
+export async function updateServiceDayStaffingAndTeam(
+  serviceId: string,
+  staffing: Partial<ServiceDayStaffing>,
+  team: { tot_enabled: boolean; gro_enabled: boolean; ora_enabled: boolean }
+): Promise<void> {
+  console.warn('⚠️ updateServiceDayStaffingAndTeam is deprecated - gebruik team_regels in plaats daarvan');
+  
+  // This is a no-op for backward compatibility
+  console.log('Legacy staffing update called but not executed:', { serviceId, staffing, team });
 }
 
 // ============================================================================
@@ -355,6 +504,13 @@ export function subscribeToServices(callback: (services: Dienst[]) => void): () 
   return () => {
     supabase.removeChannel(channel);
   };
+}
+
+/**
+ * Subscribe to service changes (alias voor backward compatibility)
+ */
+export function subscribeToServiceChanges(callback: (services: Dienst[]) => void): () => void {
+  return subscribeToServices(callback);
 }
 
 // ============================================================================
