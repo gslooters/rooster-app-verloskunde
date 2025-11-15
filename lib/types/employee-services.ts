@@ -16,12 +16,13 @@ export interface ServiceType {
   updated_at: string;
 }
 
+// Database schema: employee_services tabel
 export interface EmployeeService {
   id: string;
-  employee_id: string;
-  service_id: string;
-  can_perform_service: boolean;
-  target_count_per_period: number;
+  employee_id: string;  // text (foreign key naar employees.id)
+  service_id: string;   // uuid (foreign key naar service_types.id)
+  aantal: number;       // aantal keer dat deze dienst per periode wordt gedaan
+  actief: boolean;      // of deze dienst actief is voor deze medewerker
   created_at: string;
   updated_at: string;
 }
@@ -29,8 +30,8 @@ export interface EmployeeService {
 export interface EmployeeServiceInput {
   employee_id: string;
   service_id: string;
-  can_perform_service: boolean;
-  target_count_per_period: number;
+  aantal: number;
+  actief: boolean;
 }
 
 export interface EmployeeServiceRow {
@@ -40,11 +41,11 @@ export interface EmployeeServiceRow {
   dienstenperiode: number;
   services: {
     [serviceCode: string]: {
-      enabled: boolean;
-      count: number;
-      dienstwaarde: number;
+      enabled: boolean;     // maps to 'actief'
+      count: number;        // maps to 'aantal'
+      dienstwaarde: number; // from service_types tabel
     };
   };
-  totalDiensten: number; // Som van (count × dienstwaarde)
+  totalDiensten: number; // Som van (aantal × dienstwaarde)
   isOnTarget: boolean;
 }
