@@ -5,9 +5,11 @@ import {
   getFullName, 
   validateAantalWerkdagen,
   validateRoostervrijDagen,
+  validateStructureelNBH,
   isValidDienstverband,
   isValidTeam,
   normalizeRoostervrijDagen,
+  normalizeStructureelNBH,
 } from '../types/employee';
 import { supabase } from '../supabase';
 
@@ -34,6 +36,7 @@ function toDatabase(emp: Employee) {
     team: emp.team,
     aantalwerkdagen: emp.aantalWerkdagen,
     roostervrijdagen: emp.roostervrijDagen,
+    structureel_nbh: emp.structureel_nbh || null, // ⬅️ NIEUW AP41
     created_at: emp.created_at,
     updated_at: emp.updated_at
   };
@@ -51,6 +54,7 @@ function fromDatabase(row: any): Employee {
     team: row.team,
     aantalWerkdagen: row.aantalwerkdagen,
     roostervrijDagen: row.roostervrijdagen || [],
+    structureel_nbh: row.structureel_nbh || undefined, // ⬅️ NIEUW AP41
     created_at: row.created_at,
     updated_at: row.updated_at
   };
@@ -229,6 +233,12 @@ function validateEmployeeData(data: Partial<Employee>, isUpdate = false): void {
       throw new Error('Roostervrije dagen moeten geldig zijn');
     }
   }
+  // ⬅️ NIEUW AP41: Valideer structureel_nbh
+  if (data.structureel_nbh !== undefined) {
+    if (!validateStructureelNBH(data.structureel_nbh)) {
+      throw new Error('Ongeldige structurele NBH configuratie');
+    }
+  }
 }
 
 function getActiveEmployees(): Employee[] { return getAllEmployees().filter(e => e.actief); }
@@ -256,7 +266,8 @@ function createEmployee(
     dienstverband: data.dienstverband,
     team: data.team,
     aantalWerkdagen: data.aantalWerkdagen,
-    roostervrijDagen: normalizeRoostervrijDagen(data.roostervrijDagen)
+    roostervrijDagen: normalizeRoostervrijDagen(data.roostervrijDagen),
+    structureel_nbh: normalizeStructureelNBH(data.structureel_nbh) // ⬅️ NIEUW AP41
   };
   list.push(nieuw);
   const sorted = sortEmployees(list);
@@ -278,6 +289,10 @@ function updateEmployee(id: string, patch: Partial<Employee>): Employee {
   const current = list[idx];
   if (patch.roostervrijDagen !== undefined) {
     patch.roostervrijDagen = normalizeRoostervrijDagen(patch.roostervrijDagen);
+  }
+  // ⬅️ NIEUW AP41: Normaliseer structureel_nbh
+  if (patch.structureel_nbh !== undefined) {
+    patch.structureel_nbh = normalizeStructureelNBH(patch.structureel_nbh);
   }
   const updated = { ...current, ...patch, updated_at: now } as Employee;
   validateEmployeeData(updated, true);
