@@ -1,5 +1,3 @@
-/* Geheel vernieuwd diensten-toewijzing component met visuele verfijningen, service-totals mini-balk, altijd zichtbare invoervelden met compact design en subtiel save feedback (vinkje), sticky headers, hover en keyboard UX, toegankelijke tooltips. Volledig getest en geoptimaliseerd voor desktop, tablet en mobiel. */
-
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -18,8 +16,6 @@ import {
 import { supabase } from '@/lib/services/medewerker-diensten-supabase';
 import type { EmployeeServiceRow } from '@/lib/types/employee-services';
 
-const inputWidth = 'w-10'; // 40px breed voor max 2 cijfers
-
 export default function DienstenToewijzingPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -27,18 +23,16 @@ export default function DienstenToewijzingPage() {
   const [serviceTypes, setServiceTypes] = useState<{ code: string; dienstwaarde: number; naam?: string; kleur?: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [serviceTotals, setServiceTotals] = useState<Record<string, number>>({});
-  const [saveState, setSaveState] = useState<Record<string, boolean>>({}); // bv 'emp1_DAG': true
+  const [saveState, setSaveState] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     loadData();
   }, []);
 
   useEffect(() => {
-    // Bij wijziging data: herbereken kolomtellingen serviceTotals
     if (data.length > 0 && serviceTypes.length > 0) {
       const totals: Record<string, number> = {};
       serviceTypes.forEach(st => {
-        // Optel alle ingevulde (unweighted) waarden per dienst
         let count = 0;
         data.forEach(emp => {
           const c = emp.services?.[st.code]?.count || 0;
@@ -56,7 +50,6 @@ export default function DienstenToewijzingPage() {
     try {
       setLoading(true);
       setError(null);
-      // Haal alle dienstcodes + dienstwaarde + kleur en optioneel naam
       const { data: services } = await supabase
         .from('service_types')
         .select('code, dienstwaarde, naam, kleur')
@@ -69,7 +62,6 @@ export default function DienstenToewijzingPage() {
         kleur: s.kleur
       })) || [];
       setServiceTypes(serviceInfo);
-      // Haal employee service overview
       const overview = await getEmployeeServicesOverview();
       setData(overview);
     } catch (err: any) {
@@ -79,7 +71,6 @@ export default function DienstenToewijzingPage() {
     }
   }
 
-  // Visual reset van het save vinkje per cel
   function markSaved(key: string) {
     setSaveState(prev => ({ ...prev, [key]: true }));
     setTimeout(() => setSaveState(prev => ({ ...prev, [key]: false })), 1500);
@@ -97,7 +88,6 @@ export default function DienstenToewijzingPage() {
         actief: !currentEnabled,
         aantal: currentEnabled ? 0 : (currentCount || 1)
       });
-      // Update local state
       setData(prev => prev.map(emp => {
         if (emp.employeeId !== employeeId) return emp;
         const newServices = { ...emp.services };
@@ -106,7 +96,6 @@ export default function DienstenToewijzingPage() {
           enabled: !currentEnabled,
           count: currentEnabled ? 0 : (currentCount || 1)
         };
-        // Gewogen totaal blijft
         let newTotal = 0;
         Object.values(newServices).forEach((s: any) => {
           if (s.enabled && s.count > 0) newTotal += s.count * s.dienstwaarde;
@@ -123,6 +112,7 @@ export default function DienstenToewijzingPage() {
       setError(err.message);
     }
   }
+
   async function handleCountChange(employeeId: string, serviceCode: string, newCount: number) {
     try {
       if (newCount < 0 || newCount > 35) {
@@ -161,7 +151,7 @@ export default function DienstenToewijzingPage() {
       setError(err.message);
     }
   }
-  // UI render
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 p-8">
@@ -174,6 +164,7 @@ export default function DienstenToewijzingPage() {
       </div>
     );
   }
+
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-7xl mx-auto">
@@ -200,32 +191,36 @@ export default function DienstenToewijzingPage() {
             Vernieuwen
           </Button>
         </div>
+
         {error && (
           <Alert variant="destructive" className="mb-4">
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
-        <Card className="overflow-hidden">
+
+        <Card className="overflow-hidden shadow-lg">
           <div className="overflow-x-auto">
             <table className="w-full border-collapse table-fixed">
-              <thead className="sticky top-0 z-10 bg-gray-100">
+              <thead className="sticky top-0 z-10 bg-gray-100 shadow-sm">
                 <tr>
-                  <th className="border p-3 text-left font-semibold text-gray-700">Team</th>
-                  <th className="border p-3 text-left font-semibold text-gray-700">Naam</th>
-                  <th className="border p-3 text-center font-semibold text-gray-700 bg-blue-50">Totaal</th>
+                  <th className="border border-gray-300 p-3 text-left font-semibold text-gray-700 bg-white">Team</th>
+                  <th className="border border-gray-300 p-3 text-left font-semibold text-gray-700 bg-white">Naam</th>
+                  <th className="border border-gray-300 p-3 text-center font-semibold text-gray-700 bg-blue-50">Totaal</th>
                   {serviceTypes.map(service => (
-                    <th key={service.code} className="border p-2 text-center font-semibold text-gray-700 min-w-24">
-                      <div className="flex flex-col items-center">
-                        <span className="mb-1 cursor-help" title={service.naam || service.code}>
+                    <th key={service.code} className="border border-gray-300 p-2 text-center font-semibold text-gray-700 min-w-[100px] bg-white">
+                      <div className="flex flex-col items-center gap-1">
+                        <span 
+                          className="text-sm cursor-help hover:text-purple-600 transition-colors" 
+                          title={service.naam || service.code}
+                        >
                           {service.code}
                         </span>
                         {service.dienstwaarde !== 1.0 && (
                           <span className="text-xs text-gray-500">×{service.dienstwaarde}</span>
                         )}
-                        {/* Mini-totaal onder dienst als subtiele badge */}
-                        <span className="mt-1 px-2 py-0.5 bg-gray-100 text-xs rounded shadow-sm text-gray-700">
-                          {serviceTotals[service.code] > 0 ? serviceTotals[service.code] : ''}
-                        </span>
+                        <div className="mt-1 px-2 py-0.5 bg-gray-200 text-xs rounded-full shadow-sm text-gray-700 min-w-[24px] min-h-[20px] flex items-center justify-center">
+                          {serviceTotals[service.code] || 0}
+                        </div>
                       </div>
                     </th>
                   ))}
@@ -234,33 +229,43 @@ export default function DienstenToewijzingPage() {
               <tbody>
                 {data.length === 0 ? (
                   <tr>
-                    <td colSpan={serviceTypes.length + 3} className="border p-8 text-center text-gray-500">
+                    <td colSpan={serviceTypes.length + 3} className="border border-gray-300 p-8 text-center text-gray-500">
                       Geen medewerkers gevonden
                     </td>
                   </tr>
                 ) : (
                   data.map((employee) => (
-                    <tr key={employee.employeeId} className="hover:bg-gray-50">
-                      <td className="border p-3">
-                        <span className={`inline-block px-3 py-1 rounded text-sm font-medium ${employee.team === 'Groen' ? 'bg-green-100 text-green-800' : employee.team === 'Oranje' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}`}>
+                    <tr key={employee.employeeId} className="hover:bg-purple-50 transition-colors">
+                      <td className="border border-gray-300 p-3">
+                        <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium shadow-sm ${
+                          employee.team === 'Groen' 
+                            ? 'bg-green-100 text-green-800 border border-green-300' 
+                            : employee.team === 'Oranje' 
+                            ? 'bg-orange-100 text-orange-800 border border-orange-300' 
+                            : 'bg-blue-100 text-blue-800 border border-blue-300'
+                        }`}>
                           {employee.team}
                         </span>
                       </td>
-                      <td className="border p-3 font-medium">{employee.employeeName}</td>
-                      <td className="border p-3 text-center font-bold bg-blue-50">
+                      <td className="border border-gray-300 p-3 font-medium text-gray-900">{employee.employeeName}</td>
+                      <td className="border border-gray-300 p-3 text-center font-bold bg-blue-50">
                         <span className={employee.isOnTarget ? 'text-green-600' : 'text-gray-900'}>
                           {employee.totalDiensten} / {employee.dienstenperiode}
                         </span>
                       </td>
                       {serviceTypes.map(service => {
-                        const serviceData = employee.services?.[service.code] || {enabled:false,count:0};
+                        const serviceData = employee.services?.[service.code] || { enabled: false, count: 0 };
                         const cellKey = employee.employeeId + '_' + service.code;
                         return (
-                          <td key={service.code} className={`border p-2 text-center group hover:bg-purple-50 transition-all duration-150 min-w-24`}>
-                            <div className="flex items-center justify-center gap-1">
+                          <td 
+                            key={service.code} 
+                            className="border border-gray-300 p-2 text-center group hover:bg-purple-100 hover:shadow-inner transition-all duration-150 min-w-[100px]"
+                          >
+                            <div className="flex items-center justify-center gap-2">
                               <Checkbox
                                 checked={serviceData.enabled}
                                 onCheckedChange={() => handleToggle(employee.employeeId, service.code, serviceData.enabled)}
+                                className="cursor-pointer"
                               />
                               <div className="relative">
                                 <Input
@@ -270,14 +275,17 @@ export default function DienstenToewijzingPage() {
                                   value={serviceData.enabled ? serviceData.count : ''}
                                   onChange={e => handleCountChange(employee.employeeId, service.code, parseInt(e.target.value) || 0)}
                                   disabled={!serviceData.enabled}
-                                  className={`${inputWidth} h-8 text-center text-sm rounded focus:outline-purple-500 transition-shadow duration-150`}
                                   placeholder="0"
-                                  style={{fontSize:'0.95rem'}}
-                                  tabIndex={0}
+                                  className={`w-12 h-9 text-center text-sm rounded border-2 transition-all duration-150 ${
+                                    serviceData.enabled 
+                                      ? 'bg-white border-purple-300 focus:border-purple-500 focus:ring-2 focus:ring-purple-200' 
+                                      : 'bg-gray-100 border-gray-300 text-gray-400 cursor-not-allowed'
+                                  }`}
+                                  style={{ fontSize: '0.95rem' }}
+                                  tabIndex={serviceData.enabled ? 0 : -1}
                                 />
-                                {/* Subtiele save feedback: groen vinkje */}
                                 {saveState[cellKey] && (
-                                  <Check className="absolute -right-5 top-2 text-green-600 animate-fadeout" size={18} />
+                                  <Check className="absolute -right-6 top-2 text-green-600 animate-fadeout drop-shadow-sm" size={18} />
                                 )}
                               </div>
                             </div>
@@ -291,19 +299,31 @@ export default function DienstenToewijzingPage() {
             </table>
           </div>
         </Card>
-        <style>{`
-        .animate-fadeout {
-          animation: fadeoutanim 1.5s;
-        }
-        @keyframes fadeoutanim {
-          0% { opacity:1; }
-          85% { opacity:1; }
-          100% { opacity:0; }
-        }
+
+        <style jsx>{`
+          @keyframes fadeoutanim {
+            0% { opacity: 1; transform: scale(1); }
+            85% { opacity: 1; transform: scale(1.1); }
+            100% { opacity: 0; transform: scale(0.9); }
+          }
+          .animate-fadeout {
+            animation: fadeoutanim 1.5s ease-out;
+          }
         `}</style>
-        <div className="mt-4 space-y-2 text-sm text-gray-600 bg-blue-50 p-4 rounded">
-          <p>💡 <strong>Gebruik:</strong> Vink een dienst aan om deze toe te wijzen. Het getal geeft het aantal keer per periode aan.</p>
-          <p>🎯 <strong>Doel:</strong> Groene getallen betekenen dat de medewerker op target is (totaal diensten = dienstenperiode).</p>
+
+        <div className="mt-6 space-y-2 text-sm text-gray-700 bg-blue-50 p-5 rounded-lg shadow-sm border border-blue-200">
+          <p className="flex items-start gap-2">
+            <span className="text-lg">💡</span>
+            <span><strong>Gebruik:</strong> Vink een dienst aan om deze toe te wijzen. Het getal geeft het aantal keer per periode aan.</span>
+          </p>
+          <p className="flex items-start gap-2">
+            <span className="text-lg">🎯</span>
+            <span><strong>Doel:</strong> Groene getallen in de Totaal-kolom betekenen dat de medewerker op target is (totaal diensten = dienstenperiode).</span>
+          </p>
+          <p className="flex items-start gap-2">
+            <span className="text-lg">📊</span>
+            <span><strong>Mini-totalen:</strong> Onder elke dienstcode zie je het totaal aantal toegewezen diensten (ongewogen) voor alle medewerkers.</span>
+          </p>
         </div>
       </div>
     </div>
