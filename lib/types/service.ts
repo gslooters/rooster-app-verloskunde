@@ -2,8 +2,8 @@
 // ============================================================================
 // SERVICE TYPES - Dagblok Regels voor Teams
 // ============================================================================
-// DRAAD30B - Database Herstructurering
-// Nieuwe type definitions voor dagblok planning per team
+// AP42 - Database Herstructurering met UUID en JSONB team regels
+// Complete type definitions voor dagblok planning per team
 // ============================================================================
 
 /**
@@ -20,9 +20,9 @@ export enum DagblokStatus {
 
 /**
  * Dagblok codes
- * O = Ochtend
- * M = Middag
- * A = Avond
+ * O = Ochtend (09:00-13:00)
+ * M = Middag (13:00-18:00)
+ * A = Avond/Nacht (18:00-09:00)
  */
 export type DagblokCode = 'O' | 'M' | 'A';
 
@@ -37,18 +37,15 @@ export interface DagblokRegels {
 }
 
 /**
+ * Dag codes (voor type-safety)
+ */
+export type DagCode = 'ma' | 'di' | 'wo' | 'do' | 'vr' | 'za' | 'zo';
+
+/**
  * Team regels voor alle 7 dagen van de week
  * Bevat per dag de status van 3 dagblokken (O/M/A)
  */
-export interface TeamRegels {
-  ma: DagblokRegels;  // Maandag
-  di: DagblokRegels;  // Dinsdag
-  wo: DagblokRegels;  // Woensdag
-  do: DagblokRegels;  // Donderdag
-  vr: DagblokRegels;  // Vrijdag
-  za: DagblokRegels;  // Zaterdag
-  zo: DagblokRegels;  // Zondag
-}
+export type TeamRegels = Record<DagCode, DagblokRegels>;
 
 /**
  * Team identificaties
@@ -56,91 +53,226 @@ export interface TeamRegels {
 export type TeamCode = 'groen' | 'oranje' | 'totaal';
 
 /**
- * Dag codes (voor type-safety)
+ * ServiceType interface - Volledige definitie voor diensten
+ * Komt overeen met service_types tabel in Supabase
  */
-export type DagCode = 'ma' | 'di' | 'wo' | 'do' | 'vr' | 'za' | 'zo';
+export interface ServiceType {
+  // Basis identificatie (UUID)
+  id: string;
+  
+  // Code en naam (beide UNIQUE)
+  code: string;                       // 2-3 chars, UPPERCASE
+  naam: string;
+  beschrijving?: string;
+  
+  // Tijd en duur
+  begintijd: string;                  // "HH:MM"
+  eindtijd: string;                   // "HH:MM"
+  duur: number;                       // Berekend in uren
+  
+  // Waarde en visualisatie
+  dienstwaarde: number;               // 1.0 = normaal, 2.0 = dubbel
+  kleur?: string;                     // Hex color
+  
+  // Planning eigenschappen
+  blokkeert_volgdag: boolean;         // Voor wachtdiensten die volgende dag blokkeren
+  actief: boolean;                    // Of dienst gebruikt kan worden
+  planregels?: string;                // Vrije tekst planning regels
+  
+  // Team dagblok regels (JSONB in database)
+  team_groen_regels?: TeamRegels | null;
+  team_oranje_regels?: TeamRegels | null;
+  team_totaal_regels?: TeamRegels | null;
+  
+  // Timestamps
+  created_at: string;
+  updated_at: string;
+}
+
+// ============================================================================
+// CONSTANTS VOOR UI
+// ============================================================================
 
 /**
- * Helper: Standaard lege dagblok regels (alles MAG)
+ * Lijst van alle dagen met volledige namen
  */
-export const DEFAULT_DAGBLOK_REGELS: DagblokRegels = {
-  O: DagblokStatus.MAG,
-  M: DagblokStatus.MAG,
-  A: DagblokStatus.MAG
+export const DAGEN_VAN_WEEK: Array<{ code: DagCode; label: string; kort: string }> = [
+  { code: 'ma', label: 'Maandag', kort: 'Ma' },
+  { code: 'di', label: 'Dinsdag', kort: 'Di' },
+  { code: 'wo', label: 'Woensdag', kort: 'Wo' },
+  { code: 'do', label: 'Donderdag', kort: 'Do' },
+  { code: 'vr', label: 'Vrijdag', kort: 'Vr' },
+  { code: 'za', label: 'Zaterdag', kort: 'Za' },
+  { code: 'zo', label: 'Zondag', kort: 'Zo' }
+];
+
+/**
+ * Lijst van alle dagblokken met tijden
+ */
+export const DAGBLOKKEN: Array<{ code: DagblokCode; label: string; tijden: string }> = [
+  { code: 'O', label: 'Ochtend', tijden: '09:00-13:00' },
+  { code: 'M', label: 'Middag', tijden: '13:00-18:00' },
+  { code: 'A', label: 'Avond', tijden: '18:00-09:00' }
+];
+
+/**
+ * Labels voor dagblok status
+ */
+export const DAGBLOK_STATUS_LABELS: Record<DagblokStatus, string> = {
+  [DagblokStatus.MOET]: 'Verplicht',
+  [DagblokStatus.MAG]: 'Optioneel',
+  [DagblokStatus.MAG_NIET]: 'Verboden'
 };
 
 /**
- * Helper: Standaard lege team regels (alle dagen MAG alles)
+ * Tailwind kleuren voor dagblok status
  */
-export const DEFAULT_TEAM_REGELS: TeamRegels = {
-  ma: { ...DEFAULT_DAGBLOK_REGELS },
-  di: { ...DEFAULT_DAGBLOK_REGELS },
-  wo: { ...DEFAULT_DAGBLOK_REGELS },
-  do: { ...DEFAULT_DAGBLOK_REGELS },
-  vr: { ...DEFAULT_DAGBLOK_REGELS },
-  za: { ...DEFAULT_DAGBLOK_REGELS },
-  zo: { ...DEFAULT_DAGBLOK_REGELS }
+export const DAGBLOK_STATUS_COLORS: Record<DagblokStatus, string> = {
+  [DagblokStatus.MOET]: 'bg-red-100 text-red-700 border-red-200',
+  [DagblokStatus.MAG]: 'bg-green-100 text-green-700 border-green-200',
+  [DagblokStatus.MAG_NIET]: 'bg-gray-100 text-gray-600 border-gray-200'
 };
 
 /**
- * Helper: Lijst van alle dag codes
+ * Emoji voor dagblok status (voor compacte weergave)
  */
-export const ALLE_DAGEN: DagCode[] = ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo'];
-
-/**
- * Helper: Lijst van alle dagblok codes
- */
-export const ALLE_DAGBLOKKEN: DagblokCode[] = ['O', 'M', 'A'];
-
-/**
- * Helper: Nederlandse namen voor dagblokken
- */
-export const DAGBLOK_NAMEN: Record<DagblokCode, string> = {
-  O: 'Ochtend',
-  M: 'Middag',
-  A: 'Avond'
+export const DAGBLOK_STATUS_EMOJI: Record<DagblokStatus, string> = {
+  [DagblokStatus.MOET]: '🔴',
+  [DagblokStatus.MAG]: '🟢',
+  [DagblokStatus.MAG_NIET]: '⚫'
 };
 
 /**
- * Helper: Nederlandse namen voor dagen
+ * Hex kleuren voor dagblok status
  */
-export const DAG_NAMEN: Record<DagCode, string> = {
-  ma: 'Maandag',
-  di: 'Dinsdag',
-  wo: 'Woensdag',
-  do: 'Donderdag',
-  vr: 'Vrijdag',
-  za: 'Zaterdag',
-  zo: 'Zondag'
+export const DAGBLOK_STATUS_HEX: Record<DagblokStatus, string> = {
+  [DagblokStatus.MOET]: '#EF4444',
+  [DagblokStatus.MAG]: '#10B981',
+  [DagblokStatus.MAG_NIET]: '#6B7280'
 };
 
-/**
- * Helper: Korte Nederlandse namen voor dagen
- */
-export const DAG_KORT: Record<DagCode, string> = {
-  ma: 'Ma',
-  di: 'Di',
-  wo: 'Wo',
-  do: 'Do',
-  vr: 'Vr',
-  za: 'Za',
-  zo: 'Zo'
-};
+// ============================================================================
+// HELPER FUNCTIES
+// ============================================================================
 
 /**
- * Helper: Kleur codes voor dagblok status (voor UI)
+ * Type voor team scope bepaling
  */
-export const STATUS_KLEUREN: Record<DagblokStatus, string> = {
-  [DagblokStatus.MOET]: '#EF4444',      // Rood
-  [DagblokStatus.MAG]: '#10B981',        // Groen
-  [DagblokStatus.MAG_NIET]: '#6B7280'    // Grijs
-};
+export type TeamScope = 'totaal' | 'per_team' | 'mixed' | 'geen';
 
 /**
- * Helper: Emoji voor dagblok status
+ * Bepaal welk type team regels een dienst heeft
  */
-export const STATUS_EMOJI: Record<DagblokStatus, string> = {
-  [DagblokStatus.MOET]: '✓',
-  [DagblokStatus.MAG]: '○',
-  [DagblokStatus.MAG_NIET]: '✗'
-};
+export function getTeamScope(service: ServiceType): TeamScope {
+  const hasTotaal = !!service.team_totaal_regels;
+  const hasGroen = !!service.team_groen_regels;
+  const hasOranje = !!service.team_oranje_regels;
+  
+  if (hasTotaal && !hasGroen && !hasOranje) return 'totaal';
+  if (!hasTotaal && (hasGroen || hasOranje)) return 'per_team';
+  if (hasTotaal && (hasGroen || hasOranje)) return 'mixed';
+  return 'geen';
+}
+
+/**
+ * Verkrijg een leesbaar label voor team scope
+ */
+export function getTeamScopeLabel(service: ServiceType): string {
+  const scope = getTeamScope(service);
+  switch(scope) {
+    case 'totaal': return 'Hele praktijk';
+    case 'per_team': return 'Per team';
+    case 'mixed': return 'Gemixed';
+    case 'geen': return 'Geen regels';
+  }
+}
+
+/**
+ * Maak standaard dagblok regels (alles MAG, behalve avond MAG_NIET)
+ */
+export function createDefaultDagblokRegels(): DagblokRegels {
+  return {
+    O: DagblokStatus.MAG,
+    M: DagblokStatus.MAG,
+    A: DagblokStatus.MAG_NIET  // Standaard geen avonddiensten
+  };
+}
+
+/**
+ * Maak standaard team regels voor weekdagen
+ * Ma-Vr: ochtend/middag MAG, avond MAG_NIET
+ * Za-Zo: alles MAG_NIET
+ */
+export function createDefaultTeamRegels(): TeamRegels {
+  const weekdagRegels = createDefaultDagblokRegels();
+  const weekendRegels: DagblokRegels = {
+    O: DagblokStatus.MAG_NIET,
+    M: DagblokStatus.MAG_NIET,
+    A: DagblokStatus.MAG_NIET
+  };
+  
+  return {
+    ma: { ...weekdagRegels },
+    di: { ...weekdagRegels },
+    wo: { ...weekdagRegels },
+    do: { ...weekdagRegels },
+    vr: { ...weekdagRegels },
+    za: { ...weekendRegels },
+    zo: { ...weekendRegels }
+  };
+}
+
+/**
+ * Verkrijg de dagblok status voor een specifiek team, dag en blok
+ * Met fallback logica: team-specifiek -> totaal -> MAG
+ */
+export function getDagblokStatus(
+  service: ServiceType,
+  team: 'groen' | 'oranje',
+  dag: DagCode,
+  blok: DagblokCode
+): DagblokStatus {
+  // Check team-specifiek eerst
+  const teamRegels = team === 'groen' 
+    ? service.team_groen_regels 
+    : service.team_oranje_regels;
+  
+  if (teamRegels?.[dag]?.[blok]) {
+    return teamRegels[dag][blok];
+  }
+  
+  // Fallback naar totaal
+  if (service.team_totaal_regels?.[dag]?.[blok]) {
+    return service.team_totaal_regels[dag][blok];
+  }
+  
+  // Default: MAG
+  return DagblokStatus.MAG;
+}
+
+/**
+ * Valideer of een code voldoet aan de eisen (2-3 chars, UPPERCASE)
+ */
+export function isValidServiceCode(code: string): boolean {
+  return code.length >= 2 && code.length <= 3 && code === code.toUpperCase();
+}
+
+/**
+ * Bereken duur in uren tussen begin en eindtijd
+ * Handelt overloop naar volgende dag af (bijv. 18:00 - 09:00 = 15 uur)
+ */
+export function berekenDuur(begintijd: string, eindtijd: string): number {
+  const [beginUur, beginMin] = begintijd.split(':').map(Number);
+  const [eindUur, eindMin] = eindtijd.split(':').map(Number);
+  
+  let beginMinuten = beginUur * 60 + beginMin;
+  let eindMinuten = eindUur * 60 + eindMin;
+  
+  // Als eindtijd eerder is dan begintijd, ga uit van volgende dag
+  if (eindMinuten <= beginMinuten) {
+    eindMinuten += 24 * 60;
+  }
+  
+  const verschilMinuten = eindMinuten - beginMinuten;
+  return Math.round(verschilMinuten / 60 * 10) / 10; // Afgerond op 1 decimaal
+}
