@@ -34,7 +34,7 @@ export async function getEmployeeServicesOverview(): Promise<EmployeeServiceRow[
   // Haal alle diensten op inclusief dienstwaarde
   const { data: services, error: servError } = await supabase
     .from('service_types')
-    .select('id, code, dienstwaarde')  // ← GEBRUIK dienstwaarde, niet weging
+    .select('id, code, dienstwaarde')
     .eq('actief', true)
     .order('code', { ascending: true });
   
@@ -43,10 +43,10 @@ export async function getEmployeeServicesOverview(): Promise<EmployeeServiceRow[
     throw servError;
   }
 
-  // Haal alle employee_services op
+  // Haal alle employee_services op (LET OP: veldnamen uit database!)
   const { data: employeeServices, error: esError } = await supabase
     .from('employee_services')
-    .select('employee_id, service_id, can_perform_service, target_count_per_period');
+    .select('employee_id, service_id, actief, aantal');
   
   if (esError) {
     console.error('❌ Error loading employee services:', esError);
@@ -73,8 +73,8 @@ export async function getEmployeeServicesOverview(): Promise<EmployeeServiceRow[
     const serviceInfo = serviceMap.get(es.service_id);
     if (serviceInfo) {
       empServiceMap.get(es.employee_id)!.set(serviceInfo.code, {
-        enabled: es.can_perform_service,
-        count: es.target_count_per_period,
+        enabled: es.actief,              // ← database veld: actief
+        count: es.aantal,                // ← database veld: aantal
         dienstwaarde: serviceInfo.dienstwaarde
       });
     }
@@ -128,8 +128,8 @@ export async function upsertEmployeeService(
     .upsert({
       employee_id: input.employee_id,
       service_id: input.service_id,
-      can_perform_service: input.can_perform_service,
-      target_count_per_period: input.target_count_per_period
+      actief: input.actief,        // ← database veld
+      aantal: input.aantal         // ← database veld
     }, {
       onConflict: 'employee_id,service_id'
     })
@@ -198,7 +198,7 @@ export async function getEmployeeServicesMappings(): Promise<Record<string, stri
 
   const { data: employeeServices, error: esError } = await supabase
     .from('employee_services')
-    .select('employee_id, service_id, can_perform_service');
+    .select('employee_id, service_id, actief');  // ← gebruik 'actief'
   
   if (esError) throw esError;
 
@@ -206,7 +206,7 @@ export async function getEmployeeServicesMappings(): Promise<Record<string, stri
   const mappings: Record<string, string[]> = {};
   
   employeeServices?.forEach(es => {
-    if (es.can_perform_service) {
+    if (es.actief) {  // ← gebruik 'actief' in plaats van 'can_perform_service'
       const code = serviceCodeMap.get(es.service_id);
       if (code) {
         if (!mappings[es.employee_id]) {
@@ -259,8 +259,8 @@ export async function setServicesForEmployee(employeeId: string, serviceCodes: s
       return {
         employee_id: employeeId,
         service_id: serviceId,
-        can_perform_service: true,
-        target_count_per_period: 0
+        actief: true,     // ← database veld
+        aantal: 1         // ← database veld, default waarde
       };
     })
     .filter(row => row !== null);
