@@ -565,9 +565,9 @@ export default function ServiceTypesPage() {
 
                 {/* Modal content */}
                 <form onSubmit={handleSubmit} className="flex-1 overflow-hidden flex flex-col">
-                  <div className="flex-1 overflow-y-auto p-6">
+                  <div className="flex-1 overflow-y-auto relative">
                     {activeTab === 'basis' ? (
-                      <div className="space-y-4">
+                      <div className="p-6 space-y-4">
                         <div className="grid grid-cols-2 gap-3">
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -731,35 +731,60 @@ export default function ServiceTypesPage() {
                         </div>
                       </div>
                     ) : (
-                      <div className="space-y-6">
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                          <h3 className="font-medium text-blue-900 mb-2">📌 Team regels instellen</h3>
-                          <p className="text-sm text-blue-700">
-                            Configureer per team wanneer deze dienst verplicht (MOET), optioneel (MAG) of niet toegestaan (MAG_NIET) is.
-                            Stel in per dag en dagblok (Ochtend/Middag/Avond) wat de regels zijn.
-                          </p>
+                      <div>
+                        {/* Sticky dienst header - alleen in Team regels tab */}
+                        <div className="sticky top-0 z-10 bg-white border-b shadow-sm">
+                          <div className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div 
+                                className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-md" 
+                                style={{ backgroundColor: formData.kleur }}
+                              >
+                                {formData.code.toUpperCase() || 'XX'}
+                              </div>
+                              <div className="flex-1">
+                                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                                  {formData.code.toUpperCase() || 'CODE'} {formData.naam || 'Nieuwe dienst'}
+                                  <span className="inline-block px-2 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-700">
+                                    🎯 Team regels
+                                  </span>
+                                </h3>
+                              </div>
+                            </div>
+                          </div>
                         </div>
 
-                        <DagblokMatrix
-                          teamRegels={formData.team_groen_regels}
-                          onChange={(regels) => handleTeamRegelsChange('groen', regels)}
-                          teamNaam="Groen"
-                          disabled={editingDienst?.system || submitting}
-                        />
+                        {/* Team regels content */}
+                        <div className="p-6 space-y-6">
+                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <h3 className="font-medium text-blue-900 mb-2">📌 Team regels instellen</h3>
+                            <p className="text-sm text-blue-700">
+                              Configureer per team wanneer deze dienst verplicht (MOET), optioneel (MAG) of niet toegestaan (MAG_NIET) is.
+                              Stel in per dag en dagblok (Ochtend/Middag/Avond) wat de regels zijn.
+                            </p>
+                          </div>
 
-                        <DagblokMatrix
-                          teamRegels={formData.team_oranje_regels}
-                          onChange={(regels) => handleTeamRegelsChange('oranje', regels)}
-                          teamNaam="Oranje"
-                          disabled={editingDienst?.system || submitting}
-                        />
+                          <DagblokMatrix
+                            teamRegels={formData.team_groen_regels}
+                            onChange={(regels) => handleTeamRegelsChange('groen', regels)}
+                            teamNaam="Groen"
+                            disabled={editingDienst?.system || submitting}
+                          />
 
-                        <DagblokMatrix
-                          teamRegels={formData.team_totaal_regels}
-                          onChange={(regels) => handleTeamRegelsChange('totaal', regels)}
-                          teamNaam="Totaal"
-                          disabled={editingDienst?.system || submitting}
-                        />
+                          <DagblokMatrix
+                            teamRegels={formData.team_oranje_regels}
+                            onChange={(regels) => handleTeamRegelsChange('oranje', regels)}
+                            teamNaam="Oranje"
+                            disabled={editingDienst?.system || submitting}
+                          />
+
+                          <DagblokMatrix
+                            teamRegels={formData.team_totaal_regels}
+                            onChange={(regels) => handleTeamRegelsChange('totaal', regels)}
+                            teamNaam="Totaal"
+                            disabled={editingDienst?.system || submitting}
+                          />
+                        </div>
                       </div>
                     )}
                   </div>
