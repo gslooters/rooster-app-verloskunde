@@ -11,6 +11,7 @@ import { initializeRosterDesign } from '@/lib/planning/rosterDesign';
 import { useRouter } from 'next/navigation';
 import { generateRosterPeriodStaffing } from '@/lib/planning/roster-period-staffing-storage';
 import { initializePeriodEmployeeStaffing } from '@/lib/services/period-employee-staffing';
+import { loadRosterDesignData } from '@/lib/planning/rosterDesign';
 
 const FIXED_WEEKS = 5;
 
@@ -40,6 +41,7 @@ export default function Wizard({ onClose }: WizardProps = {}) {
   const [step, setStep] = useState<WizardStep>('period');
   const [error, setError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState<boolean>(false);
+  const [verifyAttempt, setVerifyAttempt] = useState<number>(0);
 
   // Async laden van perioden met status
   useEffect(() => {
@@ -107,9 +109,45 @@ export default function Wizard({ onClose }: WizardProps = {}) {
     router.push('/dashboard'); 
   }
 
+  /**
+   * DRAAD00 FIX: Verificatie functie die controleert of roster data beschikbaar is
+   * Retry mechanisme met 500ms delay tussen pogingen (max 10 pogingen = 5 seconden)
+   */
+  async function verifyRosterDataExists(rosterId: string, maxAttempts: number = 10): Promise<boolean> {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      setVerifyAttempt(attempt);
+      
+      console.log(`[Wizard] 🔍 Verificatie poging ${attempt}/${maxAttempts}...`);
+      
+      try {
+        // Probeer roster design data op te halen
+        const data = await loadRosterDesignData(rosterId);
+        
+        if (data && data.employees && data.employees.length > 0) {
+          console.log('[Wizard] ✅ Roster data geverifieerd - navigatie veilig');
+          console.log(`[Wizard] Gevonden: ${data.employees.length} medewerkers`);
+          return true;
+        }
+        
+        console.log(`[Wizard] ⏳ Data nog niet beschikbaar, wacht 500ms...`);
+      } catch (err) {
+        console.log(`[Wizard] ⚠️  Verificatie fout (poging ${attempt}):`, err);
+      }
+      
+      // Wacht 500ms voor volgende poging
+      if (attempt < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+    
+    console.error('[Wizard] ❌ Verificatie gefaald na maximaal aantal pogingen');
+    return false;
+  }
+
   async function createRosterConfirmed() {
     setIsCreating(true);
     setError(null);
+    setVerifyAttempt(0);
     
     let rosterId: string | null = null;
     
@@ -273,7 +311,33 @@ export default function Wizard({ onClose }: WizardProps = {}) {
       // Geen error message tonen aan gebruiker - niet kritiek
     }
     
-    // === FASE 4: Navigeer naar dashboard ===
+    // === DRAAD00 FIX - FASE 4: Verificatie voor navigatie ===
+    console.log('\n' + '='.repeat(80));
+    console.log('[Wizard] 🔍 START: Database commit verificatie');
+    console.log('='.repeat(80) + '\n');
+    
+    const dataVerified = await verifyRosterDataExists(rosterId!);
+    
+    if (!dataVerified) {
+      console.error('\n' + '='.repeat(80));
+      console.error('[Wizard] ❌ FOUT: Data verificatie gefaald na 5 seconden');
+      console.error('[Wizard] Rooster is aangemaakt maar data nog niet beschikbaar');
+      console.error('[Wizard] Gebruiker wordt teruggeleid naar planning overzicht');
+      console.error('='.repeat(80) + '\n');
+      
+      setError('Rooster is aangemaakt maar data nog niet beschikbaar. Probeer de pagina opnieuw te laden.');
+      setIsCreating(false);
+      
+      // Navigeer naar planning overzicht als fallback
+      setTimeout(() => {
+        if (onClose) onClose();
+        router.push('/planning');
+      }, 2000);
+      
+      return;
+    }
+    
+    // === FASE 5: Navigeer naar dashboard (alleen na succesvolle verificatie) ===
     console.log('[Wizard] 🔄 Navigeren naar dashboard...');
     console.log('[Wizard] Route:', `/planning/design/dashboard?rosterId=${rosterId}`);
     console.log('\n' + '='.repeat(80));
@@ -284,7 +348,7 @@ export default function Wizard({ onClose }: WizardProps = {}) {
       onClose();
     }
     
-    // Direct navigeren zonder setTimeout (voorkomt race conditions)
+    // Direct navigeren (data is nu geverifieerd beschikbaar)
     router.push(`/planning/design/dashboard?rosterId=${rosterId}`);
     setIsCreating(false);
   }
@@ -477,10 +541,25 @@ export default function Wizard({ onClose }: WizardProps = {}) {
               {formatDateRangeNl(selectedStart, selectedEnd)} wordt aangemaakt. Is dit akkoord?
             </div>
           </div>
+          
+          {/* DRAAD00 FIX: Verificatie progress indicator */}
+          {isCreating && verifyAttempt > 0 && (
+            <div className="bg-blue-50 border border-blue-200 rounded p-3">
+              <div className="flex items-center gap-3">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                <div className="text-sm text-blue-800">
+                  <div className="font-semibold">Database verificatie...</div>
+                  <div className="text-xs">Poging {verifyAttempt} van 10 (wacht op commit)</div>
+                </div>
+              </div>
+            </div>
+          )}
+          
           <div className="flex gap-2 justify-end">
             <button 
               onClick={backToDashboard} 
-              className="px-3 py-2 border rounded bg-white"
+              disabled={isCreating}
+              className="px-3 py-2 border rounded bg-white disabled:opacity-50"
             >
               Nee
             </button>
@@ -489,7 +568,7 @@ export default function Wizard({ onClose }: WizardProps = {}) {
               disabled={isCreating} 
               className="px-3 py-2 border rounded bg-blue-600 text-white disabled:bg-blue-400"
             >
-              {isCreating ? 'Aanmaken…' : 'Ja, aanmaken'}
+              {isCreating ? (verifyAttempt > 0 ? 'Verifiëren…' : 'Aanmaken…') : 'Ja, aanmaken'}
             </button>
           </div>
         </div>
