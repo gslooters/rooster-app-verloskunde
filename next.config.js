@@ -1,17 +1,17 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // CRITICAL: Disable ALL caching mechanisms
+  // Force unique build ID for Railway fresh deploys
   generateBuildId: async () => {
-    // Unique build ID every time to force Railway fresh build
-    return `build-force-${Date.now()}-${Math.random().toString(36).substring(7)}`
+    return `build-${Date.now()}-${Math.random().toString(36).substring(7)}`
   },
-  // Disable static page generation
-  output: 'standalone',
-  // Force fresh data fetching
+  // Disable SWC cache
   env: {
     NEXT_DISABLE_SWC_CACHE: '1',
     FORCE_REBUILD_TIMESTAMP: Date.now().toString()
-  }
+  },
+  // Optimale performance settings
+  swcMinify: true,
+  compress: true
 };
 
 module.exports = nextConfig;
