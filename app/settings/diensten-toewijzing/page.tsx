@@ -34,6 +34,8 @@ export default function DienstenToewijzingPage() {
       setLoading(true);
       setError(null);
       
+      console.log('🔄 Starting loadData...');
+      
       // Haal diensten op
       const { data: services, error: servError } = await supabase
         .from('service_types')
@@ -41,14 +43,22 @@ export default function DienstenToewijzingPage() {
         .eq('actief', true)
         .order('code', { ascending: true });
       
-      if (servError) throw servError;
-      setServiceTypes(services?.map(s => s.code) || []);
+      if (servError) {
+        console.error('❌ Service error:', servError);
+        throw servError;
+      }
+      
+      const serviceCodes = services?.map(s => s.code) || [];
+      console.log('✅ Service types loaded:', serviceCodes);
+      setServiceTypes(serviceCodes);
 
       // Haal employee overview op
       const overview = await getEmployeeServicesOverview();
+      console.log('✅ Employee overview loaded:', overview.length, 'employees');
+      console.log('📊 First employee sample:', overview[0]);
       setData(overview);
     } catch (err: any) {
-      console.error('Error loading data:', err);
+      console.error('❌ Error loading data:', err);
       setError(err.message || 'Fout bij laden van gegevens');
     } finally {
       setLoading(false);
@@ -101,6 +111,9 @@ export default function DienstenToewijzingPage() {
         }
         return emp;
       }));
+      
+      setSuccess('Opgeslagen!');
+      setTimeout(() => setSuccess(null), 2000);
     } catch (err: any) {
       console.error('Error toggling service:', err);
       setError(err.message);
@@ -148,7 +161,7 @@ export default function DienstenToewijzingPage() {
         return emp;
       }));
 
-      setSuccess('Opgeslagen');
+      setSuccess('Opgeslagen!');
       setTimeout(() => setSuccess(null), 2000);
     } catch (err: any) {
       console.error('Error updating count:', err);
@@ -197,6 +210,13 @@ export default function DienstenToewijzingPage() {
           </Button>
         </div>
 
+        {/* Debug info */}
+        <div className="mb-4 p-3 bg-blue-50 rounded text-xs">
+          <p><strong>Debug Info:</strong></p>
+          <p>Medewerkers geladen: {data.length}</p>
+          <p>Dienst types: {serviceTypes.join(', ')}</p>
+        </div>
+
         {/* Alerts */}
         {error && (
           <Alert variant="destructive" className="mb-4">
@@ -222,61 +242,75 @@ export default function DienstenToewijzingPage() {
                       {code}
                     </th>
                   ))}
+                  <th className="border p-3 text-center font-semibold text-gray-700">Totaal</th>
                 </tr>
               </thead>
               <tbody>
-                {data.map((employee) => (
-                  <tr key={employee.employeeId} className="hover:bg-gray-50">
-                    <td className="border p-3">
-                      <span 
-                        className={`inline-block px-3 py-1 rounded text-sm font-medium ${
-                          employee.team === 'Groen' 
-                            ? 'bg-green-100 text-green-800'
-                            : employee.team === 'Oranje'
-                            ? 'bg-orange-100 text-orange-800'
-                            : 'bg-blue-100 text-blue-800'
-                        }`}
-                      >
-                        {employee.team}
-                      </span>
+                {data.length === 0 ? (
+                  <tr>
+                    <td colSpan={serviceTypes.length + 3} className="border p-8 text-center text-gray-500">
+                      Geen medewerkers gevonden
                     </td>
-                    <td className="border p-3 font-medium">{employee.employeeName}</td>
-                    {serviceTypes.map(code => {
-                      const service = employee.services[code];
-                      const enabled = service?.enabled || false;
-                      const count = service?.count || 0;
+                  </tr>
+                ) : (
+                  data.map((employee) => (
+                    <tr key={employee.employeeId} className="hover:bg-gray-50">
+                      <td className="border p-3">
+                        <span 
+                          className={`inline-block px-3 py-1 rounded text-sm font-medium ${
+                            employee.team === 'Groen' 
+                              ? 'bg-green-100 text-green-800'
+                              : employee.team === 'Oranje'
+                              ? 'bg-orange-100 text-orange-800'
+                              : 'bg-blue-100 text-blue-800'
+                          }`}
+                        >
+                          {employee.team}
+                        </span>
+                      </td>
+                      <td className="border p-3 font-medium">{employee.employeeName}</td>
+                      {serviceTypes.map(code => {
+                        const service = employee.services?.[code];
+                        const enabled = service?.enabled || false;
+                        const count = service?.count || 0;
 
-                      return (
-                        <td key={code} className="border p-2 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            <Checkbox
-                              checked={enabled}
-                              onCheckedChange={() => handleToggle(
-                                employee.employeeId,
-                                code,
-                                enabled
-                              )}
-                            />
-                            {enabled && (
-                              <Input
-                                type="number"
-                                min="0"
-                                max="35"
-                                value={count}
-                                onChange={(e) => handleCountChange(
+                        return (
+                          <td key={code} className="border p-2 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              <Checkbox
+                                checked={enabled}
+                                onCheckedChange={() => handleToggle(
                                   employee.employeeId,
                                   code,
-                                  parseInt(e.target.value) || 0
+                                  enabled
                                 )}
-                                className="w-16 h-8 text-center"
                               />
-                            )}
-                          </div>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
+                              {enabled && (
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  max="35"
+                                  value={count}
+                                  onChange={(e) => handleCountChange(
+                                    employee.employeeId,
+                                    code,
+                                    parseInt(e.target.value) || 0
+                                  )}
+                                  className="w-16 h-8 text-center"
+                                />
+                              )}
+                            </div>
+                          </td>
+                        );
+                      })}
+                      <td className="border p-3 text-center font-semibold">
+                        <span className={employee.isOnTarget ? 'text-green-600' : 'text-gray-900'}>
+                          {employee.totalDiensten} / {employee.dienstenperiode}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -285,7 +319,7 @@ export default function DienstenToewijzingPage() {
         {/* Footer info */}
         <div className="mt-4 text-sm text-gray-600">
           <p>💡 <strong>Tip:</strong> Vink een dienst aan om deze toe te wijzen. Het getal geeft het aantal keer per periode aan.</p>
-          <p className="mt-1">🎯 Groene rijen betekenen dat de medewerker op target is (totaal diensten = dienstenperiode).</p>
+          <p className="mt-1">🎯 Groene getallen betekenen dat de medewerker op target is (totaal diensten = dienstenperiode).</p>
         </div>
       </div>
     </div>
