@@ -16,6 +16,10 @@ import {
 import { supabase } from '@/lib/services/medewerker-diensten-supabase';
 import type { EmployeeServiceRow } from '@/lib/types/employee-services';
 
+// CRITICAL: Force dynamic rendering - no caching whatsoever
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default function DienstenToewijzingPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
