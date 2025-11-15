@@ -116,11 +116,17 @@ export default function ServiceTypesPage() {
     setError('');
     setSubmitting(true);
     
+    // DRAAD30D-v2: Force code naar UPPERCASE voor database constraint
+    const safeFormData = {
+      ...formData,
+      code: formData.code.toUpperCase()
+    };
+    
     try {
       if (editingDienst) {
-        await updateService(editingDienst.id, formData as any);
+        await updateService(editingDienst.id, safeFormData as any);
       } else {
-        await createService(formData as any);
+        await createService(safeFormData as any);
       }
       
       // Data wordt automatisch bijgewerkt via realtime subscription
@@ -421,8 +427,8 @@ export default function ServiceTypesPage() {
                         <input 
                           type="text" 
                           value={formData.code} 
-                          onChange={(e) => setFormData({...formData, code: e.target.value})} 
-                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                          onChange={(e) => setFormData({...formData, code: e.target.value.toUpperCase()})} 
+                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent uppercase" 
                           placeholder="bijv. D, ND" 
                           maxLength={4} 
                           required 
