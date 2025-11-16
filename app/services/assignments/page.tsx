@@ -172,50 +172,35 @@ export default function DienstenToewijzingPage() {
     }
   }
 
-  // PDF Export functie
+  // PDF Export functie - GEFIXTE VERSIE
   async function exportToPDF() {
     try {
       setExportingPDF(true);
       
-      // Dynamische import om bundle size klein te houden
-      const html2canvas = (await import('html2canvas')).default;
+      // Dynamische import van jsPDF en autoTable plugin
       const { jsPDF } = await import('jspdf');
+      const autoTable = (await import('jspdf-autotable')).default;
       
-      if (!tableRef.current) {
-        throw new Error('Tabel niet gevonden');
-      }
-
-      // Maak screenshot van tabel
-      const canvas = await html2canvas(tableRef.current, {
-        scale: 2,
-        backgroundColor: '#ffffff',
-        logging: false,
-        useCORS: true
+      // Initialiseer jsPDF met compressie
+      const doc = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'a4',
+        compress: true
       });
-
-      // A4 landscape formaat (297mm x 210mm)
-      const pdf = new jsPDF('landscape', 'mm', 'a4');
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
       
-      // Marges
+      // Gebruik Helvetica font voor correcte text encoding
+      doc.setFont('helvetica', 'normal');
+      
+      const pageWidth = doc.internal.pageSize.getWidth();
       const margin = 10;
-      const availableWidth = pageWidth - (2 * margin);
-      const availableHeight = pageHeight - (2 * margin) - 15; // 15mm voor header
-
-      // Bereken schaling
-      const imgWidth = canvas.width;
-      const imgHeight = canvas.height;
-      const ratio = Math.min(availableWidth / (imgWidth * 0.264583), availableHeight / (imgHeight * 0.264583));
       
-      const scaledWidth = (imgWidth * 0.264583) * ratio;
-      const scaledHeight = (imgHeight * 0.264583) * ratio;
-
-      // Centreer op pagina
-      const xPos = (pageWidth - scaledWidth) / 2;
-      const yPos = margin + 15; // Na header
-
-      // Header met titel en datum/tijd
+      // Header
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Diensten Toewijzing', margin, margin + 5);
+      
+      // Datum en tijd
       const now = new Date();
       const dateStr = now.toLocaleDateString('nl-NL', { 
         year: 'numeric', 
@@ -227,25 +212,110 @@ export default function DienstenToewijzingPage() {
         minute: '2-digit' 
       });
       
-      pdf.setFontSize(16);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('🧩 Diensten Toewijzing', margin, margin + 7);
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Datum: ${dateStr} om ${timeStr}`, pageWidth - margin, margin + 5, { align: 'right' });
       
-      pdf.setFontSize(10);
-      pdf.setFont('helvetica', 'normal');
-      pdf.text(`Gegenereerd op: ${dateStr} om ${timeStr}`, pageWidth - margin, margin + 7, { align: 'right' });
-
-      // Voeg afbeelding toe
-      const imgData = canvas.toDataURL('image/png');
-      pdf.addImage(imgData, 'PNG', xPos, yPos, scaledWidth, scaledHeight);
-
-      // Genereer bestandsnaam: DienstenToewijzing20251116hhmm.pdf
+      // Bereken team counts
+      const serviceCounts = calculateServiceCounts();
+      
+      // Bouw tabel data
+      const tableData = [];
+      
+      // Header rij
+      const headerRow = ['Team', 'Naam', 'Totaal'];
+      serviceTypes.forEach(code => {
+        headerRow.push(code);
+      });
+      tableData.push(headerRow);
+      
+      // Team counts rij
+      const teamCountRow = ['', 'Per team:', ''];
+      serviceTypes.forEach(code => {
+        const groen = serviceCounts.Groen[code] || 0;
+        const oranje = serviceCounts.Oranje[code] || 0;
+        const totaal = groen + oranje + (serviceCounts.Overig[code] || 0);
+        teamCountRow.push(`${groen} ${oranje} ${totaal}`);
+      });
+      tableData.push(teamCountRow);
+      
+      // Data rijen - getallen als tekst
+      data.forEach(emp => {
+        const row = [
+          emp.team || '',
+          emp.employeeName || '',
+          `${emp.totalDiensten} / ${emp.dienstenperiode}`
+        ];
+        
+        serviceTypes.forEach(code => {
+          const service = emp.services?.[code];
+          const count = service?.enabled ? (service?.count || 0) : 0;
+          row.push(count.toString());
+        });
+        
+        tableData.push(row);
+      });
+      
+      // Genereer tabel met autoTable
+      (doc as any).autoTable({
+        head: [tableData[0]],
+        body: tableData.slice(1),
+        startY: margin + 12,
+        margin: { left: margin, right: margin },
+        styles: {
+          fontSize: 8,
+          cellPadding: 2,
+          overflow: 'linebreak',
+          halign: 'center',
+          valign: 'middle',
+          font: 'helvetica'
+        },
+        headStyles: {
+          fillColor: [41, 128, 185],
+          textColor: 255,
+          fontStyle: 'bold',
+          fontSize: 9
+        },
+        columnStyles: {
+          0: { cellWidth: 20, halign: 'left' },
+          1: { cellWidth: 35, halign: 'left' },
+          2: { cellWidth: 25, halign: 'center' }
+        },
+        didParseCell: function(hookData: any) {
+          // Kleur team kolom
+          if (hookData.section === 'body' && hookData.column.index === 0) {
+            const teamNaam = hookData.cell.raw;
+            if (teamNaam === 'Groen') {
+              hookData.cell.styles.fillColor = [144, 238, 144];
+            } else if (teamNaam === 'Oranje') {
+              hookData.cell.styles.fillColor = [255, 200, 124];
+            } else if (teamNaam === 'Overig') {
+              hookData.cell.styles.fillColor = [173, 216, 230];
+            }
+          }
+          
+          // Team counts rij opmaak
+          if (hookData.section === 'body' && hookData.row.index === 0) {
+            hookData.cell.styles.fillColor = [240, 240, 240];
+            hookData.cell.styles.fontStyle = 'bold';
+          }
+        }
+      });
+      
+      // Voeg footer toe
+      const finalY = (doc as any).lastAutoTable.finalY || margin + 100;
+      doc.setFontSize(8);
+      doc.setTextColor(100);
+      doc.text('Gebruik: Vink diensten aan door op de cellen te klikken. Getallen geven aantal per periode.', margin, finalY + 8);
+      doc.text('Team-tellers: Groen Oranje Totaal', margin, finalY + 12);
+      
+      // Bestandsnaam met timestamp
       const fileDate = now.toISOString().slice(0, 10).replace(/-/g, '');
       const fileTime = now.toTimeString().slice(0, 5).replace(':', '');
       const fileName = `DienstenToewijzing${fileDate}${fileTime}.pdf`;
-
-      // Download PDF
-      pdf.save(fileName);
+      
+      // Opslaan met compressie
+      doc.save(fileName);
       
       console.log('✅ PDF exported:', fileName);
     } catch (err: any) {
