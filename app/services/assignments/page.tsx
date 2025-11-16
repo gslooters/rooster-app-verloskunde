@@ -172,7 +172,7 @@ export default function DienstenToewijzingPage() {
     }
   }
 
-  // PDF Export functie - GEFIXTE VERSIE
+  // PDF Export functie - VERSIE 2 MET KLEUR & FORMAT FIXES
   async function exportToPDF() {
     try {
       setExportingPDF(true);
@@ -229,17 +229,18 @@ export default function DienstenToewijzingPage() {
       });
       tableData.push(headerRow);
       
-      // Team counts rij
+      // Team counts rij - FIX: Format met leading zeros
       const teamCountRow = ['', 'Per team:', ''];
       serviceTypes.forEach(code => {
-        const groen = serviceCounts.Groen[code] || 0;
-        const oranje = serviceCounts.Oranje[code] || 0;
-        const totaal = groen + oranje + (serviceCounts.Overig[code] || 0);
+        const groen = (serviceCounts.Groen[code] || 0).toString().padStart(2, '0');
+        const oranje = (serviceCounts.Oranje[code] || 0).toString().padStart(2, '0');
+        const totaal = ((serviceCounts.Groen[code] || 0) + (serviceCounts.Oranje[code] || 0) + (serviceCounts.Overig[code] || 0)).toString().padStart(2, '0');
         teamCountRow.push(`${groen} ${oranje} ${totaal}`);
       });
       tableData.push(teamCountRow);
       
-      // Data rijen - getallen als tekst
+      // Data rijen - FIX: Getallen met leading zeros en tracking voor kleur
+      const rowsWithTeam: Array<{row: any[], team: string}> = [];
       data.forEach(emp => {
         const row = [
           emp.team || '',
@@ -250,10 +251,12 @@ export default function DienstenToewijzingPage() {
         serviceTypes.forEach(code => {
           const service = emp.services?.[code];
           const count = service?.enabled ? (service?.count || 0) : 0;
-          row.push(count.toString());
+          // FIX 1: Format met leading zero (##)
+          row.push(count.toString().padStart(2, '0'));
         });
         
         tableData.push(row);
+        rowsWithTeam.push({ row, team: emp.team || '' });
       });
       
       // Genereer tabel met autoTable
@@ -299,15 +302,29 @@ export default function DienstenToewijzingPage() {
             hookData.cell.styles.fillColor = [240, 240, 240];
             hookData.cell.styles.fontStyle = 'bold';
           }
+          
+          // FIX 1: Kleur de getallen per team (kolom 3 en hoger)
+          if (hookData.section === 'body' && hookData.row.index > 0 && hookData.column.index >= 3) {
+            // Bepaal het team van deze rij (row.index - 1 omdat eerste rij team counts is)
+            const dataRowIndex = hookData.row.index - 1;
+            if (dataRowIndex >= 0 && dataRowIndex < rowsWithTeam.length) {
+              const team = rowsWithTeam[dataRowIndex].team;
+              
+              // Zet text kleur op basis van team
+              if (team === 'Groen') {
+                hookData.cell.styles.textColor = [0, 128, 0];  // Groen
+              } else if (team === 'Oranje') {
+                hookData.cell.styles.textColor = [255, 140, 0];  // Oranje
+              } else if (team === 'Overig') {
+                hookData.cell.styles.textColor = [0, 0, 255];  // Blauw
+              }
+            }
+          }
         }
       });
       
-      // Voeg footer toe
-      const finalY = (doc as any).lastAutoTable.finalY || margin + 100;
-      doc.setFontSize(8);
-      doc.setTextColor(100);
-      doc.text('Gebruik: Vink diensten aan door op de cellen te klikken. Getallen geven aantal per periode.', margin, finalY + 8);
-      doc.text('Team-tellers: Groen Oranje Totaal', margin, finalY + 12);
+      // FIX 2: Footer tekst VERWIJDERD (was: Gebruik instructies en Team-tellers)
+      // Geen footer meer nodig
       
       // Bestandsnaam met timestamp
       const fileDate = now.toISOString().slice(0, 10).replace(/-/g, '');
