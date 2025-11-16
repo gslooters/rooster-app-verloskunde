@@ -72,20 +72,12 @@ export default function DashboardPage() {
               <p className="text-gray-700 font-medium">Afgesloten roosters</p>
             </Link>
             
-            <Link href="/services/assignments" className="bg-purple-50 p-6 rounded-xl hover:bg-purple-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md">
-              <div className="flex items-center mb-1">
+            <Link href="/services" className="bg-purple-50 p-6 rounded-xl hover:bg-purple-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md">
+              <div className="flex items-center mb-3">
                 <span className="text-2xl mr-3">💼</span>
                 <h3 className="font-bold text-purple-900 text-lg">Diensten Beheren</h3>
               </div>
-            </Link>
-
-            {/* NIEUW: Diensten Toewijzing */}
-            <Link href="/settings/diensten-toewijzing" className="bg-pink-50 p-6 rounded-xl hover:bg-pink-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md">
-              <div className="flex items-center mb-3">
-                <span className="text-2xl mr-3">🎯</span>
-                <h3 className="font-bold text-pink-900 text-lg">Diensten Toewijzing</h3>
-              </div>
-              <p className="text-pink-700 font-medium">Koppel medewerkers aan diensten</p>
+              <p className="text-purple-700 font-medium">Types, medewerkers en regels</p>
             </Link>
           </div>
 
