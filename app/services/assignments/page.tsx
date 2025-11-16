@@ -176,6 +176,37 @@ export default function DienstenToewijzingPage() {
     return name.length > max ? name.substring(0, max - 1) + '…' : name;
   }
 
+  // NIEUWE FUNCTIE: Bereken team-counts per diensttype
+  function calculateServiceCounts() {
+    const counts = {
+      Groen: {} as Record<string, number>,
+      Oranje: {} as Record<string, number>,
+      Overig: {} as Record<string, number>
+    };
+    
+    // Initialiseer alle diensten met 0
+    serviceTypes.forEach(code => {
+      counts.Groen[code] = 0;
+      counts.Oranje[code] = 0;
+      counts.Overig[code] = 0;
+    });
+    
+    // Tel enabled diensten per team
+    data.forEach(emp => {
+      serviceTypes.forEach(code => {
+        const service = emp.services?.[code];
+        if (service?.enabled) {
+          const team = emp.team === 'Groen' ? 'Groen' 
+                     : emp.team === 'Oranje' ? 'Oranje' 
+                     : 'Overig';
+          counts[team][code]++;
+        }
+      });
+    });
+    
+    return counts;
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 p-8">
@@ -188,6 +219,9 @@ export default function DienstenToewijzingPage() {
       </div>
     );
   }
+
+  // Pre-calculate counts voor performance (buiten render loops)
+  const serviceCounts = calculateServiceCounts();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-4 md:p-8">
@@ -326,6 +360,36 @@ export default function DienstenToewijzingPage() {
                   ))
                 )}
               </tbody>
+              {/* NIEUWE TFOOT SECTIE: Team-tellers */}
+              <tfoot>
+                <tr className="bg-gray-50 border-t-2 border-gray-300">
+                  <td colSpan={3} className="border p-3 text-sm text-gray-600 font-medium">
+                    Per team:
+                  </td>
+                  {serviceTypes.map(code => {
+                    const groen = serviceCounts.Groen[code] || 0;
+                    const oranje = serviceCounts.Oranje[code] || 0;
+                    const overig = serviceCounts.Overig[code] || 0;
+                    const totaal = groen + oranje + overig;
+                    
+                    return (
+                      <td key={`count-${code}`} className="border p-2 bg-gray-50">
+                        <div className="flex items-center justify-center gap-2 text-sm font-semibold tabular-nums">
+                          <span className="text-green-700" title="Groen team">
+                            {groen.toString().padStart(2, '0')}
+                          </span>
+                          <span className="text-orange-600" title="Oranje team">
+                            {oranje.toString().padStart(2, '0')}
+                          </span>
+                          <span className="text-blue-600" title="Totaal alle teams">
+                            {totaal.toString().padStart(2, '0')}
+                          </span>
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              </tfoot>
             </table>
           </div>
 
@@ -334,6 +398,7 @@ export default function DienstenToewijzingPage() {
             <p>💡 <strong>Gebruik:</strong> Vink een dienst aan om deze toe te wijzen. Het getal geeft het aantal keer per periode aan.</p>
             <p className="mt-1">🎯 <strong>Doel:</strong> Groene getallen betekenen dat de medewerker op target is (totaal diensten = dienstenperiode).</p>
             <p className="mt-1">⚙️ <strong>Tip:</strong> Input velden met waarde 0 zijn uitgeschakeld maar blijven zichtbaar voor overzicht en ad-hoc planning.</p>
+            <p className="mt-1">📊 <strong>Team-tellers:</strong> Onderaan zie je per dienst: <span className="text-green-700 font-semibold">Groen</span> <span className="text-orange-600 font-semibold">Oranje</span> <span className="text-blue-600 font-semibold">Totaal</span></p>
           </div>
         </Card>
       </div>
