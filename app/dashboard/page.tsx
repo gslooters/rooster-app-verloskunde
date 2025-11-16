@@ -72,7 +72,7 @@ export default function DashboardPage() {
               <p className="text-gray-700 font-medium">Afgesloten roosters</p>
             </Link>
             
-            <Link href="/services" className="bg-purple-50 p-6 rounded-xl hover:bg-purple-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md">
+            <Link href="/services/assignments" className="bg-purple-50 p-6 rounded-xl hover:bg-purple-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md">
               <div className="flex items-center mb-1">
                 <span className="text-2xl mr-3">💼</span>
                 <h3 className="font-bold text-purple-900 text-lg">Diensten Beheren</h3>
