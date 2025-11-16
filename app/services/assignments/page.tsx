@@ -176,7 +176,7 @@ export default function DienstenToewijzingPage() {
     return name.length > max ? name.substring(0, max - 1) + '…' : name;
   }
 
-  // Bereken team-counts per diensttype - wordt nu real-time herberekend
+  // Bereken team-counts per diensttype - FIXED: Tel nu werkelijke aantallen ipv alleen enabled
   function calculateServiceCounts() {
     const counts = {
       Groen: {} as Record<string, number>,
@@ -191,15 +191,16 @@ export default function DienstenToewijzingPage() {
       counts.Overig[code] = 0;
     });
     
-    // Tel enabled diensten per team
+    // Tel werkelijke aantallen per team (niet alleen enabled status)
     data.forEach(emp => {
       serviceTypes.forEach(code => {
         const service = emp.services?.[code];
-        if (service?.enabled) {
+        // FIXED: Tel nu service.count ipv alleen +1 voor enabled
+        if (service?.enabled && service?.count > 0) {
           const team = emp.team === 'Groen' ? 'Groen' 
                      : emp.team === 'Oranje' ? 'Oranje' 
                      : 'Overig';
-          counts[team][code]++;
+          counts[team][code] += service.count;  // Was: counts[team][code]++
         }
       });
     });
@@ -396,7 +397,7 @@ export default function DienstenToewijzingPage() {
             <p>💡 <strong>Gebruik:</strong> Vink een dienst aan om deze toe te wijzen. Het getal geeft het aantal keer per periode aan.</p>
             <p className="mt-1">🎯 <strong>Doel:</strong> Groene getallen betekenen dat de medewerker op target is (totaal diensten = dienstenperiode).</p>
             <p className="mt-1">⚙️ <strong>Tip:</strong> Input velden met waarde 0 zijn uitgeschakeld maar blijven zichtbaar voor overzicht en ad-hoc planning.</p>
-            <p className="mt-1">📊 <strong>Team-tellers:</strong> Onderaan zie je per dienst: <span className="text-green-700 font-semibold">Groen</span> <span className="text-orange-600 font-semibold">Oranje</span> <span className="text-blue-600 font-semibold">Totaal</span></p>
+            <p className="mt-1">📊 <strong>Team-tellers:</strong> Tonen totaal aantal diensten per team (niet aantal medewerkers): <span className="text-green-700 font-semibold">Groen</span> <span className="text-orange-600 font-semibold">Oranje</span> <span className="text-blue-600 font-semibold">Totaal</span></p>
           </div>
         </Card>
       </div>
