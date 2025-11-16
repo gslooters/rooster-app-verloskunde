@@ -169,6 +169,11 @@ export default function DienstenToewijzingPage() {
     }
   }
 
+  // Helper functie om naam te trunceren
+  function truncateName(name: string, max: number) {
+    return name.length > max ? name.substring(0, max - 1) + '…' : name;
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 p-8">
@@ -233,7 +238,7 @@ export default function DienstenToewijzingPage() {
                 <tr className="bg-gray-100">
                   <th className="border p-3 text-left font-semibold text-gray-700">Team</th>
                   <th className="border p-3 text-left font-semibold text-gray-700">Naam</th>
-                  <th className="border p-3 text-center font-semibold text-gray-700">Totaal</th>
+                  <th className="border px-5 py-3 text-center font-semibold text-gray-700 min-w-[110px]">Totaal</th>
                   {serviceTypes.map(code => (
                     <th key={code} className="border p-3 text-center font-semibold text-gray-700">
                       {code}
@@ -264,10 +269,10 @@ export default function DienstenToewijzingPage() {
                           {employee.team}
                         </span>
                       </td>
-                      <td className="border p-3 font-medium">{employee.employeeName}</td>
-                      <td className="border p-3 text-center font-semibold">
+                      <td className="border p-3 font-medium truncate w-[130px] max-w-[130px]">{truncateName(employee.employeeName, 12)}</td>
+                      <td className="border px-5 py-3 text-center font-semibold min-w-[110px]">
                         <span className={employee.isOnTarget ? 'text-green-600' : 'text-gray-900'}>
-                          {employee.totalDiensten} / {employee.dienstenperiode}
+                          {employee.dienstenperiode} / {employee.totalDiensten}
                         </span>
                       </td>
                       {serviceTypes.map(code => {
