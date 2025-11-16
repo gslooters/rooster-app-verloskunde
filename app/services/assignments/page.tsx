@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ArrowLeft, Save, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Save, RefreshCw, Check } from 'lucide-react';
 import { 
   getEmployeeServicesOverview, 
   upsertEmployeeService,
@@ -23,7 +23,7 @@ export default function DienstenToewijzingPage() {
   const [data, setData] = useState<EmployeeServiceRow[]>([]);
   const [serviceTypes, setServiceTypes] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -112,8 +112,9 @@ export default function DienstenToewijzingPage() {
         return emp;
       }));
       
-      setSuccess('Opgeslagen!');
-      setTimeout(() => setSuccess(null), 2000);
+      // Toon klein groen vinkje
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 1500);
     } catch (err: any) {
       console.error('Error toggling service:', err);
       setError(err.message);
@@ -161,8 +162,9 @@ export default function DienstenToewijzingPage() {
         return emp;
       }));
 
-      setSuccess('Opgeslagen!');
-      setTimeout(() => setSuccess(null), 2000);
+      // Toon klein groen vinkje
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 1500);
     } catch (err: any) {
       console.error('Error updating count:', err);
       setError(err.message);
@@ -208,26 +210,29 @@ export default function DienstenToewijzingPage() {
                 Diensten Toewijzing
               </h1>
             </div>
-            <Button
-              onClick={() => loadData()}
-              variant="outline"
-              size="sm"
-              disabled={loading}
-            >
-              <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-              Vernieuwen
-            </Button>
+            <div className="flex items-center gap-3">
+              {/* Klein groen vinkje bij succesvolle save */}
+              {success && (
+                <div className="flex items-center gap-1 text-green-600 animate-pulse">
+                  <Check className="w-5 h-5" />
+                </div>
+              )}
+              <Button
+                onClick={() => loadData()}
+                variant="outline"
+                size="sm"
+                disabled={loading}
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                Vernieuwen
+              </Button>
+            </div>
           </div>
 
-          {/* Alerts */}
+          {/* Alleen Error Alert - geen success alert meer */}
           {error && (
             <Alert variant="destructive" className="mb-4">
               <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-          {success && (
-            <Alert className="mb-4 border-green-500 bg-green-50">
-              <AlertDescription className="text-green-800">{success}</AlertDescription>
             </Alert>
           )}
 
@@ -272,7 +277,7 @@ export default function DienstenToewijzingPage() {
                       <td className="border p-3 font-medium truncate w-[130px] max-w-[130px]">{truncateName(employee.employeeName, 12)}</td>
                       <td className="border px-5 py-3 text-center font-semibold min-w-[110px]">
                         <span className={employee.isOnTarget ? 'text-green-600' : 'text-gray-900'}>
-                          {employee.dienstenperiode} / {employee.totalDiensten}
+                          {employee.totalDiensten} / {employee.dienstenperiode}
                         </span>
                       </td>
                       {serviceTypes.map(code => {
@@ -291,20 +296,28 @@ export default function DienstenToewijzingPage() {
                                   enabled
                                 )}
                               />
-                              {enabled && (
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  max="35"
-                                  value={count}
-                                  onChange={(e) => handleCountChange(
-                                    employee.employeeId,
-                                    code,
-                                    parseInt(e.target.value) || 0
-                                  )}
-                                  className="w-16 h-8 text-center"
-                                />
-                              )}
+                              {/* Input veld ALTIJD zichtbaar */}
+                              <Input
+                                type="number"
+                                min="0"
+                                max="35"
+                                value={enabled ? count : 0}
+                                onChange={(e) => {
+                                  if (enabled) {
+                                    handleCountChange(
+                                      employee.employeeId,
+                                      code,
+                                      parseInt(e.target.value) || 0
+                                    );
+                                  }
+                                }}
+                                disabled={!enabled}
+                                className={`w-16 h-8 text-center transition-all ${
+                                  !enabled 
+                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                                    : 'bg-white'
+                                }`}
+                              />
                             </div>
                           </td>
                         );
@@ -320,6 +333,7 @@ export default function DienstenToewijzingPage() {
           <div className="mt-6 p-4 bg-blue-50 rounded-lg text-sm text-gray-700">
             <p>💡 <strong>Gebruik:</strong> Vink een dienst aan om deze toe te wijzen. Het getal geeft het aantal keer per periode aan.</p>
             <p className="mt-1">🎯 <strong>Doel:</strong> Groene getallen betekenen dat de medewerker op target is (totaal diensten = dienstenperiode).</p>
+            <p className="mt-1">⚙️ <strong>Tip:</strong> Input velden met waarde 0 zijn uitgeschakeld maar blijven zichtbaar voor overzicht en ad-hoc planning.</p>
           </div>
         </Card>
       </div>
