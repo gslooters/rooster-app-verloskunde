@@ -233,12 +233,12 @@ export default function DienstenToewijzingPage() {
                 <tr className="bg-gray-100">
                   <th className="border p-3 text-left font-semibold text-gray-700">Team</th>
                   <th className="border p-3 text-left font-semibold text-gray-700">Naam</th>
+                  <th className="border p-3 text-center font-semibold text-gray-700">Totaal</th>
                   {serviceTypes.map(code => (
                     <th key={code} className="border p-3 text-center font-semibold text-gray-700">
                       {code}
                     </th>
                   ))}
-                  <th className="border p-3 text-center font-semibold text-gray-700">Totaal</th>
                 </tr>
               </thead>
               <tbody>
@@ -265,6 +265,11 @@ export default function DienstenToewijzingPage() {
                         </span>
                       </td>
                       <td className="border p-3 font-medium">{employee.employeeName}</td>
+                      <td className="border p-3 text-center font-semibold">
+                        <span className={employee.isOnTarget ? 'text-green-600' : 'text-gray-900'}>
+                          {employee.totalDiensten} / {employee.dienstenperiode}
+                        </span>
+                      </td>
                       {serviceTypes.map(code => {
                         const service = employee.services?.[code];
                         const enabled = service?.enabled || false;
@@ -299,11 +304,6 @@ export default function DienstenToewijzingPage() {
                           </td>
                         );
                       })}
-                      <td className="border p-3 text-center font-semibold">
-                        <span className={employee.isOnTarget ? 'text-green-600' : 'text-gray-900'}>
-                          {employee.totalDiensten} / {employee.dienstenperiode}
-                        </span>
-                      </td>
                     </tr>
                   ))
                 )}
