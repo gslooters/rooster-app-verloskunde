@@ -176,7 +176,7 @@ export default function DienstenToewijzingPage() {
     return name.length > max ? name.substring(0, max - 1) + '…' : name;
   }
 
-  // NIEUWE FUNCTIE: Bereken team-counts per diensttype
+  // Bereken team-counts per diensttype - wordt nu real-time herberekend
   function calculateServiceCounts() {
     const counts = {
       Groen: {} as Record<string, number>,
@@ -220,7 +220,7 @@ export default function DienstenToewijzingPage() {
     );
   }
 
-  // Pre-calculate counts voor performance (buiten render loops)
+  // Bereken counts dynamisch zodat deze real-time worden bijgewerkt
   const serviceCounts = calculateServiceCounts();
 
   return (
@@ -283,6 +283,34 @@ export default function DienstenToewijzingPage() {
                       {code}
                     </th>
                   ))}
+                </tr>
+                {/* Team-tellers direct na header */}
+                <tr className="bg-gradient-to-r from-gray-100 to-gray-50 border-b-2 border-gray-300">
+                  <td colSpan={3} className="border p-3 text-sm text-gray-600 font-medium">
+                    Per team:
+                  </td>
+                  {serviceTypes.map(code => {
+                    const groen = serviceCounts.Groen[code] || 0;
+                    const oranje = serviceCounts.Oranje[code] || 0;
+                    const overig = serviceCounts.Overig[code] || 0;
+                    const totaal = groen + oranje + overig;
+                    
+                    return (
+                      <td key={`count-${code}`} className="border p-2 bg-gray-50">
+                        <div className="flex items-center justify-center gap-2 text-sm font-semibold tabular-nums">
+                          <span className="text-green-700" title="Groen team">
+                            {groen.toString().padStart(2, '0')}
+                          </span>
+                          <span className="text-orange-600" title="Oranje team">
+                            {oranje.toString().padStart(2, '0')}
+                          </span>
+                          <span className="text-blue-600" title="Totaal alle teams">
+                            {totaal.toString().padStart(2, '0')}
+                          </span>
+                        </div>
+                      </td>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
@@ -360,36 +388,6 @@ export default function DienstenToewijzingPage() {
                   ))
                 )}
               </tbody>
-              {/* NIEUWE TFOOT SECTIE: Team-tellers */}
-              <tfoot>
-                <tr className="bg-gray-50 border-t-2 border-gray-300">
-                  <td colSpan={3} className="border p-3 text-sm text-gray-600 font-medium">
-                    Per team:
-                  </td>
-                  {serviceTypes.map(code => {
-                    const groen = serviceCounts.Groen[code] || 0;
-                    const oranje = serviceCounts.Oranje[code] || 0;
-                    const overig = serviceCounts.Overig[code] || 0;
-                    const totaal = groen + oranje + overig;
-                    
-                    return (
-                      <td key={`count-${code}`} className="border p-2 bg-gray-50">
-                        <div className="flex items-center justify-center gap-2 text-sm font-semibold tabular-nums">
-                          <span className="text-green-700" title="Groen team">
-                            {groen.toString().padStart(2, '0')}
-                          </span>
-                          <span className="text-orange-600" title="Oranje team">
-                            {oranje.toString().padStart(2, '0')}
-                          </span>
-                          <span className="text-blue-600" title="Totaal alle teams">
-                            {totaal.toString().padStart(2, '0')}
-                          </span>
-                        </div>
-                      </td>
-                    );
-                  })}
-                </tr>
-              </tfoot>
             </table>
           </div>
 
