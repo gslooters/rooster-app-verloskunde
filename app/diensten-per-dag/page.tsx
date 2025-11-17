@@ -1,6 +1,6 @@
 'use client';
 
-import { createClient } from '@/utils/supabase/client';
+import { supabase } from '@/lib/supabase';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, ArrowLeft, Calendar } from 'lucide-react';
@@ -79,8 +79,6 @@ export default function DienstenPerDagPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const supabase = createClient();
-
   // Load data
   useEffect(() => {
     async function loadData() {
@@ -140,7 +138,7 @@ export default function DienstenPerDagPage() {
     }
 
     loadData();
-  }, [rosterId, supabase]);
+  }, [rosterId]);
 
   // Save assignment
   async function handleAssignment(
