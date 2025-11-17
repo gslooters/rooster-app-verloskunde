@@ -216,7 +216,7 @@ export default function DashboardClient() {
                 </div>
                 <div className="flex items-center gap-3 sm:flex-row flex-col">
                   <StatusBadgeToggle completed={completionStatus.diensten_per_dag} onToggle={()=>toggleStep('diensten_per_dag')} label="Diensten per dagdeel"/>
-                  <Link href={`/diensten-per-dag?rosterId=${rosterId}`}>
+                  <Link href={`/planning/period-staffing?rosterId=${rosterId}`}>
                     <button className="px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 font-medium whitespace-nowrap">Openen →</button>
                   </Link>
                 </div>
