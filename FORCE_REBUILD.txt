@@ -1,2 +1,3 @@
-Force rebuild timestamp: 2025-11-15T23:03:00Z
-This file forces Railway to rebuild from scratch.
+DRAAD36B - DienstenPerDag Frontend Component
+Timestamp: 2025-11-17 19:25:00 UTC
+Deploy trigger voor nieuwe /diensten-per-dag route
