@@ -5,13 +5,13 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState, Suspense } from 'react';
 import { ChevronLeft, ChevronRight, ArrowLeft, Calendar } from 'lucide-react';
 
-// Types
+// Types - AANGEPAST NAAR WERKELIJKE DATABASE SCHEMA
 interface RosterInfo {
   id: string;
   name: string;
   start_date: string;
   end_date: string;
-  active: boolean;
+  status: string;
 }
 
 interface Service {
@@ -21,19 +21,23 @@ interface Service {
   kleur: string;
 }
 
-interface Assignment {
+// GEFIXTE TYPE - Correct volgens roster_period_staffing_dagdelen schema
+interface DagdeelAssignment {
   id?: string;
-  roster_id: string;
-  employee_id: string;
-  service_id: string;
-  date: string;
-  period: 'ochtend' | 'middag' | 'avond' | 'nacht';
+  roster_period_staffing_id: string;
+  dagdeel: string;
+  team: string;
+  status: string;
+  aantal: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
 interface Employee {
   id: string;
   voornaam: string;
   achternaam: string;
+  team: string;
 }
 
 // Utility functions
@@ -75,7 +79,7 @@ function DienstenPerDagContent() {
   const [roster, setRoster] = useState<RosterInfo | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [services, setServices] = useState<Service[]>([]);
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [assignments, setAssignments] = useState<DagdeelAssignment[]>([]);
   const [currentWeek, setCurrentWeek] = useState<number>(getWeekNumber(new Date()));
   const [currentYear] = useState<number>(new Date().getFullYear());
   const [loading, setLoading] = useState(true);
@@ -93,7 +97,7 @@ function DienstenPerDagContent() {
       try {
         setLoading(true);
 
-        // Load roster - GEFIXTE TABELNAAM: 'roosters' (dubbele o)
+        // Load roster
         const { data: rosterData, error: rosterError } = await supabase
           .from('roosters')
           .select('*')
@@ -107,12 +111,13 @@ function DienstenPerDagContent() {
         const { data: employeesData, error: employeesError } = await supabase
           .from('employees')
           .select('*')
+          .eq('actief', true)
           .order('achternaam');
 
         if (employeesError) throw employeesError;
         setEmployees(employeesData || []);
 
-        // Load services - GEFIXTE TABELNAAM: 'service_types'
+        // Load services
         const { data: servicesData, error: servicesError } = await supabase
           .from('service_types')
           .select('*')
@@ -122,15 +127,21 @@ function DienstenPerDagContent() {
         if (servicesError) throw servicesError;
         setServices(servicesData || []);
 
-        // Load assignments for this roster
+        // GEFIXTE QUERY - Gebruik correcte tabelnaam roster_period_staffing_dagdelen
         const { data: assignmentsData, error: assignmentsError } = await supabase
-          .from('diensten_per_dag')
-          .select('*')
-          .eq('roster_id', rosterId);
+          .from('roster_period_staffing_dagdelen')
+          .select(`
+            *,
+            roster_period_staffing!inner(roster_id)
+          `)
+          .eq('roster_period_staffing.roster_id', rosterId);
 
-        if (assignmentsError) throw assignmentsError;
+        if (assignmentsError) {
+          console.error('Error loading dagdeel assignments:', assignmentsError);
+          throw assignmentsError;
+        }
+        
         setAssignments(assignmentsData || []);
-
         setError(null);
       } catch (err: any) {
         console.error('Error loading data:', err);
@@ -143,75 +154,68 @@ function DienstenPerDagContent() {
     loadData();
   }, [rosterId]);
 
-  // Save assignment
-  async function handleAssignment(
-    employeeId: string,
-    date: string,
-    period: 'ochtend' | 'middag' | 'avond' | 'nacht',
-    serviceId: string | null
+  // GEFIXTE FUNCTIE - Gebruik correcte tabelnaam en velden
+  async function handleDagdeelChange(
+    rosterPeriodStaffingId: string,
+    dagdeel: string,
+    team: string,
+    newAantal: number
   ) {
     if (!rosterId) return;
 
     try {
       const existing = assignments.find(
-        a => a.employee_id === employeeId && a.date === date && a.period === period
+        a => 
+          a.roster_period_staffing_id === rosterPeriodStaffingId &&
+          a.dagdeel === dagdeel &&
+          a.team === team
       );
 
-      if (serviceId === null) {
-        // Delete assignment
-        if (existing?.id) {
-          const { error } = await supabase
-            .from('diensten_per_dag')
-            .delete()
-            .eq('id', existing.id);
+      if (existing?.id) {
+        // Update bestaande
+        const { error } = await supabase
+          .from('roster_period_staffing_dagdelen')
+          .update({ 
+            aantal: newAantal,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existing.id);
 
-          if (error) throw error;
+        if (error) throw error;
 
-          setAssignments(prev => prev.filter(a => a.id !== existing.id));
-        }
+        setAssignments(prev =>
+          prev.map(a => (a.id === existing.id ? { ...a, aantal: newAantal } : a))
+        );
       } else {
-        if (existing?.id) {
-          // Update existing
-          const { error } = await supabase
-            .from('diensten_per_dag')
-            .update({ service_id: serviceId })
-            .eq('id', existing.id);
+        // Nieuwe invoegen
+        const newAssignment: DagdeelAssignment = {
+          roster_period_staffing_id: rosterPeriodStaffingId,
+          dagdeel,
+          team,
+          status: 'MAG',
+          aantal: newAantal
+        };
 
-          if (error) throw error;
+        const { data, error } = await supabase
+          .from('roster_period_staffing_dagdelen')
+          .insert(newAssignment)
+          .select()
+          .single();
 
-          setAssignments(prev =>
-            prev.map(a => (a.id === existing.id ? { ...a, service_id: serviceId } : a))
-          );
-        } else {
-          // Insert new
-          const newAssignment: Assignment = {
-            roster_id: rosterId,
-            employee_id: employeeId,
-            service_id: serviceId,
-            date,
-            period
-          };
-
-          const { data, error } = await supabase
-            .from('diensten_per_dag')
-            .insert(newAssignment)
-            .select()
-            .single();
-
-          if (error) throw error;
-          if (data) {
-            setAssignments(prev => [...prev, data]);
-          }
+        if (error) throw error;
+        if (data) {
+          setAssignments(prev => [...prev, data]);
         }
       }
     } catch (err: any) {
-      console.error('Error saving assignment:', err);
+      console.error('Error saving dagdeel assignment:', err);
       alert('Fout bij opslaan: ' + err.message);
     }
   }
 
   const weekDates = getWeekDates(currentWeek, currentYear);
-  const periods = ['ochtend', 'middag', 'avond', 'nacht'] as const;
+  const dagdelen = ['ochtend', 'middag', 'avond', 'nacht'];
+  const teams = ['TOT', 'GRO', 'ORA'];
 
   if (loading) {
     return (
@@ -256,7 +260,7 @@ function DienstenPerDagContent() {
           Diensten per Dagdeel
         </h1>
         <p className="text-gray-600">
-          Rooster: <span className="font-semibold">{roster.name}</span>
+          Rooster: <span className="font-semibold">{roster.name || 'Onbekend'}</span>
         </p>
       </div>
 
@@ -284,82 +288,81 @@ function DienstenPerDagContent() {
         </button>
       </div>
 
-      {/* Grid */}
+      {/* Info Panel */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+        <h3 className="font-semibold text-blue-900 mb-2">Dagdeel Overzicht</h3>
+        <p className="text-sm text-blue-800">
+          Totaal dagdeel records: <strong>{assignments.length}</strong>
+        </p>
+        <p className="text-sm text-blue-700 mt-1">
+          Teams: {teams.join(', ')} | Dagdelen: {dagdelen.join(', ')}
+        </p>
+      </div>
+
+      {/* Grid - Simplified view voor roster_period_staffing_dagdelen */}
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
               <tr className="bg-gray-100">
-                <th className="border border-gray-300 p-2 sticky left-0 bg-gray-100 z-10">
-                  Medewerker
-                </th>
-                {weekDates.map((date, i) => (
-                  <th key={i} className="border border-gray-300 p-2 text-center min-w-[140px]">
-                    <div className="font-semibold">
-                      {['Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo'][i]}
-                    </div>
-                    <div className="text-xs text-gray-600">
-                      {date.getDate()}/{date.getMonth() + 1}
-                    </div>
-                  </th>
-                ))}
+                <th className="border border-gray-300 p-3 text-left">Dagdeel</th>
+                <th className="border border-gray-300 p-3 text-left">Team</th>
+                <th className="border border-gray-300 p-3 text-left">Status</th>
+                <th className="border border-gray-300 p-3 text-center">Aantal</th>
+                <th className="border border-gray-300 p-3 text-left">ID</th>
               </tr>
             </thead>
             <tbody>
-              {employees.map(employee => (
-                <tr key={employee.id} className="hover:bg-gray-50">
-                  <td className="border border-gray-300 p-2 font-medium sticky left-0 bg-white z-10">
-                    {employee.voornaam} {employee.achternaam}
+              {assignments.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="border border-gray-300 p-4 text-center text-gray-500">
+                    Geen dagdeel gegevens gevonden voor dit rooster
                   </td>
-                  {weekDates.map((date, dayIndex) => {
-                    const dateStr = formatDate(date);
-                    return (
-                      <td key={dayIndex} className="border border-gray-300 p-1">
-                        <div className="flex flex-col gap-1">
-                          {periods.map(period => {
-                            const assignment = assignments.find(
-                              a =>
-                                a.employee_id === employee.id &&
-                                a.date === dateStr &&
-                                a.period === period
-                            );
-                            const service = services.find(s => s.id === assignment?.service_id);
-
-                            return (
-                              <select
-                                key={period}
-                                value={assignment?.service_id || ''}
-                                onChange={e =>
-                                  handleAssignment(
-                                    employee.id,
-                                    dateStr,
-                                    period,
-                                    e.target.value || null
-                                  )
-                                }
-                                className="text-xs p-1 border rounded cursor-pointer"
-                                style={{
-                                  backgroundColor: service?.kleur || '#fff',
-                                  color: service ? '#000' : '#666'
-                                }}
-                              >
-                                <option value="">
-                                  {period.charAt(0).toUpperCase() + period.slice(1)}
-                                </option>
-                                {services.map(s => (
-                                  <option key={s.id} value={s.id}>
-                                    {s.code} - {s.naam}
-                                  </option>
-                                ))}
-                              </select>
-                            );
-                          })}
-                        </div>
-                      </td>
-                    );
-                  })}
                 </tr>
-              ))}
+              ) : (
+                assignments.map((assignment, index) => (
+                  <tr key={assignment.id || index} className="hover:bg-gray-50">
+                    <td className="border border-gray-300 p-3 font-medium">
+                      {assignment.dagdeel}
+                    </td>
+                    <td className="border border-gray-300 p-3">
+                      <span className={`px-2 py-1 rounded text-sm font-semibold ${
+                        assignment.team === 'TOT' ? 'bg-purple-100 text-purple-800' :
+                        assignment.team === 'GRO' ? 'bg-green-100 text-green-800' :
+                        'bg-orange-100 text-orange-800'
+                      }`}>
+                        {assignment.team}
+                      </span>
+                    </td>
+                    <td className="border border-gray-300 p-3">
+                      <span className={`px-2 py-1 rounded text-sm ${
+                        assignment.status === 'MOET' ? 'bg-red-100 text-red-800' :
+                        assignment.status === 'MAG' ? 'bg-blue-100 text-blue-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {assignment.status}
+                      </span>
+                    </td>
+                    <td className="border border-gray-300 p-3 text-center">
+                      <input
+                        type="number"
+                        min="0"
+                        value={assignment.aantal}
+                        onChange={(e) => handleDagdeelChange(
+                          assignment.roster_period_staffing_id,
+                          assignment.dagdeel,
+                          assignment.team,
+                          parseInt(e.target.value) || 0
+                        )}
+                        className="w-20 px-2 py-1 border rounded text-center"
+                      />
+                    </td>
+                    <td className="border border-gray-300 p-3 text-xs text-gray-500 font-mono">
+                      {assignment.id?.substring(0, 8)}...
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -367,18 +370,16 @@ function DienstenPerDagContent() {
 
       {/* Legend */}
       <div className="mt-6 bg-white rounded-lg shadow-sm p-4">
-        <h3 className="font-semibold mb-2">Diensten Legenda:</h3>
-        <div className="flex flex-wrap gap-2">
-          {services.map(service => (
-            <div
-              key={service.id}
-              className="flex items-center gap-2 px-3 py-1 rounded"
-              style={{ backgroundColor: service.kleur }}
-            >
-              <span className="font-mono font-bold">{service.code}</span>
-              <span>{service.naam}</span>
-            </div>
-          ))}
+        <h3 className="font-semibold mb-3">Status Legenda:</h3>
+        <div className="flex flex-wrap gap-3">
+          <div className="flex items-center gap-2">
+            <span className="px-3 py-1 rounded bg-red-100 text-red-800 text-sm">MOET</span>
+            <span className="text-sm text-gray-600">Vereist minimum</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="px-3 py-1 rounded bg-blue-100 text-blue-800 text-sm">MAG</span>
+            <span className="text-sm text-gray-600">Optioneel maximum</span>
+          </div>
         </div>
       </div>
     </div>
