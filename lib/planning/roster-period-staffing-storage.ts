@@ -1,9 +1,19 @@
 // lib/planning/roster-period-staffing-storage.ts
 // Opslaglaag: TypeScript functies voor Supabase interactie (Diensten per Dag)
+// DRAAD36A: Uitgebreid met dagdelen generatie
 
 import { supabase } from '@/lib/supabase';
-import { getAllServicesDayStaffing, ServiceDayStaffing } from '@/lib/services/diensten-storage';
+import { getAllServices } from '@/lib/services/diensten-storage';
 import { getFallbackHolidays } from '@/lib/data/dutch-holidays-fallback';
+import { bulkCreateDagdeelRegels } from '@/lib/services/roster-period-staffing-dagdelen-storage';
+import {
+  CreateDagdeelRegel,
+  DAGBLOK_NAAR_DAGDEEL,
+  TEAM_NAAR_TEAM_DAGDEEL,
+  DAGBLOK_STATUS_NAAR_DAGDEEL_STATUS,
+  DEFAULT_AANTAL_PER_STATUS
+} from '@/lib/types/roster-period-staffing-dagdeel';
+import { DagCode, DagblokCode, DagblokStatus, TeamRegels } from '@/lib/types/service';
 
 export interface RosterPeriodStaffing {
   id: string;
@@ -21,8 +31,6 @@ export interface RosterPeriodStaffing {
 
 /**
  * Helper functie: Valideer UUID format
- * @param uuid String die gevalideerd moet worden
- * @returns true als geldige UUID, anders false
  */
 function isValidUUID(uuid: string): boolean {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -30,17 +38,12 @@ function isValidUUID(uuid: string): boolean {
 }
 
 /**
- * Helper functie: Valideer UUID format (strict - alleen echte UUIDs)
- * @param id String die gevalideerd moet worden
- * @param fieldName Naam van het veld voor foutmelding
- * @returns void - throws Error als ongeldig
+ * Helper functie: Valideer UUID format (strict)
  */
 function validateId(id: string, fieldName: string): void {
   if (!id || typeof id !== 'string') {
     throw new Error(`Ongeldig ${fieldName}: "${id}" (moet een string zijn)`);
   }
-  
-  // FIX: Alleen UUID formaat toegestaan - geen custom formaten meer
   if (!isValidUUID(id)) {
     throw new Error(
       `Ongeldig ${fieldName} format: "${id}". ` +
@@ -51,22 +54,26 @@ function validateId(id: string, fieldName: string): void {
 
 /**
  * Helper functie: Valideer ISO8601 date format (YYYY-MM-DD)
- * @param dateStr String die gevalideerd moet worden
- * @returns true als geldige datum, anders false
  */
 function isValidISODate(dateStr: string): boolean {
   const isoDateRegex = /^\d{4}-\d{2}-\d{2}$/;
   if (!isoDateRegex.test(dateStr)) return false;
-  
   const date = new Date(dateStr + 'T00:00:00');
   return date instanceof Date && !isNaN(date.getTime());
+}
+
+/**
+ * Helper functie: Convert JavaScript day (0=Sun) naar DagCode (ma/di/wo/do/vr/za/zo)
+ */
+function getDagCodeFromDate(date: Date): DagCode {
+  const day = date.getDay();
+  const dagCodes: DagCode[] = ['zo', 'ma', 'di', 'wo', 'do', 'vr', 'za'];
+  return dagCodes[day];
 }
 
 export async function getRosterPeriodStaffing(rosterId: string): Promise<RosterPeriodStaffing[]> {
   try {
     console.log('[getRosterPeriodStaffing] Fetching data for rosterId:', rosterId);
-    
-    // === FIX 4: UUID VALIDATIE (STRICT) ===
     validateId(rosterId, 'rosterId');
     console.log('[getRosterPeriodStaffing] ✓ RosterId validated (UUID format)');
     
@@ -93,11 +100,8 @@ export async function getRosterPeriodStaffing(rosterId: string): Promise<RosterP
 export async function updateRosterPeriodStaffingMinMax(id: string, min: number, max: number): Promise<void> {
   try {
     console.log('[updateRosterPeriodStaffingMinMax] Updating id:', id, 'min:', min, 'max:', max);
-    
-    // === FIX 4: UUID VALIDATIE (STRICT) ===
     validateId(id, 'id');
     
-    // Valideer min/max waarden
     if (typeof min !== 'number' || min < 0) {
       throw new Error(`Ongeldige min_staff waarde: ${min} (moet een positief getal zijn)`);
     }
@@ -133,52 +137,39 @@ export async function updateRosterPeriodStaffingMinMax(id: string, min: number, 
 
 export async function bulkCreateRosterPeriodStaffing(
   records: Omit<RosterPeriodStaffing, 'id' | 'created_at' | 'updated_at'>[]
-): Promise<void> {
+): Promise<RosterPeriodStaffing[]> {
   if (!records.length) {
     console.log('[bulkCreateRosterPeriodStaffing] Geen records om aan te maken');
-    return;
+    return [];
   }
   
   try {
     console.log('[bulkCreateRosterPeriodStaffing] Aanmaken van', records.length, 'records');
-    console.log('[bulkCreateRosterPeriodStaffing] Eerste record sample:', JSON.stringify(records[0], null, 2));
     
-    // Valideer alle records voordat we gaan inserten
+    // Valideer alle records
     for (let i = 0; i < records.length; i++) {
       const r = records[i];
       if (!r.roster_id || typeof r.roster_id !== 'string') {
-        throw new Error(`Record ${i}: roster_id is verplicht en moet een string zijn (waarde: ${r.roster_id})`);
+        throw new Error(`Record ${i}: roster_id is verplicht en moet een string zijn`);
       }
-      
-      // FIX: Valideer dat roster_id een echte UUID is
       if (!isValidUUID(r.roster_id)) {
-        throw new Error(
-          `Record ${i}: roster_id moet een geldige UUID zijn ` +
-          `(waarde: "${r.roster_id}", type: ${typeof r.roster_id})`
-        );
+        throw new Error(`Record ${i}: roster_id moet een geldige UUID zijn`);
       }
-      
       if (!r.service_id || typeof r.service_id !== 'string') {
-        throw new Error(`Record ${i}: service_id is verplicht en moet een string zijn (waarde: ${r.service_id})`);
+        throw new Error(`Record ${i}: service_id is verplicht`);
       }
-      
-      // ✅ VERWIJDERD: UUID validatie voor service_id
-      // Service IDs zijn custom strings zoals "st2", "nb", etc.
-      
       if (!r.date || typeof r.date !== 'string') {
-        throw new Error(`Record ${i}: date is verplicht en moet een string zijn (waarde: ${r.date})`);
+        throw new Error(`Record ${i}: date is verplicht`);
       }
       if (typeof r.min_staff !== 'number' || r.min_staff < 0) {
-        throw new Error(`Record ${i}: min_staff moet een positief getal zijn (waarde: ${r.min_staff})`);
+        throw new Error(`Record ${i}: min_staff moet een positief getal zijn`);
       }
       if (typeof r.max_staff !== 'number' || r.max_staff < 0) {
-        throw new Error(`Record ${i}: max_staff moet een positief getal zijn (waarde: ${r.max_staff})`);
+        throw new Error(`Record ${i}: max_staff moet een positief getal zijn`);
       }
     }
     
     console.log('[bulkCreateRosterPeriodStaffing] Alle records gevalideerd ✓');
-    console.log('[bulkCreateRosterPeriodStaffing] Roster ID is geldige UUID ✓');
-    console.log('[bulkCreateRosterPeriodStaffing] Service IDs zijn geldig ✓');
     
     const now = new Date().toISOString();
     const recordsWithTimestamps = records.map(r => ({
@@ -187,36 +178,36 @@ export async function bulkCreateRosterPeriodStaffing(
       updated_at: now
     }));
     
-    // Batch insert in chunks van 50 voor betere stabiliteit
+    const allCreatedRecords: RosterPeriodStaffing[] = [];
+    
+    // Batch insert in chunks van 50
     const chunkSize = 50;
     for (let i = 0; i < recordsWithTimestamps.length; i += chunkSize) {
       const chunk = recordsWithTimestamps.slice(i, i + chunkSize);
       const chunkNumber = Math.floor(i / chunkSize) + 1;
       const totalChunks = Math.ceil(recordsWithTimestamps.length / chunkSize);
       
-      console.log(`[bulkCreateRosterPeriodStaffing] Inserting chunk ${chunkNumber}/${totalChunks} (${chunk.length} records)...`);
+      console.log(`[bulkCreateRosterPeriodStaffing] Inserting chunk ${chunkNumber}/${totalChunks}...`);
       
       const { data, error } = await supabase
         .from('roster_period_staffing')
         .insert(chunk)
-        .select('id');
+        .select();
       
       if (error) {
-        console.error(`[bulkCreateRosterPeriodStaffing] ❌ Supabase error bij chunk ${chunkNumber}:`, error);
-        console.error('[bulkCreateRosterPeriodStaffing] Error details:', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        });
-        console.error('[bulkCreateRosterPeriodStaffing] Eerste record in failed chunk:', JSON.stringify(chunk[0], null, 2));
-        throw new Error(`Bulk insert fout bij chunk ${chunkNumber}: ${error.message}`);
+        console.error(`[bulkCreateRosterPeriodStaffing] ❌ Supabase error:`, error);
+        throw new Error(`Bulk insert fout: ${error.message}`);
       }
       
-      console.log(`[bulkCreateRosterPeriodStaffing] ✓ Chunk ${chunkNumber}/${totalChunks} succesvol (${data?.length || 0} records aangemaakt)`);
+      if (data) {
+        allCreatedRecords.push(...(data as RosterPeriodStaffing[]));
+      }
+      
+      console.log(`[bulkCreateRosterPeriodStaffing] ✓ Chunk ${chunkNumber}/${totalChunks} succesvol`);
     }
     
     console.log('[bulkCreateRosterPeriodStaffing] ✅ Alle records succesvol aangemaakt!');
+    return allCreatedRecords;
   } catch (err) {
     console.error('[bulkCreateRosterPeriodStaffing] ❌ Unexpected error:', err);
     throw err;
@@ -226,10 +217,7 @@ export async function bulkCreateRosterPeriodStaffing(
 export async function hasRosterPeriodStaffing(rosterId: string): Promise<boolean> {
   try {
     console.log('[hasRosterPeriodStaffing] Checking for rosterId:', rosterId);
-    
-    // === FIX 4: UUID VALIDATIE (STRICT) ===
     validateId(rosterId, 'rosterId');
-    console.log('[hasRosterPeriodStaffing] ✓ RosterId validated (UUID format)');
     
     const { count, error } = await supabase
       .from('roster_period_staffing')
@@ -251,33 +239,78 @@ export async function hasRosterPeriodStaffing(rosterId: string): Promise<boolean
 }
 
 /**
- * Helper functie: Haal min/max staffing op voor een specifieke dag uit ServiceDayStaffing
- * @param service ServiceDayStaffing object
- * @param dayOfWeek 0=Zondag, 1=Maandag, ..., 6=Zaterdag
- * @returns {min: number, max: number}
+ * DRAAD36A: Genereer dagdeel regels voor een roster_period_staffing record
+ * Op basis van team_regels uit service_types
  */
-function getStaffingForDay(service: ServiceDayStaffing, dayOfWeek: number): { min: number; max: number } {
-  switch (dayOfWeek) {
-    case 0: // Zondag
-      return { min: service.zo_min, max: service.zo_max };
-    case 1: // Maandag
-      return { min: service.ma_min, max: service.ma_max };
-    case 2: // Dinsdag
-      return { min: service.di_min, max: service.di_max };
-    case 3: // Woensdag
-      return { min: service.wo_min, max: service.wo_max };
-    case 4: // Donderdag
-      return { min: service.do_min, max: service.do_max };
-    case 5: // Vrijdag
-      return { min: service.vr_min, max: service.vr_max };
-    case 6: // Zaterdag
-      return { min: service.za_min, max: service.za_max };
-    default:
-      return { min: 0, max: 0 };
+async function generateDagdeelRegelsForRecord(
+  rpsRecord: RosterPeriodStaffing,
+  teamRegels: {
+    groen?: TeamRegels | null;
+    oranje?: TeamRegels | null;
+    totaal?: TeamRegels | null;
+  },
+  dagCode: DagCode
+): Promise<CreateDagdeelRegel[]> {
+  const regels: CreateDagdeelRegel[] = [];
+  const dagblokken: DagblokCode[] = ['O', 'M', 'A'];
+  
+  // Team TOT (totaal)
+  if (rpsRecord.team_tot && teamRegels.totaal) {
+    for (const dagblok of dagblokken) {
+      const dagblokStatus: DagblokStatus = teamRegels.totaal[dagCode][dagblok];
+      const status = DAGBLOK_STATUS_NAAR_DAGDEEL_STATUS[dagblokStatus];
+      const aantal = DEFAULT_AANTAL_PER_STATUS[dagblokStatus as Exclude<DagblokStatus, 'AANGEPAST'>] || 0;
+      
+      regels.push({
+        roster_period_staffing_id: rpsRecord.id,
+        dagdeel: DAGBLOK_NAAR_DAGDEEL[dagblok],
+        team: 'TOT',
+        status,
+        aantal
+      });
+    }
   }
+  
+  // Team GRO (groen)
+  if (rpsRecord.team_gro && teamRegels.groen) {
+    for (const dagblok of dagblokken) {
+      const dagblokStatus: DagblokStatus = teamRegels.groen[dagCode][dagblok];
+      const status = DAGBLOK_STATUS_NAAR_DAGDEEL_STATUS[dagblokStatus];
+      const aantal = DEFAULT_AANTAL_PER_STATUS[dagblokStatus as Exclude<DagblokStatus, 'AANGEPAST'>] || 0;
+      
+      regels.push({
+        roster_period_staffing_id: rpsRecord.id,
+        dagdeel: DAGBLOK_NAAR_DAGDEEL[dagblok],
+        team: 'GRO',
+        status,
+        aantal
+      });
+    }
+  }
+  
+  // Team ORA (oranje)
+  if (rpsRecord.team_ora && teamRegels.oranje) {
+    for (const dagblok of dagblokken) {
+      const dagblokStatus: DagblokStatus = teamRegels.oranje[dagCode][dagblok];
+      const status = DAGBLOK_STATUS_NAAR_DAGDEEL_STATUS[dagblokStatus];
+      const aantal = DEFAULT_AANTAL_PER_STATUS[dagblokStatus as Exclude<DagblokStatus, 'AANGEPAST'>] || 0;
+      
+      regels.push({
+        roster_period_staffing_id: rpsRecord.id,
+        dagdeel: DAGBLOK_NAAR_DAGDEEL[dagblok],
+        team: 'ORA',
+        status,
+        aantal
+      });
+    }
+  }
+  
+  return regels;
 }
 
-// Auto-fill: vul alle dagen met standaardwaarden per dienst en dagsoort
+/**
+ * DRAAD36A: Hoofdfunctie - genereer roster_period_staffing EN dagdelen
+ */
 export async function generateRosterPeriodStaffing(
   rosterId: string,
   startDate: string,
@@ -285,192 +318,134 @@ export async function generateRosterPeriodStaffing(
 ): Promise<void> {
   try {
     console.log('\n' + '='.repeat(80));
-    console.log('[generateRosterPeriodStaffing] 🚀 START GENERATIE');
+    console.log('[generateRosterPeriodStaffing] 🚀 START GENERATIE (DRAAD36A)');
     console.log('[generateRosterPeriodStaffing] RosterId:', rosterId);
     console.log('[generateRosterPeriodStaffing] Periode:', startDate, 'tot', endDate);
     console.log('='.repeat(80) + '\n');
     
-    // === VALIDATIE INPUT PARAMETERS ===
-    console.log('[generateRosterPeriodStaffing] STAP 0: Valideren input parameters...');
-    
-    if (!rosterId || typeof rosterId !== 'string') {
-      throw new Error(`Ongeldige rosterId: "${rosterId}" (moet een string zijn)`);
+    // Validatie
+    if (!rosterId || !isValidUUID(rosterId)) {
+      throw new Error('Ongeldige rosterId');
+    }
+    if (!isValidISODate(startDate) || !isValidISODate(endDate)) {
+      throw new Error('Ongeldige datums');
     }
     
-    // FIX: Valideer rosterId format - moet UUID zijn (geen custom formats meer)
-    if (!isValidUUID(rosterId)) {
-      throw new Error(
-        `Ongeldige rosterId format: "${rosterId}". ` +
-        `Moet een geldige UUID zijn (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)`
-      );
-    }
-    
-    if (!startDate || typeof startDate !== 'string') {
-      throw new Error(`Ongeldige startDate: "${startDate}" (moet een string zijn)`);
-    }
-    
-    if (!endDate || typeof endDate !== 'string') {
-      throw new Error(`Ongeldige endDate: "${endDate}" (moet een string zijn)`);
-    }
-    
-    if (!isValidISODate(startDate)) {
-      throw new Error(
-        `Ongeldige startDate format: "${startDate}". ` +
-        `Moet ISO8601 datum zijn (YYYY-MM-DD)`
-      );
-    }
-    
-    if (!isValidISODate(endDate)) {
-      throw new Error(
-        `Ongeldige endDate format: "${endDate}". ` +
-        `Moet ISO8601 datum zijn (YYYY-MM-DD)`
-      );
-    }
-    
-    // Valideer dat startDate voor endDate ligt
     const start = new Date(startDate + 'T00:00:00');
     const end = new Date(endDate + 'T00:00:00');
-    
     if (start > end) {
-      throw new Error(
-        `Ongeldige datumrange: startDate (${startDate}) moet voor endDate (${endDate}) liggen`
-      );
+      throw new Error('startDate moet voor endDate liggen');
     }
     
-    console.log('[generateRosterPeriodStaffing] ✓ Alle input parameters gevalideerd');
-    console.log('[generateRosterPeriodStaffing] ✓ RosterId format: geldige UUID');
-    console.log('[generateRosterPeriodStaffing] ✓ Datums: geldig ISO8601 format');
-    console.log('[generateRosterPeriodStaffing] ✓ Datumrange: geldig (start <= end)');
-    console.log('');
-    
     // Check of data al bestaat
-    console.log('[generateRosterPeriodStaffing] STAP 1: Check of data al bestaat...');
     const alreadyExists = await hasRosterPeriodStaffing(rosterId);
     if (alreadyExists) {
       console.log('[generateRosterPeriodStaffing] ⚠️  Data bestaat al, skip generatie');
       return;
     }
-    console.log('[generateRosterPeriodStaffing] ✓ Geen bestaande data, ga verder\n');
     
-    // Haal diensten op
-    console.log('[generateRosterPeriodStaffing] STAP 2: Ophalen diensten...');
-    const services = await getAllServicesDayStaffing();
+    // STAP 1: Haal diensten op (met team_regels)
+    console.log('[generateRosterPeriodStaffing] STAP 1: Ophalen diensten...');
+    const services = await getAllServices();
     console.log('[generateRosterPeriodStaffing] ✓ Diensten opgehaald:', services.length);
     
     if (services.length === 0) {
-      throw new Error('Geen diensten gevonden. Configureer eerst diensten in de instellingen.');
+      throw new Error('Geen diensten gevonden');
     }
     
-    // Log eerste dienst voor debugging
-    console.log('[generateRosterPeriodStaffing] Eerste dienst sample:', JSON.stringify(services[0], null, 2));
-    console.log('');
-    
-    // === VALIDATIE DIENSTEN ===
-    console.log('[generateRosterPeriodStaffing] STAP 2a: Valideren diensten...');
-    
-    for (let i = 0; i < services.length; i++) {
-      const service = services[i];
-      
-      if (!service.service_id) {
-        console.error(`[generateRosterPeriodStaffing] ❌ Dienst ${i} heeft geen service_id:`, service);
-        throw new Error(
-          `Dienst op positie ${i} mist service_id veld`
-        );
-      }
-      
-      if (typeof service.service_id !== 'string') {
-        throw new Error(
-          `Dienst ${i} heeft ongeldige service_id type: ` +
-          `"${typeof service.service_id}" (moet string zijn)`
-        );
-      }
-      
-      // Service IDs zijn custom strings (st2, nb, etc) - GEEN UUID validatie!
-    }
-    
-    console.log('[generateRosterPeriodStaffing] ✓ Alle diensten hebben een geldig service_id');
-    console.log('');
-    
-    // Haal feestdagen op
-    console.log('[generateRosterPeriodStaffing] STAP 3: Ophalen feestdagen...');
+    // STAP 2: Haal feestdagen op
+    console.log('[generateRosterPeriodStaffing] STAP 2: Ophalen feestdagen...');
     const holidays = await getFallbackHolidays(startDate, endDate);
-    console.log('[generateRosterPeriodStaffing] ✓ Feestdagen opgehaald:', holidays.length);
-    if (holidays.length > 0) {
-      console.log('[generateRosterPeriodStaffing] Feestdagen:', holidays.join(', '));
-    }
-    console.log('');
+    console.log('[generateRosterPeriodStaffing] ✓ Feestdagen:', holidays.length);
     
-    // Genereer alle datums
-    console.log('[generateRosterPeriodStaffing] STAP 4: Genereer datums...');
+    // STAP 3: Genereer datums
+    console.log('[generateRosterPeriodStaffing] STAP 3: Genereer datums...');
     const days: string[] = [];
-    
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       days.push(d.toISOString().split('T')[0]);
     }
+    console.log('[generateRosterPeriodStaffing] ✓ Dagen:', days.length);
     
-    console.log('[generateRosterPeriodStaffing] ✓ Dagen gegenereerd:', days.length);
-    console.log('[generateRosterPeriodStaffing] Eerste dag:', days[0]);
-    console.log('[generateRosterPeriodStaffing] Laatste dag:', days[days.length - 1]);
-    console.log('');
-    
-    const isHoliday = (date: string) => holidays.includes(date);
-    const result: Omit<RosterPeriodStaffing, 'id' | 'created_at' | 'updated_at'>[] = [];
-    
-    // Genereer records voor elke dienst en elke dag
-    console.log('[generateRosterPeriodStaffing] STAP 5: Genereer records...');
-    let recordCount = 0;
+    // STAP 4: Genereer roster_period_staffing records
+    console.log('[generateRosterPeriodStaffing] STAP 4: Genereer RPS records...');
+    const rpsRecords: Omit<RosterPeriodStaffing, 'id' | 'created_at' | 'updated_at'>[] = [];
     
     for (const service of services) {
       for (const date of days) {
-        const dayOfWeek = new Date(date + 'T00:00:00').getDay(); // 0=Zo..6=Za
-        let base = getStaffingForDay(service, dayOfWeek);
-        
-        // Gebruik zondag-waarden voor feestdagen
-        if (isHoliday(date)) {
-          base = getStaffingForDay(service, 0);
-        }
-        
-        const record = {
+        rpsRecords.push({
           roster_id: rosterId,
-          service_id: service.service_id,
+          service_id: service.id,
           date,
-          min_staff: base.min,
-          max_staff: base.max,
-          team_tot: service.tot_enabled ?? null,
-          team_gro: service.gro_enabled ?? null,
-          team_ora: service.ora_enabled ?? null
-        };
-        
-        result.push(record);
-        recordCount++;
-        
-        // Log eerste record voor debugging
-        if (recordCount === 1) {
-          console.log('[generateRosterPeriodStaffing] Eerste record sample:', JSON.stringify(record, null, 2));
-        }
+          min_staff: 0,
+          max_staff: 9,
+          team_tot: service.team_totaal_regels ? true : null,
+          team_gro: service.team_groen_regels ? true : null,
+          team_ora: service.team_oranje_regels ? true : null
+        });
       }
     }
     
-    console.log('[generateRosterPeriodStaffing] ✓ Records voorbereid:', result.length);
-    console.log('[generateRosterPeriodStaffing] Verwacht aantal:', services.length, 'diensten ×', days.length, 'dagen =', services.length * days.length, 'records');
-    console.log('');
+    console.log('[generateRosterPeriodStaffing] ✓ RPS records voorbereid:', rpsRecords.length);
     
-    // Bulk insert
-    console.log('[generateRosterPeriodStaffing] STAP 6: Start bulk insert...');
-    await bulkCreateRosterPeriodStaffing(result);
+    // STAP 5: Bulk insert RPS records (en krijg IDs terug)
+    console.log('[generateRosterPeriodStaffing] STAP 5: Bulk insert RPS...');
+    const createdRpsRecords = await bulkCreateRosterPeriodStaffing(rpsRecords);
+    console.log('[generateRosterPeriodStaffing] ✅ RPS records aangemaakt:', createdRpsRecords.length);
+    
+    // STAP 6: Genereer dagdeel regels
+    console.log('[generateRosterPeriodStaffing] STAP 6: Genereer dagdeel regels...');
+    const allDagdeelRegels: CreateDagdeelRegel[] = [];
+    
+    for (const rpsRecord of createdRpsRecords) {
+      // Vind corresponderende service
+      const service = services.find(s => s.id === rpsRecord.service_id);
+      if (!service) continue;
+      
+      // Bepaal dagcode (ma/di/wo/do/vr/za/zo)
+      const dateObj = new Date(rpsRecord.date + 'T00:00:00');
+      let dagCode = getDagCodeFromDate(dateObj);
+      
+      // Feestdag = zondag behandelen
+      if (holidays.includes(rpsRecord.date)) {
+        dagCode = 'zo';
+      }
+      
+      // Genereer dagdeel regels voor deze RPS record
+      const dagdeelRegels = await generateDagdeelRegelsForRecord(
+        rpsRecord,
+        {
+          groen: service.team_groen_regels,
+          oranje: service.team_oranje_regels,
+          totaal: service.team_totaal_regels
+        },
+        dagCode
+      );
+      
+      allDagdeelRegels.push(...dagdeelRegels);
+    }
+    
+    console.log('[generateRosterPeriodStaffing] ✓ Dagdeel regels voorbereid:', allDagdeelRegels.length);
+    
+    // STAP 7: Bulk insert dagdeel regels
+    if (allDagdeelRegels.length > 0) {
+      console.log('[generateRosterPeriodStaffing] STAP 7: Bulk insert dagdelen...');
+      const success = await bulkCreateDagdeelRegels(allDagdeelRegels);
+      if (success) {
+        console.log('[generateRosterPeriodStaffing] ✅ Dagdeel regels aangemaakt');
+      } else {
+        console.warn('[generateRosterPeriodStaffing] ⚠️  Dagdeel regels aanmaken gefaald');
+      }
+    }
     
     console.log('\n' + '='.repeat(80));
     console.log('[generateRosterPeriodStaffing] ✅ GENERATIE VOLTOOID!');
-    console.log('[generateRosterPeriodStaffing] Totaal records aangemaakt:', result.length);
+    console.log('[generateRosterPeriodStaffing] RPS records:', createdRpsRecords.length);
+    console.log('[generateRosterPeriodStaffing] Dagdeel regels:', allDagdeelRegels.length);
     console.log('='.repeat(80) + '\n');
   } catch (err) {
     console.error('\n' + '='.repeat(80));
     console.error('[generateRosterPeriodStaffing] ❌ FOUT OPGETREDEN');
-    console.error('[generateRosterPeriodStaffing] Error type:', err instanceof Error ? err.constructor.name : typeof err);
-    console.error('[generateRosterPeriodStaffing] Error message:', err instanceof Error ? err.message : String(err));
-    if (err instanceof Error && err.stack) {
-      console.error('[generateRosterPeriodStaffing] Stack trace:', err.stack);
-    }
+    console.error('[generateRosterPeriodStaffing] Error:', err);
     console.error('='.repeat(80) + '\n');
     throw err;
   }
