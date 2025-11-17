@@ -1,3 +1,14 @@
-DRAAD36B - DienstenPerDag Frontend Component
-Timestamp: 2025-11-17 19:25:00 UTC
-Deploy trigger voor nieuwe /diensten-per-dag route
+DRAAD36C - DienstenPerDag KRITISCHE FIX
+Timestamp: 2025-11-17 20:08:00 UTC
+
+KRITISCHE FIX GEDEPLOYED:
+- DienstenPerDag gebruikt nu rosterId uit URL parameter
+- Geen hardcoded "actief rooster" lookup meer
+- Dynamische week berekening uit roster start/end dates
+- Correcte Suspense wrapper toegevoegd
+- Robuuste error handling geïmplementeerd
+
+Deploy trigger voor gefixte /diensten-per-dag route
+
+Flow volledig operationeel:
+Dashboard → Rooster Ontwerpen → Dashboard Rooster Ontwerp → Diensten per dagdeel aanpassen ✅
