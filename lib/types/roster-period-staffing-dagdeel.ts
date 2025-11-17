@@ -1,0 +1,175 @@
+// lib/types/roster-period-staffing-dagdeel.ts
+// ============================================================================
+// DRAAD36A: Roster Period Staffing Dagdelen Types
+// Datum: 2025-11-17
+// ============================================================================
+
+/**
+ * Dagdeel codes
+ * 0 = Ochtend
+ * M = Middag  
+ * A = Avond
+ */
+export type Dagdeel = '0' | 'M' | 'A';
+
+/**
+ * Team codes
+ * TOT = Totaal (hele praktijk)
+ * GRO = Groen
+ * ORA = Oranje
+ */
+export type TeamDagdeel = 'TOT' | 'GRO' | 'ORA';
+
+/**
+ * Status van een dagdeel regel
+ * MOET = Verplicht (minimaal aantal personen vereist)
+ * MAG = Optioneel (mag ingepland worden)
+ * MAG_NIET = Niet toegestaan (0 personen)
+ * AANGEPAST = Handmatig aangepast door planner
+ */
+export type DagdeelStatus = 'MOET' | 'MAG' | 'MAG_NIET' | 'AANGEPAST';
+
+/**
+ * Dagdeel regel voor een specifiek team op een specifieke datum
+ */
+export interface RosterPeriodStaffingDagdeel {
+  id: string;
+  roster_period_staffing_id: string;
+  dagdeel: Dagdeel;
+  team: TeamDagdeel;
+  status: DagdeelStatus;
+  aantal: number; // 0-9
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Input voor het aanmaken van een nieuwe dagdeel regel
+ */
+export type CreateDagdeelRegel = Omit<
+  RosterPeriodStaffingDagdeel,
+  'id' | 'created_at' | 'updated_at'
+>;
+
+/**
+ * Input voor het updaten van een dagdeel regel
+ */
+export interface UpdateDagdeelRegel {
+  status?: DagdeelStatus;
+  aantal?: number;
+}
+
+/**
+ * Mapping van DagblokCode (uit service.ts) naar Dagdeel
+ */
+export const DAGBLOK_NAAR_DAGDEEL: Record<'O' | 'M' | 'A', Dagdeel> = {
+  O: '0',
+  M: 'M',
+  A: 'A'
+};
+
+/**
+ * Mapping van Dagdeel naar DagblokCode
+ */
+export const DAGDEEL_NAAR_DAGBLOK: Record<Dagdeel, 'O' | 'M' | 'A'> = {
+  '0': 'O',
+  'M': 'M',
+  'A': 'A'
+};
+
+/**
+ * Mapping van TeamCode (uit service.ts) naar TeamDagdeel
+ */
+export const TEAM_NAAR_TEAM_DAGDEEL: Record<'groen' | 'oranje' | 'totaal', TeamDagdeel> = {
+  groen: 'GRO',
+  oranje: 'ORA',
+  totaal: 'TOT'
+};
+
+/**
+ * Mapping van TeamDagdeel naar TeamCode
+ */
+export const TEAM_DAGDEEL_NAAR_TEAM: Record<TeamDagdeel, 'groen' | 'oranje' | 'totaal'> = {
+  GRO: 'groen',
+  ORA: 'oranje',
+  TOT: 'totaal'
+};
+
+/**
+ * Mapping van DagblokStatus naar DagdeelStatus
+ */
+export const DAGBLOK_STATUS_NAAR_DAGDEEL_STATUS: Record<string, DagdeelStatus> = {
+  'MOET': 'MOET',
+  'MAG': 'MAG',
+  'MAG_NIET': 'MAG_NIET'
+};
+
+/**
+ * Labels voor UI
+ */
+export const DAGDEEL_LABELS: Record<Dagdeel, string> = {
+  '0': 'Ochtend',
+  'M': 'Middag',
+  'A': 'Avond'
+};
+
+export const TEAM_DAGDEEL_LABELS: Record<TeamDagdeel, string> = {
+  TOT: 'Praktijk Totaal',
+  GRO: 'Groen',
+  ORA: 'Oranje'
+};
+
+export const DAGDEEL_STATUS_LABELS: Record<DagdeelStatus, string> = {
+  MOET: 'Verplicht',
+  MAG: 'Optioneel',
+  MAG_NIET: 'Niet toegestaan',
+  AANGEPAST: 'Aangepast'
+};
+
+/**
+ * Kleuren voor status (hex)
+ */
+export const DAGDEEL_STATUS_COLORS: Record<DagdeelStatus, string> = {
+  MOET: '#EF4444',      // Rood
+  MAG: '#10B981',       // Groen
+  MAG_NIET: '#9CA3AF',  // Grijs
+  AANGEPAST: '#3B82F6'  // Blauw
+};
+
+/**
+ * Tailwind classes voor status
+ */
+export const DAGDEEL_STATUS_BG_COLORS: Record<DagdeelStatus, string> = {
+  MOET: 'bg-red-500',
+  MAG: 'bg-green-500',
+  MAG_NIET: 'bg-gray-400',
+  AANGEPAST: 'bg-blue-500'
+};
+
+/**
+ * Standaard waarden per status
+ */
+export const DEFAULT_AANTAL_PER_STATUS: Record<Exclude<DagdeelStatus, 'AANGEPAST'>, number> = {
+  MOET: 1,
+  MAG: 1,
+  MAG_NIET: 0
+};
+
+/**
+ * Validatie functies
+ */
+export function isValidDagdeel(value: unknown): value is Dagdeel {
+  return value === '0' || value === 'M' || value === 'A';
+}
+
+export function isValidTeamDagdeel(value: unknown): value is TeamDagdeel {
+  return value === 'TOT' || value === 'GRO' || value === 'ORA';
+}
+
+export function isValidDagdeelStatus(value: unknown): value is DagdeelStatus {
+  return value === 'MOET' || value === 'MAG' || value === 'MAG_NIET' || value === 'AANGEPAST';
+}
+
+export function isValidAantal(value: number): boolean {
+  return Number.isInteger(value) && value >= 0 && value <= 9;
+}
