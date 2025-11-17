@@ -84,6 +84,14 @@ export default function DagblokMatrix({
 
   const verplichtCount = telVerplichteDagblokken();
 
+  // Vervang weergave naam 'Team totaal' door 'Praktijk totaal'
+  const getTeamNaamWeergave = (naam: string) => {
+    if (naam.trim().toLowerCase() === 'totaal' || naam.trim().toLowerCase() === 'team totaal') {
+      return 'Praktijk totaal';
+    }
+    return naam;
+  };
+
   return (
     <div className="bg-white rounded-lg border border-gray-200">
       {/* Header met team naam en stats */}
@@ -91,7 +99,7 @@ export default function DagblokMatrix({
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-gray-900 flex items-center gap-2">
             <span className="text-lg">🎯</span>
-            Team {teamNaam}
+            {getTeamNaamWeergave(`Team ${teamNaam}`)}
           </h3>
           <div className="flex items-center gap-3 text-sm">
             <span className="text-gray-600">
