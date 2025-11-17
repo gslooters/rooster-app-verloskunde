@@ -16,9 +16,9 @@ interface RosterInfo {
 
 interface Service {
   id: string;
-  name: string;
+  naam: string;
   code: string;
-  color: string;
+  kleur: string;
 }
 
 interface Assignment {
@@ -32,7 +32,8 @@ interface Assignment {
 
 interface Employee {
   id: string;
-  name: string;
+  voornaam: string;
+  achternaam: string;
 }
 
 // Utility functions
@@ -92,9 +93,9 @@ function DienstenPerDagContent() {
       try {
         setLoading(true);
 
-        // Load roster
+        // Load roster - GEFIXTE TABELNAAM: 'roosters' (dubbele o)
         const { data: rosterData, error: rosterError } = await supabase
-          .from('rosters')
+          .from('roosters')
           .select('*')
           .eq('id', rosterId)
           .single();
@@ -106,16 +107,17 @@ function DienstenPerDagContent() {
         const { data: employeesData, error: employeesError } = await supabase
           .from('employees')
           .select('*')
-          .order('name');
+          .order('achternaam');
 
         if (employeesError) throw employeesError;
         setEmployees(employeesData || []);
 
-        // Load services
+        // Load services - GEFIXTE TABELNAAM: 'service_types'
         const { data: servicesData, error: servicesError } = await supabase
-          .from('services')
+          .from('service_types')
           .select('*')
-          .order('name');
+          .eq('actief', true)
+          .order('naam');
 
         if (servicesError) throw servicesError;
         setServices(servicesData || []);
@@ -307,7 +309,7 @@ function DienstenPerDagContent() {
               {employees.map(employee => (
                 <tr key={employee.id} className="hover:bg-gray-50">
                   <td className="border border-gray-300 p-2 font-medium sticky left-0 bg-white z-10">
-                    {employee.name}
+                    {employee.voornaam} {employee.achternaam}
                   </td>
                   {weekDates.map((date, dayIndex) => {
                     const dateStr = formatDate(date);
@@ -337,7 +339,7 @@ function DienstenPerDagContent() {
                                 }
                                 className="text-xs p-1 border rounded cursor-pointer"
                                 style={{
-                                  backgroundColor: service?.color || '#fff',
+                                  backgroundColor: service?.kleur || '#fff',
                                   color: service ? '#000' : '#666'
                                 }}
                               >
@@ -346,7 +348,7 @@ function DienstenPerDagContent() {
                                 </option>
                                 {services.map(s => (
                                   <option key={s.id} value={s.id}>
-                                    {s.code} - {s.name}
+                                    {s.code} - {s.naam}
                                   </option>
                                 ))}
                               </select>
@@ -371,10 +373,10 @@ function DienstenPerDagContent() {
             <div
               key={service.id}
               className="flex items-center gap-2 px-3 py-1 rounded"
-              style={{ backgroundColor: service.color }}
+              style={{ backgroundColor: service.kleur }}
             >
               <span className="font-mono font-bold">{service.code}</span>
-              <span>{service.name}</span>
+              <span>{service.naam}</span>
             </div>
           ))}
         </div>
