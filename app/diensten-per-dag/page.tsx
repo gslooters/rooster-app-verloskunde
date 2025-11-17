@@ -3,15 +3,17 @@
 import { supabase } from '@/lib/supabase';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState, Suspense } from 'react';
-import { ChevronLeft, ChevronRight, ArrowLeft, Calendar } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ArrowLeft, Calendar, Sun, Sunset, Moon } from 'lucide-react';
 
-// Types - AANGEPAST NAAR WERKELIJKE DATABASE SCHEMA
+// ============================================================================
+// TYPES
+// ============================================================================
+
 interface RosterInfo {
   id: string;
-  name: string;
+  naam: string;
   start_date: string;
   end_date: string;
-  status: string;
 }
 
 interface Service {
@@ -21,7 +23,15 @@ interface Service {
   kleur: string;
 }
 
-// GEFIXTE TYPE - Correct volgens roster_period_staffing_dagdelen schema
+interface RosterPeriodStaffing {
+  id: string;
+  roster_id: string;
+  service_id: string;
+  date: string;
+  min_staff: number;
+  max_staff: number;
+}
+
 interface DagdeelAssignment {
   id?: string;
   roster_period_staffing_id: string;
@@ -33,34 +43,42 @@ interface DagdeelAssignment {
   updated_at?: string;
 }
 
-interface Employee {
-  id: string;
-  voornaam: string;
-  achternaam: string;
+interface CellData {
+  rpsId: string;
+  serviceId: string;
+  date: string;
+  dagdeel: string;
   team: string;
+  status: string;
+  aantal: number;
+  assignmentId?: string;
 }
 
-// Utility functions
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
 function getWeekNumber(date: Date): number {
-  const firstDayOfYear = new Date(date.getFullYear(), 0, 1);
-  const pastDaysOfYear = (date.getTime() - firstDayOfYear.getTime()) / 86400000;
-  return Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
 }
 
 function getWeekDates(weekNumber: number, year: number): Date[] {
-  const firstDayOfYear = new Date(year, 0, 1);
-  const daysOffset = (weekNumber - 1) * 7;
-  const weekStart = new Date(firstDayOfYear.getTime() + daysOffset * 86400000);
-  
-  // Adjust to Monday
-  const dayOfWeek = weekStart.getDay();
-  const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-  weekStart.setDate(weekStart.getDate() + diff);
-  
+  const simple = new Date(year, 0, 1 + (weekNumber - 1) * 7);
+  const dayOfWeek = simple.getDay();
+  const ISOweekStart = simple;
+  if (dayOfWeek <= 4) {
+    ISOweekStart.setDate(simple.getDate() - simple.getDay() + 1);
+  } else {
+    ISOweekStart.setDate(simple.getDate() + 8 - simple.getDay());
+  }
   const dates: Date[] = [];
   for (let i = 0; i < 7; i++) {
-    const date = new Date(weekStart);
-    date.setDate(weekStart.getDate() + i);
+    const date = new Date(ISOweekStart);
+    date.setDate(ISOweekStart.getDate() + i);
     dates.push(date);
   }
   return dates;
@@ -70,22 +88,48 @@ function formatDate(date: Date): string {
   return date.toISOString().split('T')[0];
 }
 
-// Main content component
+function formatDateDisplay(date: Date): string {
+  const day = date.getDate().toString().padStart(2, '0');
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  return `${day}/${month}`;
+}
+
+function getDayName(date: Date): string {
+  const days = ['ZO', 'MA', 'DI', 'WO', 'DO', 'VR', 'ZA'];
+  return days[date.getDay()];
+}
+
+function isWeekendDay(date: Date): boolean {
+  const day = date.getDay();
+  return day === 0 || day === 6;
+}
+
+// ============================================================================
+// MAIN CONTENT COMPONENT
+// ============================================================================
+
 function DienstenPerDagContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const rosterId = searchParams?.get('rosterId');
 
-  const [roster, setRoster] = useState<RosterInfo | null>(null);
-  const [employees, setEmployees] = useState<Employee[]>([]);
+  // State
+  const [rosterInfo, setRosterInfo] = useState<RosterInfo | null>(null);
   const [services, setServices] = useState<Service[]>([]);
-  const [assignments, setAssignments] = useState<DagdeelAssignment[]>([]);
+  const [rpsRecords, setRpsRecords] = useState<RosterPeriodStaffing[]>([]);
+  const [dagdeelAssignments, setDagdeelAssignments] = useState<DagdeelAssignment[]>([]);
   const [currentWeek, setCurrentWeek] = useState<number>(getWeekNumber(new Date()));
   const [currentYear] = useState<number>(new Date().getFullYear());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Load data
+  const dagdelen = ['ochtend', 'middag', 'avond'];
+  const teams = ['GRO', 'ORA', 'PRA']; // Groen, Oranje, Praktijk
+
+  // ============================================================================
+  // DATA LOADING
+  // ============================================================================
+
   useEffect(() => {
     async function loadData() {
       if (!rosterId) {
@@ -97,38 +141,69 @@ function DienstenPerDagContent() {
       try {
         setLoading(true);
 
-        // Load roster
-        const { data: rosterData, error: rosterError } = await supabase
-          .from('roosters')
+        // 1. Haal roster info uit localStorage (zoals Dashboard doet)
+        if (typeof window === 'undefined') {
+          throw new Error('Browser omgeving niet beschikbaar');
+        }
+
+        const rostersRaw = localStorage.getItem('verloskunde_rosters');
+        if (!rostersRaw) {
+          throw new Error('Geen rosters gevonden. Maak eerst een rooster aan.');
+        }
+
+        let rosters;
+        try {
+          rosters = JSON.parse(rostersRaw);
+        } catch (parseError) {
+          throw new Error('Ongeldige roster data');
+        }
+
+        const rosterData = rosters.find((r: any) => r.id === rosterId);
+        if (!rosterData) {
+          throw new Error(`Rooster niet gevonden`);
+        }
+
+        const roster: RosterInfo = {
+          id: rosterData.id,
+          naam: rosterData.naam || rosterData.name || 'Naamloos Rooster',
+          start_date: rosterData.start_date || rosterData.startDate || rosterData.roster_start,
+          end_date: rosterData.end_date || rosterData.endDate || rosterData.roster_end
+        };
+
+        if (!roster.start_date || !roster.end_date) {
+          throw new Error('Roster periode ontbreekt');
+        }
+
+        setRosterInfo(roster);
+
+        // 2. Haal roster_period_staffing records voor dit rooster
+        const { data: rpsData, error: rpsError } = await supabase
+          .from('roster_period_staffing')
           .select('*')
-          .eq('id', rosterId)
-          .single();
+          .eq('roster_id', rosterId);
 
-        if (rosterError) throw rosterError;
-        setRoster(rosterData);
+        if (rpsError) throw rpsError;
+        setRpsRecords(rpsData || []);
 
-        // Load employees
-        const { data: employeesData, error: employeesError } = await supabase
-          .from('employees')
-          .select('*')
-          .eq('actief', true)
-          .order('achternaam');
+        // 3. Haal unieke services uit deze RPS records
+        const uniqueServiceIds = [...new Set((rpsData || []).map(r => r.service_id))];
+        
+        if (uniqueServiceIds.length > 0) {
+          const { data: servicesData, error: servicesError } = await supabase
+            .from('service_types')
+            .select('*')
+            .in('id', uniqueServiceIds)
+            .eq('actief', true)
+            .order('naam');
 
-        if (employeesError) throw employeesError;
-        setEmployees(employeesData || []);
+          if (servicesError) throw servicesError;
+          setServices(servicesData || []);
+        } else {
+          setServices([]);
+        }
 
-        // Load services
-        const { data: servicesData, error: servicesError } = await supabase
-          .from('service_types')
-          .select('*')
-          .eq('actief', true)
-          .order('naam');
-
-        if (servicesError) throw servicesError;
-        setServices(servicesData || []);
-
-        // GEFIXTE QUERY - Gebruik correcte tabelnaam roster_period_staffing_dagdelen
-        const { data: assignmentsData, error: assignmentsError } = await supabase
+        // 4. Haal alle dagdeel assignments voor dit rooster
+        const { data: dagdeelData, error: dagdeelError } = await supabase
           .from('roster_period_staffing_dagdelen')
           .select(`
             *,
@@ -136,12 +211,11 @@ function DienstenPerDagContent() {
           `)
           .eq('roster_period_staffing.roster_id', rosterId);
 
-        if (assignmentsError) {
-          console.error('Error loading dagdeel assignments:', assignmentsError);
-          throw assignmentsError;
+        if (dagdeelError) {
+          console.error('Error loading dagdeel assignments:', dagdeelError);
         }
         
-        setAssignments(assignmentsData || []);
+        setDagdeelAssignments(dagdeelData || []);
         setError(null);
       } catch (err: any) {
         console.error('Error loading data:', err);
@@ -154,45 +228,112 @@ function DienstenPerDagContent() {
     loadData();
   }, [rosterId]);
 
-  // GEFIXTE FUNCTIE - Gebruik correcte tabelnaam en velden
-  async function handleDagdeelChange(
-    rosterPeriodStaffingId: string,
-    dagdeel: string,
-    team: string,
-    newAantal: number
-  ) {
+  // ============================================================================
+  // CELL DATA HELPER
+  // ============================================================================
+
+  function getCellData(serviceId: string, date: string, dagdeel: string, team: string): CellData | null {
+    // Zoek RPS record voor deze dienst + datum
+    const rps = rpsRecords.find(r => 
+      r.service_id === serviceId && 
+      r.date === date
+    );
+
+    if (!rps) {
+      return null;
+    }
+
+    // Zoek dagdeel assignment
+    const assignment = dagdeelAssignments.find(a =>
+      a.roster_period_staffing_id === rps.id &&
+      a.dagdeel === dagdeel &&
+      a.team === team
+    );
+
+    return {
+      rpsId: rps.id,
+      serviceId,
+      date,
+      dagdeel,
+      team,
+      status: assignment?.status || 'MAG',
+      aantal: assignment?.aantal || 0,
+      assignmentId: assignment?.id
+    };
+  }
+
+  // ============================================================================
+  // HANDLE CELL CHANGE
+  // ============================================================================
+
+  async function handleCellChange(cellData: CellData, newAantal: number) {
     if (!rosterId) return;
 
-    try {
-      const existing = assignments.find(
-        a => 
-          a.roster_period_staffing_id === rosterPeriodStaffingId &&
-          a.dagdeel === dagdeel &&
-          a.team === team
-      );
+    const oldAantal = cellData.aantal;
+    const oldStatus = cellData.status;
 
-      if (existing?.id) {
-        // Update bestaande
+    // Validatie
+    if (newAantal < 0 || newAantal > 9) {
+      alert('Aantal moet tussen 0 en 9 zijn');
+      return;
+    }
+
+    // Bepaal of waarschuwing nodig is
+    let needsWarning = false;
+    let warningMessage = '';
+    let newStatus = oldStatus;
+
+    if (oldStatus === 'MOET' && newAantal === 0) {
+      needsWarning = true;
+      warningMessage = 'WAARSCHUWING: Dit is een MOET dienst. Weet u zeker dat u deze op 0 wilt zetten?';
+      newStatus = 'AANGEPAST';
+    } else if (oldStatus === 'MAG NIET' && newAantal !== 0) {
+      needsWarning = true;
+      warningMessage = 'WAARSCHUWING: Dit is een MAG NIET dienst. Weet u zeker dat u een aantal wilt invoeren?';
+      newStatus = 'AANGEPAST';
+    } else if (oldStatus === 'MOET' && newAantal !== oldAantal) {
+      newStatus = 'AANGEPAST';
+    } else if (oldStatus === 'MAG NIET' && newAantal !== 0) {
+      newStatus = 'AANGEPAST';
+    }
+
+    // Toon waarschuwing indien nodig
+    if (needsWarning) {
+      const confirmed = confirm(warningMessage);
+      if (!confirmed) {
+        return; // Gebruiker annuleert
+      }
+    }
+
+    try {
+      if (cellData.assignmentId) {
+        // Update bestaande assignment
         const { error } = await supabase
           .from('roster_period_staffing_dagdelen')
           .update({ 
             aantal: newAantal,
+            status: newStatus,
             updated_at: new Date().toISOString()
           })
-          .eq('id', existing.id);
+          .eq('id', cellData.assignmentId);
 
         if (error) throw error;
 
-        setAssignments(prev =>
-          prev.map(a => (a.id === existing.id ? { ...a, aantal: newAantal } : a))
+        // Update lokale state
+        setDagdeelAssignments(prev =>
+          prev.map(a => 
+            a.id === cellData.assignmentId 
+              ? { ...a, aantal: newAantal, status: newStatus }
+              : a
+          )
         );
       } else {
-        // Nieuwe invoegen
+        // Nieuwe assignment aanmaken
         const newAssignment: DagdeelAssignment = {
-          roster_period_staffing_id: rosterPeriodStaffingId,
-          dagdeel,
-          team,
-          status: 'MAG',
+          roster_period_staffing_id: cellData.rpsId,
+          dagdeel: cellData.dagdeel,
+          team: cellData.team,
+          status: newStatus,
           aantal: newAantal
         };
 
@@ -204,18 +345,86 @@ function DienstenPerDagContent() {
 
         if (error) throw error;
         if (data) {
-          setAssignments(prev => [...prev, data]);
+          setDagdeelAssignments(prev => [...prev, data]);
         }
       }
     } catch (err: any) {
-      console.error('Error saving dagdeel assignment:', err);
+      console.error('Error saving:', err);
       alert('Fout bij opslaan: ' + err.message);
     }
   }
 
+  // ============================================================================
+  // WEEK NAVIGATION
+  // ============================================================================
+
+  function canGoToPreviousWeek(): boolean {
+    if (!rosterInfo) return false;
+    const weekDates = getWeekDates(currentWeek - 1, currentYear);
+    const weekStart = formatDate(weekDates[0]);
+    return weekStart >= rosterInfo.start_date;
+  }
+
+  function canGoToNextWeek(): boolean {
+    if (!rosterInfo) return false;
+    const weekDates = getWeekDates(currentWeek + 1, currentYear);
+    const weekEnd = formatDate(weekDates[6]);
+    return weekEnd <= rosterInfo.end_date;
+  }
+
+  function handlePreviousWeek() {
+    if (canGoToPreviousWeek()) {
+      setCurrentWeek(prev => prev - 1);
+    }
+  }
+
+  function handleNextWeek() {
+    if (canGoToNextWeek()) {
+      setCurrentWeek(prev => prev + 1);
+    }
+  }
+
+  // ============================================================================
+  // STATUS COLOR HELPER
+  // ============================================================================
+
+  function getStatusColor(status: string): string {
+    switch (status) {
+      case 'MOET':
+        return 'bg-red-500';
+      case 'MAG':
+        return 'bg-green-500';
+      case 'MAG NIET':
+        return 'bg-gray-400';
+      case 'AANGEPAST':
+        return 'bg-blue-500';
+      default:
+        return 'bg-gray-300';
+    }
+  }
+
+  // ============================================================================
+  // DAGDEEL ICON HELPER
+  // ============================================================================
+
+  function getDagdeelIcon(dagdeel: string) {
+    switch (dagdeel) {
+      case 'ochtend':
+        return <Sun className="w-4 h-4" />;
+      case 'middag':
+        return <Sunset className="w-4 h-4" />;
+      case 'avond':
+        return <Moon className="w-4 h-4" />;
+      default:
+        return null;
+    }
+  }
+
+  // ============================================================================
+  // RENDER
+  // ============================================================================
+
   const weekDates = getWeekDates(currentWeek, currentYear);
-  const dagdelen = ['ochtend', 'middag', 'avond', 'nacht'];
-  const teams = ['TOT', 'GRO', 'ORA'];
 
   if (loading) {
     return (
@@ -228,7 +437,7 @@ function DienstenPerDagContent() {
     );
   }
 
-  if (error || !roster) {
+  if (error || !rosterInfo) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
@@ -250,7 +459,7 @@ function DienstenPerDagContent() {
       {/* Header */}
       <div className="mb-6">
         <button
-          onClick={() => router.push('/dashboard')}
+          onClick={() => router.push(`/dashboard?rosterId=${rosterId}`)}
           className="flex items-center text-blue-600 hover:text-blue-800 mb-4"
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
@@ -260,107 +469,208 @@ function DienstenPerDagContent() {
           Diensten per Dagdeel
         </h1>
         <p className="text-gray-600">
-          Rooster: <span className="font-semibold">{roster.name || 'Onbekend'}</span>
+          Rooster: <span className="font-semibold">{rosterInfo.naam}</span>
         </p>
       </div>
 
       {/* Week Navigation */}
       <div className="bg-white rounded-lg shadow-sm p-4 mb-6 flex items-center justify-between">
-        <button
-          onClick={() => setCurrentWeek(prev => prev - 1)}
-          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-        >
-          <ChevronLeft className="h-4 w-4 mr-2" />
-          Vorige Week
-        </button>
+        {canGoToPreviousWeek() ? (
+          <button
+            onClick={handlePreviousWeek}
+            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            <ChevronLeft className="h-4 w-4 mr-2" />
+            Vorige Week
+          </button>
+        ) : (
+          <div className="w-32"></div>
+        )}
         
         <div className="flex items-center gap-2 text-lg font-semibold">
           <Calendar className="h-5 w-5 text-blue-600" />
           Week {currentWeek}, {currentYear}
         </div>
         
-        <button
-          onClick={() => setCurrentWeek(prev => prev + 1)}
-          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-        >
-          Volgende Week
-          <ChevronRight className="h-4 w-4 ml-2" />
-        </button>
+        {canGoToNextWeek() ? (
+          <button
+            onClick={handleNextWeek}
+            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Volgende Week
+            <ChevronRight className="h-4 w-4 ml-2" />
+          </button>
+        ) : (
+          <div className="w-32"></div>
+        )}
       </div>
 
-      {/* Info Panel */}
+      {/* Instructie */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-        <h3 className="font-semibold text-blue-900 mb-2">Dagdeel Overzicht</h3>
-        <p className="text-sm text-blue-800">
-          Totaal dagdeel records: <strong>{assignments.length}</strong>
-        </p>
-        <p className="text-sm text-blue-700 mt-1">
-          Teams: {teams.join(', ')} | Dagdelen: {dagdelen.join(', ')}
+        <p className="text-sm text-blue-900">
+          <strong>Instructie:</strong> Stel per dienst het minimale en maximale aantal benodigde medewerkers in per dagdeel en team.
+          Klik op de cellen om het aantal aan te passen (0-9).
         </p>
       </div>
 
-      {/* Grid - Simplified view voor roster_period_staffing_dagdelen */}
-      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+      {/* Legend */}
+      <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
+        <h3 className="font-semibold mb-3 text-gray-900">Status Legenda:</h3>
+        <div className="flex flex-wrap gap-4">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded-full bg-red-500"></div>
+            <span className="text-sm text-gray-700"><strong>MOET</strong> - Vereist minimum (standaard: 1)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded-full bg-green-500"></div>
+            <span className="text-sm text-gray-700"><strong>MAG</strong> - Optioneel (standaard: 1)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded-full bg-gray-400"></div>
+            <span className="text-sm text-gray-700"><strong>MAG NIET</strong> - Niet toegestaan (standaard: 0)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded-full bg-blue-500"></div>
+            <span className="text-sm text-gray-700"><strong>AANGEPAST</strong> - Handmatig gewijzigd van de regel</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Grid */}
+      <div className="bg-white rounded-lg shadow-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
-              <tr className="bg-gray-100">
-                <th className="border border-gray-300 p-3 text-left">Dagdeel</th>
-                <th className="border border-gray-300 p-3 text-left">Team</th>
-                <th className="border border-gray-300 p-3 text-left">Status</th>
-                <th className="border border-gray-300 p-3 text-center">Aantal</th>
-                <th className="border border-gray-300 p-3 text-left">ID</th>
+              {/* Week Header */}
+              <tr className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+                <th className="border border-blue-500 p-3 text-left sticky left-0 bg-blue-600 z-10">
+                  <div className="text-sm font-semibold">Week {currentWeek}</div>
+                </th>
+                {weekDates.map((date, idx) => (
+                  <th
+                    key={idx}
+                    colSpan={3}
+                    className={`border border-blue-500 p-2 text-center ${
+                      isWeekendDay(date) ? 'bg-blue-800' : ''
+                    }`}
+                  >
+                    <div className="text-xs font-medium">{getDayName(date)}</div>
+                    <div className="text-sm font-bold">{formatDateDisplay(date)}</div>
+                  </th>
+                ))}
+              </tr>
+              
+              {/* Dagdeel Icons Row */}
+              <tr className="bg-blue-100">
+                <th className="border border-gray-300 p-2 text-left sticky left-0 bg-blue-100 z-10">
+                  <span className="text-xs font-semibold text-gray-700">Dienst / Team</span>
+                </th>
+                {weekDates.map((date, dateIdx) => (
+                  dagdelen.map((dagdeel, dagdeelIdx) => (
+                    <th
+                      key={`${dateIdx}-${dagdeelIdx}`}
+                      className={`border border-gray-300 p-2 text-center ${
+                        isWeekendDay(date) ? 'bg-blue-50' : ''
+                      }`}
+                    >
+                      <div className="flex items-center justify-center text-gray-600">
+                        {getDagdeelIcon(dagdeel)}
+                      </div>
+                    </th>
+                  ))
+                ))}
               </tr>
             </thead>
+
             <tbody>
-              {assignments.length === 0 ? (
+              {services.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="border border-gray-300 p-4 text-center text-gray-500">
-                    Geen dagdeel gegevens gevonden voor dit rooster
+                  <td
+                    colSpan={22}
+                    className="border border-gray-300 p-8 text-center text-gray-500"
+                  >
+                    Geen diensten gevonden voor dit rooster. Ga naar Dashboard om diensten toe te voegen.
                   </td>
                 </tr>
               ) : (
-                assignments.map((assignment, index) => (
-                  <tr key={assignment.id || index} className="hover:bg-gray-50">
-                    <td className="border border-gray-300 p-3 font-medium">
-                      {assignment.dagdeel}
-                    </td>
-                    <td className="border border-gray-300 p-3">
-                      <span className={`px-2 py-1 rounded text-sm font-semibold ${
-                        assignment.team === 'TOT' ? 'bg-purple-100 text-purple-800' :
-                        assignment.team === 'GRO' ? 'bg-green-100 text-green-800' :
-                        'bg-orange-100 text-orange-800'
-                      }`}>
-                        {assignment.team}
-                      </span>
-                    </td>
-                    <td className="border border-gray-300 p-3">
-                      <span className={`px-2 py-1 rounded text-sm ${
-                        assignment.status === 'MOET' ? 'bg-red-100 text-red-800' :
-                        assignment.status === 'MAG' ? 'bg-blue-100 text-blue-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {assignment.status}
-                      </span>
-                    </td>
-                    <td className="border border-gray-300 p-3 text-center">
-                      <input
-                        type="number"
-                        min="0"
-                        value={assignment.aantal}
-                        onChange={(e) => handleDagdeelChange(
-                          assignment.roster_period_staffing_id,
-                          assignment.dagdeel,
-                          assignment.team,
-                          parseInt(e.target.value) || 0
-                        )}
-                        className="w-20 px-2 py-1 border rounded text-center"
-                      />
-                    </td>
-                    <td className="border border-gray-300 p-3 text-xs text-gray-500 font-mono">
-                      {assignment.id?.substring(0, 8)}...
-                    </td>
-                  </tr>
+                services.map((service, serviceIdx) => (
+                  teams.map((team, teamIdx) => {
+                    const isFirstTeamRow = teamIdx === 0;
+                    const teamLabel = team === 'GRO' ? 'Groen' : team === 'ORA' ? 'Oranje' : 'Praktijk';
+                    const teamColor = team === 'GRO' ? 'bg-green-50' : team === 'ORA' ? 'bg-orange-50' : 'bg-purple-50';
+
+                    return (
+                      <tr key={`${service.id}-${team}`} className={`hover:bg-gray-50 ${teamColor}`}>
+                        <td className={`border border-gray-300 p-3 sticky left-0 ${teamColor} z-10`}>
+                          {isFirstTeamRow && (
+                            <div className="font-semibold text-gray-900 mb-1">
+                              <span 
+                                className="inline-block px-2 py-1 rounded text-xs font-bold text-white mr-2"
+                                style={{ backgroundColor: service.kleur || '#666' }}
+                              >
+                                {service.code}
+                              </span>
+                              {service.naam}
+                            </div>
+                          )}
+                          <div className="text-sm text-gray-600 font-medium">
+                            {teamLabel}
+                          </div>
+                        </td>
+
+                        {weekDates.map((date, dateIdx) => (
+                          dagdelen.map((dagdeel, dagdeelIdx) => {
+                            const cellData = getCellData(
+                              service.id,
+                              formatDate(date),
+                              dagdeel,
+                              team
+                            );
+
+                            if (!cellData) {
+                              return (
+                                <td
+                                  key={`${dateIdx}-${dagdeelIdx}`}
+                                  className={`border border-gray-300 p-1 text-center ${
+                                    isWeekendDay(date) ? 'bg-gray-100' : 'bg-white'
+                                  }`}
+                                >
+                                  <div className="text-xs text-gray-400">-</div>
+                                </td>
+                              );
+                            }
+
+                            return (
+                              <td
+                                key={`${dateIdx}-${dagdeelIdx}`}
+                                className={`border border-gray-300 p-1 text-center ${
+                                  isWeekendDay(date) ? 'bg-gray-50' : 'bg-white'
+                                }`}
+                              >
+                                <div className="flex items-center justify-center gap-1">
+                                  <div
+                                    className={`w-3 h-3 rounded-full ${getStatusColor(cellData.status)}`}
+                                    title={cellData.status}
+                                  ></div>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="9"
+                                    value={cellData.aantal}
+                                    onChange={(e) => {
+                                      const val = parseInt(e.target.value) || 0;
+                                      handleCellChange(cellData, val);
+                                    }}
+                                    className="w-8 h-7 text-center text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  />
+                                </div>
+                              </td>
+                            );
+                          })
+                        ))}
+                      </tr>
+                    );
+                  })
                 ))
               )}
             </tbody>
@@ -368,25 +678,24 @@ function DienstenPerDagContent() {
         </div>
       </div>
 
-      {/* Legend */}
+      {/* Footer Info */}
       <div className="mt-6 bg-white rounded-lg shadow-sm p-4">
-        <h3 className="font-semibold mb-3">Status Legenda:</h3>
-        <div className="flex flex-wrap gap-3">
-          <div className="flex items-center gap-2">
-            <span className="px-3 py-1 rounded bg-red-100 text-red-800 text-sm">MOET</span>
-            <span className="text-sm text-gray-600">Vereist minimum</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="px-3 py-1 rounded bg-blue-100 text-blue-800 text-sm">MAG</span>
-            <span className="text-sm text-gray-600">Optioneel maximum</span>
-          </div>
+        <div className="text-sm text-gray-600">
+          <p><strong>Totaal diensten:</strong> {services.length}</p>
+          <p><strong>Totaal dagdeel records:</strong> {dagdeelAssignments.length}</p>
+          <p className="mt-2 text-xs text-gray-500">
+            Periode: {rosterInfo.start_date} tot {rosterInfo.end_date}
+          </p>
         </div>
       </div>
     </div>
   );
 }
 
-// Main page component with Suspense boundary
+// ============================================================================
+// MAIN PAGE COMPONENT
+// ============================================================================
+
 export default function DienstenPerDagPage() {
   return (
     <Suspense fallback={
