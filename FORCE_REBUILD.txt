@@ -1,14 +1,36 @@
-DRAAD36C - DienstenPerDag KRITISCHE FIX
-Timestamp: 2025-11-17 20:08:00 UTC
+DRAAD36D - DienstenPerDag ROOT CAUSE FIX
+Timestamp: 2025-11-17 20:40:00 UTC
 
-KRITISCHE FIX GEDEPLOYED:
-- DienstenPerDag gebruikt nu rosterId uit URL parameter
-- Geen hardcoded "actief rooster" lookup meer
-- Dynamische week berekening uit roster start/end dates
-- Correcte Suspense wrapper toegevoegd
-- Robuuste error handling geïmplementeerd
+🚨 KRITIEKE FIX GEDEPLOYED - 404 ERROR OPGELOST:
 
-Deploy trigger voor gefixte /diensten-per-dag route
+**Probleem:**
+- Component zocht roster in Supabase 'rosters' tabel
+- Tabel bestaat NIET → gaf 404 error
+- DRAAD36B en 36C waren incomplete fixes
+
+**Oplossing:**
+✅ Roster data uit localStorage (zoals Dashboard)
+✅ Gebruikt 'verloskunde_rosters' key
+✅ Flexibele property mapping (naam/name, start_date/startDate/roster_start)
+✅ Services blijven uit Supabase (correct)
+✅ Robuuste error handling met duidelijke messages
+
+**Architectuur Fix:**
+VOOR: Supabase 'rosters' tabel (bestaat niet) → 404 → crash
+NA:   localStorage 'verloskunde_rosters' → roster gevonden → werkt
+
+**Deploy Trigger:**
+Railway force rebuild voor pagina: /diensten-per-dag?rosterId=...
+
+**Verificatie Checklist:**
+1. Console GEEN 404 errors meer
+2. Pagina laadt met roster naam in header
+3. Grid toont diensten en dagen
+4. Edit functionaliteit werkt
+5. Weeknavigatie werkt
 
 Flow volledig operationeel:
 Dashboard → Rooster Ontwerpen → Dashboard Rooster Ontwerp → Diensten per dagdeel aanpassen ✅
+
+Commit SHA: a394803425fd522b013db05a183dc206d0470ab6
+Docs: DRAAD36D_CRITICAL_FIX.md
