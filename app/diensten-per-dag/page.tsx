@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
 import {
   getDagdeelRegelsVoorRooster,
   updateDagdeelRegelSmart
@@ -12,10 +13,8 @@ import {
   TEAM_DAGDEEL_LABELS,
   DAGDEEL_STATUS_COLORS,
   Dagdeel,
-  TeamDagdeel,
-  DagdeelStatus
+  TeamDagdeel
 } from '@/lib/types/roster-period-staffing-dagdeel';
-import { supabase } from '@/lib/supabase';
 
 // ============================================================================
 // TYPES
@@ -35,6 +34,13 @@ interface ServiceInfo {
   naam: string;
 }
 
+interface RosterInfo {
+  id: string;
+  naam: string;
+  start_date: string;
+  end_date: string;
+}
+
 interface WeekData {
   weekNummer: number;
   startDatum: Date;
@@ -46,9 +52,6 @@ interface WeekData {
 // CONSTANTS
 // ============================================================================
 
-const ROOSTER_WEKEN = [48, 49, 50, 51, 52] as const;
-const JAAR = 2025;
-
 const DAGEN_KORT = ['Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo'];
 const DAGDELEN: Dagdeel[] = ['0', 'M', 'A'];
 const TEAMS: TeamDagdeel[] = ['TOT', 'GRO', 'ORA'];
@@ -57,10 +60,31 @@ const TEAMS: TeamDagdeel[] = ['TOT', 'GRO', 'ORA'];
 // HELPER FUNCTIES
 // ============================================================================
 
-function getWeekData(weekNummer: number, jaar: number): WeekData {
-  // ISO week: week begint op maandag
+function getWeekNumber(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+}
+
+function getWeeksInRange(startDate: string, endDate: string): number[] {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const weeks = new Set<number>();
+  
+  const current = new Date(start);
+  while (current <= end) {
+    weeks.add(getWeekNumber(current));
+    current.setDate(current.getDate() + 1);
+  }
+  
+  return Array.from(weeks).sort((a, b) => a - b);
+}
+
+function getWeekData(weekNummer: number, jaar: number, rosterStart: Date, rosterEnd: Date): WeekData {
   const jan4 = new Date(jaar, 0, 4);
-  const jan4DayOfWeek = jan4.getDay() || 7; // Zondag = 7
+  const jan4DayOfWeek = jan4.getDay() || 7;
   const firstMonday = new Date(jan4);
   firstMonday.setDate(jan4.getDate() - jan4DayOfWeek + 1);
   
@@ -71,7 +95,11 @@ function getWeekData(weekNummer: number, jaar: number): WeekData {
   for (let i = 0; i < 7; i++) {
     const dag = new Date(weekStart);
     dag.setDate(weekStart.getDate() + i);
-    dagen.push(dag);
+    
+    // Filter dagen binnen roster periode
+    if (dag >= rosterStart && dag <= rosterEnd) {
+      dagen.push(dag);
+    }
   }
   
   const weekEind = new Date(weekStart);
@@ -99,50 +127,81 @@ function dateToString(datum: Date): string {
 }
 
 // ============================================================================
-// MAIN COMPONENT
+// MAIN COMPONENT WRAPPER
 // ============================================================================
 
-export default function DienstenPerDagPage() {
+function DienstenPerDagContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const rosterId = searchParams.get('rosterId');
   
   // State
   const [huidigWeekIndex, setHuidigWeekIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [rosterId, setRosterId] = useState<string | null>(null);
+  const [rosterInfo, setRosterInfo] = useState<RosterInfo | null>(null);
+  const [roosterWeken, setRoosterWeken] = useState<number[]>([]);
   const [services, setServices] = useState<ServiceInfo[]>([]);
   const [dagdelenData, setDagdelenData] = useState<Map<string, RosterPeriodStaffingDagdeel[]>>(new Map());
   const [rpsRecords, setRpsRecords] = useState<RosterPeriodStaffing[]>([]);
   const [bewerkingActief, setBewerkingActief] = useState<string | null>(null);
   const [waarschuwing, setWaarschuwing] = useState<string | null>(null);
   
-  const huidigWeek = ROOSTER_WEKEN[huidigWeekIndex];
-  const weekData = getWeekData(huidigWeek, JAAR);
+  const currentWeekNumber = roosterWeken[huidigWeekIndex];
+  const currentYear = rosterInfo ? new Date(rosterInfo.start_date).getFullYear() : 2025;
+  const weekData = currentWeekNumber && rosterInfo 
+    ? getWeekData(
+        currentWeekNumber, 
+        currentYear,
+        new Date(rosterInfo.start_date),
+        new Date(rosterInfo.end_date)
+      )
+    : null;
   
   // ============================================================================
-  // DATA LADEN
+  // INITIALISATIE
   // ============================================================================
   
   useEffect(() => {
-    loadData();
-  }, [huidigWeekIndex]);
+    if (!rosterId) {
+      setError('Geen roster ID opgegeven in URL');
+      setLoading(false);
+      return;
+    }
+    
+    initializeData();
+  }, [rosterId]);
   
-  async function loadData() {
+  useEffect(() => {
+    if (rosterInfo && roosterWeken.length > 0) {
+      loadWeekData();
+    }
+  }, [huidigWeekIndex, rosterInfo, roosterWeken]);
+  
+  async function initializeData() {
     try {
       setLoading(true);
       setError(null);
       
-      // 1. Haal actief rooster op
-      const { data: roosterData, error: roosterError } = await supabase
+      if (!rosterId) {
+        throw new Error('Geen roster ID');
+      }
+      
+      // 1. Haal roster informatie op
+      const { data: rosterData, error: rosterError } = await supabase
         .from('rosters')
         .select('id, naam, start_date, end_date')
-        .eq('actief', true)
+        .eq('id', rosterId)
         .single();
       
-      if (roosterError) throw new Error('Geen actief rooster gevonden');
-      if (!roosterData) throw new Error('Geen rooster data');
+      if (rosterError) throw new Error('Roster niet gevonden');
+      if (!rosterData) throw new Error('Geen roster data');
       
-      setRosterId(roosterData.id);
+      setRosterInfo(rosterData);
+      
+      // Bereken weken in de rooster periode
+      const weken = getWeeksInRange(rosterData.start_date, rosterData.end_date);
+      setRoosterWeken(weken);
       
       // 2. Haal services op
       const { data: servicesData, error: servicesError } = await supabase
@@ -154,20 +213,33 @@ export default function DienstenPerDagPage() {
       if (servicesError) throw servicesError;
       setServices(servicesData || []);
       
-      // 3. Haal roster_period_staffing op voor huidige week
-      const weekStartStr = dateToString(weekData.startDatum);
-      const weekEindStr = dateToString(weekData.eindDatum);
+      setLoading(false);
       
+    } catch (err) {
+      console.error('Fout bij initialisatie:', err);
+      setError(err instanceof Error ? err.message : 'Onbekende fout');
+      setLoading(false);
+    }
+  }
+  
+  async function loadWeekData() {
+    if (!rosterId || !rosterInfo || !weekData) return;
+    
+    try {
+      const weekStartStr = dateToString(weekData.dagen[0]);
+      const weekEindStr = dateToString(weekData.dagen[weekData.dagen.length - 1]);
+      
+      // Haal RPS data op voor deze week
       const { data: rpsData, error: rpsError } = await supabase
         .from('roster_period_staffing')
         .select('id, roster_id, service_id, date')
-        .eq('roster_id', roosterData.id)
+        .eq('roster_id', rosterId)
         .gte('date', weekStartStr)
         .lte('date', weekEindStr);
       
       if (rpsError) throw rpsError;
       
-      // 4. Haal alle dagdelen op voor deze RPS records
+      // Haal dagdelen op voor deze RPS records
       const rpsIds = (rpsData || []).map(r => r.id);
       
       if (rpsIds.length > 0) {
@@ -196,13 +268,15 @@ export default function DienstenPerDagPage() {
           ...rps,
           dagdelen: dagdelenMap.get(rps.id) || []
         })));
+      } else {
+        setDagdelenData(new Map());
+        setRpsRecords([]);
       }
       
     } catch (err) {
-      console.error('Fout bij laden data:', err);
-      setError(err instanceof Error ? err.message : 'Onbekende fout');
-    } finally {
-      setLoading(false);
+      console.error('Fout bij laden week data:', err);
+      setWaarschuwing('Fout bij laden week data');
+      setTimeout(() => setWaarschuwing(null), 3000);
     }
   }
   
@@ -249,8 +323,7 @@ export default function DienstenPerDagPage() {
     }
     
     if (result.success) {
-      // Herlaad data
-      await loadData();
+      await loadWeekData();
       setBewerkingActief(null);
     } else {
       setWaarschuwing('Fout bij opslaan wijziging');
@@ -265,9 +338,7 @@ export default function DienstenPerDagPage() {
   function renderDagdeelCel(
     rps: RosterPeriodStaffing | undefined,
     dagdeel: Dagdeel,
-    team: TeamDagdeel,
-    serviceCode: string,
-    datumStr: string
+    team: TeamDagdeel
   ) {
     const regel = getDagdeelRegel(rps, dagdeel, team);
     
@@ -334,15 +405,15 @@ export default function DienstenPerDagPage() {
     );
   }
   
-  if (error) {
+  if (error || !rosterInfo || !weekData) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md">
           <h2 className="text-red-800 font-bold mb-2">Fout bij laden</h2>
-          <p className="text-red-600">{error}</p>
+          <p className="text-red-600 mb-4">{error || 'Geen rooster data beschikbaar'}</p>
           <button
-            onClick={() => router.push('/dashboard')}
-            className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+            onClick={() => router.push(`/planning/design/dashboard?rosterId=${rosterId}`)}
+            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
           >
             Terug naar Dashboard
           </button>
@@ -359,14 +430,14 @@ export default function DienstenPerDagPage() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h1 className="text-2xl font-bold text-gray-800">
-                Diensten per Dag - Dagdeel Bezetting
+                Diensten per Dagdeel - {rosterInfo.naam}
               </h1>
               <p className="text-sm text-gray-600 mt-1">
-                Klik op een cel om het aantal personen aan te passen (0-9)
+                Periode: {new Date(rosterInfo.start_date).toLocaleDateString('nl-NL')} - {new Date(rosterInfo.end_date).toLocaleDateString('nl-NL')}
               </p>
             </div>
             <button
-              onClick={() => router.push('/dashboard')}
+              onClick={() => router.push(`/planning/design/dashboard?rosterId=${rosterId}`)}
               className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
             >
               ← Terug naar Dashboard
@@ -385,16 +456,20 @@ export default function DienstenPerDagPage() {
             
             <div className="text-center">
               <div className="text-lg font-bold text-blue-900">
-                Week {huidigWeek} - {JAAR}
+                Week {currentWeekNumber} - {currentYear}
               </div>
               <div className="text-sm text-blue-700">
-                {formatDatum(weekData.startDatum)} t/m {formatDatum(weekData.eindDatum)}
+                {weekData.dagen.length > 0 && (
+                  <>
+                    {formatDatum(weekData.dagen[0])} t/m {formatDatum(weekData.dagen[weekData.dagen.length - 1])}
+                  </>
+                )}
               </div>
             </div>
             
             <button
-              onClick={() => setHuidigWeekIndex(Math.min(ROOSTER_WEKEN.length - 1, huidigWeekIndex + 1))}
-              disabled={huidigWeekIndex === ROOSTER_WEKEN.length - 1}
+              onClick={() => setHuidigWeekIndex(Math.min(roosterWeken.length - 1, huidigWeekIndex + 1))}
+              disabled={huidigWeekIndex === roosterWeken.length - 1}
               className="px-4 py-2 bg-blue-600 text-white rounded disabled:bg-gray-300 disabled:cursor-not-allowed hover:bg-blue-700 transition-colors"
             >
               Volgende →
@@ -402,7 +477,7 @@ export default function DienstenPerDagPage() {
           </div>
           
           {/* Legenda */}
-          <div className="mt-3 flex gap-4 text-xs">
+          <div className="mt-3 flex gap-4 text-xs flex-wrap">
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded" style={{ backgroundColor: DAGDEEL_STATUS_COLORS.MOET + '80' }}></div>
               <span>MOET (verplicht)</span>
@@ -447,7 +522,7 @@ export default function DienstenPerDagPage() {
                       key={idx}
                       className="px-2 py-2 text-center text-xs font-bold text-gray-700 border-r border-gray-300"
                     >
-                      <div>{DAGEN_KORT[idx]}</div>
+                      <div>{DAGEN_KORT[dag.getDay() === 0 ? 6 : dag.getDay() - 1]}</div>
                       <div className="text-gray-500 font-normal">{formatDatum(dag)}</div>
                     </th>
                   ))}
@@ -468,13 +543,7 @@ export default function DienstenPerDagPage() {
                             {TEAMS.map((team) => (
                               <div key={team} className="divide-y divide-gray-200">
                                 {DAGDELEN.map((dagdeel) => 
-                                  renderDagdeelCel(
-                                    rps,
-                                    dagdeel,
-                                    team,
-                                    service.code,
-                                    dateToString(dag)
-                                  )
+                                  renderDagdeelCel(rps, dagdeel, team)
                                 )}
                               </div>
                             ))}
@@ -502,5 +571,20 @@ export default function DienstenPerDagPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function DienstenPerDagPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Laden...</p>
+        </div>
+      </div>
+    }>
+      <DienstenPerDagContent />
+    </Suspense>
   );
 }
