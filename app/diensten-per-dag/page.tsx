@@ -187,23 +187,52 @@ function DienstenPerDagContent() {
         throw new Error('Geen roster ID');
       }
       
-      // 1. Haal roster informatie op
-      const { data: rosterData, error: rosterError } = await supabase
-        .from('rosters')
-        .select('id, naam, start_date, end_date')
-        .eq('id', rosterId)
-        .single();
-      
-      if (rosterError) throw new Error('Roster niet gevonden');
-      if (!rosterData) throw new Error('Geen roster data');
-      
-      setRosterInfo(rosterData);
+      // 1. Haal roster informatie op uit localStorage (zoals Dashboard doet)
+      if (typeof window === 'undefined') {
+        throw new Error('Browser omgeving niet beschikbaar');
+      }
+
+      const rostersRaw = localStorage.getItem('verloskunde_rosters');
+      if (!rostersRaw) {
+        throw new Error('Geen rosters gevonden in lokale opslag. Maak eerst een rooster aan.');
+      }
+
+      let rosters;
+      try {
+        rosters = JSON.parse(rostersRaw);
+      } catch (parseError) {
+        throw new Error('Ongeldige roster data in lokale opslag');
+      }
+
+      const rosterData = rosters.find((r: any) => r.id === rosterId);
+
+      if (!rosterData) {
+        throw new Error(`Roster met ID ${rosterId} niet gevonden in lokale opslag`);
+      }
+
+      // Flexibele property mapping (ondersteunt verschillende formaten)
+      const rosterInfo: RosterInfo = {
+        id: rosterData.id,
+        naam: rosterData.naam || rosterData.name || 'Naamloos Rooster',
+        start_date: rosterData.start_date || rosterData.startDate || rosterData.roster_start,
+        end_date: rosterData.end_date || rosterData.endDate || rosterData.roster_end
+      };
+
+      // Valideer dat we start en end date hebben
+      if (!rosterInfo.start_date || !rosterInfo.end_date) {
+        throw new Error('Roster periode (start/end datum) ontbreekt');
+      }
+
+      setRosterInfo(rosterInfo);
       
       // Bereken weken in de rooster periode
-      const weken = getWeeksInRange(rosterData.start_date, rosterData.end_date);
+      const weken = getWeeksInRange(rosterInfo.start_date, rosterInfo.end_date);
+      if (weken.length === 0) {
+        throw new Error('Geen geldige weken gevonden in roster periode');
+      }
       setRoosterWeken(weken);
       
-      // 2. Haal services op
+      // 2. Haal services op (uit Supabase - CORRECT, tabel bestaat wel)
       const { data: servicesData, error: servicesError } = await supabase
         .from('service_types')
         .select('id, code, naam')
@@ -217,7 +246,7 @@ function DienstenPerDagContent() {
       
     } catch (err) {
       console.error('Fout bij initialisatie:', err);
-      setError(err instanceof Error ? err.message : 'Onbekende fout');
+      setError(err instanceof Error ? err.message : 'Onbekende fout bij laden van gegevens');
       setLoading(false);
     }
   }
