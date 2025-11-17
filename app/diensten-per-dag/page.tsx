@@ -2,7 +2,7 @@
 
 import { supabase } from '@/lib/supabase';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { ChevronLeft, ChevronRight, ArrowLeft, Calendar } from 'lucide-react';
 
 // Types
@@ -65,7 +65,8 @@ function formatDate(date: Date): string {
   return date.toISOString().split('T')[0];
 }
 
-export default function DienstenPerDagPage() {
+// Main content component
+function DienstenPerDagContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const rosterId = searchParams?.get('rosterId');
@@ -379,5 +380,21 @@ export default function DienstenPerDagPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// Main page component with Suspense boundary
+export default function DienstenPerDagPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Pagina wordt geladen...</p>
+        </div>
+      </div>
+    }>
+      <DienstenPerDagContent />
+    </Suspense>
   );
 }
