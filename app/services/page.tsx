@@ -30,11 +30,11 @@ export default function DienstenDashboardPage() {
 
           {/* Beschrijving */}
           <p className="text-gray-600 mb-8">
-            Beheer alle aspecten van diensten: types, medewerker-toewijzingen en dagsoort-regels.
+            Beheer alle aspecten van diensten: types en medewerker-toewijzingen.
           </p>
 
-          {/* Grid met drie opties */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Grid met twee opties */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Optie 1: Diensten Types */}
             <Link
               href="/services/types"
@@ -70,30 +70,12 @@ export default function DienstenDashboardPage() {
                 </p>
               </div>
             </Link>
-
-            {/* Optie 3: Diensten Dagsoort */}
-            <Link
-              href="/services/schedule-rules"
-              className="bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-xl hover:shadow-lg transition-all duration-300 cursor-pointer block border border-orange-200 hover:border-orange-300"
-            >
-              <div className="flex flex-col items-center text-center">
-                <div className="w-16 h-16 mb-4 rounded-full bg-orange-200 flex items-center justify-center">
-                  <span className="text-3xl">📅</span>
-                </div>
-                <h3 className="font-bold text-orange-900 text-xl mb-2">
-                  Diensten Dagsoort
-                </h3>
-                <p className="text-orange-700 text-sm">
-                  Configureer regels per team en dagblokken
-                </p>
-              </div>
-            </Link>
           </div>
 
           {/* Info sectie onderaan */}
           <div className="mt-8 p-4 bg-purple-50 rounded-lg border border-purple-200">
             <p className="text-sm text-purple-800">
-              <strong>💡 Tip:</strong> Klik op een van de drie opties hierboven om specifieke dienst-instellingen te beheren.
+              <strong>💡 Tip:</strong> Klik op een van de twee opties hierboven om specifieke dienst-instellingen te beheren.
             </p>
           </div>
         </div>
