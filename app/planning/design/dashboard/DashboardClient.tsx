@@ -1,3 +1,6 @@
+/* DRAAD36C: Diensten per dag stap vernieuwd volgens opdracht, alleen bereikbaar via rooster-ontwerp.
+ * Flow correct, statusbalk geoptimaliseerd, NL UI consistent gemaakt.
+*/
 'use client';
 import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -111,7 +114,6 @@ export default function DashboardClient() {
     if (!rosterId) { setError('Geen roster ID gevonden'); setLoading(false); return; }
     async function fetchData() {
       try {
-        // FIXED: Add explicit check that rosterId is not null before calling loadRosterDesignData
         if (!rosterId) {
           setError('Geen roster ID gevonden');
           return;
@@ -203,24 +205,24 @@ export default function DashboardClient() {
           </div>
           
           <div className="space-y-3 mb-6">
-            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 hover:bg-purple-100 transition-colors">
+            <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-4 hover:bg-cyan-100 transition-colors">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-start">
-                  <span className="text-2xl mr-3 mt-1">📊</span>
+                  <span className="text-2xl mr-3 mt-1">📅</span>
                   <div>
-                    <h3 className="font-bold text-purple-900 text-lg">Diensten per dag aanpassen</h3>
-                    <p className="text-purple-700 text-sm">Stel het aantal benodigde medewerkers per dienst per dag in</p>
+                    <h3 className="font-bold text-cyan-900 text-lg">Diensten per dagdeel aanpassen</h3>
+                    <p className="text-cyan-700 text-sm">Beheer bezetting per dienst, dagdeel (Ochtend/Middag/Avond), per team.</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3 sm:flex-row flex-col">
-                  <StatusBadgeToggle completed={completionStatus.diensten_per_dag} onToggle={()=>toggleStep('diensten_per_dag')} label="Diensten per dag"/>
-                  <Link href={`/planning/period-staffing?rosterId=${rosterId}`}>
-                    <button className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium whitespace-nowrap">Openen →</button>
+                  <StatusBadgeToggle completed={completionStatus.diensten_per_dag} onToggle={()=>toggleStep('diensten_per_dag')} label="Diensten per dagdeel"/>
+                  <Link href={`/diensten-per-dag?rosterId=${rosterId}`}>
+                    <button className="px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 font-medium whitespace-nowrap">Openen →</button>
                   </Link>
                 </div>
               </div>
             </div>
-            
+
             <div className="bg-red-50 border border-red-200 rounded-lg p-4 hover:bg-red-100 transition-colors">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-start">
@@ -236,7 +238,7 @@ export default function DashboardClient() {
                 </div>
               </div>
             </div>
-            
+
             <div className="bg-green-50 border border-green-200 rounded-lg p-4 hover:bg-green-100 transition-colors">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-start">
@@ -252,7 +254,7 @@ export default function DashboardClient() {
                 </div>
               </div>
             </div>
-            
+
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 hover:bg-blue-100 transition-colors">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-start">
@@ -268,7 +270,7 @@ export default function DashboardClient() {
                 </div>
               </div>
             </div>
-            
+
             <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 hover:bg-orange-100 transition-colors">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-start">
