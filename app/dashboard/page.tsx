@@ -48,6 +48,14 @@ export default function DashboardPage() {
               <p className="text-blue-700 font-medium">Nieuwe planning starten</p>
             </Link>
             
+            <Link href="/diensten-per-dag" className="bg-cyan-50 p-6 rounded-xl hover:bg-cyan-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md">
+              <div className="flex items-center mb-3">
+                <span className="text-2xl mr-3">📅</span>
+                <h3 className="font-bold text-cyan-900 text-lg">Diensten per Dag</h3>
+              </div>
+              <p className="text-cyan-700 font-medium">Dagdeel bezetting aanpassen</p>
+            </Link>
+            
             <Link href="/employees" className="bg-green-50 p-6 rounded-xl hover:bg-green-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md">
               <div className="flex items-center mb-3">
                 <span className="text-2xl mr-3">👥</span>
