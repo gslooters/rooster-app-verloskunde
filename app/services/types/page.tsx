@@ -67,25 +67,22 @@ export default function ServiceTypesPage() {
   useEffect(() => { 
     loadDiensten();
     
-    // Setup realtime subscription
     const unsubscribe = subscribeToServiceChanges((updatedServices) => {
       console.log('📡 Realtime update ontvangen, diensten bijwerken');
       setDiensten(updatedServices);
     });
     
-    // Cleanup subscription on unmount
     return () => {
       console.log('🧹 Cleaning up subscription');
       unsubscribe();
     };
   }, []);
   
-  // Health check indicator updaten
   useEffect(() => {
     const interval = setInterval(() => {
       const status = getSupabaseHealthStatus();
       setHealthStatus(status);
-    }, 5000); // Check elke 5 seconden
+    }, 5000);
     
     return () => clearInterval(interval);
   }, []);
@@ -96,14 +93,12 @@ export default function ServiceTypesPage() {
       const services = await getAllServices();
       setDiensten(services);
       
-      // Update health status
       const status = getSupabaseHealthStatus();
       setHealthStatus(status);
     } catch (err) { 
       console.error('❌ Error loading services:', err);
       setError('Kon diensten niet laden. Probeer de pagina te verversen.');
       
-      // Update health status
       const status = getSupabaseHealthStatus();
       setHealthStatus(status);
     } finally { 
@@ -186,7 +181,6 @@ export default function ServiceTypesPage() {
     setError('');
     setSubmitting(true);
     
-    // DRAAD30D-v2: Force code naar UPPERCASE voor database constraint
     const safeFormData = {
       ...formData,
       code: formData.code.toUpperCase()
@@ -199,8 +193,6 @@ export default function ServiceTypesPage() {
         await createService(safeFormData as any);
       }
       
-      // Data wordt automatisch bijgewerkt via realtime subscription
-      // maar we doen ook een handmatige refresh voor zekerheid
       await loadDiensten();
       closeModal();
     } catch (err: any) { 
@@ -224,8 +216,6 @@ export default function ServiceTypesPage() {
       }
       
       await removeService(dienst.code); 
-      
-      // Data wordt automatisch bijgewerkt via realtime subscription
       await loadDiensten();
     } catch (err: any) { 
       alert(err.message || 'Er is een fout opgetreden bij het verwijderen'); 
@@ -255,7 +245,7 @@ export default function ServiceTypesPage() {
     let width = ((end - start) / totalMinutes) * 100;
     
     if (end < start) width = ((totalMinutes - start + end) / totalMinutes) * 100;
-    if (start === end && start !== 0) width = 100; // 24-uurs dienst
+    if (start === end && start !== 0) width = 100;
     
     return (
       <div className="w-full h-2 bg-gray-200 rounded-full relative">
@@ -338,7 +328,6 @@ export default function ServiceTypesPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-4">
       <div className="max-w-7xl mx-auto">
-        {/* Health Status Banner */}
         {!healthStatus.healthy && (
           <div className="mb-4 bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-lg">
             <div className="flex items-center">
@@ -357,7 +346,6 @@ export default function ServiceTypesPage() {
               <a href="/services" className="text-blue-600 hover:text-blue-800 flex items-center mr-4">
                 <span className="mr-1">←</span>Diensten Beheren
               </a>
-              {/* Health indicator */}
               <div className={`flex items-center text-xs px-2 py-1 rounded-full ${
                 healthStatus.healthy 
                   ? 'bg-green-100 text-green-700' 
@@ -520,8 +508,7 @@ export default function ServiceTypesPage() {
 
           {showModal && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-              <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
-                {/* Modal header */}
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
                 <div className="flex items-center justify-between p-6 border-b">
                   <h2 className="text-xl font-semibold text-gray-900">
                     {editingDienst ? 'Dienst Bewerken' : 'Nieuwe Dienst'}
@@ -535,7 +522,6 @@ export default function ServiceTypesPage() {
                   </button>
                 </div>
 
-                {/* Tab navigation */}
                 <div className="border-b px-6">
                   <div className="flex gap-4">
                     <button
@@ -563,7 +549,6 @@ export default function ServiceTypesPage() {
                   </div>
                 </div>
 
-                {/* Modal content */}
                 <form onSubmit={handleSubmit} className="flex-1 overflow-hidden flex flex-col">
                   <div className="flex-1 overflow-y-auto relative">
                     {activeTab === 'basis' ? (
@@ -732,7 +717,6 @@ export default function ServiceTypesPage() {
                       </div>
                     ) : (
                       <div>
-                        {/* Sticky dienst header - alleen in Team regels tab */}
                         <div className="sticky top-0 z-10 bg-white border-b shadow-sm">
                           <div className="px-6 py-4">
                             <div className="flex items-center gap-3">
@@ -754,9 +738,8 @@ export default function ServiceTypesPage() {
                           </div>
                         </div>
 
-                        {/* Team regels content */}
-                        <div className="p-6 space-y-6">
-                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <div className="p-6">
+                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
                             <h3 className="font-medium text-blue-900 mb-2">📌 Team regels instellen</h3>
                             <p className="text-sm text-blue-700">
                               Configureer per team wanneer deze dienst verplicht (MOET), optioneel (MAG) of niet toegestaan (MAG_NIET) is.
@@ -764,26 +747,43 @@ export default function ServiceTypesPage() {
                             </p>
                           </div>
 
-                          <DagblokMatrix
-                            teamRegels={formData.team_groen_regels}
-                            onChange={(regels) => handleTeamRegelsChange('groen', regels)}
-                            teamNaam="Groen"
-                            disabled={editingDienst?.system || submitting}
-                          />
+                          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                            <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
+                              <h4 className="font-semibold text-green-700 mb-3 flex items-center">
+                                <span className="mr-2">🟢</span>Team Groen
+                              </h4>
+                              <DagblokMatrix
+                                teamRegels={formData.team_groen_regels}
+                                onChange={(regels) => handleTeamRegelsChange('groen', regels)}
+                                teamNaam="Groen"
+                                disabled={editingDienst?.system || submitting}
+                              />
+                            </div>
 
-                          <DagblokMatrix
-                            teamRegels={formData.team_oranje_regels}
-                            onChange={(regels) => handleTeamRegelsChange('oranje', regels)}
-                            teamNaam="Oranje"
-                            disabled={editingDienst?.system || submitting}
-                          />
+                            <div className="bg-orange-50 border-2 border-orange-200 rounded-lg p-4">
+                              <h4 className="font-semibold text-orange-700 mb-3 flex items-center">
+                                <span className="mr-2">🟠</span>Team Oranje
+                              </h4>
+                              <DagblokMatrix
+                                teamRegels={formData.team_oranje_regels}
+                                onChange={(regels) => handleTeamRegelsChange('oranje', regels)}
+                                teamNaam="Oranje"
+                                disabled={editingDienst?.system || submitting}
+                              />
+                            </div>
 
-                          <DagblokMatrix
-                            teamRegels={formData.team_totaal_regels}
-                            onChange={(regels) => handleTeamRegelsChange('totaal', regels)}
-                            teamNaam="Totaal"
-                            disabled={editingDienst?.system || submitting}
-                          />
+                            <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
+                              <h4 className="font-semibold text-blue-700 mb-3 flex items-center">
+                                <span className="mr-2">🔵</span>Praktijk Totaal
+                              </h4>
+                              <DagblokMatrix
+                                teamRegels={formData.team_totaal_regels}
+                                onChange={(regels) => handleTeamRegelsChange('totaal', regels)}
+                                teamNaam="Totaal"
+                                disabled={editingDienst?.system || submitting}
+                              />
+                            </div>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -801,7 +801,6 @@ export default function ServiceTypesPage() {
                     </div>
                   )}
 
-                  {/* Modal footer */}
                   <div className="flex gap-3 p-6 border-t bg-gray-50">
                     <button 
                       type="button" 
