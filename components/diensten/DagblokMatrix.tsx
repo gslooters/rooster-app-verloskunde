@@ -116,7 +116,7 @@ export default function DagblokMatrix({
           <div className="flex flex-wrap gap-2 text-xs">
             <span className="text-gray-600 font-medium">Snel invullen:</span>
             
-            {/* Alle dagen */}
+            {/* Alles MOET */}
             <button
               type="button"
               onClick={() => handleQuickFill(ALLE_DAGEN, ALLE_DAGBLOKKEN, DagblokStatus.MOET)}
@@ -124,6 +124,7 @@ export default function DagblokMatrix({
             >
               Alles MOET
             </button>
+            {/* Alles MAG */}
             <button
               type="button"
               onClick={() => handleQuickFill(ALLE_DAGEN, ALLE_DAGBLOKKEN, DagblokStatus.MAG)}
@@ -131,8 +132,15 @@ export default function DagblokMatrix({
             >
               Alles MAG
             </button>
-            
-            {/* Weekdagen */}
+            {/* Alles MAG_NIET */}
+            <button
+              type="button"
+              onClick={() => handleQuickFill(ALLE_DAGEN, ALLE_DAGBLOKKEN, DagblokStatus.MAG_NIET)}
+              className="px-2 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-300 border border-gray-400"
+            >
+              Alles MAG_NIET
+            </button>
+            {/* Weekdagen O/M MOET */}
             <button
               type="button"
               onClick={() => handleQuickFill(['ma', 'di', 'wo', 'do', 'vr'], ['O', 'M'], DagblokStatus.MOET)}
@@ -140,8 +148,7 @@ export default function DagblokMatrix({
             >
               Weekdagen O/M MOET
             </button>
-            
-            {/* Weekend */}
+            {/* Weekend MAG_NIET */}
             <button
               type="button"
               onClick={() => handleQuickFill(['za', 'zo'], ALLE_DAGBLOKKEN, DagblokStatus.MAG_NIET)}
