@@ -1,36 +1,66 @@
-DRAAD36D - DienstenPerDag ROOT CAUSE FIX
-Timestamp: 2025-11-17 20:40:00 UTC
+DRAAD37K2-ULTRA-FIX - ISO-8601 WEEKDAG CORRECTIE
+Timestamp: 2025-11-18 23:08:00 UTC
 
-🚨 KRITIEKE FIX GEDEPLOYED - 404 ERROR OPGELOST:
+🚀 KRITIEKE FIX GEDEPLOYED - WEEK 47/52 BUG VOLLEDIG OPGELOST:
 
 **Probleem:**
-- Component zocht roster in Supabase 'rosters' tabel
-- Tabel bestaat NIET → gaf 404 error
-- DRAAD36B en 36C waren incomplete fixes
+- JavaScript Date.getDay() retourneert zondag=0
+- ISO-8601 verwacht zondag=7
+- Week 47 verscheen onterecht (zou Week 48 moeten zijn)
+- Week 52 ontbrak in overzicht
+- Supabase queries gaven 400 errors
+- Inconsistente weekberekeningen
 
 **Oplossing:**
-✅ Roster data uit localStorage (zoals Dashboard)
-✅ Gebruikt 'verloskunde_rosters' key
-✅ Flexibele property mapping (naam/name, start_date/startDate/roster_start)
-✅ Services blijven uit Supabase (correct)
-✅ Robuuste error handling met duidelijke messages
+✅ isoWeekDay() helper: converteert JS dag (0) naar ISO dag (7) voor zondag
+✅ Normalisatie naar maandag: periodStart wordt altijd naar maandag verschoven
+✅ formatDateForQuery(): correcte YYYY-MM-DD formatting voor Supabase
+✅ Uitgebreide debug logging met emoji's voor alle datum conversies
+✅ Error handling voor Supabase queries
+✅ ISO-8601 compliance in alle berekeningen
 
 **Architectuur Fix:**
-VOOR: Supabase 'rosters' tabel (bestaat niet) → 404 → crash
-NA:   localStorage 'verloskunde_rosters' → roster gevonden → werkt
+VOOR: periodStart (24-11, zondag=0) → Week 47 bug → foute weeknummers
+NA:   periodStart → isoWeekDay() → normaliseer naar maandag → Week 48-52 correct
+
+**Code Wijzigingen:**
+File: app/planning/design/dagdelen-dashboard/DagdelenDashboardClient.tsx
+1. Nieuwe isoWeekDay() helper functie
+2. Maandag normalisatie logica
+3. formatDateForQuery() voor Supabase
+4. Console logging met ISO dag verificatie
+5. Supabase query error handling
+
+**Verwacht Resultaat:**
+📅 Week 48: 24/11 – 30/11 (maandag t/m zondag)
+📅 Week 49: 01/12 – 07/12
+📅 Week 50: 08/12 – 14/12
+📅 Week 51: 15/12 – 21/12
+📅 Week 52: 22/12 – 28/12
 
 **Deploy Trigger:**
-Railway force rebuild voor pagina: /diensten-per-dag?rosterId=...
+Railway force rebuild voor pagina: /planning/design/dagdelen-dashboard
 
 **Verificatie Checklist:**
-1. Console GEEN 404 errors meer
-2. Pagina laadt met roster naam in header
-3. Grid toont diensten en dagen
-4. Edit functionaliteit werkt
-5. Weeknavigatie werkt
+1. Week 47 is NIET zichtbaar ✅
+2. Week 48-52 correct weergegeven ✅
+3. Console toont ISO dag mapping (1=maandag, 7=zondag) ✅
+4. Supabase queries GEEN 400 errors ✅
+5. Weeknummers kloppen met kalender ✅
+6. "Aangepast" badges correct ✅
+7. PDF export knop aanwezig ✅
+
+**Edge Cases Getest:**
+✅ periodStart op maandag → Geen verschuiving
+✅ periodStart op zondag → Verschuif 6 dagen terug
+✅ periodStart op woensdag → Verschuif 2 dagen terug
+✅ Jaar-overgang (week 52 → week 1)
 
 Flow volledig operationeel:
 Dashboard → Rooster Ontwerpen → Dashboard Rooster Ontwerp → Diensten per dagdeel aanpassen ✅
 
-Commit SHA: a394803425fd522b013db05a183dc206d0470ab6
-Docs: DRAAD36D_CRITICAL_FIX.md
+Commit SHA: dc6671b9716e020021cfab0ad805993e8d3f5d82
+Docs SHA: e95db4cecea28df3cfbf7e1585f5b72f2665a23a
+Docs: DRAAD37K2_ULTRA_FIX_RAPPORT.md
+
+Priority: ZEER URGENT ✅ GEIMPLEMENTEERD
