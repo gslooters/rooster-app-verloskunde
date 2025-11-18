@@ -486,12 +486,12 @@ function DienstenPerDagContent() {
       {/* Header - STAP 1 VERBETERD */}
       <div className="mb-6">
         <div className="flex items-start justify-between">
-          {/* Linksboven: Titel met periode */}
+          {/* Linksboven: Titel met weekperiode (groot en vet) */}
           <div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">
+            <h1 className="text-3xl font-bold text-gray-900 mb-1">
               Diensten per Dagdeel periode : Week {periodInfo?.startWeek} - Week {periodInfo?.endWeek} {currentYear}
             </h1>
-            <p className="text-base text-gray-600">
+            <p className="text-sm text-gray-600">
               Van {periodInfo && formatDateLong(periodInfo.startDate)} tot en met {periodInfo && formatDateLong(periodInfo.endDate)}
             </p>
           </div>
