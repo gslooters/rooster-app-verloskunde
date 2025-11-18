@@ -138,7 +138,9 @@ function PeriodStaffingContent() {
   const [services, setServices] = useState<Service[]>([]);
   const [rpsRecords, setRpsRecords] = useState<RosterPeriodStaffing[]>([]);
   const [dagdeelAssignments, setDagdeelAssignments] = useState<DagdeelAssignment[]>([]);
-  const [currentWeek, setCurrentWeek] = useState<number>(getWeekNumber(new Date()));
+  
+  // DRAAD37C FIX: Initialiseer currentWeek op null, wordt ingesteld na laden van rosterInfo
+  const [currentWeek, setCurrentWeek] = useState<number | null>(null);
   const [currentYear] = useState<number>(new Date().getFullYear());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -190,6 +192,12 @@ function PeriodStaffingContent() {
 
         setRosterInfo(roster);
         console.log('[DAGDEEL PERIODE] Roster info loaded:', roster);
+
+        // DRAAD37C FIX: Stel currentWeek in op de startweek van het rooster
+        const startDate = new Date(roster.start_date);
+        const startWeek = getWeekNumber(startDate);
+        setCurrentWeek(startWeek);
+        console.log('[DAGDEEL PERIODE] Starting at week:', startWeek);
 
         // 2. Haal roster_period_staffing records voor dit rooster
         const { data: rpsData, error: rpsError } = await supabase
@@ -366,28 +374,28 @@ function PeriodStaffingContent() {
   // ============================================================================
 
   function canGoToPreviousWeek(): boolean {
-    if (!rosterInfo) return false;
+    if (!rosterInfo || currentWeek === null) return false;
     const weekDates = getWeekDates(currentWeek - 1, currentYear);
     const weekStart = formatDate(weekDates[0]);
     return weekStart >= rosterInfo.start_date;
   }
 
   function canGoToNextWeek(): boolean {
-    if (!rosterInfo) return false;
+    if (!rosterInfo || currentWeek === null) return false;
     const weekDates = getWeekDates(currentWeek + 1, currentYear);
     const weekEnd = formatDate(weekDates[6]);
     return weekEnd <= rosterInfo.end_date;
   }
 
   function handlePreviousWeek() {
-    if (canGoToPreviousWeek()) {
-      setCurrentWeek(prev => prev - 1);
+    if (canGoToPreviousWeek() && currentWeek !== null) {
+      setCurrentWeek(prev => (prev !== null ? prev - 1 : null));
     }
   }
 
   function handleNextWeek() {
-    if (canGoToNextWeek()) {
-      setCurrentWeek(prev => prev + 1);
+    if (canGoToNextWeek() && currentWeek !== null) {
+      setCurrentWeek(prev => (prev !== null ? prev + 1 : null));
     }
   }
 
@@ -446,10 +454,8 @@ function PeriodStaffingContent() {
   // RENDER
   // ============================================================================
 
-  const weekDates = getWeekDates(currentWeek, currentYear);
-  const periodInfo = getPeriodInfo();
-
-  if (loading) {
+  // DRAAD37C FIX: Wacht tot currentWeek is ingesteld
+  if (loading || currentWeek === null) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
@@ -459,6 +465,9 @@ function PeriodStaffingContent() {
       </div>
     );
   }
+
+  const weekDates = getWeekDates(currentWeek, currentYear);
+  const periodInfo = getPeriodInfo();
 
   if (error || !rosterInfo) {
     return (
