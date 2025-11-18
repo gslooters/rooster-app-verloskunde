@@ -29,6 +29,16 @@ export default function DagdelenDashboardClient() {
     }
   }, [rosterId, periodStart]);
 
+  /**
+   * 🔧 ISO-8601 Helper: Converteer JavaScript day (0=zondag) naar ISO day (7=zondag)
+   * @param date - De datum waarvan de dag bepaald moet worden
+   * @returns ISO weekdag nummer (1=maandag, 7=zondag)
+   */
+  const isoWeekDay = (date: Date): number => {
+    const jsDay = date.getDay(); // JavaScript: 0=zondag, 1=maandag, ..., 6=zaterdag
+    return jsDay === 0 ? 7 : jsDay; // ISO-8601: 1=maandag, ..., 7=zondag
+  };
+
   const loadWeekData = async () => {
     try {
       setLoading(true);
@@ -42,37 +52,64 @@ export default function DagdelenDashboardClient() {
 
       setRosterInfo(roster);
 
-      // KRITIEKE FIX: Start direct vanaf periodStart, zonder extra normalisatie
-      // De periodStart is al de juiste startdatum van de periode (24/11/2025)
-      const startDate = new Date(periodStart!);
+      // KRITIEKE FIX: Normaliseer naar maandag als startdatum niet op maandag valt
+      // Zorg ervoor dat periodStart ALTIJD begint op een maandag (ISO weekdag 1)
+      const rawStartDate = new Date(periodStart!);
+      const currentIsoDay = isoWeekDay(rawStartDate);
       
-      console.log('🔍 Period Start:', periodStart);
-      console.log('📅 Start Date:', startDate.toISOString());
-      console.log('📆 Day of week:', startDate.getDay(), '(0=zondag, 1=maandag)');
+      console.log('🔍 Period Start (raw):', periodStart);
+      console.log('📅 Raw Start Date:', rawStartDate.toISOString());
+      console.log('📆 JavaScript day:', rawStartDate.getDay(), '| ISO day:', currentIsoDay, '(1=maandag, 7=zondag)');
+      
+      // Als periodStart NIET op maandag valt, verschuif naar de HUIDIGE week maandag
+      const startDate = new Date(rawStartDate);
+      if (currentIsoDay !== 1) {
+        // Bereken hoeveel dagen terug naar maandag
+        const daysToMonday = currentIsoDay - 1;
+        startDate.setDate(rawStartDate.getDate() - daysToMonday);
+        console.log(`⚠️ Start datum NIET op maandag! Verschuiving: ${daysToMonday} dagen terug naar maandag`);
+      }
+      
+      console.log('✅ Genormaliseerde Start Date (maandag):', startDate.toISOString());
+      console.log('✅ Verificatie ISO day na correctie:', isoWeekDay(startDate));
       
       const weeks: WeekInfo[] = [];
 
-      // Genereer exact 5 weken vanaf startDate
+      // Genereer exact 5 weken vanaf genormaliseerde maandag
       for (let i = 0; i < 5; i++) {
         // Bereken weekStart door i*7 dagen toe te voegen aan startDate
         const weekStart = new Date(startDate);
         weekStart.setDate(startDate.getDate() + (i * 7));
         
         const weekEnd = new Date(weekStart);
-        weekEnd.setDate(weekStart.getDate() + 6);
+        weekEnd.setDate(weekStart.getDate() + 6); // Zondag is laatste dag van de week
 
         const weekNumber = getWeekNumber(weekStart);
         
-        console.log(`✅ Week ${i + 1}: Weeknr ${weekNumber}, Start: ${weekStart.toLocaleDateString('nl-NL')}, End: ${weekEnd.toLocaleDateString('nl-NL')}`);
+        // Verificatie logging
+        console.log(`✅ Week ${i + 1}: Weeknr ${weekNumber}, Start: ${weekStart.toLocaleDateString('nl-NL')} (ISO dag ${isoWeekDay(weekStart)}), End: ${weekEnd.toLocaleDateString('nl-NL')} (ISO dag ${isoWeekDay(weekEnd)})`);
+
+        // KRITIEKE FIX: Supabase query met correcte datum formatting
+        // Zorg dat weekStart en weekEnd altijd in YYYY-MM-DD formaat zijn
+        const weekStartStr = formatDateForQuery(weekStart);
+        const weekEndStr = formatDateForQuery(weekEnd);
+        
+        console.log(`🔎 Supabase query: date >= ${weekStartStr} AND date <= ${weekEndStr}`);
 
         // Check voor wijzigingen in deze week
-        const { data: changes } = await supabase
+        const { data: changes, error: queryError } = await supabase
           .from('roster_period_staffing_dagdelen')
           .select('updated_at, status')
           .eq('roster_id', rosterId)
-          .gte('date', weekStart.toISOString().split('T')[0])
-          .lte('date', weekEnd.toISOString().split('T')[0])
+          .gte('date', weekStartStr)
+          .lte('date', weekEndStr)
           .eq('status', 'AANGEPAST');
+
+        if (queryError) {
+          console.error(`❌ Supabase query error voor week ${weekNumber}:`, queryError);
+        } else {
+          console.log(`✅ Supabase query success voor week ${weekNumber}: ${changes?.length || 0} wijzigingen gevonden`);
+        }
 
         const hasChanges: boolean = !!(changes && changes.length > 0);
         const lastUpdated = changes && changes.length > 0 
@@ -102,6 +139,7 @@ export default function DagdelenDashboardClient() {
 
   /**
    * Berekent ISO-8601 weeknummer voor een gegeven datum
+   * Deze functie is al correct en gebruikt zondag=7 mapping
    * @param date - De datum waarvoor het weeknummer berekend moet worden
    * @returns Het weeknummer (1-53)
    */
@@ -113,10 +151,24 @@ export default function DagdelenDashboardClient() {
     return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
   };
 
+  /**
+   * Format datum voor weergave (dd/mm)
+   */
   const formatDate = (date: Date): string => {
     const day = String(date.getDate()).padStart(2, '0');
     const month = String(date.getMonth() + 1).padStart(2, '0');
     return `${day}/${month}`;
+  };
+
+  /**
+   * 🔧 NIEUWE HELPER: Format datum voor Supabase query (YYYY-MM-DD)
+   * Voorkomt timezone issues en 400 errors
+   */
+  const formatDateForQuery = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   const handleWeekClick = (weekNumber: number) => {
