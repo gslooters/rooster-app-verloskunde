@@ -141,39 +141,36 @@ function PeriodStaffingContent() {
       try {
         setLoading(true);
 
-        // 1. Haal roster info uit localStorage (zoals Dashboard doet)
-        if (typeof window === 'undefined') {
-          throw new Error('Browser omgeving niet beschikbaar');
+        // 🔥 FIX: Haal roster info DIRECT uit Supabase roosters tabel
+        console.log('[PeriodStaffing] Ophalen roster info voor ID:', rosterId);
+        
+        const { data: rosterData, error: rosterError } = await supabase
+          .from('roosters')
+          .select('id, naam, start_date, end_date')
+          .eq('id', rosterId)
+          .single();
+
+        if (rosterError) {
+          console.error('[PeriodStaffing] Supabase error:', rosterError);
+          throw new Error('Rooster niet gevonden in database');
         }
 
-        const rostersRaw = localStorage.getItem('verloskunde_rosters');
-        if (!rostersRaw) {
-          throw new Error('Geen rosters gevonden. Maak eerst een rooster aan.');
-        }
-
-        let rosters;
-        try {
-          rosters = JSON.parse(rostersRaw);
-        } catch (parseError) {
-          throw new Error('Ongeldige roster data');
-        }
-
-        const rosterData = rosters.find((r: any) => r.id === rosterId);
         if (!rosterData) {
-          throw new Error(`Rooster niet gevonden`);
+          throw new Error('Rooster bestaat niet');
         }
 
         const roster: RosterInfo = {
           id: rosterData.id,
-          naam: rosterData.naam || rosterData.name || 'Naamloos Rooster',
-          start_date: rosterData.start_date || rosterData.startDate || rosterData.roster_start,
-          end_date: rosterData.end_date || rosterData.endDate || rosterData.roster_end
+          naam: rosterData.naam || 'Naamloos Rooster',
+          start_date: rosterData.start_date,
+          end_date: rosterData.end_date
         };
 
         if (!roster.start_date || !roster.end_date) {
-          throw new Error('Roster periode ontbreekt');
+          throw new Error('Roster periode is niet compleet');
         }
 
+        console.log('[PeriodStaffing] ✅ Roster info opgehaald:', roster);
         setRosterInfo(roster);
 
         // 2. Haal roster_period_staffing records voor dit rooster
@@ -183,6 +180,8 @@ function PeriodStaffingContent() {
           .eq('roster_id', rosterId);
 
         if (rpsError) throw rpsError;
+        
+        console.log('[PeriodStaffing] RPS records opgehaald:', rpsData?.length || 0);
         setRpsRecords(rpsData || []);
 
         // 3. Haal unieke services uit deze RPS records
@@ -197,6 +196,7 @@ function PeriodStaffingContent() {
             .order('naam');
 
           if (servicesError) throw servicesError;
+          console.log('[PeriodStaffing] Services opgehaald:', servicesData?.length || 0);
           setServices(servicesData || []);
         } else {
           setServices([]);
@@ -212,13 +212,14 @@ function PeriodStaffingContent() {
           .eq('roster_period_staffing.roster_id', rosterId);
 
         if (dagdeelError) {
-          console.error('Error loading dagdeel assignments:', dagdeelError);
+          console.error('[PeriodStaffing] Error loading dagdeel assignments:', dagdeelError);
         }
         
+        console.log('[PeriodStaffing] ✅ Dagdeel records opgehaald:', dagdeelData?.length || 0);
         setDagdeelAssignments(dagdeelData || []);
         setError(null);
       } catch (err: any) {
-        console.error('Error loading data:', err);
+        console.error('[PeriodStaffing] ❌ Error loading data:', err);
         setError(err.message || 'Fout bij laden van gegevens');
       } finally {
         setLoading(false);
@@ -442,7 +443,7 @@ function PeriodStaffingContent() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <h2 className="text-xl font-semibold text-red-600 mb-2">Error</h2>
-          <p className="text-gray-600">{error || 'Rooster niet gevonden'}</p>
+          <p className="text-gray-600 mb-4">{error || 'Rooster niet gevonden'}</p>
           <button
             onClick={() => router.push(`/planning/design/dashboard?rosterId=${rosterId}`)}
             className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
