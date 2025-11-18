@@ -80,7 +80,15 @@ function getISOWeekNumber(date: Date): number {
   return 1 + Math.ceil((firstThursday - target.valueOf()) / 604800000);
 }
 
-// Helper voor datums van een week (ongewijzigd)
+// NIEUWE FUNCTIE: Bepaal het ISO-jaar van een datum (kan afwijken van kalenderjaar!)
+function getISOYear(date: Date): number {
+  const target = new Date(date.valueOf());
+  const dayNr = (target.getDay() + 6) % 7;
+  target.setDate(target.getDate() - dayNr + 3); // Donderdag van de week
+  return target.getFullYear();
+}
+
+// Helper voor datums van een week
 function getWeekDates(weekNumber: number, year: number): Date[] {
   const simple = new Date(year, 0, 1 + (weekNumber - 1) * 7);
   const dayOfWeek = simple.getDay();
@@ -144,9 +152,9 @@ function PeriodStaffingContent() {
   const [services, setServices] = useState<Service[]>([]);
   const [rpsRecords, setRpsRecords] = useState<RosterPeriodStaffing[]>([]);
   const [dagdeelAssignments, setDagdeelAssignments] = useState<DagdeelAssignment[]>([]);
-  // Initialiseer correct, instellen na laden rosterInfo
   const [currentWeek, setCurrentWeek] = useState<number | null>(null);
-  const [currentYear] = useState<number>(new Date().getFullYear());
+  // FIX: currentYear is nu ook dynamisch state, niet meer vast op browser-jaar
+  const [currentYear, setCurrentYear] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -184,10 +192,21 @@ function PeriodStaffingContent() {
         if (!roster.start_date || !roster.end_date) throw new Error('Rooster periode is niet compleet');
         setRosterInfo(roster);
 
-        // ISO-weekfix: startweek correct initialiseren
+        // FIX: Bepaal startweek EN startjaar op basis van rooster.start_date
         const startDate = new Date(roster.start_date);
         const startWeek = getISOWeekNumber(startDate);
+        const startYear = getISOYear(startDate);
+        
+        console.log('[PERIOD-STAFFING] Rooster initialisatie:', {
+          start_date: roster.start_date,
+          startWeek,
+          startYear,
+          weekDates: getWeekDates(startWeek, startYear).map(d => formatDate(d))
+        });
+        
         setCurrentWeek(startWeek);
+        setCurrentYear(startYear);
+
         // 2. Period data ophalen
         const { data: rpsData, error: rpsError } = await supabase
           .from('roster_period_staffing')
@@ -195,6 +214,7 @@ function PeriodStaffingContent() {
           .eq('roster_id', rosterId);
         if (rpsError) throw rpsError;
         setRpsRecords(rpsData || []);
+        
         // 3. Unieke services ophalen
         const uniqueServiceIds = [...new Set((rpsData || []).map(r => r.service_id))];
         if (uniqueServiceIds.length > 0) {
@@ -207,6 +227,7 @@ function PeriodStaffingContent() {
           if (servicesError) throw servicesError;
           setServices(servicesData || []);
         } else setServices([]);
+        
         // 4. Dagdeel assignments ophalen
         const { data: dagdeelData, error: dagdeelError } = await supabase
           .from('roster_period_staffing_dagdelen')
@@ -223,6 +244,27 @@ function PeriodStaffingContent() {
     }
     loadData();
   }, [rosterId]);
+
+  // FIX: Update jaar wanneer week verandert (voor navigatie over jaargrens)
+  useEffect(() => {
+    if (currentWeek !== null && currentYear !== null) {
+      // Bepaal eerste datum van huidige week om het correcte jaar te vinden
+      const weekDates = getWeekDates(currentWeek, currentYear);
+      const firstDateOfWeek = weekDates[0];
+      const correctYear = getISOYear(firstDateOfWeek);
+      
+      // Als het jaar niet klopt, update dan currentYear
+      if (correctYear !== currentYear) {
+        console.log('[PERIOD-STAFFING] Jaar correctie:', {
+          currentWeek,
+          oldYear: currentYear,
+          newYear: correctYear,
+          firstDateOfWeek: formatDate(firstDateOfWeek)
+        });
+        setCurrentYear(correctYear);
+      }
+    }
+  }, [currentWeek, currentYear]);
 
   // ========== CELL DATA HELPER ==============
   function getCellData(serviceId: string, date: string, dagdeel: string, team: string): CellData | null {
@@ -314,22 +356,25 @@ function PeriodStaffingContent() {
 
   // ========== WEEK NAVIGATION ==============
   function canGoToPreviousWeek(): boolean {
-    if (!rosterInfo || currentWeek === null) return false;
+    if (!rosterInfo || currentWeek === null || currentYear === null) return false;
     const weekDates = getWeekDates(currentWeek - 1, currentYear);
     const weekStart = formatDate(weekDates[0]);
     return weekStart >= rosterInfo.start_date;
   }
+  
   function canGoToNextWeek(): boolean {
-    if (!rosterInfo || currentWeek === null) return false;
+    if (!rosterInfo || currentWeek === null || currentYear === null) return false;
     const weekDates = getWeekDates(currentWeek + 1, currentYear);
     const weekEnd = formatDate(weekDates[6]);
     return weekEnd <= rosterInfo.end_date;
   }
+  
   function handlePreviousWeek() {
     if (canGoToPreviousWeek() && currentWeek !== null) {
       setCurrentWeek(prev => (prev !== null ? prev - 1 : null));
     }
   }
+  
   function handleNextWeek() {
     if (canGoToNextWeek() && currentWeek !== null) {
       setCurrentWeek(prev => (prev !== null ? prev + 1 : null));
@@ -341,7 +386,6 @@ function PeriodStaffingContent() {
     if (!rosterInfo) return null;
     const startDate = new Date(rosterInfo.start_date);
     const endDate = new Date(rosterInfo.end_date);
-    // ISO FIX: gebruik getISOWeekNumber
     const startWeek = getISOWeekNumber(startDate);
     const endWeek = getISOWeekNumber(endDate);
     return { startWeek, endWeek, startDate, endDate };
@@ -369,7 +413,7 @@ function PeriodStaffingContent() {
   }
 
   // ========== RENDER ==============
-  if (loading || currentWeek === null) {
+  if (loading || currentWeek === null || currentYear === null) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
@@ -379,8 +423,10 @@ function PeriodStaffingContent() {
       </div>
     );
   }
+  
   const weekDates = getWeekDates(currentWeek, currentYear);
   const periodInfo = getPeriodInfo();
+  
   if (error || !rosterInfo) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -397,6 +443,7 @@ function PeriodStaffingContent() {
       </div>
     );
   }
+  
   return (
     <div className="min-h-screen bg-gray-50 p-6" data-screen="period-staffing-dagdelen">
       {/* Header */}
@@ -404,7 +451,7 @@ function PeriodStaffingContent() {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-1">
-              Diensten per Dagdeel periode : Week {periodInfo?.startWeek} - Week {periodInfo?.endWeek} {currentYear}
+              Diensten per Dagdeel periode : Week {periodInfo?.startWeek} - Week {periodInfo?.endWeek} {getISOYear(periodInfo?.endDate || new Date())}
             </h1>
             <p className="text-sm text-gray-600">
               Van {periodInfo && formatDateLong(periodInfo.startDate)} tot en met {periodInfo && formatDateLong(periodInfo.endDate)}
@@ -419,11 +466,29 @@ function PeriodStaffingContent() {
           </button>
         </div>
       </div>
+      
       <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
         <h3 className="font-semibold mb-3 text-gray-900">Status Legenda:</h3>
         <div className="flex flex-wrap gap-4">
-          <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-red-500"></div><span className="text-sm text-gray-700"><strong>MOET</strong> - Vereist minimum (standaard: 1)</span></div> <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-green-500"></div><span className="text-sm text-gray-700"><strong>MAG</strong> - Optioneel (standaard: 1)</span></div> <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-gray-400"></div><span className="text-sm text-gray-700"><strong>MAG NIET</strong> - Niet toegestaan (standaard: 0)</span></div> <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-blue-500"></div><span className="text-sm text-gray-700"><strong>AANGEPAST</strong> - Handmatig gewijzigd van de regel</span></div> </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded-full bg-red-500"></div>
+            <span className="text-sm text-gray-700"><strong>MOET</strong> - Vereist minimum (standaard: 1)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded-full bg-green-500"></div>
+            <span className="text-sm text-gray-700"><strong>MAG</strong> - Optioneel (standaard: 1)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded-full bg-gray-400"></div>
+            <span className="text-sm text-gray-700"><strong>MAG NIET</strong> - Niet toegestaan (standaard: 0)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded-full bg-blue-500"></div>
+            <span className="text-sm text-gray-700"><strong>AANGEPAST</strong> - Handmatig gewijzigd van de regel</span>
+          </div>
+        </div>
       </div>
+      
       <div className="bg-white rounded-lg shadow-sm p-4 mb-4 flex items-center justify-between">
         {canGoToPreviousWeek() ? (
           <button
@@ -433,7 +498,9 @@ function PeriodStaffingContent() {
             <ChevronLeft className="h-4 w-4 mr-2" />
             Vorige Week
           </button>
-        ) : (<div className="w-32"></div>)}
+        ) : (
+          <div className="w-32"></div>
+        )}
         <div className="flex items-center gap-2 text-lg font-semibold">
           <Calendar className="h-5 w-5 text-blue-600" />
           Week {currentWeek}, {currentYear}
@@ -446,8 +513,11 @@ function PeriodStaffingContent() {
             Volgende Week
             <ChevronRight className="h-4 w-4 ml-2" />
           </button>
-        ) : (<div className="w-32"></div>)}
+        ) : (
+          <div className="w-32"></div>
+        )}
       </div>
+      
       <div className="bg-white rounded-lg shadow-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
@@ -464,16 +534,24 @@ function PeriodStaffingContent() {
                 ))}
               </tr>
               <tr className="bg-blue-100">
-                <th className="border border-gray-300 p-2 text-left sticky left-0 bg-blue-100 z-10"><span className="text-xs font-semibold text-gray-700">Team</span></th>
+                <th className="border border-gray-300 p-2 text-left sticky left-0 bg-blue-100 z-10">
+                  <span className="text-xs font-semibold text-gray-700">Team</span>
+                </th>
                 {weekDates.map((date, dateIdx) => dagdelen.map((dagdeel, dagdeelIdx) => (
-                  <th key={`${dateIdx}-${dagdeelIdx}`} className={`border border-gray-300 p-2 text-center ${isWeekendDay(date) ? 'bg-blue-50' : ''}`}> <div className="flex items-center justify-center text-gray-600">{getDagdeelIcon(dagdeel)}</div> </th>
+                  <th key={`${dateIdx}-${dagdeelIdx}`} className={`border border-gray-300 p-2 text-center ${isWeekendDay(date) ? 'bg-blue-50' : ''}`}>
+                    <div className="flex items-center justify-center text-gray-600">
+                      {getDagdeelIcon(dagdeel)}
+                    </div>
+                  </th>
                 )))}
               </tr>
             </thead>
             <tbody>
               {services.length === 0 ? (
                 <tr>
-                  <td colSpan={22} className="border border-gray-300 p-8 text-center text-gray-500">Geen diensten gevonden voor dit rooster. Ga naar Dashboard om diensten toe te voegen.</td>
+                  <td colSpan={22} className="border border-gray-300 p-8 text-center text-gray-500">
+                    Geen diensten gevonden voor dit rooster. Ga naar Dashboard om diensten toe te voegen.
+                  </td>
                 </tr>
               ) : (
                 services.map((service) => (
@@ -486,7 +564,10 @@ function PeriodStaffingContent() {
                         <td className={`border border-gray-300 p-3 sticky left-0 ${teamColor} z-10`}>
                           {isFirstTeamRow && (
                             <div className="font-semibold text-gray-900 mb-1">
-                              <span className="inline-block px-2 py-1 rounded text-xs font-bold text-white mr-2" style={{ backgroundColor: service.kleur || '#666' }}>{service.code}</span>{service.naam}
+                              <span className="inline-block px-2 py-1 rounded text-xs font-bold text-white mr-2" style={{ backgroundColor: service.kleur || '#666' }}>
+                                {service.code}
+                              </span>
+                              {service.naam}
                             </div>
                           )}
                           <div className="text-sm text-gray-600 font-medium">{teamLabel}</div>
@@ -494,9 +575,30 @@ function PeriodStaffingContent() {
                         {weekDates.map((date, dateIdx) => dagdelen.map((dagdeel, dagdeelIdx) => {
                           const cellData = getCellData(service.id, formatDate(date), dagdeel, team);
                           if (!cellData) {
-                            return (<td key={`${dateIdx}-${dagdeelIdx}`} className={`border border-gray-300 p-1 text-center ${isWeekendDay(date) ? 'bg-gray-100' : 'bg-white'}`}><div className="text-xs text-gray-400">-</div></td>); 
+                            return (
+                              <td key={`${dateIdx}-${dagdeelIdx}`} className={`border border-gray-300 p-1 text-center ${isWeekendDay(date) ? 'bg-gray-100' : 'bg-white'}`}>
+                                <div className="text-xs text-gray-400">-</div>
+                              </td>
+                            );
                           }
-                          return (<td key={`${dateIdx}-${dagdeelIdx}`} className={`border border-gray-300 p-1 text-center ${isWeekendDay(date) ? 'bg-gray-50' : 'bg-white'}`}><div className="flex items-center justify-center gap-1"><div className={`w-3 h-3 rounded-full ${getStatusColor(cellData.status)}`} title={cellData.status}></div><input type="number" min="0" max="9" value={cellData.aantal} onChange={(e) => { const val = parseInt(e.target.value) || 0; handleCellChange(cellData, val); }} className="w-8 h-7 text-center text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500" /></div></td>);
+                          return (
+                            <td key={`${dateIdx}-${dagdeelIdx}`} className={`border border-gray-300 p-1 text-center ${isWeekendDay(date) ? 'bg-gray-50' : 'bg-white'}`}>
+                              <div className="flex items-center justify-center gap-1">
+                                <div className={`w-3 h-3 rounded-full ${getStatusColor(cellData.status)}`} title={cellData.status}></div>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="9"
+                                  value={cellData.aantal}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value) || 0;
+                                    handleCellChange(cellData, val);
+                                  }}
+                                  className="w-8 h-7 text-center text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                />
+                              </div>
+                            </td>
+                          );
                         }))}
                       </tr>
                     );
@@ -507,15 +609,35 @@ function PeriodStaffingContent() {
           </table>
         </div>
       </div>
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4 mb-2"><p className="text-sm text-blue-900"><strong>Instructie:</strong> Stel per dienst het minimale en maximale aantal benodigde medewerkers in per dagdeel en team. Klik op de cellen om het aantal aan te passen (0-9).</p></div>
-      <div className="mt-3 bg-white rounded-lg shadow-sm p-4"><div className="text-sm text-gray-600"><p><strong>Totaal diensten:</strong> {services.length}</p><p><strong>Totaal dagdeel records:</strong> {dagdeelAssignments.length}</p><p className="mt-2 text-xs text-gray-500">Periode: {rosterInfo.start_date} tot {rosterInfo.end_date}</p></div></div>
+      
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4 mb-2">
+        <p className="text-sm text-blue-900">
+          <strong>Instructie:</strong> Stel per dienst het minimale en maximale aantal benodigde medewerkers in per dagdeel en team. 
+          Klik op de cellen om het aantal aan te passen (0-9).
+        </p>
+      </div>
+      
+      <div className="mt-3 bg-white rounded-lg shadow-sm p-4">
+        <div className="text-sm text-gray-600">
+          <p><strong>Totaal diensten:</strong> {services.length}</p>
+          <p><strong>Totaal dagdeel records:</strong> {dagdeelAssignments.length}</p>
+          <p className="mt-2 text-xs text-gray-500">Periode: {rosterInfo.start_date} tot {rosterInfo.end_date}</p>
+        </div>
+      </div>
     </div>
   );
 }
 
 export default function PeriodStaffingPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="text-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div><p className="text-gray-600">Pagina wordt geladen...</p></div></div>}>
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Pagina wordt geladen...</p>
+        </div>
+      </div>
+    }>
       <PeriodStaffingContent />
     </Suspense>
   );
