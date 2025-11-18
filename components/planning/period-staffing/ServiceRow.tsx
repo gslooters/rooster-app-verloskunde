@@ -93,10 +93,11 @@ export function ServiceRow({ serviceId, records, days, holidays, onUpdate }: Pro
   }
 
   // Definieer teams met hun eigenschappen
+  // Fix: Converteer null naar false met !! operator voor TypeScript type compatibility
   const teams: Array<{ type: TeamType; label: string; color: string; active: boolean }> = [
-    { type: 'groen', label: 'Groen', color: '#10B981', active: firstRecord.team_gro },
-    { type: 'oranje', label: 'Oranje', color: '#F97316', active: firstRecord.team_ora },
-    { type: 'praktijk', label: 'Praktijk', color: '#3B82F6', active: firstRecord.team_tot }
+    { type: 'groen', label: 'Groen', color: '#10B981', active: !!firstRecord.team_gro },
+    { type: 'oranje', label: 'Oranje', color: '#F97316', active: !!firstRecord.team_ora },
+    { type: 'praktijk', label: 'Praktijk', color: '#3B82F6', active: !!firstRecord.team_tot }
   ];
 
   return (
