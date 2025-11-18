@@ -6,6 +6,16 @@ import { useEffect, useState, Suspense } from 'react';
 import { ChevronLeft, ChevronRight, ArrowLeft, Calendar, Sun, Sunset, Moon } from 'lucide-react';
 
 // ============================================================================
+// SCHERM: DIENSTEN PER DAGDEEL PERIODE
+// URL: /planning/period-staffing?rosterId={id}
+// Functie: Bezetting per dienst/team/dagdeel instellen voor roosterperiode
+// Database: roster_period_staffing + roster_period_staffing_dagdelen
+// 
+// LET OP: Dit is NIET het "Niet Beschikbaar" scherm!
+//         NB-scherm bevindt zich op /planning/design/unavailability
+// ============================================================================
+
+// ============================================================================
 // TYPES
 // ============================================================================
 
@@ -148,6 +158,8 @@ function PeriodStaffingContent() {
         return;
       }
 
+      console.log('[SCHERM: Diensten per Dagdeel periode] Loading data for roster:', rosterId);
+
       try {
         setLoading(true);
 
@@ -177,6 +189,7 @@ function PeriodStaffingContent() {
         }
 
         setRosterInfo(roster);
+        console.log('[DAGDEEL PERIODE] Roster info loaded:', roster);
 
         // 2. Haal roster_period_staffing records voor dit rooster
         const { data: rpsData, error: rpsError } = await supabase
@@ -200,6 +213,7 @@ function PeriodStaffingContent() {
 
           if (servicesError) throw servicesError;
           setServices(servicesData || []);
+          console.log('[DAGDEEL PERIODE] Services loaded:', servicesData?.length);
         } else {
           setServices([]);
         }
@@ -214,11 +228,13 @@ function PeriodStaffingContent() {
           .eq('roster_period_staffing.roster_id', rosterId);
 
         if (dagdeelError) {
-          console.error('Error loading dagdeel assignments:', dagdeelError);
+          console.error('[DAGDEEL PERIODE] Error loading dagdeel assignments:', dagdeelError);
         }
         setDagdeelAssignments(dagdeelData || []);
+        console.log('[DAGDEEL PERIODE] Dagdeel assignments loaded:', dagdeelData?.length);
         setError(null);
       } catch (err: any) {
+        console.error('[DAGDEEL PERIODE] Error:', err);
         setError(err.message || 'Fout bij laden van gegevens');
       } finally {
         setLoading(false);
@@ -462,11 +478,11 @@ function PeriodStaffingContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      {/* Header - STAP 1 VERBETERD */}
+    <div className="min-h-screen bg-gray-50 p-6" data-screen="period-staffing-dagdelen">
+      {/* Header */}
       <div className="mb-6">
         <div className="flex items-start justify-between">
-          {/* Linksboven: Titel met weekperiode (groot en vet) */}
+          {/* Linksboven: Titel met weekperiode */}
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-1">
               Diensten per Dagdeel periode : Week {periodInfo?.startWeek} - Week {periodInfo?.endWeek} {currentYear}
@@ -487,8 +503,31 @@ function PeriodStaffingContent() {
         </div>
       </div>
 
-      {/* Week Navigation */}
-      <div className="bg-white rounded-lg shadow-sm p-4 mb-6 flex items-center justify-between">
+      {/* VERBETERING 2: Status Legenda BOVEN week-navigator */}
+      <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
+        <h3 className="font-semibold mb-3 text-gray-900">Status Legenda:</h3>
+        <div className="flex flex-wrap gap-4">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded-full bg-red-500"></div>
+            <span className="text-sm text-gray-700"><strong>MOET</strong> - Vereist minimum (standaard: 1)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded-full bg-green-500"></div>
+            <span className="text-sm text-gray-700"><strong>MAG</strong> - Optioneel (standaard: 1)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded-full bg-gray-400"></div>
+            <span className="text-sm text-gray-700"><strong>MAG NIET</strong> - Niet toegestaan (standaard: 0)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded-full bg-blue-500"></div>
+            <span className="text-sm text-gray-700"><strong>AANGEPAST</strong> - Handmatig gewijzigd van de regel</span>
+          </div>
+        </div>
+      </div>
+
+      {/* VERBETERING 3: Week Navigation - precies boven dagsoort headers */}
+      <div className="bg-white rounded-lg shadow-sm p-4 mb-4 flex items-center justify-between">
         {canGoToPreviousWeek() ? (
           <button
             onClick={handlePreviousWeek}
@@ -519,37 +558,6 @@ function PeriodStaffingContent() {
         )}
       </div>
 
-      {/* Instructie */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-        <p className="text-sm text-blue-900">
-          <strong>Instructie:</strong> Stel per dienst het minimale en maximale aantal benodigde medewerkers in per dagdeel en team.
-          Klik op de cellen om het aantal aan te passen (0-9).
-        </p>
-      </div>
-
-      {/* Legend */}
-      <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
-        <h3 className="font-semibold mb-3 text-gray-900">Status Legenda:</h3>
-        <div className="flex flex-wrap gap-4">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-red-500"></div>
-            <span className="text-sm text-gray-700"><strong>MOET</strong> - Vereist minimum (standaard: 1)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-green-500"></div>
-            <span className="text-sm text-gray-700"><strong>MAG</strong> - Optioneel (standaard: 1)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-gray-400"></div>
-            <span className="text-sm text-gray-700"><strong>MAG NIET</strong> - Niet toegestaan (standaard: 0)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-blue-500"></div>
-            <span className="text-sm text-gray-700"><strong>AANGEPAST</strong> - Handmatig gewijzigd van de regel</span>
-          </div>
-        </div>
-      </div>
-
       {/* Main Grid */}
       <div className="bg-white rounded-lg shadow-lg overflow-hidden">
         <div className="overflow-x-auto">
@@ -557,7 +565,7 @@ function PeriodStaffingContent() {
             <thead>
               <tr className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
                 <th className="border border-blue-500 p-3 text-left sticky left-0 bg-blue-600 z-10">
-                  <div className="text-sm font-semibold">Week {currentWeek}</div>
+                  <div className="text-sm font-semibold">Dienst / Team</div>
                 </th>
                 {weekDates.map((date, idx) => (
                   <th
@@ -575,7 +583,7 @@ function PeriodStaffingContent() {
               
               <tr className="bg-blue-100">
                 <th className="border border-gray-300 p-2 text-left sticky left-0 bg-blue-100 z-10">
-                  <span className="text-xs font-semibold text-gray-700">Dienst / Team</span>
+                  <span className="text-xs font-semibold text-gray-700">Team</span>
                 </th>
                 {weekDates.map((date, dateIdx) => (
                   dagdelen.map((dagdeel, dagdeelIdx) => (
@@ -613,6 +621,7 @@ function PeriodStaffingContent() {
 
                     return (
                       <tr key={`${service.id}-${team}`} className={`hover:bg-gray-50 ${teamColor}`}>
+                        {/* VERBETERING 4: Team als aparte kolom naast Dienst */}
                         <td className={`border border-gray-300 p-3 sticky left-0 ${teamColor} z-10`}>
                           {isFirstTeamRow && (
                             <div className="font-semibold text-gray-900 mb-1">
@@ -690,8 +699,16 @@ function PeriodStaffingContent() {
         </div>
       </div>
 
+      {/* VERBETERING 1: Instructie direct boven de footer */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4 mb-2">
+        <p className="text-sm text-blue-900">
+          <strong>Instructie:</strong> Stel per dienst het minimale en maximale aantal benodigde medewerkers in per dagdeel en team.
+          Klik op de cellen om het aantal aan te passen (0-9).
+        </p>
+      </div>
+
       {/* Footer Info */}
-      <div className="mt-6 bg-white rounded-lg shadow-sm p-4">
+      <div className="mt-3 bg-white rounded-lg shadow-sm p-4">
         <div className="text-sm text-gray-600">
           <p><strong>Totaal diensten:</strong> {services.length}</p>
           <p><strong>Totaal dagdeel records:</strong> {dagdeelAssignments.length}</p>
