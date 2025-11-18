@@ -29,6 +29,22 @@ export default function DagdelenDashboardClient() {
     }
   }, [rosterId, periodStart]);
 
+  /**
+   * Normaliseert een datum naar de maandag van die week (ISO-8601 standaard)
+   * @param date - De datum om te normaliseren
+   * @returns De maandag van de week waarin de datum valt
+   */
+  const normalizeToMonday = (date: Date): Date => {
+    const d = new Date(date);
+    const day = d.getDay(); // 0 = zondag, 1 = maandag, ..., 6 = zaterdag
+    
+    // Als zondag (0), ga 6 dagen terug, anders bereken verschil naar maandag
+    const diff = day === 0 ? -6 : 1 - day;
+    d.setDate(d.getDate() + diff);
+    
+    return d;
+  };
+
   const loadWeekData = async () => {
     try {
       setLoading(true);
@@ -42,18 +58,28 @@ export default function DagdelenDashboardClient() {
 
       setRosterInfo(roster);
 
-      // Bereken 5 weken vanaf startdatum
+      // Bereken 5 weken vanaf startdatum - NORMALISEER EERST NAAR MAANDAG
       const startDate = new Date(periodStart!);
+      const normalizedStart = normalizeToMonday(startDate);
+      
+      // Debug logging voor verificatie
+      console.log('Original startDate:', startDate.toISOString());
+      console.log('Normalized to Monday:', normalizedStart.toISOString());
+      
       const weeks: WeekInfo[] = [];
 
       for (let i = 0; i < 5; i++) {
-        const weekStart = new Date(startDate);
-        weekStart.setDate(startDate.getDate() + (i * 7));
+        // Start vanaf genormaliseerde maandag
+        const weekStart = new Date(normalizedStart);
+        weekStart.setDate(normalizedStart.getDate() + (i * 7));
         
         const weekEnd = new Date(weekStart);
         weekEnd.setDate(weekStart.getDate() + 6);
 
         const weekNumber = getWeekNumber(weekStart);
+        
+        // Debug logging voor verificatie
+        console.log(`Week ${i + 1}: Week number ${weekNumber}, Start: ${weekStart.toISOString()}, End: ${weekEnd.toISOString()}`);
 
         // Check voor wijzigingen in deze week
         const { data: changes } = await supabase
@@ -87,9 +113,14 @@ export default function DagdelenDashboardClient() {
     }
   };
 
+  /**
+   * Berekent ISO-8601 weeknummer voor een gegeven datum
+   * @param date - De datum waarvoor het weeknummer berekend moet worden
+   * @returns Het weeknummer (1-53)
+   */
   const getWeekNumber = (date: Date): number => {
     const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-    const dayNum = d.getUTCDay() || 7;
+    const dayNum = d.getUTCDay() || 7; // Zondag=7, Maandag=1
     d.setUTCDate(d.getUTCDate() + 4 - dayNum);
     const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
     return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
