@@ -93,6 +93,17 @@ function formatDateDisplay(date: Date): string {
   return `${day}/${month}`;
 }
 
+function formatDateLong(date: Date): string {
+  const months = [
+    'januari', 'februari', 'maart', 'april', 'mei', 'juni',
+    'juli', 'augustus', 'september', 'oktober', 'november', 'december'
+  ];
+  const day = date.getDate();
+  const month = months[date.getMonth()];
+  const year = date.getFullYear();
+  return `${day} ${month} ${year}`;
+}
+
 function getDayName(date: Date): string {
   const days = ['ZO', 'MA', 'DI', 'WO', 'DO', 'VR', 'ZA'];
   return days[date.getDay()];
@@ -140,7 +151,7 @@ function PeriodStaffingContent() {
       try {
         setLoading(true);
 
-        // 🔥 FIX: Haal rooster info DIRECT uit Supabase roosters tabel met correcte kolomnamen
+        // Haal rooster info DIRECT uit Supabase roosters tabel
         const { data: rosterData, error: rosterError } = await supabase
           .from('roosters')
           .select('id, start_date, end_date')
@@ -222,7 +233,6 @@ function PeriodStaffingContent() {
   // ============================================================================
 
   function getCellData(serviceId: string, date: string, dagdeel: string, team: string): CellData | null {
-    // Zoek RPS record voor deze dienst + datum
     const rps = rpsRecords.find(r => 
       r.service_id === serviceId && 
       r.date === date
@@ -232,7 +242,6 @@ function PeriodStaffingContent() {
       return null;
     }
 
-    // Zoek dagdeel assignment
     const assignment = dagdeelAssignments.find(a =>
       a.roster_period_staffing_id === rps.id &&
       a.dagdeel === dagdeel &&
@@ -261,13 +270,11 @@ function PeriodStaffingContent() {
     const oldAantal = cellData.aantal;
     const oldStatus = cellData.status;
 
-    // Validatie
     if (newAantal < 0 || newAantal > 9) {
       alert('Aantal moet tussen 0 en 9 zijn');
       return;
     }
 
-    // Bepaal of waarschuwing nodig is
     let needsWarning = false;
     let warningMessage = '';
     let newStatus = oldStatus;
@@ -286,17 +293,15 @@ function PeriodStaffingContent() {
       newStatus = 'AANGEPAST';
     }
 
-    // Toon waarschuwing indien nodig
     if (needsWarning) {
       const confirmed = confirm(warningMessage);
       if (!confirmed) {
-        return; // Gebruiker annuleert
+        return;
       }
     }
 
     try {
       if (cellData.assignmentId) {
-        // Update bestaande assignment
         const { error } = await supabase
           .from('roster_period_staffing_dagdelen')
           .update({ 
@@ -308,7 +313,6 @@ function PeriodStaffingContent() {
 
         if (error) throw error;
 
-        // Update lokale state
         setDagdeelAssignments(prev =>
           prev.map(a => 
             a.id === cellData.assignmentId 
@@ -317,7 +321,6 @@ function PeriodStaffingContent() {
           )
         );
       } else {
-        // Nieuwe assignment aanmaken
         const newAssignment: DagdeelAssignment = {
           roster_period_staffing_id: cellData.rpsId,
           dagdeel: cellData.dagdeel,
@@ -373,6 +376,21 @@ function PeriodStaffingContent() {
   }
 
   // ============================================================================
+  // PERIOD INFO HELPER
+  // ============================================================================
+
+  function getPeriodInfo(): { startWeek: number; endWeek: number; startDate: Date; endDate: Date } | null {
+    if (!rosterInfo) return null;
+    
+    const startDate = new Date(rosterInfo.start_date);
+    const endDate = new Date(rosterInfo.end_date);
+    const startWeek = getWeekNumber(startDate);
+    const endWeek = getWeekNumber(endDate);
+    
+    return { startWeek, endWeek, startDate, endDate };
+  }
+
+  // ============================================================================
   // STATUS COLOR HELPER
   // ============================================================================
 
@@ -413,6 +431,7 @@ function PeriodStaffingContent() {
   // ============================================================================
 
   const weekDates = getWeekDates(currentWeek, currentYear);
+  const periodInfo = getPeriodInfo();
 
   if (loading) {
     return (
@@ -444,21 +463,28 @@ function PeriodStaffingContent() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
-      {/* Header */}
+      {/* Header - STAP 1 VERBETERD */}
       <div className="mb-6">
-        <button
-          onClick={() => router.push(`/planning/design/dashboard?rosterId=${rosterId}`)}
-          className="flex items-center text-blue-600 hover:text-blue-800 mb-4"
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Terug naar Dashboard
-        </button>
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          Diensten per Dagdeel
-        </h1>
-        <p className="text-gray-600">
-          Roosterperiode: <span className="font-semibold">{rosterInfo.start_date} tot {rosterInfo.end_date}</span>
-        </p>
+        <div className="flex items-start justify-between">
+          {/* Linksboven: Titel met weekperiode (groot en vet) */}
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-1">
+              Diensten per Dagdeel periode : Week {periodInfo?.startWeek} - Week {periodInfo?.endWeek} {currentYear}
+            </h1>
+            <p className="text-sm text-gray-600">
+              Van {periodInfo && formatDateLong(periodInfo.startDate)} tot en met {periodInfo && formatDateLong(periodInfo.endDate)}
+            </p>
+          </div>
+          
+          {/* Rechtsboven: Terug naar Dashboard button */}
+          <button
+            onClick={() => router.push(`/planning/design/dashboard?rosterId=${rosterId}`)}
+            className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-md flex items-center gap-2"
+          >
+            <ArrowLeft className="h-5 w-5" />
+            Terug naar Dashboard
+          </button>
+        </div>
       </div>
 
       {/* Week Navigation */}
@@ -529,7 +555,6 @@ function PeriodStaffingContent() {
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
-              {/* Week Header */}
               <tr className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
                 <th className="border border-blue-500 p-3 text-left sticky left-0 bg-blue-600 z-10">
                   <div className="text-sm font-semibold">Week {currentWeek}</div>
@@ -548,7 +573,6 @@ function PeriodStaffingContent() {
                 ))}
               </tr>
               
-              {/* Dagdeel Icons Row */}
               <tr className="bg-blue-100">
                 <th className="border border-gray-300 p-2 text-left sticky left-0 bg-blue-100 z-10">
                   <span className="text-xs font-semibold text-gray-700">Dienst / Team</span>
@@ -581,7 +605,7 @@ function PeriodStaffingContent() {
                   </td>
                 </tr>
               ) : (
-                services.map((service, serviceIdx) => (
+                services.map((service) => (
                   teams.map((team, teamIdx) => {
                     const isFirstTeamRow = teamIdx === 0;
                     const teamLabel = team === 'GRO' ? 'Groen' : team === 'ORA' ? 'Oranje' : 'Praktijk';
