@@ -94,6 +94,17 @@ function formatDateDisplay(date: Date): string {
   return `${day}/${month}`;
 }
 
+function formatDateLong(date: Date): string {
+  const months = [
+    'januari', 'februari', 'maart', 'april', 'mei', 'juni',
+    'juli', 'augustus', 'september', 'oktober', 'november', 'december'
+  ];
+  const day = date.getDate();
+  const month = months[date.getMonth()];
+  const year = date.getFullYear();
+  return `${day} ${month} ${year}`;
+}
+
 function getDayName(date: Date): string {
   const days = ['ZO', 'MA', 'DI', 'WO', 'DO', 'VR', 'ZA'];
   return days[date.getDay()];
@@ -385,6 +396,21 @@ function DienstenPerDagContent() {
   }
 
   // ============================================================================
+  // PERIOD INFO HELPER
+  // ============================================================================
+
+  function getPeriodInfo(): { startWeek: number; endWeek: number; startDate: Date; endDate: Date } | null {
+    if (!rosterInfo) return null;
+    
+    const startDate = new Date(rosterInfo.start_date);
+    const endDate = new Date(rosterInfo.end_date);
+    const startWeek = getWeekNumber(startDate);
+    const endWeek = getWeekNumber(endDate);
+    
+    return { startWeek, endWeek, startDate, endDate };
+  }
+
+  // ============================================================================
   // STATUS COLOR HELPER
   // ============================================================================
 
@@ -425,6 +451,7 @@ function DienstenPerDagContent() {
   // ============================================================================
 
   const weekDates = getWeekDates(currentWeek, currentYear);
+  const periodInfo = getPeriodInfo();
 
   if (loading) {
     return (
@@ -456,21 +483,28 @@ function DienstenPerDagContent() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
-      {/* Header */}
+      {/* Header - STAP 1 VERBETERD */}
       <div className="mb-6">
-        <button
-          onClick={() => router.push(`/dashboard?rosterId=${rosterId}`)}
-          className="flex items-center text-blue-600 hover:text-blue-800 mb-4"
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Terug naar Dashboard
-        </button>
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          Diensten per Dagdeel
-        </h1>
-        <p className="text-gray-600">
-          Rooster: <span className="font-semibold">{rosterInfo.naam}</span>
-        </p>
+        <div className="flex items-start justify-between">
+          {/* Linksboven: Titel met periode */}
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900 mb-2">
+              Diensten per Dagdeel periode : Week {periodInfo?.startWeek} - Week {periodInfo?.endWeek} {currentYear}
+            </h1>
+            <p className="text-base text-gray-600">
+              Van {periodInfo && formatDateLong(periodInfo.startDate)} tot en met {periodInfo && formatDateLong(periodInfo.endDate)}
+            </p>
+          </div>
+          
+          {/* Rechtsboven: Terug naar Dashboard button */}
+          <button
+            onClick={() => router.push(`/planning/design/dashboard?rosterId=${rosterId}`)}
+            className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-md flex items-center gap-2"
+          >
+            <ArrowLeft className="h-5 w-5" />
+            Terug naar Dashboard
+          </button>
+        </div>
       </div>
 
       {/* Week Navigation */}
