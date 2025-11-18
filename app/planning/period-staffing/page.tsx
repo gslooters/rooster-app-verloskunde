@@ -11,7 +11,6 @@ import { ChevronLeft, ChevronRight, ArrowLeft, Calendar, Sun, Sunset, Moon } fro
 
 interface RosterInfo {
   id: string;
-  naam: string;
   start_date: string;
   end_date: string;
 }
@@ -141,17 +140,14 @@ function PeriodStaffingContent() {
       try {
         setLoading(true);
 
-        // 🔥 FIX: Haal roster info DIRECT uit Supabase roosters tabel
-        console.log('[PeriodStaffing] Ophalen roster info voor ID:', rosterId);
-        
+        // 🔥 FIX: Haal rooster info DIRECT uit Supabase roosters tabel met correcte kolomnamen
         const { data: rosterData, error: rosterError } = await supabase
           .from('roosters')
-          .select('id, naam, start_date, end_date')
+          .select('id, start_date, end_date')
           .eq('id', rosterId)
-          .single();
+          .maybeSingle();
 
         if (rosterError) {
-          console.error('[PeriodStaffing] Supabase error:', rosterError);
           throw new Error('Rooster niet gevonden in database');
         }
 
@@ -161,16 +157,14 @@ function PeriodStaffingContent() {
 
         const roster: RosterInfo = {
           id: rosterData.id,
-          naam: rosterData.naam || 'Naamloos Rooster',
           start_date: rosterData.start_date,
           end_date: rosterData.end_date
         };
 
         if (!roster.start_date || !roster.end_date) {
-          throw new Error('Roster periode is niet compleet');
+          throw new Error('Rooster periode is niet compleet');
         }
 
-        console.log('[PeriodStaffing] ✅ Roster info opgehaald:', roster);
         setRosterInfo(roster);
 
         // 2. Haal roster_period_staffing records voor dit rooster
@@ -180,8 +174,6 @@ function PeriodStaffingContent() {
           .eq('roster_id', rosterId);
 
         if (rpsError) throw rpsError;
-        
-        console.log('[PeriodStaffing] RPS records opgehaald:', rpsData?.length || 0);
         setRpsRecords(rpsData || []);
 
         // 3. Haal unieke services uit deze RPS records
@@ -196,7 +188,6 @@ function PeriodStaffingContent() {
             .order('naam');
 
           if (servicesError) throw servicesError;
-          console.log('[PeriodStaffing] Services opgehaald:', servicesData?.length || 0);
           setServices(servicesData || []);
         } else {
           setServices([]);
@@ -212,14 +203,11 @@ function PeriodStaffingContent() {
           .eq('roster_period_staffing.roster_id', rosterId);
 
         if (dagdeelError) {
-          console.error('[PeriodStaffing] Error loading dagdeel assignments:', dagdeelError);
+          console.error('Error loading dagdeel assignments:', dagdeelError);
         }
-        
-        console.log('[PeriodStaffing] ✅ Dagdeel records opgehaald:', dagdeelData?.length || 0);
         setDagdeelAssignments(dagdeelData || []);
         setError(null);
       } catch (err: any) {
-        console.error('[PeriodStaffing] ❌ Error loading data:', err);
         setError(err.message || 'Fout bij laden van gegevens');
       } finally {
         setLoading(false);
@@ -350,7 +338,6 @@ function PeriodStaffingContent() {
         }
       }
     } catch (err: any) {
-      console.error('Error saving:', err);
       alert('Fout bij opslaan: ' + err.message);
     }
   }
@@ -470,7 +457,7 @@ function PeriodStaffingContent() {
           Diensten per Dagdeel
         </h1>
         <p className="text-gray-600">
-          Rooster: <span className="font-semibold">{rosterInfo.naam}</span>
+          Roosterperiode: <span className="font-semibold">{rosterInfo.start_date} tot {rosterInfo.end_date}</span>
         </p>
       </div>
 
