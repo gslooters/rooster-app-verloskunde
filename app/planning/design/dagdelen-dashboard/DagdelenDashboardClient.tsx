@@ -29,22 +29,6 @@ export default function DagdelenDashboardClient() {
     }
   }, [rosterId, periodStart]);
 
-  /**
-   * Normaliseert een datum naar de maandag van die week (ISO-8601 standaard)
-   * @param date - De datum om te normaliseren
-   * @returns De maandag van de week waarin de datum valt
-   */
-  const normalizeToMonday = (date: Date): Date => {
-    const d = new Date(date);
-    const day = d.getDay(); // 0 = zondag, 1 = maandag, ..., 6 = zaterdag
-    
-    // Als zondag (0), ga 6 dagen terug, anders bereken verschil naar maandag
-    const diff = day === 0 ? -6 : 1 - day;
-    d.setDate(d.getDate() + diff);
-    
-    return d;
-  };
-
   const loadWeekData = async () => {
     try {
       setLoading(true);
@@ -58,28 +42,28 @@ export default function DagdelenDashboardClient() {
 
       setRosterInfo(roster);
 
-      // Bereken 5 weken vanaf startdatum - NORMALISEER EERST NAAR MAANDAG
+      // KRITIEKE FIX: Start direct vanaf periodStart, zonder extra normalisatie
+      // De periodStart is al de juiste startdatum van de periode (24/11/2025)
       const startDate = new Date(periodStart!);
-      const normalizedStart = normalizeToMonday(startDate);
       
-      // Debug logging voor verificatie
-      console.log('Original startDate:', startDate.toISOString());
-      console.log('Normalized to Monday:', normalizedStart.toISOString());
+      console.log('🔍 Period Start:', periodStart);
+      console.log('📅 Start Date:', startDate.toISOString());
+      console.log('📆 Day of week:', startDate.getDay(), '(0=zondag, 1=maandag)');
       
       const weeks: WeekInfo[] = [];
 
+      // Genereer exact 5 weken vanaf startDate
       for (let i = 0; i < 5; i++) {
-        // Start vanaf genormaliseerde maandag
-        const weekStart = new Date(normalizedStart);
-        weekStart.setDate(normalizedStart.getDate() + (i * 7));
+        // Bereken weekStart door i*7 dagen toe te voegen aan startDate
+        const weekStart = new Date(startDate);
+        weekStart.setDate(startDate.getDate() + (i * 7));
         
         const weekEnd = new Date(weekStart);
         weekEnd.setDate(weekStart.getDate() + 6);
 
         const weekNumber = getWeekNumber(weekStart);
         
-        // Debug logging voor verificatie
-        console.log(`Week ${i + 1}: Week number ${weekNumber}, Start: ${weekStart.toISOString()}, End: ${weekEnd.toISOString()}`);
+        console.log(`✅ Week ${i + 1}: Weeknr ${weekNumber}, Start: ${weekStart.toLocaleDateString('nl-NL')}, End: ${weekEnd.toLocaleDateString('nl-NL')}`);
 
         // Check voor wijzigingen in deze week
         const { data: changes } = await supabase
@@ -90,7 +74,6 @@ export default function DagdelenDashboardClient() {
           .lte('date', weekEnd.toISOString().split('T')[0])
           .eq('status', 'AANGEPAST');
 
-        // Ensure hasChanges is always boolean, never null
         const hasChanges: boolean = !!(changes && changes.length > 0);
         const lastUpdated = changes && changes.length > 0 
           ? changes.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())[0].updated_at
@@ -106,8 +89,12 @@ export default function DagdelenDashboardClient() {
       }
 
       setWeekData(weeks);
+      
+      // Verificatie logging
+      console.log('📊 Gegenereerde weken:', weeks.map(w => `Week ${w.weekNumber}: ${w.startDate}-${w.endDate}`).join(', '));
+      
     } catch (error) {
-      console.error('Fout bij laden weekdata:', error);
+      console.error('❌ Fout bij laden weekdata:', error);
     } finally {
       setLoading(false);
     }
@@ -142,6 +129,7 @@ export default function DagdelenDashboardClient() {
   };
 
   const handleBack = () => {
+    // CORRECTE ROUTE: Terug naar Rooster Ontwerp Dashboard
     router.push(`/planning/design/dashboard?roster_id=${rosterId}`);
   };
 
