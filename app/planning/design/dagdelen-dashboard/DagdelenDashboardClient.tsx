@@ -64,7 +64,8 @@ export default function DagdelenDashboardClient() {
           .lte('date', weekEnd.toISOString().split('T')[0])
           .eq('status', 'AANGEPAST');
 
-        const hasChanges = changes && changes.length > 0;
+        // Ensure hasChanges is always boolean, never null
+        const hasChanges: boolean = !!(changes && changes.length > 0);
         const lastUpdated = changes && changes.length > 0 
           ? changes.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())[0].updated_at
           : null;
