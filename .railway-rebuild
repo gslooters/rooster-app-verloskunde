@@ -1,6 +1,18 @@
-# Railway rebuild trigger
-# Dit bestand forceert een complete rebuild
-TIMESTAMP=2025-11-16T17:00:00Z
-REBUILD=FORCE
-CACHE_BUST=41cdc3758b018e5217d7e4527cdc04b779d1dd82
-# DRAAD 33B: UX verbeteringen - klein vinkje + permanent input veld
+# Railway Rebuild Trigger
+# Dit bestand triggert een nieuwe deployment op Railway.com
+
+Laatste rebuild: 18 november 2025 17:00 UTC
+Reden: DRAAD37A - Splitsen Dienst/Team kolommen implementatie
+
+Wijzigingen:
+- ServiceRow.tsx: 3 rijen per dienst (Groen/Oranje/Praktijk)
+- WeekHeader.tsx: 2-kolom header (Dienst 180px + Team 60px)
+- Team mapping: team_tot = Praktijk
+- Kleuren: Groen #10B981, Oranje #F97316, Praktijk #3B82F6
+
+Commit SHA's:
+- f32b303: ServiceRow restructuur
+- b0ca645: WeekHeader update
+- 8d00d64: Documentatie
+
+Deployment URL: https://rooster-app-verloskunde-production.up.railway.app
