@@ -6,7 +6,7 @@ command = "npm install && npm run build"
 # Start command
 startCommand = "npm start"
 # Health check
-healthcheckPath = "/"
+healthcheckPath = "/api/health"
 healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
