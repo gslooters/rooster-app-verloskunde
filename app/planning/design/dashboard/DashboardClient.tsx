@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { getRosterIdFromParams } from '@/lib/utils/getRosterIdFromParams';
 import { loadRosterDesignData } from '@/lib/planning/rosterDesign';
 import { formatWeekRange, formatDateRangeNl } from '@/lib/planning/storage';
 import type { RosterDesignData } from '@/lib/types/roster';
@@ -90,7 +91,7 @@ function StatusBadgeToggle({completed, onToggle, label}:{completed:boolean; onTo
 export default function DashboardClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const rosterId = searchParams.get('rosterId');
+  const rosterId = getRosterIdFromParams(searchParams);
   const [designData, setDesignData] = useState<RosterDesignData | null>(null);
   const [completionStatus, setCompletionStatus] = useState<CompletionStatus>({
     diensten_per_dag: false,
