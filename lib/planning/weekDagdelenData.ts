@@ -40,6 +40,13 @@ export interface WeekNavigatieBounds {
   hasNext: boolean;
 }
 
+// Helper type for Supabase employee response
+interface EmployeeRecord {
+  id: string;
+  naam: string;
+  team: string;
+}
+
 /**
  * Calculate start and end dates for a given ISO week number
  */
@@ -129,40 +136,62 @@ export async function getWeekDagdelenData(
       // Filter assignments for this day
       const dayAssignments = assignments?.filter(a => a.datum === dateStr) || [];
       
+      // Helper function to extract employee data
+      const getEmployeeData = (employees: any): EmployeeRecord | null => {
+        if (!employees) return null;
+        // Handle both array and object responses from Supabase
+        if (Array.isArray(employees)) {
+          return employees.length > 0 ? employees[0] : null;
+        }
+        return employees;
+      };
+      
       // Group by dagdeel
       const dagdelen = {
         ochtend: dayAssignments
           .filter(a => a.dagdeel === 'ochtend')
-          .map(a => ({
-            employeeId: a.employee_id,
-            employeeName: a.employees?.naam || 'Onbekend',
-            team: a.employees?.team || '',
-            status: 'assigned' as const,
-          })),
+          .map(a => {
+            const employee = getEmployeeData(a.employees);
+            return {
+              employeeId: a.employee_id,
+              employeeName: employee?.naam || 'Onbekend',
+              team: employee?.team || '',
+              status: 'assigned' as const,
+            };
+          }),
         middag: dayAssignments
           .filter(a => a.dagdeel === 'middag')
-          .map(a => ({
-            employeeId: a.employee_id,
-            employeeName: a.employees?.naam || 'Onbekend',
-            team: a.employees?.team || '',
-            status: 'assigned' as const,
-          })),
+          .map(a => {
+            const employee = getEmployeeData(a.employees);
+            return {
+              employeeId: a.employee_id,
+              employeeName: employee?.naam || 'Onbekend',
+              team: employee?.team || '',
+              status: 'assigned' as const,
+            };
+          }),
         avond: dayAssignments
           .filter(a => a.dagdeel === 'avond')
-          .map(a => ({
-            employeeId: a.employee_id,
-            employeeName: a.employees?.naam || 'Onbekend',
-            team: a.employees?.team || '',
-            status: 'assigned' as const,
-          })),
+          .map(a => {
+            const employee = getEmployeeData(a.employees);
+            return {
+              employeeId: a.employee_id,
+              employeeName: employee?.naam || 'Onbekend',
+              team: employee?.team || '',
+              status: 'assigned' as const,
+            };
+          }),
         nacht: dayAssignments
           .filter(a => a.dagdeel === 'nacht')
-          .map(a => ({
-            employeeId: a.employee_id,
-            employeeName: a.employees?.naam || 'Onbekend',
-            team: a.employees?.team || '',
-            status: 'assigned' as const,
-          })),
+          .map(a => {
+            const employee = getEmployeeData(a.employees);
+            return {
+              employeeId: a.employee_id,
+              employeeName: employee?.naam || 'Onbekend',
+              team: employee?.team || '',
+              status: 'assigned' as const,
+            };
+          }),
       };
       
       days.push({
