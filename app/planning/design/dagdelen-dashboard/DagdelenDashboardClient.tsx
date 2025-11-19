@@ -93,19 +93,41 @@ export default function DagdelenDashboardClient() {
           console.error(`❌ Supabase error week ${weekNumber}:`, queryError);
         }
 
-        // Extract dagdelen records en filter op status
-        const dagdelenRecords = parentRecords?.flatMap(parent => 
-          parent.roster_period_staffing_dagdelen || []
-        ) || [];
+        // 🔧 DRAAD39.3: Defensieve data extractie met null checks
+        const dagdelenRecords = Array.isArray(parentRecords) 
+          ? parentRecords.flatMap(parent => {
+              const dagdelen = parent?.roster_period_staffing_dagdelen;
+              return Array.isArray(dagdelen) ? dagdelen : [];
+            })
+          : [];
         
-        const modifiedChanges = dagdelenRecords.filter((d: any) => d.status === 'AANGEPAST');
+        console.log(`📊 Week ${weekNumber}: ${dagdelenRecords.length} dagdelen records gevonden`);
+        
+        const modifiedChanges = dagdelenRecords.filter((d: any) => 
+          d && typeof d === 'object' && d.status === 'AANGEPAST'
+        );
 
         const hasChanges: boolean = modifiedChanges.length > 0;
-        const lastUpdated = modifiedChanges.length > 0 
-          ? modifiedChanges.sort((a: any, b: any) => 
-              new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-            )[0].updated_at
-          : null;
+        
+        // 🔧 DRAAD39.3: Safe lastUpdated met extra validatie
+        let lastUpdated: string | null = null;
+        if (modifiedChanges.length > 0) {
+          try {
+            const sorted = modifiedChanges
+              .filter((c: any) => c.updated_at) // Filter out null/undefined
+              .sort((a: any, b: any) => {
+                const timeA = new Date(a.updated_at).getTime();
+                const timeB = new Date(b.updated_at).getTime();
+                return timeB - timeA;
+              });
+            
+            if (sorted.length > 0 && sorted[0].updated_at) {
+              lastUpdated = sorted[0].updated_at;
+            }
+          } catch (err) {
+            console.warn(`⚠️ Error sorting lastUpdated for week ${weekNumber}:`, err);
+          }
+        }
 
         weeks.push({
           weekNumber,
@@ -116,8 +138,11 @@ export default function DagdelenDashboardClient() {
         });
       }
 
-      setWeekData(weeks);
+      // 🔧 DRAAD39.3: Debug logging vóór setState
       console.log('📊 Gegenereerde weken:', weeks.map(w => `Week ${w.weekNumber}: ${w.startDate}-${w.endDate}`).join(', '));
+      console.log('🔍 weekData details:', JSON.stringify(weeks, null, 2));
+      
+      setWeekData(weeks);
       
     } catch (error) {
       console.error('❌ Fout bij laden weekdata:', error);
@@ -199,6 +224,23 @@ export default function DagdelenDashboardClient() {
     router.push(`/planning/design/dashboard?roster_id=${rosterId}`);
   };
 
+  // 🔧 DRAAD39.3: Safe date formatting voor lastUpdated
+  const formatLastUpdated = (dateString: string | null): string => {
+    if (!dateString) return '';
+    
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        console.warn('⚠️ Invalid date string:', dateString);
+        return '';
+      }
+      return date.toLocaleString('nl-NL');
+    } catch (err) {
+      console.warn('⚠️ Error formatting date:', dateString, err);
+      return '';
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -210,12 +252,13 @@ export default function DagdelenDashboardClient() {
     );
   }
 
-  const firstWeek = weekData[0];
-  const lastWeek = weekData[4];
+  // 🔧 DRAAD39.3: Safe access met defaults
+  const firstWeek = weekData.length > 0 ? weekData[0] : null;
+  const lastWeek = weekData.length >= 5 ? weekData[4] : null;
   
   // ✅ VERBETERING 2: Titel ZONDER datums tussen haakjes
   const periodTitle = firstWeek && lastWeek 
-    ? `Week ${firstWeek.weekNumber} – Week ${lastWeek.weekNumber}`
+    ? `Week ${firstWeek.weekNumber || '?'} – Week ${lastWeek.weekNumber || '?'}`
     : '';
 
   // ✅ VERBETERING 3: Rooster info met volledige datums
@@ -224,6 +267,10 @@ export default function DagdelenDashboardClient() {
   periodEndDate.setUTCDate(periodStartDate.getUTCDate() + 34); // 5 weken - 1 dag
   
   const rosterPeriodText = `${formatDateFull(periodStartDate)} - ${formatDateFull(periodEndDate)}`;
+
+  // 🔧 DRAAD39.3: Extra logging vóór render
+  console.log('🎨 About to render, weekData length:', weekData.length);
+  console.log('🎨 weekData:', weekData);
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
@@ -264,42 +311,63 @@ export default function DagdelenDashboardClient() {
 
         {/* Week Buttons */}
         <div className="space-y-4">
-          {weekData.map((week) => (
-            <button
-              key={week.weekNumber}
-              onClick={() => handleWeekClick(week.weekNumber)}
-              className="w-full bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg shadow-sm hover:shadow-md transition-all p-6 text-left border-2 border-blue-200 hover:border-blue-400 relative"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                    Week {week.weekNumber}: {week.startDate} – {week.endDate}
-                  </h3>
-                  
-                  {week.lastUpdated && (
-                    <p className="text-sm text-gray-500">
-                      Laatst gewijzigd: {new Date(week.lastUpdated).toLocaleString('nl-NL')}
-                    </p>
-                  )}
-                </div>
+          {/* 🔧 DRAAD39.3: Safe map met null checks en expliciete key */}
+          {Array.isArray(weekData) && weekData.length > 0 ? (
+            weekData.map((week, index) => {
+              // Extra validatie per week
+              if (!week || typeof week !== 'object') {
+                console.warn(`⚠️ Invalid week at index ${index}:`, week);
+                return null;
+              }
+              
+              const weekNum = week.weekNumber || 0;
+              const startDt = week.startDate || '?';
+              const endDt = week.endDate || '?';
+              const hasChg = Boolean(week.hasChanges);
+              const lastUpd = week.lastUpdated;
+              
+              return (
+                <button
+                  key={`week-${weekNum}-${index}`}
+                  onClick={() => handleWeekClick(weekNum)}
+                  className="w-full bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg shadow-sm hover:shadow-md transition-all p-6 text-left border-2 border-blue-200 hover:border-blue-400 relative"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                        Week {weekNum}: {startDt} – {endDt}
+                      </h3>
+                      
+                      {lastUpd && (
+                        <p className="text-sm text-gray-500">
+                          Laatst gewijzigd: {formatLastUpdated(lastUpd)}
+                        </p>
+                      )}
+                    </div>
 
-                <div className="flex items-center space-x-3">
-                  {week.hasChanges && (
-                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-amber-100 text-amber-800">
-                      <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    <div className="flex items-center space-x-3">
+                      {hasChg && (
+                        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-amber-100 text-amber-800">
+                          <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                          </svg>
+                          Aangepast
+                        </span>
+                      )}
+                      
+                      <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
-                      Aangepast
-                    </span>
-                  )}
-                  
-                  <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </div>
-              </div>
-            </button>
-          ))}
+                    </div>
+                  </div>
+                </button>
+              );
+            })
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              Geen weekdata beschikbaar
+            </div>
+          )}
         </div>
 
         {/* Info sectie */}
