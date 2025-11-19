@@ -12,8 +12,10 @@ interface DagdeelCellProps {
 /**
  * DagdeelCell Component
  * 
- * Toont toegewezen medewerkers voor een specifiek dagdeel.
+ * Toont team toewijzingen voor een specifiek dagdeel.
  * Bevat kleurcodering per team en status indicatie.
+ * 
+ * AANGEPAST: Toont nu team + aantal (geen individuele medewerkers)
  */
 export function DagdeelCell({ assignments, dagdeel, datum }: DagdeelCellProps) {
   // Team kleurcodering
@@ -22,55 +24,81 @@ export function DagdeelCell({ assignments, dagdeel, datum }: DagdeelCellProps) {
     
     switch (teamUpper) {
       case 'A':
-        return 'bg-blue-50 border-blue-200 text-blue-900';
+        return 'bg-blue-100 border-blue-300 text-blue-900';
       case 'B':
-        return 'bg-green-50 border-green-200 text-green-900';
+        return 'bg-green-100 border-green-300 text-green-900';
       case 'C':
-        return 'bg-purple-50 border-purple-200 text-purple-900';
+        return 'bg-purple-100 border-purple-300 text-purple-900';
       default:
-        return 'bg-gray-50 border-gray-200 text-gray-900';
+        return 'bg-gray-100 border-gray-300 text-gray-900';
     }
+  };
+
+  // Status kleurcodering
+  const getStatusColor = (status: string): string => {
+    const statusUpper = status?.toUpperCase() || '';
+    
+    if (statusUpper.includes('MOET')) return 'text-red-700';
+    if (statusUpper.includes('MAG')) return 'text-blue-700';
+    return 'text-gray-700';
   };
 
   // Bepaal achtergrondkleur op basis van bezetting
   const getBgColor = (): string => {
-    if (assignments.length === 0) return 'bg-red-50';
-    if (assignments.length === 1) return 'bg-yellow-50';
+    const totalAantal = assignments.reduce((sum, a) => sum + (a.aantal || 0), 0);
+    
+    if (totalAantal === 0) return 'bg-red-50';
+    if (totalAantal === 1) return 'bg-yellow-50';
     return 'bg-white';
   };
 
+  // Bereken totaal aantal
+  const totalAantal = assignments.reduce((sum, a) => sum + (a.aantal || 0), 0);
+
   // Als leeg, toon placeholder
-  if (assignments.length === 0) {
+  if (assignments.length === 0 || totalAantal === 0) {
     return (
-      <div className={`p-3 min-h-[80px] border border-gray-200 rounded-lg ${getBgColor()}`}>
-        <div className="text-xs text-gray-400 italic">Geen bezetting</div>
+      <div className={`p-3 min-h-[80px] border border-gray-300 rounded-lg ${getBgColor()}`}>
+        <div className="text-xs text-gray-400 italic text-center">Geen bezetting</div>
       </div>
     );
   }
 
   return (
-    <div className={`p-3 min-h-[80px] border border-gray-200 rounded-lg ${getBgColor()}`}>
+    <div className={`p-3 min-h-[80px] border border-gray-300 rounded-lg ${getBgColor()}`}>
       <div className="space-y-2">
         {assignments.map((assignment, index) => (
           <div
-            key={`${assignment.employeeId}-${index}`}
-            className={`p-2 rounded-md border ${getTeamColor(assignment.team)} transition-all hover:shadow-sm`}
+            key={`${assignment.team}-${index}`}
+            className={`p-2 rounded-md border-2 ${getTeamColor(assignment.team)} transition-all hover:shadow-sm`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-sm font-medium truncate">
-                {assignment.employeeName}
-              </span>
-              {assignment.team && (
-                <span className="ml-2 px-2 py-0.5 text-xs font-bold rounded">
-                  {assignment.team.toUpperCase()}
+              {/* Team Label */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold">
+                  Team {assignment.team?.toUpperCase() || '?'}
+                </span>
+                <span className="text-xs text-gray-600">
+                  ({assignment.aantal || 0}x)
+                </span>
+              </div>
+              
+              {/* Status Badge */}
+              {assignment.status && assignment.status !== 'NIET_TOEGEWEZEN' && (
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded ${getStatusColor(assignment.status)}`}>
+                  {assignment.status}
                 </span>
               )}
             </div>
-            {assignment.status === 'tentative' && (
-              <div className="mt-1 text-xs text-gray-500 italic">Voorlopig</div>
-            )}
           </div>
         ))}
+        
+        {/* Totaal indicator */}
+        {assignments.length > 1 && (
+          <div className="pt-2 border-t border-gray-200 text-xs text-gray-600 text-center font-medium">
+            Totaal: {totalAantal} medewerker{totalAantal !== 1 ? 's' : ''}
+          </div>
+        )}
       </div>
     </div>
   );
