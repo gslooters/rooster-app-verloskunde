@@ -564,30 +564,3 @@ export function calculateWeekStats(data: WeekDagdelenData): WeekDagdelenStats {
   
   return stats;
 }
-
-/**
- * Export all types for easy importing
- */
-export type {
-  WeekContext,
-  DagdeelWaarde,
-  DagDagdelen,
-  TeamDagdelenWeek,
-  DienstDagdelenWeek,
-  WeekDagdelenData,
-  CelEditState,
-  WeekDagdelenLoadingState,
-  WeekDagdelenError,
-  WeekDagdelenUIState,
-  RawDagdeelRecord,
-  GroupedDagdelenData,
-  DagdeelUpdate,
-  DagdelenBatchUpdate,
-  DagdelenSaveResponse,
-  WeekDagdelenFilters,
-  DienstSortField,
-  SortDirection,
-  DienstSortOptions,
-  WeekdayIndex,
-  WeekDagdelenStats
-};
