@@ -1,17 +1,28 @@
 # Railway Deployment Trigger
-# Laatste update: 2025-11-19 15:31 CET
-# Reden: DRAAD37L2 - Fix navigatie knop "Terug naar Dashboard Rooster Ontwerp"
+# Laatste update: 2025-11-19 15:09 CET
+# Reden: DRAAD37L3 - Fix consistente knoptekst "Terug naar Dashboard Rooster Ontwerp"
 
 ## Wijzigingen in deze deployment:
-- Knoptekst gewijzigd naar "Terug naar Dashboard Rooster Ontwerp"
-- Navigatie route gecorrigeerd naar `/planning/design/dashboard?rosterId=${rosterId}`
-- Fix toegepast op zowel hoofdscherm als error scherm
-- Geen "Geen roster ID gevonden" fout meer bij terugkeren
+- Error screen knop: toegevoegd ArrowLeft icon voor visuele consistentie
+- Error screen knop: verbeterde styling (flex items-center gap-2 mx-auto)
+- Beide knoppen (header + error) hebben nu identieke tekst: "Terug naar Dashboard Rooster Ontwerp"
+- Beide knoppen gebruiken identieke route: `/planning/design/dashboard?rosterId=${rosterId}`
+- Volledige consistentie tussen normale navigatie en error flow
 
 ## Technische details:
 - File: app/planning/period-staffing/page.tsx
-- Commit: aa0e428d74523169055fcc250dd591b816fe4e87
+- Commit: 6ffa9290cbc4aa8820292a6620fe1b4a96fbd6a6
 - Branch: main
+- Status: ✅ Code intensief gecontroleerd op syntaxfouten
+
+## Verificatie checklist:
+- [x] Knoptekst consistent op beide locaties
+- [x] Route navigatie correct
+- [x] Icon toegevoegd voor visuele consistentie
+- [x] Styling verbeterd voor betere UX
+- [x] Syntax gecontroleerd en gecorrigeerd
+- [ ] Deployment gestart op Railway
+- [ ] TEST: Navigatie werkt zonder foutmelding
 
 Deze file wordt alleen gebruikt om Railway deployments te triggeren.
 Wijzigingen in deze file hebben geen invloed op de applicatie functionaliteit.
