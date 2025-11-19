@@ -437,7 +437,7 @@ function PeriodStaffingContent() {
             onClick={() => router.push(`/planning/design/dashboard?rosterId=${rosterId}`)}
             className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
           >
-            Terug naar Dashboard
+            Terug naar Dashboard Rooster Ontwerp
           </button>
         </div>
       </div>
@@ -462,7 +462,7 @@ function PeriodStaffingContent() {
             className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-md flex items-center gap-2"
           >
             <ArrowLeft className="h-5 w-5" />
-            Terug naar Dashboard
+            Terug naar Dashboard Rooster Ontwerp
           </button>
         </div>
       </div>
