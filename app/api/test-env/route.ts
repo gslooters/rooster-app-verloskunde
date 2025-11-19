@@ -59,7 +59,7 @@ export async function GET() {
         serverOk: !!serverSupabaseUrl && !!serverSupabaseKey,
         valuesMatch: clientSupabaseUrl === serverSupabaseUrl,
       },
-      recommendations: [],
+      recommendations: [] as string[],
     };
     
     // Add recommendations based on diagnosis
