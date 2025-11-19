@@ -144,6 +144,19 @@ export default function DagdelenDashboardClient() {
   };
 
   /**
+   * ✅ VERBETERING 3: Format datum voor volledige Nederlandse weergave
+   * Gebruikt voor rooster periode weergave onder titel
+   */
+  const formatDateFull = (date: Date): string => {
+    const months = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 
+                    'juli', 'augustus', 'september', 'oktober', 'november', 'december'];
+    const day = date.getUTCDate();
+    const month = months[date.getUTCMonth()];
+    const year = date.getUTCFullYear();
+    return `${day} ${month} ${year}`;
+  };
+
+  /**
    * Format datum voor Supabase query (YYYY-MM-DD)
    * ✅ Gebruikt UTC om exacte datum te garanderen
    */
@@ -163,8 +176,8 @@ export default function DagdelenDashboardClient() {
     alert('PDF export wordt geïmplementeerd in volgende fase');
   };
 
+  // ✅ VERBETERING 1: Correcte terugnavigatie naar Dashboard Rooster Ontwerp
   const handleBack = () => {
-    // CORRECTE ROUTE: Terug naar Rooster Ontwerp Dashboard
     router.push(`/planning/design/dashboard?roster_id=${rosterId}`);
   };
 
@@ -181,9 +194,18 @@ export default function DagdelenDashboardClient() {
 
   const firstWeek = weekData[0];
   const lastWeek = weekData[4];
+  
+  // ✅ VERBETERING 2: Titel ZONDER datums tussen haakjes
   const periodTitle = firstWeek && lastWeek 
-    ? `Week ${firstWeek.weekNumber} – Week ${lastWeek.weekNumber} (${firstWeek.startDate}–${lastWeek.endDate})`
+    ? `Week ${firstWeek.weekNumber} – Week ${lastWeek.weekNumber}`
     : '';
+
+  // ✅ VERBETERING 3: Rooster info met volledige datums
+  const periodStartDate = new Date(periodStart! + 'T00:00:00Z');
+  const periodEndDate = new Date(periodStartDate);
+  periodEndDate.setUTCDate(periodStartDate.getUTCDate() + 34); // 5 weken - 1 dag
+  
+  const rosterPeriodText = `${formatDateFull(periodStartDate)} - ${formatDateFull(periodEndDate)}`;
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
@@ -216,11 +238,10 @@ export default function DagdelenDashboardClient() {
             Diensten per Dagdeel Aanpassen: Periode {periodTitle}
           </h1>
           
-          {rosterInfo && (
-            <p className="text-gray-600 mt-2">
-              Rooster: {rosterInfo.name}
-            </p>
-          )}
+          {/* ✅ VERBETERING 3: Rooster info met volledige datums in kleine letters */}
+          <p className="text-sm text-gray-600 mt-2">
+            rooster: {rosterPeriodText}
+          </p>
         </div>
 
         {/* Week Buttons */}
@@ -229,7 +250,7 @@ export default function DagdelenDashboardClient() {
             <button
               key={week.weekNumber}
               onClick={() => handleWeekClick(week.weekNumber)}
-              className="w-full bg-white rounded-lg shadow-sm hover:shadow-md transition-all p-6 text-left border-2 border-transparent hover:border-blue-500 relative"
+              className="w-full bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg shadow-sm hover:shadow-md transition-all p-6 text-left border-2 border-blue-200 hover:border-blue-400 relative"
             >
               <div className="flex items-center justify-between">
                 <div className="flex-1">
@@ -254,7 +275,7 @@ export default function DagdelenDashboardClient() {
                     </span>
                   )}
                   
-                  <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
                 </div>
