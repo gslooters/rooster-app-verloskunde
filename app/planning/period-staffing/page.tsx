@@ -67,6 +67,48 @@ interface CellData {
 // UTILITY FUNCTIONS
 // ============================================================================
 
+/**
+ * 🔧 FIX DRAAD37L4: Robuuste rosterId parameter extractie met fallback
+ * 
+ * Probleem: Verschillende schermen gebruiken verschillende URL parameter namen:
+ * - Nieuwe style: ?rosterId=xxx
+ * - Oude style: ?roster_id=xxx
+ * 
+ * Oplossing: Probeer beide varianten met duidelijke logging
+ * 
+ * @param searchParams - Next.js useSearchParams() result
+ * @returns rosterId string of null met console logging
+ */
+function getRosterIdFromParams(searchParams: ReturnType<typeof useSearchParams>): string | null {
+  if (!searchParams) {
+    console.warn('[PERIOD-STAFFING] ⚠️  searchParams is null');
+    return null;
+  }
+  
+  // Probeer eerst moderne variant (rosterId)
+  const rosterIdNew = searchParams.get('rosterId');
+  if (rosterIdNew) {
+    console.log('[PERIOD-STAFFING] ✅ Found rosterId (camelCase):', rosterIdNew);
+    return rosterIdNew;
+  }
+  
+  // Fallback naar oude variant (roster_id met underscore)
+  const rosterIdOld = searchParams.get('roster_id');
+  if (rosterIdOld) {
+    console.log('[PERIOD-STAFFING] ✅ Found roster_id (snake_case):', rosterIdOld);
+    return rosterIdOld;
+  }
+  
+  // Debug: toon alle beschikbare parameters
+  const allParams: Record<string, string> = {};
+  searchParams.forEach((value, key) => {
+    allParams[key] = value;
+  });
+  
+  console.error('[PERIOD-STAFFING] ❌ Geen rosterId gevonden in URL parameters:', allParams);
+  return null;
+}
+
 // ISO-8601 weeknummering voor correcte weekberekening
 function getISOWeekNumber(date: Date): number {
   const target = new Date(date.valueOf());
@@ -145,7 +187,9 @@ function isWeekendDay(date: Date): boolean {
 function PeriodStaffingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const rosterId = searchParams?.get('rosterId');
+  
+  // 🔧 FIX DRAAD37L4: Gebruik robuuste parameter extractie
+  const rosterId = getRosterIdFromParams(searchParams);
 
   // State
   const [rosterInfo, setRosterInfo] = useState<RosterInfo | null>(null);
@@ -168,13 +212,16 @@ function PeriodStaffingContent() {
   useEffect(() => {
     async function loadData() {
       if (!rosterId) {
-        setError('Geen rooster ID gevonden');
+        console.error('[PERIOD-STAFFING] ❌ Geen rosterId beschikbaar - kan data niet laden');
+        setError('Geen rooster ID gevonden in URL parameters');
         setLoading(false);
         return;
       }
 
       try {
+        console.log('[PERIOD-STAFFING] 🔄 Start laden data voor rosterId:', rosterId);
         setLoading(true);
+        
         // Haal rooster info uit Supabase roosters tabel
         const { data: rosterData, error: rosterError } = await supabase
           .from('roosters')
@@ -182,14 +229,27 @@ function PeriodStaffingContent() {
           .eq('id', rosterId)
           .maybeSingle();
 
-        if (rosterError) throw new Error('Rooster niet gevonden in database');
-        if (!rosterData) throw new Error('Rooster bestaat niet');
+        if (rosterError) {
+          console.error('[PERIOD-STAFFING] ❌ Supabase error:', rosterError);
+          throw new Error('Rooster niet gevonden in database');
+        }
+        if (!rosterData) {
+          console.error('[PERIOD-STAFFING] ❌ Geen rooster data gevonden voor ID:', rosterId);
+          throw new Error('Rooster bestaat niet');
+        }
+        
         const roster: RosterInfo = {
           id: rosterData.id,
           start_date: rosterData.start_date,
           end_date: rosterData.end_date
         };
-        if (!roster.start_date || !roster.end_date) throw new Error('Rooster periode is niet compleet');
+        
+        if (!roster.start_date || !roster.end_date) {
+          console.error('[PERIOD-STAFFING] ❌ Rooster heeft incomplete periode:', roster);
+          throw new Error('Rooster periode is niet compleet');
+        }
+        
+        console.log('[PERIOD-STAFFING] ✅ Rooster geladen:', roster);
         setRosterInfo(roster);
 
         // FIX: Bepaal startweek EN startjaar op basis van rooster.start_date
@@ -197,7 +257,7 @@ function PeriodStaffingContent() {
         const startWeek = getISOWeekNumber(startDate);
         const startYear = getISOYear(startDate);
         
-        console.log('[PERIOD-STAFFING] Rooster initialisatie:', {
+        console.log('[PERIOD-STAFFING] 📅 Rooster initialisatie:', {
           start_date: roster.start_date,
           startWeek,
           startYear,
@@ -213,6 +273,8 @@ function PeriodStaffingContent() {
           .select('*')
           .eq('roster_id', rosterId);
         if (rpsError) throw rpsError;
+        
+        console.log('[PERIOD-STAFFING] ✅ Period staffing records geladen:', rpsData?.length || 0);
         setRpsRecords(rpsData || []);
         
         // 3. Unieke services ophalen
@@ -225,18 +287,30 @@ function PeriodStaffingContent() {
             .eq('actief', true)
             .order('naam');
           if (servicesError) throw servicesError;
+          
+          console.log('[PERIOD-STAFFING] ✅ Services geladen:', servicesData?.length || 0);
           setServices(servicesData || []);
-        } else setServices([]);
+        } else {
+          console.log('[PERIOD-STAFFING] ℹ️  Geen services gevonden');
+          setServices([]);
+        }
         
         // 4. Dagdeel assignments ophalen
         const { data: dagdeelData, error: dagdeelError } = await supabase
           .from('roster_period_staffing_dagdelen')
           .select(`*,roster_period_staffing!inner(roster_id)`)
           .eq('roster_period_staffing.roster_id', rosterId);
-        if (dagdeelError) console.error('[DAGDEEL PERIODE] Error loading dagdeel assignments:', dagdeelError);
+        if (dagdeelError) {
+          console.error('[PERIOD-STAFFING] ⚠️  Error loading dagdeel assignments:', dagdeelError);
+        }
+        
+        console.log('[PERIOD-STAFFING] ✅ Dagdeel assignments geladen:', dagdeelData?.length || 0);
         setDagdeelAssignments(dagdeelData || []);
         setError(null);
+        
+        console.log('[PERIOD-STAFFING] ✅ Alle data succesvol geladen');
       } catch (err: any) {
+        console.error('[PERIOD-STAFFING] ❌ Fout bij laden:', err);
         setError(err.message || 'Fout bij laden van gegevens');
       } finally {
         setLoading(false);
@@ -255,7 +329,7 @@ function PeriodStaffingContent() {
       
       // Als het jaar niet klopt, update dan currentYear
       if (correctYear !== currentYear) {
-        console.log('[PERIOD-STAFFING] Jaar correctie:', {
+        console.log('[PERIOD-STAFFING] 📅 Jaar correctie:', {
           currentWeek,
           oldYear: currentYear,
           newYear: correctYear,
@@ -430,15 +504,27 @@ function PeriodStaffingContent() {
   if (error || !rosterInfo) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
+        <div className="text-center max-w-lg">
           <h2 className="text-xl font-semibold text-red-600 mb-2">Error</h2>
-          <p className="text-gray-600 mb-4">{error || 'Rooster niet gevonden'}</p>
+          <p className="text-gray-600 mb-2">{error || 'Rooster niet gevonden'}</p>
+          <p className="text-sm text-gray-500 mb-4">
+            {rosterId ? `Rooster ID: ${rosterId}` : 'Geen rooster ID beschikbaar in URL'}
+          </p>
           <button
-            onClick={() => router.push(`/planning/design/dashboard?rosterId=${rosterId}`)}
+            onClick={() => {
+              // 🔧 FIX DRAAD37L4: Gebruik correct rosterId in fallback navigatie
+              if (rosterId) {
+                console.log('[PERIOD-STAFFING] 🔄 Navigatie naar dashboard met rosterId:', rosterId);
+                router.push(`/planning/design/dashboard?rosterId=${rosterId}`);
+              } else {
+                console.log('[PERIOD-STAFFING] 🔄 Navigatie naar hoofdoverzicht (geen rosterId)');
+                router.push('/planning');
+              }
+            }}
             className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-2 mx-auto"
           >
             <ArrowLeft className="h-5 w-5" />
-            Terug naar Dashboard Rooster Ontwerp
+            {rosterId ? 'Terug naar Dashboard Rooster Ontwerp' : 'Terug naar Overzicht'}
           </button>
         </div>
       </div>
@@ -459,7 +545,10 @@ function PeriodStaffingContent() {
             </p>
           </div>
           <button
-            onClick={() => router.push(`/planning/design/dashboard?rosterId=${rosterId}`)}
+            onClick={() => {
+              console.log('[PERIOD-STAFFING] 🔄 Navigatie naar dashboard met rosterId:', rosterId);
+              router.push(`/planning/design/dashboard?rosterId=${rosterId}`);
+            }}
             className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-md flex items-center gap-2"
           >
             <ArrowLeft className="h-5 w-5" />
@@ -623,6 +712,7 @@ function PeriodStaffingContent() {
           <p><strong>Totaal diensten:</strong> {services.length}</p>
           <p><strong>Totaal dagdeel records:</strong> {dagdeelAssignments.length}</p>
           <p className="mt-2 text-xs text-gray-500">Periode: {rosterInfo.start_date} tot {rosterInfo.end_date}</p>
+          <p className="mt-1 text-xs text-gray-400">Rooster ID: {rosterId}</p>
         </div>
       </div>
     </div>
