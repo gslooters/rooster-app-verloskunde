@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useMemo, memo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { getRosterIdFromParams } from '@/lib/utils/getRosterIdFromParams';
 import { loadRosterDesignData, updateEmployeeMaxShifts, syncRosterDesignWithEmployeeData } from '@/lib/planning/rosterDesign';
 import { fetchNetherlandsHolidays, createHolidaySet, findHolidayByDate } from '@/lib/services/holidays-api';
 import { loadServiceTypes } from '@/lib/services/service-types-loader';
@@ -127,7 +128,7 @@ const ServiceCell = memo(({
 export default function DesignPageClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const rosterId = searchParams.get('rosterId');
+  const rosterId = getRosterIdFromParams(searchParams);
   const [designData, setDesignData] = useState<RosterDesignData | null>(null);
   const [employees, setEmployees] = useState<RosterEmployee[]>([]);
   const [serviceTypes, setServiceTypes] = useState<ServiceTypeWithColor[]>([]);
