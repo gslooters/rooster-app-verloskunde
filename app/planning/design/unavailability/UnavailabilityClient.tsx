@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { getRosterIdFromParams } from '@/lib/utils/getRosterIdFromParams';
 import { loadRosterDesignData, toggleNBAssignment } from '@/lib/planning/rosterDesign';
 import { getAllAssignmentsByRosterId } from '@/lib/services/roster-assignments-supabase';
 
@@ -105,7 +106,7 @@ function sortEmployees(empArray: any[]): any[] {
 export default function UnavailabilityClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const rosterId = searchParams.get('rosterId');
+  const rosterId = getRosterIdFromParams(searchParams);
   const [designData, setDesignData] = useState<any>(null);
   const [allAssignments, setAllAssignments] = useState<Map<string, Map<string, string>>>(new Map());
   const [loading, setLoading] = useState(true);
