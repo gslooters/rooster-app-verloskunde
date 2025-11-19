@@ -66,18 +66,25 @@ export default function DagdelenDashboardClient() {
         
         console.log(`✅ Week ${i + 1}: Weeknr ${weekNumber}, Start: ${formatDateNL(weekStart)}, End: ${formatDateNL(weekEnd)}`);
 
-        // Check voor wijzigingen in deze week
+        // 🔥 CRITICAL FIX: Query via parent tabel met JOIN
         const weekStartStr = formatDateForQuery(weekStart);
         const weekEndStr = formatDateForQuery(weekEnd);
         
-        console.log(`🔎 Supabase query: date >= ${weekStartStr} AND date <= ${weekEndStr}`);
+        console.log(`🔎 Supabase query: roster_period_staffing.date >= ${weekStartStr} AND date <= ${weekEndStr}`);
 
-        // 🔥 HOTFIX: Verwijder .eq('status', 'AANGEPAST') filter
-        // Dit veroorzaakte 400 Bad Request omdat de filter syntax niet klopte
-        // Check gewoon of er records zijn voor deze week
-        const { data: changes, error: queryError } = await supabase
-          .from('roster_period_staffing_dagdelen')
-          .select('updated_at, status')
+        // ✅ NIEUWE AANPAK: Query parent tabel + JOIN naar dagdelen
+        // roster_period_staffing heeft wel een date kolom!
+        // roster_period_staffing_dagdelen heeft alleen een foreign key (roster_period_staffing_id)
+        const { data: parentRecords, error: queryError } = await supabase
+          .from('roster_period_staffing')
+          .select(`
+            id,
+            date,
+            roster_period_staffing_dagdelen (
+              updated_at,
+              status
+            )
+          `)
           .eq('roster_id', rosterId)
           .gte('date', weekStartStr)
           .lte('date', weekEndStr);
@@ -86,12 +93,18 @@ export default function DagdelenDashboardClient() {
           console.error(`❌ Supabase error week ${weekNumber}:`, queryError);
         }
 
-        // Filter in JavaScript ipv in query
-        const modifiedChanges = changes?.filter(c => c.status === 'AANGEPAST') || [];
+        // Extract dagdelen records en filter op status
+        const dagdelenRecords = parentRecords?.flatMap(parent => 
+          parent.roster_period_staffing_dagdelen || []
+        ) || [];
+        
+        const modifiedChanges = dagdelenRecords.filter((d: any) => d.status === 'AANGEPAST');
 
         const hasChanges: boolean = modifiedChanges.length > 0;
         const lastUpdated = modifiedChanges.length > 0 
-          ? modifiedChanges.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())[0].updated_at
+          ? modifiedChanges.sort((a: any, b: any) => 
+              new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+            )[0].updated_at
           : null;
 
         weeks.push({
