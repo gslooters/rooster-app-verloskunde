@@ -1,70 +1,17 @@
-DRAAD37L - UI/UX VERBETERINGEN - 2025-11-19 15:16 CET
+# Railway Deployment Trigger
+# Laatste update: 2025-11-19 15:31 CET
+# Reden: DRAAD37L2 - Fix navigatie knop "Terug naar Dashboard Rooster Ontwerp"
 
-🎉 DATUMPROBLEEM OPGELOST + 4 EXTRA VERBETERINGEN GEIMPLEMENTEERD
+## Wijzigingen in deze deployment:
+- Knoptekst gewijzigd naar "Terug naar Dashboard Rooster Ontwerp"
+- Navigatie route gecorrigeerd naar `/planning/design/dashboard?rosterId=${rosterId}`
+- Fix toegepast op zowel hoofdscherm als error scherm
+- Geen "Geen roster ID gevonden" fout meer bij terugkeren
 
-**Primaire Succes:**
-✅ Week 48-52 correct weergegeven (was: Week 47-51)
-✅ Startdatum 24/11 correct (was: 17/11)
-✅ Supabase queries werken (geen 400 errors meer)
-✅ UTC parsing consistent
+## Technische details:
+- File: app/planning/period-staffing/page.tsx
+- Commit: aa0e428d74523169055fcc250dd591b816fe4e87
+- Branch: main
 
-**Nieuwe Verbeteringen in deze Deploy:**
-
-🔧 VERBETERING 1: Navigatie Fix
-   Probleem: 'Terug naar Rooster Ontwerp' gaf 'Geen roster ID gevonden' error
-   Oplossing: Correcte route naar Dashboard Rooster Ontwerp
-   Route: /planning/design/dashboard?roster_id=${rosterId}
-   Impact: Gebruikers kunnen nu soepel terug navigeren
-
-🎨 VERBETERING 2: Titel Simplicatie
-   WAS: 'Diensten per Dagdeel Aanpassen: Periode Week 48 – Week 52 (24/11–28/12)'
-   NU:  'Diensten per Dagdeel Aanpassen: Periode Week 48 – Week 52'
-   Reden: Cleaner, datums staan nu onder titel bij rooster info
-
-📅 VERBETERING 3: Rooster Info met Volledige Datums
-   WAS: 'Rooster:' (leeg/geen info)
-   NU:  'rooster: 24 november 2025 - 28 december 2025'
-   Details:
-   - Nieuwe formatDateFull() helper functie
-   - Kleine letters zoals gevraagd
-   - Nederlandse maandnamen (januari, februari, etc.)
-   - Automatische berekening: periodStart + 34 dagen (5 weken)
-   - text-sm text-gray-600 styling
-
-🎨 VERBETERING 4: Week Knoppen Mooie Blauwe Styling
-   WAS: Wit met grijze border (saai)
-   NU:  Blauwe gradient achtergrond met mooie hover effecten
-   Details:
-   - Background: gradient-to-r from-blue-50 to-indigo-50
-   - Border: border-blue-200 → hover: border-blue-400
-   - Pijl icoon: text-blue-500 (was text-gray-400)
-   - Visueel aantrekkelijker en consistenter met app kleurenschema
-   - Zoals geïnspireerd door image3 voorbeeld
-
-**Code Kwaliteit:**
-✅ Alle syntax checks geslaagd
-✅ TypeScript types correct
-✅ UTC date handling consistent
-✅ Responsive design behouden
-✅ Hover states geoptimaliseerd
-✅ Accessibility behouden
-
-**Commits:**
-- UI/UX Fix: 26609d061cffa5146c59ae352c0ba918b2eac2f3
-- Rebuild Trigger: Dit bestand
-
-**Verificatie na Deploy:**
-[ ] Titel toont: 'Periode Week 48 – Week 52' (ZONDER datums)
-[ ] Onder titel: 'rooster: 24 november 2025 - 28 december 2025'
-[ ] Week knoppen hebben blauwe gradient achtergrond
-[ ] 'Terug naar Rooster Ontwerp' knop werkt correct
-[ ] Geen 'Geen roster ID gevonden' error meer
-[ ] Week 48-52 correct (niet Week 47)
-
-**User Feedback:**
-"Datumprobleem OPGELOST!! 🎉"
-"jij bent de beste programmeur; maak er iets moois van, dat ook heel goed werkt!!"
-
-✅ MISSIE VOLBRACHT - Production Ready!
-
-**Prioriteit:** NU - AUTO DEPLOY ACTIEF
+Deze file wordt alleen gebruikt om Railway deployments te triggeren.
+Wijzigingen in deze file hebben geen invloed op de applicatie functionaliteit.
