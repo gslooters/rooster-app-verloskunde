@@ -20,6 +20,8 @@ interface WeekDagdelenTableProps {
  * - Sticky headers voor dagen en dagdelen
  * - Kleurcodering per team en bezettingsstatus
  * - Responsive design met horizontaal scrollen op kleinere schermen
+ * 
+ * AANGEPAST: Berekent totalen op basis van team aantallen
  */
 export function WeekDagdelenTable({ weekData }: WeekDagdelenTableProps) {
   const dagdelen = [
@@ -29,17 +31,17 @@ export function WeekDagdelenTable({ weekData }: WeekDagdelenTableProps) {
     { key: 'nacht' as const, label: 'Nacht', tijd: '07:00 - 19:00' },
   ];
 
-  // Bereken totale bezetting per dag
+  // Bereken totale bezetting per dag (som van alle aantallen)
   const getDayTotals = (dayIndex: number) => {
     const day = weekData.days[dayIndex];
     if (!day) return 0;
     
-    return (
-      day.dagdelen.ochtend.length +
-      day.dagdelen.middag.length +
-      day.dagdelen.avond.length +
-      day.dagdelen.nacht.length
-    );
+    const ochtendTotaal = day.dagdelen.ochtend.reduce((sum, a) => sum + (a.aantal || 0), 0);
+    const middagTotaal = day.dagdelen.middag.reduce((sum, a) => sum + (a.aantal || 0), 0);
+    const avondTotaal = day.dagdelen.avond.reduce((sum, a) => sum + (a.aantal || 0), 0);
+    const nachtTotaal = day.dagdelen.nacht.reduce((sum, a) => sum + (a.aantal || 0), 0);
+    
+    return ochtendTotaal + middagTotaal + avondTotaal + nachtTotaal;
   };
 
   return (
@@ -57,7 +59,7 @@ export function WeekDagdelenTable({ weekData }: WeekDagdelenTableProps) {
           </div>
           <div className="text-right">
             <p className="text-sm text-gray-600">Rooster ID</p>
-            <p className="text-xs font-mono text-gray-500">{weekData.rosterId}</p>
+            <p className="text-xs font-mono text-gray-500 break-all max-w-xs">{weekData.rosterId}</p>
           </div>
         </div>
       </div>
@@ -151,15 +153,15 @@ export function WeekDagdelenTable({ weekData }: WeekDagdelenTableProps) {
             <h4 className="text-sm font-semibold text-gray-700 mb-2">Team Kleuren</h4>
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <div className="w-16 h-6 bg-blue-50 border border-blue-200 rounded"></div>
+                <div className="w-16 h-6 bg-blue-100 border-2 border-blue-300 rounded"></div>
                 <span className="text-sm text-gray-600">Team A</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-16 h-6 bg-green-50 border border-green-200 rounded"></div>
+                <div className="w-16 h-6 bg-green-100 border-2 border-green-300 rounded"></div>
                 <span className="text-sm text-gray-600">Team B</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-16 h-6 bg-purple-50 border border-purple-200 rounded"></div>
+                <div className="w-16 h-6 bg-purple-100 border-2 border-purple-300 rounded"></div>
                 <span className="text-sm text-gray-600">Team C</span>
               </div>
             </div>
