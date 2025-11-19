@@ -1,44 +1,37 @@
-# Railway Deployment Trigger
-# Laatste update: 2025-11-19 15:56 UTC
-# Reden: DRAAD37L4 - Robuuste rosterId parameter fix voor period-staffing navigatie
+=== DEPLOYMENT TRIGGER ===
+Timestamp: 2025-11-20 00:32 CET
+Draad: 39.4 (CRITICAL HEALTHCHECK FIX)
 
-## 🎯 ROOT CAUSE FIX:
-URL gebruikt roster_id (underscore) maar code verwacht rosterId (camelCase)
+FIXES APPLIED:
+✅ Start command: HOSTNAME=0.0.0.0 node .next/standalone/server.js
+✅ Health endpoint: /api/health (returns 200 OK)
+✅ Postbuild script: kopieert static + public naar standalone
+✅ Documentation: DEPLOYMENT_FIX_19NOV2025_HEALTHCHECK.md
 
-## 🔧 Wijzigingen in deze deployment:
-- ✅ Nieuwe getRosterIdFromParams() helper met fallback logica
-- ✅ Accepteert BEIDE parameter varianten: rosterId EN roster_id
-- ✅ Comprehensive console logging voor debugging
-- ✅ Verbeterde error handling met actuele parameter waarden
-- ✅ Intelligente fallback navigatie (dashboard of /planning)
-- ✅ Error screen toont nu rosterId waarde of "niet beschikbaar"
+KEY CHANGES:
+1. package.json - Start script nu met HOSTNAME=0.0.0.0
+2. app/api/health/route.ts - Nieuwe dedicated health endpoint
+3. Volledige documentatie van probleem en oplossing
 
-## 📊 Technische details:
-- File: app/planning/period-staffing/page.tsx  
-- Commits:
-  - 0ec4066: Code fix met robuuste parameter extractie
-  - 2f6611f: Volledige implementatie documentatie
-- Branch: main
-- Status: ✅ Intensieve syntax/quality controle - PASS
+RAILWAY CONFIGURATIE VEREIST:
+⚠️ Ga naar Railway Service Settings
+⚠️ Stel Healthcheck Path in op: /api/health
 
-## 🧪 Test scenarios:
-- ✅ URL met ?rosterId=xxx (nieuwe style)
-- ✅ URL met ?roster_id=xxx (oude style) - NU OOK WERKEND
-- ✅ URL zonder parameters (verbeterde error handling)
-- ✅ Navigatie vanuit verschillende schermen
-- ✅ Page refresh met beide parameter varianten
-- ✅ "Terug" knop in normale flow EN error state
+WAAROM DIT WERKT:
+- Next.js standalone server.js ondersteunt HOSTNAME variable
+- 0.0.0.0 = luister op alle netwerk interfaces (niet alleen localhost)
+- Railway kan nu container bereiken via intern netwerk
+- /api/health is simpel endpoint, geen complex rendering
 
-## 📝 Verificatie checklist:
-- [x] Root cause geïdentificeerd (parameter mismatch)
-- [x] Fallback logica geïmplementeerd
-- [x] Console logging toegevoegd
-- [x] Error handling verbeterd
-- [x] Syntax gecontroleerd - geen fouten
-- [x] Code gecommit naar main
-- [x] Documentatie compleet
-- [ ] Railway deployment gestart
-- [ ] TEST: Navigatie werkt met BEIDE parameter namen
+VERWACHTE RESULTAAT:
+✅ Build succesvol (zoals voorheen)
+✅ Server start op 0.0.0.0:PORT
+✅ Railway healthcheck naar /api/health slaagt
+✅ Deployment wordt actief
 
-Deze file wordt alleen gebruikt om Railway deployments te triggeren.
-Wijzigingen in deze file hebben geen invloed op de applicatie functionaliteit.
+GEDOCUMENTEERDE COMMITS:
+- 14d432cf: Start command met HOSTNAME
+- f2f5f8f3: Health endpoint
+- 1abded14: Deployment documentatie
+
+Deployment #: [Railway zal dit vullen]
