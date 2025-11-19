@@ -11,7 +11,17 @@ const nextConfig = {
   },
   // Optimale performance settings
   swcMinify: true,
-  compress: true
+  compress: true,
+  
+  // CRITICAL: Disable static optimization voor pagina's met database calls
+  // Dit voorkomt pre-rendering tijdens build waar Supabase env vars nodig zijn
+  experimental: {
+    // Force dynamic rendering
+    isrMemoryCacheSize: 0,
+  },
+  
+  // Output config voor deployment
+  output: 'standalone'
 };
 
 module.exports = nextConfig;
