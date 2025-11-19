@@ -3,6 +3,7 @@
 import dynamic from 'next/dynamic';
 import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { getRosterIdFromParams } from '@/lib/utils/getRosterIdFromParams';
 import { readRosters } from '@/lib/planning/storage';
 
 // CSR-only: direct lazy import van DesignPageClient, zonder extra wrappers of children props
@@ -22,8 +23,8 @@ export default function RosterDesignPageWrapper() {
     let isActive = true;
 
     async function resolveRoute() {
-      // 1. Check URL parameter
-      let id = searchParams.get('rosterId');
+      // 1. Check URL parameter met centrale helper
+      const id = getRosterIdFromParams(searchParams);
       if (id) { 
         if (isActive) { 
           setResolved(true); 
