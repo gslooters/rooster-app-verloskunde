@@ -15,8 +15,13 @@ const nextConfig = {
   swcMinify: true,
   compress: true,
   
-  // Output config voor Railway deployment
-  output: 'standalone'
+  // Output config voor Railway deployment met standalone
+  output: 'standalone',
+  
+  // Zorg dat alle dependencies worden meegenomen in standalone build
+  experimental: {
+    outputFileTracingRoot: undefined,
+  }
 };
 
 module.exports = nextConfig;
