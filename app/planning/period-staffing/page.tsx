@@ -435,8 +435,9 @@ function PeriodStaffingContent() {
           <p className="text-gray-600 mb-4">{error || 'Rooster niet gevonden'}</p>
           <button
             onClick={() => router.push(`/planning/design/dashboard?rosterId=${rosterId}`)}
-            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-2 mx-auto"
           >
+            <ArrowLeft className="h-5 w-5" />
             Terug naar Dashboard Rooster Ontwerp
           </button>
         </div>
