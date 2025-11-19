@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { getRosterIdFromParams } from '@/lib/utils/getRosterIdFromParams';
 import DesignErrorCard from './DesignErrorCard';
 
 export default function DesignErrorGate({ children }: { children: React.ReactNode }) {
@@ -8,8 +9,8 @@ export default function DesignErrorGate({ children }: { children: React.ReactNod
   const [showError, setShowError] = useState(false);
 
   useEffect(() => {
-    const hasId = !!searchParams.get('rosterId');
-    setShowError(!hasId);
+    const rosterId = getRosterIdFromParams(searchParams);
+    setShowError(!rosterId);
   }, [searchParams]);
 
   if (showError) {
