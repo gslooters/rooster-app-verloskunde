@@ -1,20 +1,52 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { use } from 'react';
+import { useEffect, useState } from 'react';
 
-export default function WeekDetailPage({ params }: { params: Promise<{ weekNumber: string }> }) {
-  const resolvedParams = use(params);
+interface PageProps {
+  params: Promise<{ weekNumber: string }>;
+}
+
+export default function WeekDetailPage({ params }: PageProps) {
+  const [weekNumber, setWeekNumber] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
   const searchParams = useSearchParams();
   
   const rosterId = searchParams.get('roster_id');
   const periodStart = searchParams.get('period_start');
-  const weekNumber = resolvedParams.weekNumber;
+
+  // ✅ DRAAD39.2 FIX: Correct async params handling zonder use() hook
+  useEffect(() => {
+    const loadParams = async () => {
+      try {
+        const resolvedParams = await params;
+        setWeekNumber(resolvedParams.weekNumber);
+      } catch (error) {
+        console.error('❌ Fout bij laden params:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadParams();
+  }, [params]);
 
   const handleBack = () => {
     router.push(`/planning/design/dagdelen-dashboard?roster_id=${rosterId}&period_start=${periodStart}`);
   };
+
+  // ✅ Loading state tijdens params resolving
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Laden...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
@@ -22,7 +54,7 @@ export default function WeekDetailPage({ params }: { params: Promise<{ weekNumbe
         <div className="bg-white rounded-lg shadow-sm p-8">
           <button
             onClick={handleBack}
-            className="flex items-center text-gray-600 hover:text-gray-900 mb-6"
+            className="flex items-center text-gray-600 hover:text-gray-900 mb-6 transition-colors"
           >
             <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
