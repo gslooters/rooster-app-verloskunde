@@ -26,10 +26,9 @@ export interface DayDagdeelData {
 }
 
 export interface DagdeelAssignment {
-  employeeId: string;
-  employeeName: string;
   team: string;
-  status: 'assigned' | 'tentative' | 'unavailable';
+  aantal: number;
+  status: string;
 }
 
 export interface WeekNavigatieBounds {
@@ -38,13 +37,6 @@ export interface WeekNavigatieBounds {
   currentWeek: number;
   hasPrevious: boolean;
   hasNext: boolean;
-}
-
-// Helper type for Supabase employee response
-interface EmployeeRecord {
-  id: string;
-  naam: string;
-  team: string;
 }
 
 /**
@@ -69,6 +61,10 @@ export function calculateWeekDates(weekNummer: number, jaar: number): { startDat
 
 /**
  * Get week dagdelen data for a specific roster and week
+ * 
+ * Fixed to use correct database schema:
+ * - roster_period_staffing (has date column)
+ * - roster_period_staffing_dagdelen (has dagdeel, team, aantal, status)
  */
 export async function getWeekDagdelenData(
   rosterId: string,
@@ -81,6 +77,8 @@ export async function getWeekDagdelenData(
     // Calculate week dates
     const { startDatum, eindDatum } = calculateWeekDates(weekNummer, jaar);
     
+    console.log(`🔍 Fetching week ${weekNummer} data: ${format(startDatum, 'yyyy-MM-dd')} to ${format(eindDatum, 'yyyy-MM-dd')}`);
+    
     // Fetch roster to verify it exists
     const { data: roster, error: rosterError } = await supabase
       .from('rosters')
@@ -89,7 +87,7 @@ export async function getWeekDagdelenData(
       .single();
     
     if (rosterError || !roster) {
-      console.error('Roster not found:', rosterError);
+      console.error('❌ Roster not found:', rosterError);
       return null;
     }
     
@@ -98,32 +96,35 @@ export async function getWeekDagdelenData(
     const rosterEnd = new Date(roster.eind_datum);
     
     if (startDatum < rosterStart || eindDatum > rosterEnd) {
-      console.error('Week outside roster period');
+      console.error('❌ Week outside roster period');
       return null;
     }
     
-    // Fetch dagdelen assignments for this week
-    const { data: assignments, error: assignmentsError } = await supabase
-      .from('roster_dagdelen_assignments')
+    // ✅ CORRECTE QUERY: Gebruik roster_period_staffing met dagdelen join
+    const { data: periodData, error: periodError } = await supabase
+      .from('roster_period_staffing')
       .select(`
-        datum,
-        dagdeel,
-        employee_id,
-        employees:employee_id (
+        id,
+        date,
+        roster_period_staffing_dagdelen (
           id,
-          naam,
-          team
+          dagdeel,
+          team,
+          status,
+          aantal
         )
       `)
       .eq('roster_id', rosterId)
-      .gte('datum', format(startDatum, 'yyyy-MM-dd'))
-      .lte('datum', format(eindDatum, 'yyyy-MM-dd'))
-      .order('datum', { ascending: true });
+      .gte('date', format(startDatum, 'yyyy-MM-dd'))
+      .lte('date', format(eindDatum, 'yyyy-MM-dd'))
+      .order('date', { ascending: true });
     
-    if (assignmentsError) {
-      console.error('Error fetching assignments:', assignmentsError);
+    if (periodError) {
+      console.error('❌ Error fetching period data:', periodError);
       return null;
     }
+    
+    console.log(`✅ Fetched ${periodData?.length || 0} period records`);
     
     // Build days array
     const days: DayDagdeelData[] = [];
@@ -133,65 +134,42 @@ export async function getWeekDagdelenData(
       const dateStr = format(currentDate, 'yyyy-MM-dd');
       const dayName = format(currentDate, 'EEEE', { locale: nl });
       
-      // Filter assignments for this day
-      const dayAssignments = assignments?.filter(a => a.datum === dateStr) || [];
+      // Find period data for this day
+      const dayPeriod = periodData?.find(p => p.date === dateStr);
       
-      // Helper function to extract employee data
-      const getEmployeeData = (employees: any): EmployeeRecord | null => {
-        if (!employees) return null;
-        // Handle both array and object responses from Supabase
-        if (Array.isArray(employees)) {
-          return employees.length > 0 ? employees[0] : null;
-        }
-        return employees;
-      };
+      // Get dagdelen for this day
+      const dagdelenRecords = dayPeriod?.roster_period_staffing_dagdelen || [];
       
-      // Group by dagdeel
+      // Group by dagdeel type
       const dagdelen = {
-        ochtend: dayAssignments
-          .filter(a => a.dagdeel === 'ochtend')
-          .map(a => {
-            const employee = getEmployeeData(a.employees);
-            return {
-              employeeId: a.employee_id,
-              employeeName: employee?.naam || 'Onbekend',
-              team: employee?.team || '',
-              status: 'assigned' as const,
-            };
-          }),
-        middag: dayAssignments
-          .filter(a => a.dagdeel === 'middag')
-          .map(a => {
-            const employee = getEmployeeData(a.employees);
-            return {
-              employeeId: a.employee_id,
-              employeeName: employee?.naam || 'Onbekend',
-              team: employee?.team || '',
-              status: 'assigned' as const,
-            };
-          }),
-        avond: dayAssignments
-          .filter(a => a.dagdeel === 'avond')
-          .map(a => {
-            const employee = getEmployeeData(a.employees);
-            return {
-              employeeId: a.employee_id,
-              employeeName: employee?.naam || 'Onbekend',
-              team: employee?.team || '',
-              status: 'assigned' as const,
-            };
-          }),
-        nacht: dayAssignments
-          .filter(a => a.dagdeel === 'nacht')
-          .map(a => {
-            const employee = getEmployeeData(a.employees);
-            return {
-              employeeId: a.employee_id,
-              employeeName: employee?.naam || 'Onbekend',
-              team: employee?.team || '',
-              status: 'assigned' as const,
-            };
-          }),
+        ochtend: dagdelenRecords
+          .filter(d => d.dagdeel?.toLowerCase() === 'ochtend')
+          .map(d => ({
+            team: d.team || '',
+            aantal: d.aantal || 0,
+            status: d.status || 'NIET_TOEGEWEZEN',
+          })),
+        middag: dagdelenRecords
+          .filter(d => d.dagdeel?.toLowerCase() === 'middag')
+          .map(d => ({
+            team: d.team || '',
+            aantal: d.aantal || 0,
+            status: d.status || 'NIET_TOEGEWEZEN',
+          })),
+        avond: dagdelenRecords
+          .filter(d => d.dagdeel?.toLowerCase() === 'avond')
+          .map(d => ({
+            team: d.team || '',
+            aantal: d.aantal || 0,
+            status: d.status || 'NIET_TOEGEWEZEN',
+          })),
+        nacht: dagdelenRecords
+          .filter(d => d.dagdeel?.toLowerCase() === 'nacht')
+          .map(d => ({
+            team: d.team || '',
+            aantal: d.aantal || 0,
+            status: d.status || 'NIET_TOEGEWEZEN',
+          })),
       };
       
       days.push({
@@ -203,6 +181,8 @@ export async function getWeekDagdelenData(
       currentDate.setDate(currentDate.getDate() + 1);
     }
     
+    console.log(`✅ Built ${days.length} days with dagdelen data`);
+    
     return {
       rosterId,
       weekNummer,
@@ -212,7 +192,7 @@ export async function getWeekDagdelenData(
       days,
     };
   } catch (error) {
-    console.error('Error in getWeekDagdelenData:', error);
+    console.error('❌ Error in getWeekDagdelenData:', error);
     return null;
   }
 }
