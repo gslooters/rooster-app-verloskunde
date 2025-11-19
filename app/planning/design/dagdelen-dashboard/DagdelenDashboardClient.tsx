@@ -72,21 +72,26 @@ export default function DagdelenDashboardClient() {
         
         console.log(`🔎 Supabase query: date >= ${weekStartStr} AND date <= ${weekEndStr}`);
 
+        // 🔥 HOTFIX: Verwijder .eq('status', 'AANGEPAST') filter
+        // Dit veroorzaakte 400 Bad Request omdat de filter syntax niet klopte
+        // Check gewoon of er records zijn voor deze week
         const { data: changes, error: queryError } = await supabase
           .from('roster_period_staffing_dagdelen')
           .select('updated_at, status')
           .eq('roster_id', rosterId)
           .gte('date', weekStartStr)
-          .lte('date', weekEndStr)
-          .eq('status', 'AANGEPAST');
+          .lte('date', weekEndStr);
 
         if (queryError) {
           console.error(`❌ Supabase error week ${weekNumber}:`, queryError);
         }
 
-        const hasChanges: boolean = !!(changes && changes.length > 0);
-        const lastUpdated = changes && changes.length > 0 
-          ? changes.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())[0].updated_at
+        // Filter in JavaScript ipv in query
+        const modifiedChanges = changes?.filter(c => c.status === 'AANGEPAST') || [];
+
+        const hasChanges: boolean = modifiedChanges.length > 0;
+        const lastUpdated = modifiedChanges.length > 0 
+          ? modifiedChanges.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())[0].updated_at
           : null;
 
         weeks.push({
