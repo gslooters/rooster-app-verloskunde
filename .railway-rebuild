@@ -1,18 +1,18 @@
 # Railway Rebuild Trigger
-# Dit bestand triggert een nieuwe deployment op Railway.com
+# Last update: 2025-11-19 19:24 CET
+# Reason: DRAAD39.1 - TypeScript types voor Week Dagdelen scherm
 
-Laatste rebuild: 18 november 2025 17:00 UTC
-Reden: DRAAD37A - Splitsen Dienst/Team kolommen implementatie
+Dit bestand wordt gebruikt om Railway deployments te triggeren.
 
-Wijzigingen:
-- ServiceRow.tsx: 3 rijen per dienst (Groen/Oranje/Praktijk)
-- WeekHeader.tsx: 2-kolom header (Dienst 180px + Team 60px)
-- Team mapping: team_tot = Praktijk
-- Kleuren: Groen #10B981, Oranje #F97316, Praktijk #3B82F6
+## Recente updates:
 
-Commit SHA's:
-- f32b303: ServiceRow restructuur
-- b0ca645: WeekHeader update
-- 8d00d64: Documentatie
+### 2025-11-19 19:24 - DRAAD39.1 Foundation & Data Layer
+- Nieuwe TypeScript types in lib/types/week-dagdelen.ts
+- Complete type definities voor Week Dagdelen scherm
+- Data structuren voor lazy-loaded week data (~1134 records)
+- UI state management types
+- Filter & sort utilities
+- Statistieken functies
+- Type guards en validators
 
-Deployment URL: https://rooster-app-verloskunde-production.up.railway.app
+Ready voor deployment ✅
