@@ -29,16 +29,6 @@ export default function DagdelenDashboardClient() {
     }
   }, [rosterId, periodStart]);
 
-  /**
-   * 🔧 ISO-8601 Helper: Converteer JavaScript day (0=zondag) naar ISO day (7=zondag)
-   * @param date - De datum waarvan de dag bepaald moet worden
-   * @returns ISO weekdag nummer (1=maandag, 7=zondag)
-   */
-  const isoWeekDay = (date: Date): number => {
-    const jsDay = date.getDay(); // JavaScript: 0=zondag, 1=maandag, ..., 6=zaterdag
-    return jsDay === 0 ? 7 : jsDay; // ISO-8601: 1=maandag, ..., 7=zondag
-  };
-
   const loadWeekData = async () => {
     try {
       setLoading(true);
@@ -52,51 +42,36 @@ export default function DagdelenDashboardClient() {
 
       setRosterInfo(roster);
 
-      // KRITIEKE FIX: Normaliseer naar maandag als startdatum niet op maandag valt
-      // Zorg ervoor dat periodStart ALTIJD begint op een maandag (ISO weekdag 1)
-      const rawStartDate = new Date(periodStart!);
-      const currentIsoDay = isoWeekDay(rawStartDate);
+      // ✅ DRAAD37K2-FIX: Forceer UTC parsing en verwijder onnodige normalisatie
+      // periodStart komt AL correct binnen vanaf Dashboard (maandag 24-11-2025)
+      const startDate = new Date(periodStart! + 'T00:00:00Z');
       
-      console.log('🔍 Period Start (raw):', periodStart);
-      console.log('📅 Raw Start Date:', rawStartDate.toISOString());
-      console.log('📆 JavaScript day:', rawStartDate.getDay(), '| ISO day:', currentIsoDay, '(1=maandag, 7=zondag)');
-      
-      // Als periodStart NIET op maandag valt, verschuif naar de HUIDIGE week maandag
-      const startDate = new Date(rawStartDate);
-      if (currentIsoDay !== 1) {
-        // Bereken hoeveel dagen terug naar maandag
-        const daysToMonday = currentIsoDay - 1;
-        startDate.setDate(rawStartDate.getDate() - daysToMonday);
-        console.log(`⚠️ Start datum NIET op maandag! Verschuiving: ${daysToMonday} dagen terug naar maandag`);
-      }
-      
-      console.log('✅ Genormaliseerde Start Date (maandag):', startDate.toISOString());
-      console.log('✅ Verificatie ISO day na correctie:', isoWeekDay(startDate));
+      console.log('🔍 Period Start (input):', periodStart);
+      console.log('📅 Parsed as UTC Date:', startDate.toISOString());
+      console.log('📆 UTC Day:', startDate.getUTCDay(), '(0=zondag, 1=maandag)');
+      console.log('✅ Week berekening start vanaf:', startDate.toLocaleDateString('nl-NL'));
       
       const weeks: WeekInfo[] = [];
 
-      // Genereer exact 5 weken vanaf genormaliseerde maandag
+      // Genereer exact 5 weken vanaf startDate (ZONDER normalisatie)
       for (let i = 0; i < 5; i++) {
-        // Bereken weekStart door i*7 dagen toe te voegen aan startDate
+        // ✅ Gebruik UTC methoden om timezone issues te voorkomen
         const weekStart = new Date(startDate);
-        weekStart.setDate(startDate.getDate() + (i * 7));
+        weekStart.setUTCDate(startDate.getUTCDate() + (i * 7));
         
         const weekEnd = new Date(weekStart);
-        weekEnd.setDate(weekStart.getDate() + 6); // Zondag is laatste dag van de week
+        weekEnd.setUTCDate(weekStart.getUTCDate() + 6);
 
         const weekNumber = getWeekNumber(weekStart);
         
-        // Verificatie logging
-        console.log(`✅ Week ${i + 1}: Weeknr ${weekNumber}, Start: ${weekStart.toLocaleDateString('nl-NL')} (ISO dag ${isoWeekDay(weekStart)}), End: ${weekEnd.toLocaleDateString('nl-NL')} (ISO dag ${isoWeekDay(weekEnd)})`);
+        console.log(`✅ Week ${i + 1}: Weeknr ${weekNumber}, Start: ${formatDateNL(weekStart)}, End: ${formatDateNL(weekEnd)}`);
 
-        // KRITIEKE FIX: Supabase query met correcte datum formatting
-        // Zorg dat weekStart en weekEnd altijd in YYYY-MM-DD formaat zijn
+        // Check voor wijzigingen in deze week
         const weekStartStr = formatDateForQuery(weekStart);
         const weekEndStr = formatDateForQuery(weekEnd);
         
         console.log(`🔎 Supabase query: date >= ${weekStartStr} AND date <= ${weekEndStr}`);
 
-        // Check voor wijzigingen in deze week
         const { data: changes, error: queryError } = await supabase
           .from('roster_period_staffing_dagdelen')
           .select('updated_at, status')
@@ -106,9 +81,7 @@ export default function DagdelenDashboardClient() {
           .eq('status', 'AANGEPAST');
 
         if (queryError) {
-          console.error(`❌ Supabase query error voor week ${weekNumber}:`, queryError);
-        } else {
-          console.log(`✅ Supabase query success voor week ${weekNumber}: ${changes?.length || 0} wijzigingen gevonden`);
+          console.error(`❌ Supabase error week ${weekNumber}:`, queryError);
         }
 
         const hasChanges: boolean = !!(changes && changes.length > 0);
@@ -126,8 +99,6 @@ export default function DagdelenDashboardClient() {
       }
 
       setWeekData(weeks);
-      
-      // Verificatie logging
       console.log('📊 Gegenereerde weken:', weeks.map(w => `Week ${w.weekNumber}: ${w.startDate}-${w.endDate}`).join(', '));
       
     } catch (error) {
@@ -139,35 +110,47 @@ export default function DagdelenDashboardClient() {
 
   /**
    * Berekent ISO-8601 weeknummer voor een gegeven datum
-   * Deze functie is al correct en gebruikt zondag=7 mapping
-   * @param date - De datum waarvoor het weeknummer berekend moet worden
-   * @returns Het weeknummer (1-53)
+   * ✅ Gebruikt UTC om consistentie te garanderen
    */
   const getWeekNumber = (date: Date): number => {
-    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-    const dayNum = d.getUTCDay() || 7; // Zondag=7, Maandag=1
+    const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+    const dayNum = d.getUTCDay() || 7; // Zondag=7
     d.setUTCDate(d.getUTCDate() + 4 - dayNum);
     const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
     return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
   };
 
   /**
-   * Format datum voor weergave (dd/mm)
+   * Format datum voor Nederlandse weergave (dd/mm)
+   * ✅ Gebruikt UTC om timezone issues te voorkomen
    */
   const formatDate = (date: Date): string => {
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
     return `${day}/${month}`;
   };
 
   /**
-   * 🔧 NIEUWE HELPER: Format datum voor Supabase query (YYYY-MM-DD)
-   * Voorkomt timezone issues en 400 errors
+   * Format datum voor Nederlandse volledige weergave
+   * ✅ Helper voor logging
+   */
+  const formatDateNL = (date: Date): string => {
+    return date.toLocaleDateString('nl-NL', { 
+      timeZone: 'UTC',
+      day: '2-digit', 
+      month: '2-digit',
+      year: 'numeric'
+    });
+  };
+
+  /**
+   * Format datum voor Supabase query (YYYY-MM-DD)
+   * ✅ Gebruikt UTC om exacte datum te garanderen
    */
   const formatDateForQuery = (date: Date): string => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   };
 
