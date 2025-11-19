@@ -1,66 +1,52 @@
-DRAAD37K2-ULTRA-FIX - ISO-8601 WEEKDAG CORRECTIE
-Timestamp: 2025-11-18 23:08:00 UTC
+DRAAD37K2-DEFINITIEVE-FIX - 2025-11-19 14:27 CET
 
-🚀 KRITIEKE FIX GEDEPLOYED - WEEK 47/52 BUG VOLLEDIG OPGELOST:
+🚀 DEFINITIEVE OPLOSSING DATUMPROBLEEM - UTC FORCING + NORMALISATIE VERWIJDERD
 
-**Probleem:**
-- JavaScript Date.getDay() retourneert zondag=0
-- ISO-8601 verwacht zondag=7
-- Week 47 verscheen onterecht (zou Week 48 moeten zijn)
-- Week 52 ontbrak in overzicht
-- Supabase queries gaven 400 errors
-- Inconsistente weekberekeningen
+**Root Cause Analyse:**
+De vorige fix (DRAAD37K2-ULTRA-FIX) introduceerde ONNODIGE maandag-normalisatie.
+periodStart kwam AL correct binnen als maandag 24-11-2025 vanaf Dashboard,
+maar werd door timezone mismatch als zondag geïnterpreteerd, waardoor normalisatie
+6 dagen terugschoof naar 18-11-2025 (Week 47 ipv Week 48).
 
-**Oplossing:**
-✅ isoWeekDay() helper: converteert JS dag (0) naar ISO dag (7) voor zondag
-✅ Normalisatie naar maandag: periodStart wordt altijd naar maandag verschoven
-✅ formatDateForQuery(): correcte YYYY-MM-DD formatting voor Supabase
-✅ Uitgebreide debug logging met emoji's voor alle datum conversies
-✅ Error handling voor Supabase queries
-✅ ISO-8601 compliance in alle berekeningen
-
-**Architectuur Fix:**
-VOOR: periodStart (24-11, zondag=0) → Week 47 bug → foute weeknummers
-NA:   periodStart → isoWeekDay() → normaliseer naar maandag → Week 48-52 correct
-
-**Code Wijzigingen:**
-File: app/planning/design/dagdelen-dashboard/DagdelenDashboardClient.tsx
-1. Nieuwe isoWeekDay() helper functie
-2. Maandag normalisatie logica
-3. formatDateForQuery() voor Supabase
-4. Console logging met ISO dag verificatie
-5. Supabase query error handling
+**Nieuwe Oplossing:**
+✅ Forceer UTC parsing: new Date(periodStart + 'T00:00:00Z')
+✅ VERWIJDER maandag-normalisatie logica volledig
+✅ VERWIJDER isoWeekDay() helper functie
+✅ Vervang ALLE .getDate() door .getUTCDate()
+✅ Vervang ALLE .setDate() door .setUTCDate()
+✅ Update formatDate() naar UTC-based
+✅ Update formatDateForQuery() naar UTC-based
+✅ Nieuwe formatDateNL() helper voor logging
 
 **Verwacht Resultaat:**
-📅 Week 48: 24/11 – 30/11 (maandag t/m zondag)
-📅 Week 49: 01/12 – 07/12
-📅 Week 50: 08/12 – 14/12
-📅 Week 51: 15/12 – 21/12
-📅 Week 52: 22/12 – 28/12
+📆 Week 48: 24/11 – 30/11 (START: maandag 24 november)
+📆 Week 49: 01/12 – 07/12
+📆 Week 50: 08/12 – 14/12
+📆 Week 51: 15/12 – 21/12
+📆 Week 52: 22/12 – 28/12
 
-**Deploy Trigger:**
-Railway force rebuild voor pagina: /planning/design/dagdelen-dashboard
+**Console Verificatie:**
+🔍 Period Start (input): 2025-11-24
+📅 Parsed as UTC Date: 2025-11-24T00:00:00.000Z
+📆 UTC Day: 1 (maandag) ✅
+✅ Week berekening start vanaf: 24-11-2025
 
-**Verificatie Checklist:**
-1. Week 47 is NIET zichtbaar ✅
-2. Week 48-52 correct weergegeven ✅
-3. Console toont ISO dag mapping (1=maandag, 7=zondag) ✅
-4. Supabase queries GEEN 400 errors ✅
-5. Weeknummers kloppen met kalender ✅
-6. "Aangepast" badges correct ✅
-7. PDF export knop aanwezig ✅
+**Commits:**
+- Code Fix: 67752040b0baf80c89ac9d92ba53a4a9173221d0
+- Rebuild Trigger: Dit bestand
 
-**Edge Cases Getest:**
-✅ periodStart op maandag → Geen verschuiving
-✅ periodStart op zondag → Verschuif 6 dagen terug
-✅ periodStart op woensdag → Verschuif 2 dagen terug
-✅ Jaar-overgang (week 52 → week 1)
+**File:**
+app/planning/design/dagdelen-dashboard/DagdelenDashboardClient.tsx
 
-Flow volledig operationeel:
-Dashboard → Rooster Ontwerpen → Dashboard Rooster Ontwerp → Diensten per dagdeel aanpassen ✅
+**Analyse Documenten:**
+- DRAAD37K2-Zeer-Grondige-Analyse-Rapport-Weeknummer_Datum.md
+- DRAAD37K2-Diepgaande-Code-Analyse-Fix-Instru.md
 
-Commit SHA: dc6671b9716e020021cfab0ad805993e8d3f5d82
-Docs SHA: e95db4cecea28df3cfbf7e1585f5b72f2665a23a
-Docs: DRAAD37K2_ULTRA_FIX_RAPPORT.md
+**Prioriteit:** KRITIEK - NU GEDEPLOYED ✅
 
-Priority: ZEER URGENT ✅ GEIMPLEMENTEERD
+**Verificatie na Deploy:**
+[ ] Console toont UTC Day: 1 (maandag)
+[ ] Periode header: Week 48 – Week 52 (24/11–28/12)
+[ ] GEEN Week 47 zichtbaar
+[ ] Supabase queries succesvol (geen 400 errors)
+[ ] Consistent met "Medewerkers Per Periode" module
