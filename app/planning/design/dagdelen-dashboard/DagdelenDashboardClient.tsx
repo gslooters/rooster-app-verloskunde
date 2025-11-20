@@ -253,7 +253,7 @@ export default function DagdelenDashboardClient() {
   };
 
   /**
-   * 🔥 OPTIE A FIX: Week click handler - Gebruikt nu weekIndex (1-5) i.p.v. ISO weeknummer!
+   * 🔥 FIX 1 - DRAAD40B: Week click handler met period_start parameter
    * Route: /planning/design/week-dagdelen/[rosterId]/[weekIndex]?period_start=[periodStart]
    * weekIndex = positie binnen 5-weekse roosterperiode (1, 2, 3, 4, 5)
    */
@@ -261,7 +261,7 @@ export default function DagdelenDashboardClient() {
     console.log(`🔗 OPTIE A: Navigeren naar week INDEX ${weekIndex}`);
     console.log(`📝 Parameters: rosterId=${rosterId}, weekIndex=${weekIndex}, periodStart=${periodStart}`);
     
-    // 🔥 OPTIE A: Gebruik weekIndex (1-5) in URL, niet ISO weeknummer!
+    // 🔥 FIX 1: Voeg period_start parameter toe aan URL
     router.push(
       `/planning/design/week-dagdelen/${rosterId}/${weekIndex}?period_start=${periodStart}`
     );
@@ -517,14 +517,14 @@ export default function DagdelenDashboardClient() {
         {/* Debug info (development only) */}
         {process.env.NODE_ENV === 'development' && (
           <div className="mt-6 bg-gray-800 text-gray-100 rounded-lg p-4 text-xs font-mono">
-            <div className="font-bold mb-2">🐛 Debug Info (OPTIE A FIX):</div>
+            <div className="font-bold mb-2">🐛 Debug Info (FIX 1 - DRAAD40B):</div>
             <div>isLoading: {String(isLoading)}</div>
             <div>hasError: {String(hasError)}</div>
             <div>isDataReady: {String(isDataReady)}</div>
             <div>weekData.length: {weekData?.length || 0}</div>
             <div>roster_id: {rosterId}</div>
             <div>period_start: {periodStart}</div>
-            <div className="mt-2 text-green-400">✅ OPTIE A: Gebruikt weekIndex (1-5) voor routing!</div>
+            <div className="mt-2 text-green-400">✅ FIX 1: period_start parameter toegevoegd aan URL!</div>
             <div className="text-green-400">✅ Display: ISO weeknummer (48-52)</div>
             <div className="text-green-400">✅ Route: /planning/design/week-dagdelen/[rosterId]/[1-5]?period_start=[date]</div>
           </div>
