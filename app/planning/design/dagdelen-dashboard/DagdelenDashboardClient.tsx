@@ -249,8 +249,15 @@ export default function DagdelenDashboardClient() {
     return `${year}-${month}-${day}`;
   };
 
-  const handleWeekClick = (weekNumber: number) => {
-    router.push(`/planning/design/dagdelen-dashboard/${weekNumber}?roster_id=${rosterId}&period_start=${periodStart}`);
+  /**
+   * 🎯 FASE 3: Week click handler - Navigeert naar week detail scherm
+   * Route: /planning/design/week-dagdelen/[rosterId]/[weekNummer]
+   */
+  const handleWeekClick = (weekNummer: number) => {
+    console.log(`🔗 FASE 3: Navigeren naar week ${weekNummer}`);
+    router.push(
+      `/planning/design/week-dagdelen/${rosterId}/${weekNummer}`
+    );
   };
 
   const handleExportPDF = async () => {
@@ -432,7 +439,7 @@ export default function DagdelenDashboardClient() {
           </p>
         </div>
 
-        {/* Week Buttons */}
+        {/* 🎯 FASE 3: Week Cards met klikbare navigatie en hover styling */}
         <div className="space-y-4">
           {weekData.map((week, index) => {
             // Extra validatie per week
@@ -451,7 +458,7 @@ export default function DagdelenDashboardClient() {
               <button
                 key={`week-${weekNum}-${index}`}
                 onClick={() => handleWeekClick(weekNum)}
-                className="w-full bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg shadow-sm hover:shadow-md transition-all p-6 text-left border-2 border-blue-200 hover:border-blue-400 relative"
+                className="w-full bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg shadow-sm hover:shadow-lg transition-all duration-200 p-6 text-left border-2 border-blue-200 hover:border-blue-400 hover:bg-blue-100 hover:-translate-y-0.5 cursor-pointer relative"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
@@ -502,13 +509,15 @@ export default function DagdelenDashboardClient() {
         {/* Debug info (development only) */}
         {process.env.NODE_ENV === 'development' && (
           <div className="mt-6 bg-gray-800 text-gray-100 rounded-lg p-4 text-xs font-mono">
-            <div className="font-bold mb-2">🐛 Debug Info (DRAAD39.3):</div>
+            <div className="font-bold mb-2">🐛 Debug Info (FASE 3):</div>
             <div>isLoading: {String(isLoading)}</div>
             <div>hasError: {String(hasError)}</div>
             <div>isDataReady: {String(isDataReady)}</div>
             <div>weekData.length: {weekData?.length || 0}</div>
             <div>roster_id: {rosterId}</div>
             <div>period_start: {periodStart}</div>
+            <div className="mt-2 text-green-400">✅ FASE 3: Week cards zijn klikbaar</div>
+            <div className="text-green-400">✅ Route: /planning/design/week-dagdelen/[rosterId]/[weekNummer]</div>
           </div>
         )}
       </div>
