@@ -94,7 +94,7 @@ export default function WeekTableBody({
                     ${!isLastDienst && teamIndex === 2 ? 'border-b border-gray-300' : ''}
                   `}
                 >
-                  {/* KOLOM 1: Dienst info (frozen left, rowspan=3 alleen in eerste rij) */}
+                  {/* Kolom 1: Dienst info (frozen left, rowspan=3 alleen in eerste rij) */}
                   {isFirstRow && (
                     <td
                       rowSpan={3}
@@ -118,7 +118,7 @@ export default function WeekTableBody({
                     </td>
                   )}
 
-                  {/* KOLOM 2: Team badge (frozen left) */}
+                  {/* Kolom 2: Team badge (frozen left) */}
                   <td
                     className="
                       sticky left-[180px] z-10
@@ -145,7 +145,7 @@ export default function WeekTableBody({
                     </div>
                   </td>
 
-                  {/* KOLOM 3-23: Dagdeel cellen (21 cellen: 7 dagen × 3 dagdelen) */}
+                  {/* Kolom 3-23: Dagdeel cellen (21 cellen: 7 dagen x 3 dagdelen) */}
                   {teamData.dagen.map((dag) => (
                     <React.Fragment key={`${dienst.dienstId}-${teamCode}-${dag.datum}`}>
                       {/* Ochtend */}
