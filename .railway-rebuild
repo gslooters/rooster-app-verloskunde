@@ -1,10 +1,36 @@
 # Railway Rebuild Trigger
-# Last update: 2025-11-19 19:29 CET
-# Reason: DRAAD39.1 HOTFIX - TypeScript dubbele export fix
+# Last update: 2025-11-20 14:54 EST
+# Reason: DRAAD40 FASE 1 HOTFIX - Force rebuild na Railway incident
 
 Dit bestand wordt gebruikt om Railway deployments te triggeren.
 
 ## Recente updates:
+
+### 2025-11-20 14:54 - DRAAD40 FASE 1 HOTFIX - FORCE REBUILD
+🔴 CRITICAL DEPLOYMENT
+
+**Situatie**:
+- Railway had platform incident ("Limited Access")
+- Hotfix commits gedaan tijdens downtime:
+  - 2a3bece5: fix(DRAAD40) Corrigeer Supabase import
+  - 739cc437: deploy trigger
+- Geen automatische deployment gestart
+- Railway nu weer ONLINE
+
+**Hotfix Details**:
+- File: lib/planning/weekBoundaryCalculator.ts
+- Probleem: Import '@/lib/supabase/server' niet gevonden
+- Oplossing: Gebruik '@/lib/supabase-server' met getSupabaseServer()
+- TypeScript compile error OPGELOST
+
+**Verwachte Build**:
+✅ npm ci - Dependencies
+✅ npm run build - TypeScript compilatie (NU ZONDER ERRORS)
+✅ npm start - Production server
+
+**Ready voor deployment** ✅
+**Timestamp**: 2025-11-20T18:54:00Z
+**Force rebuild**: ENABLED
 
 ### 2025-11-19 19:29 - DRAAD39.1 HOTFIX
 - FIX: Verwijderd dubbele 'export type {}' sectie
