@@ -1,10 +1,12 @@
 'use client';
 
-import { Suspense } from 'react';
+import { Suspense, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import PageHeader from './PageHeader';
-import ActionBar from './ActionBar';
+import ActionBar, { type TeamFilters, type SaveStatus, type TeamDagdeel } from './ActionBar';
 import WeekDagdelenTable from './WeekDagdelenTable';
 import type { WeekDagdeelData, WeekNavigatieBounds } from '@/lib/planning/weekDagdelenData';
+import type { WeekBoundary } from '@/lib/planning/weekBoundaryCalculator';
 
 interface WeekDagdelenClientProps {
   rosterId: string;
@@ -12,16 +14,17 @@ interface WeekDagdelenClientProps {
   jaar: number;
   initialWeekData: WeekDagdeelData;
   navigatieBounds: WeekNavigatieBounds;
+  weekBoundary: WeekBoundary;
 }
 
 /**
  * Client wrapper component for week dagdelen view
  * Handles interactive features and state management
  * 
- * DRAAD39.3: Server-side data fetching with props pattern
- * - Data is fetched in page.tsx (server component)
- * - Passed as props to this client component
- * - WeekDagdelenTable renders the data without additional API calls
+ * DRAAD40B FASE 2: Toegevoegd state management voor:
+ * - Team filters (Groen/Oranje/Praktijk)
+ * - Save status (idle/saving/saved/error)
+ * - Week navigatie
  */
 export default function WeekDagdelenClient({
   rosterId,
@@ -29,7 +32,62 @@ export default function WeekDagdelenClient({
   jaar,
   initialWeekData,
   navigatieBounds,
+  weekBoundary,
 }: WeekDagdelenClientProps) {
+  const router = useRouter();
+
+  // ============================================================================
+  // STATE MANAGEMENT
+  // ============================================================================
+
+  // Team filter toggles (standaard: alle teams zichtbaar)
+  const [teamFilters, setTeamFilters] = useState<TeamFilters>({
+    GRO: true,
+    ORA: true,
+    TOT: true,
+  });
+
+  // Save status voor autosave feedback
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+
+  // ============================================================================
+  // EVENT HANDLERS
+  // ============================================================================
+
+  /**
+   * Toggle team filter visibility
+   */
+  const handleToggleTeam = useCallback((team: TeamDagdeel) => {
+    setTeamFilters(prev => ({
+      ...prev,
+      [team]: !prev[team],
+    }));
+  }, []);
+
+  /**
+   * Navigate to previous/next week
+   */
+  const handleNavigateWeek = useCallback(
+    (direction: 'prev' | 'next') => {
+      const targetWeek = direction === 'prev' ? weekNummer - 1 : weekNummer + 1;
+      
+      // Boundary check (extra veiligheid)
+      if (targetWeek < 1 || targetWeek > 5) {
+        console.warn(`Cannot navigate to week ${targetWeek} (out of bounds)`);
+        return;
+      }
+
+      // Navigate to new week URL
+      const newUrl = `/planning/design/week-dagdelen/${rosterId}/${targetWeek}`;
+      router.push(newUrl);
+    },
+    [rosterId, weekNummer, router]
+  );
+
+  // ============================================================================
+  // RENDER
+  // ============================================================================
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header - Sticky top */}
@@ -42,7 +100,13 @@ export default function WeekDagdelenClient({
       />
 
       {/* Action Bar - Sticky below header */}
-      <ActionBar />
+      <ActionBar
+        weekBoundary={weekBoundary}
+        teamFilters={teamFilters}
+        onToggleTeam={handleToggleTeam}
+        onNavigateWeek={handleNavigateWeek}
+        saveStatus={saveStatus}
+      />
 
       {/* Main Content Container */}
       <div className="container mx-auto px-6 py-6">
@@ -80,7 +144,10 @@ export default function WeekDagdelenClient({
         {/* WeekDagdelenTable - DRAAD 39.3 ✅ COMPLEET */}
         <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
           <Suspense fallback={<TableLoadingSkeleton weekNummer={weekNummer} />}>
-            <WeekDagdelenTable weekData={initialWeekData} />
+            <WeekDagdelenTable 
+              weekData={initialWeekData}
+              teamFilters={teamFilters}
+            />
           </Suspense>
         </div>
       </div>
