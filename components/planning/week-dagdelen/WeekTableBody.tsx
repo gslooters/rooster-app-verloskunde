@@ -1,16 +1,16 @@
 'use client';
 import React from 'react';
-import { DienstDagdelenWeek, TeamDagdeel, TEAM_ORDER } from '@/lib/types/week-dagdelen';
+import { DienstDagdelenWeek, TeamDagdeel, TEAM_ORDER, DagdeelStatus } from '@/lib/types/week-dagdelen';
 import DagdeelCell from './DagdeelCell';
 
 interface WeekTableBodyProps {
   diensten: DienstDagdelenWeek[];
-  onCellClick?: (dienstId: string, team: TeamDagdeel, datum: string, dagdeel: string) => void;
+  onDagdeelUpdate?: (dagdeelId: string, nieuweStatus: DagdeelStatus, nieuwAantal: number) => Promise<void>;
   disabled?: boolean;
 }
 
 /**
- * DRAAD39.4: Table Body met Dienst Groepering
+ * DRAAD39.4/39.5: Table Body met Dienst Groepering en Inline Editing
  * 
  * Layout per dienst:
  * - 3 rijen: Groen, Oranje, Praktijk (TOT)
@@ -22,10 +22,14 @@ interface WeekTableBodyProps {
  * - Alternerende achtergrond per dienst-groep
  * - Border tussen groepen
  * - Frozen eerste kolom voor horizontaal scrollen
+ * 
+ * DRAAD39.5 Update:
+ * - Inline editable cells met onUpdate handler
+ * - Proper context passed to DagdeelCell (dienst code, team label, dagdeel label)
  */
 export default function WeekTableBody({
   diensten,
-  onCellClick,
+  onDagdeelUpdate,
   disabled = false
 }: WeekTableBodyProps) {
   
@@ -65,6 +69,29 @@ export default function WeekTableBody({
    */
   const getDienstGroupBg = (index: number): string => {
     return index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+  };
+  
+  /**
+   * Get dagdeel label for accessibility
+   */
+  const getDagdeelLabel = (dagdeel: '0' | 'M' | 'A'): string => {
+    const labels = {
+      '0': 'Ochtend',
+      'M': 'Middag',
+      'A': 'Avond'
+    };
+    return labels[dagdeel];
+  };
+  
+  /**
+   * Create update handler for specific dagdeel
+   */
+  const createUpdateHandler = (dagdeelId: string) => {
+    return async (nieuweStatus: DagdeelStatus, nieuwAantal: number) => {
+      if (onDagdeelUpdate) {
+        await onDagdeelUpdate(dagdeelId, nieuweStatus, nieuwAantal);
+      }
+    };
   };
 
   return (
@@ -151,28 +178,37 @@ export default function WeekTableBody({
                       {/* Ochtend */}
                       <DagdeelCell
                         dienstId={dienst.dienstId}
+                        dienstCode={dienst.dienstCode}
                         team={teamCode}
+                        teamLabel={teamBadge.label}
                         datum={dag.datum}
+                        dagdeelLabel={getDagdeelLabel('0')}
                         dagdeelWaarde={dag.dagdeelWaarden.ochtend}
-                        onClick={onCellClick}
+                        onUpdate={createUpdateHandler(dag.dagdeelWaarden.ochtend.id)}
                         disabled={disabled}
                       />
                       {/* Middag */}
                       <DagdeelCell
                         dienstId={dienst.dienstId}
+                        dienstCode={dienst.dienstCode}
                         team={teamCode}
+                        teamLabel={teamBadge.label}
                         datum={dag.datum}
+                        dagdeelLabel={getDagdeelLabel('M')}
                         dagdeelWaarde={dag.dagdeelWaarden.middag}
-                        onClick={onCellClick}
+                        onUpdate={createUpdateHandler(dag.dagdeelWaarden.middag.id)}
                         disabled={disabled}
                       />
                       {/* Avond */}
                       <DagdeelCell
                         dienstId={dienst.dienstId}
+                        dienstCode={dienst.dienstCode}
                         team={teamCode}
+                        teamLabel={teamBadge.label}
                         datum={dag.datum}
+                        dagdeelLabel={getDagdeelLabel('A')}
                         dagdeelWaarde={dag.dagdeelWaarden.avond}
-                        onClick={onCellClick}
+                        onUpdate={createUpdateHandler(dag.dagdeelWaarden.avond.id)}
                         disabled={disabled}
                       />
                     </React.Fragment>
