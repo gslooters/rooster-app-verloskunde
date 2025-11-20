@@ -9,7 +9,7 @@
  * FASE 1 van DRAAD40 implementatie
  */
 
-import { createClient } from '@/lib/supabase/server';
+import { getSupabaseServer } from '@/lib/supabase-server';
 import { addDays, parseISO, format } from 'date-fns';
 
 // ============================================================================
@@ -45,7 +45,7 @@ export async function getRosterPeriodInfo(
   rosterId: string
 ): Promise<RosterPeriodInfo> {
   // 1. Query roster periode
-  const supabase = await createClient();
+  const supabase = getSupabaseServer();
   
   const { data: roster, error } = await supabase
     .from('roosters')
