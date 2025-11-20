@@ -20,6 +20,9 @@ interface PageHeaderProps {
  * ✅ FIX 1: Toon ISO weeknummer (48, 49, 50) i.p.v. weekIndex (1, 2, 3)
  * ✅ FIX 2: Return button naar correct dashboard met period_start parameter
  * 
+ * DRAAD40B5 FASE 5:
+ * ✅ TEST: Toevoegen "WERKSCHERM" indicator voor schermidentificatie
+ * 
  * Display voorbeeld:
  * - Titel: "Diensten per Dagdeel periode: Week 49"
  * - Subtitle: "Van 1 december 2025 t/m 7 december 2025"
@@ -55,21 +58,32 @@ export default function PageHeader({
           <span>Terug naar Dashboard Rooster Ontwerp</span>
         </Link>
 
-        {/* 🔥 FIX 1: Title met ISO weeknummer
-            
-            FOUT: weekNummer toonde weekIndex (1, 2, 3, 4, 5)
-            CORRECT: isoWeekNummer toont ISO week (48, 49, 50, 51, 52)
-            
-            Voor roosterperiode vanaf 24 november 2025:
-            - Week 1 (index) = Week 48 (ISO)
-            - Week 2 (index) = Week 49 (ISO)
-            - Week 3 (index) = Week 50 (ISO)
-            - Week 4 (index) = Week 51 (ISO)  
-            - Week 5 (index) = Week 52 (ISO)
+        {/* 🔥 DRAAD40B5 FASE 5: TEST INDICATOR
+            Toevoegen van "WERKSCHERM" tekst rechts bovenaan
+            Dit helpt identificeren of we in het juiste scherm werken
         */}
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">
-          Diensten per Dagdeel periode: Week {isoWeekNummer}
-        </h1>
+        <div className="flex items-start justify-between mb-1">
+          {/* 🔥 FIX 1: Title met ISO weeknummer
+              
+              FOUT: weekNummer toonde weekIndex (1, 2, 3, 4, 5)
+              CORRECT: isoWeekNummer toont ISO week (48, 49, 50, 51, 52)
+              
+              Voor roosterperiode vanaf 24 november 2025:
+              - Week 1 (index) = Week 48 (ISO)
+              - Week 2 (index) = Week 49 (ISO)
+              - Week 3 (index) = Week 50 (ISO)
+              - Week 4 (index) = Week 51 (ISO)  
+              - Week 5 (index) = Week 52 (ISO)
+          */}
+          <h1 className="text-2xl font-bold text-gray-900">
+            Diensten per Dagdeel periode: Week {isoWeekNummer}
+          </h1>
+
+          {/* 🔥 DRAAD40B5 FASE 5: WERKSCHERM indicator */}
+          <div className="px-4 py-2 bg-blue-100 border-2 border-blue-500 rounded-lg">
+            <span className="text-sm font-bold text-blue-700">WERKSCHERM</span>
+          </div>
+        </div>
 
         {/* Subtitle met datums - geen wijziging nodig */}
         <p className="text-sm text-gray-600">
