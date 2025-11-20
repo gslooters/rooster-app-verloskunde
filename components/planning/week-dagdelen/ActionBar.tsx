@@ -4,10 +4,11 @@ import { ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import type { WeekBoundary } from '@/lib/planning/weekBoundaryCalculator';
 
 /**
- * DRAAD40B FASE 2: ActionBar Component Update
+ * DRAAD40B FASE 3 - FIX FOUT 1: ISO weeknummer display
  * 
  * Functionaliteit:
  * - Week navigatie met boundary logic (geen prev bij week 1, geen next bij week 5)
+ * - 🔥 FIX FOUT 1: Toon ISO weeknummer (48, 49, 50) i.p.v. "Week 1 van 5"
  * - Team filter toggles (Groen/Oranje/Praktijk)
  * - Autosave status indicator (idle/saving/saved/error)
  * 
@@ -124,9 +125,16 @@ export default function ActionBar({
           </button>
         )}
 
-        {/* Week Label */}
+        {/* 🔥 FIX FOUT 1: Week Label met ISO weeknummer
+            
+            VOOR: weekBoundary.weekLabel toonde "Week 1 van 5"
+            NA:   Toon "Week {isoWeekNummer}" (bijv. "Week 48")
+            
+            De isoWeekNummer komt van weekBoundaryCalculator en bevat
+            het echte ISO weeknummer (48, 49, 50, 51, 52)
+        */}
         <span className="week-label">
-          {weekBoundary.weekLabel}
+          Week {weekBoundary.isoWeekNummer}
         </span>
 
         {/* Volgende Week Button */}
