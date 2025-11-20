@@ -7,7 +7,7 @@ import { getWeekBoundary } from '@/lib/planning/weekBoundaryCalculator';
 interface PageProps {
   params: {
     rosterId: string;
-    weekNummer: string;
+    weekNummer: string; // 🔥 OPTIE A: Dit is nu weekIndex (1-5), niet ISO weeknummer!
   };
   searchParams: {
     jaar?: string;
@@ -25,7 +25,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 }
 
 export default async function WeekDagdelenPage({ params, searchParams }: PageProps) {
+  // 🔥 OPTIE A: params.weekNummer is nu weekIndex (1-5), niet ISO weeknummer!
   const weekNummer = parseInt(params.weekNummer);
+  
+  console.log(`🔍 OPTIE A: Server ontvangt weekNummer (=weekIndex): ${weekNummer}`);
   
   // 🔥 DRAAD40B BUGFIX: Bepaal jaar uit period_start OF gebruik jaar parameter als fallback
   let jaar: number;
@@ -34,7 +37,7 @@ export default async function WeekDagdelenPage({ params, searchParams }: PagePro
     // Parse jaar uit period_start (format: YYYY-MM-DD)
     const periodStartDate = new Date(searchParams.period_start + 'T00:00:00Z');
     jaar = periodStartDate.getUTCFullYear();
-    console.log('✅ DRAAD40B: Jaar bepaald uit period_start:', jaar);
+    console.log('✅ OPTIE A: Jaar bepaald uit period_start:', jaar);
   } else if (searchParams.jaar) {
     jaar = parseInt(searchParams.jaar);
     console.log('✅ Jaar bepaald uit jaar parameter:', jaar);
@@ -43,14 +46,17 @@ export default async function WeekDagdelenPage({ params, searchParams }: PagePro
     console.log('⚠️ Geen period_start of jaar parameter, gebruik huidig jaar:', jaar);
   }
 
-  // Validate week number (1-5 voor 5-weekse roosterperiode)
+  // ✅ OPTIE A FIX: Validate week INDEX (1-5 voor 5-weekse roosterperiode)
+  // Dit is GEEN ISO weeknummer meer, maar de positie binnen de roosterperiode!
   if (isNaN(weekNummer) || weekNummer < 1 || weekNummer > 5) {
-    console.error('❌ Invalid weekNummer:', weekNummer);
+    console.error(`❌ OPTIE A: Invalid weekIndex: ${weekNummer} (moet tussen 1-5 zijn)`);
     notFound();
   }
 
+  console.log(`✅ OPTIE A: Validatie geslaagd - weekIndex ${weekNummer} is geldig (1-5)`);
+
   try {
-    console.log(`📊 DRAAD40B: Fetching data voor roster ${params.rosterId}, week ${weekNummer}, jaar ${jaar}`);
+    console.log(`📊 OPTIE A: Fetching data voor roster ${params.rosterId}, weekIndex ${weekNummer}, jaar ${jaar}`);
     
     // Fetch data on server side for initial render
     const weekData = await getWeekDagdelenData(params.rosterId, weekNummer, jaar);
@@ -61,11 +67,11 @@ export default async function WeekDagdelenPage({ params, searchParams }: PagePro
 
     // Check if week exists in roster
     if (!weekData) {
-      console.error('❌ Week niet gevonden in rooster');
+      console.error(`❌ OPTIE A: Week ${weekNummer} niet gevonden in rooster`);
       notFound();
     }
 
-    console.log('✅ DRAAD40B: Data succesvol opgehaald, rendering client component');
+    console.log(`✅ OPTIE A: Data succesvol opgehaald voor weekIndex ${weekNummer}, rendering client component`);
 
     return (
       <WeekDagdelenClient
@@ -78,7 +84,7 @@ export default async function WeekDagdelenPage({ params, searchParams }: PagePro
       />
     );
   } catch (error) {
-    console.error('❌ DRAAD40B: Error loading week data:', error);
+    console.error(`❌ OPTIE A: Error loading week data voor weekIndex ${weekNummer}:`, error);
     notFound();
   }
 }
