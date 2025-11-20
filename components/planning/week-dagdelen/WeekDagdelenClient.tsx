@@ -3,7 +3,7 @@
 import { Suspense, useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import PageHeader from './PageHeader';
-import ActionBar, { type TeamFilters, type SaveStatus, type TeamDagdeel } from './ActionBar';
+import ActionBar, { type TeamFilters, type SaveStatus } from './ActionBar';
 import WeekDagdelenTable from './WeekDagdelenTable';
 import { WeekTableSkeleton } from './WeekTableSkeleton';
 import type { WeekDagdeelData, WeekNavigatieBounds, DayDagdeelData } from '@/lib/planning/weekDagdelenData';
@@ -219,6 +219,7 @@ function extractShortDagNaam(fullName: string): string {
  * ✅ Conversie functie geïmplementeerd
  * ✅ WeekDagdelenTable volledig geactiveerd
  * ✅ Volledige functionaliteit hersteld
+ * ✅ DRAAD40B5: Fixed duplicate TeamDagdeel import
  * 
  * DRAAD40B5 FASE 5: UI Refinements
  * ✅ Nieuwe WeekTableSkeleton component geïntegreerd
