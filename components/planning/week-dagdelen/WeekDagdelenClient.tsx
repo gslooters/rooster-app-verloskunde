@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState, useCallback } from 'react';
+import { Suspense, useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import PageHeader from './PageHeader';
 import ActionBar, { type TeamFilters, type SaveStatus, type TeamDagdeel } from './ActionBar';
@@ -21,9 +21,11 @@ interface WeekDagdelenClientProps {
  * Client wrapper component for week dagdelen view
  * Handles interactive features and state management
  * 
- * DRAAD40B FASE 3 - FIXES:
+ * DRAAD40B FASE 3 - FINAL FIXES:
  * ✅ FOUT 3: Period_start parameter toegevoegd aan navigatie URL
  * ✅ FOUT 2: Overbodige legenda verwijderd
+ * ✅ FOUT 1: ISO weeknummer doorgegeven aan PageHeader
+ * ✅ Return button: Correct period_start parameter voor dashboard
  * 
  * State management voor:
  * - Team filters (Groen/Oranje/Praktijk)
@@ -39,6 +41,25 @@ export default function WeekDagdelenClient({
   weekBoundary,
 }: WeekDagdelenClientProps) {
   const router = useRouter();
+
+  // ============================================================================
+  // COMPUTED VALUES
+  // ============================================================================
+
+  /**
+   * 🔥 FIX: Bereken period_start (= week 1 startdatum)
+   * Dit is de anchor point voor de hele 5-weekse roosterperiode
+   * 
+   * Voor week 1: weekBoundary.startDatum IS period_start
+   * Voor week 2-5: Bereken terug naar week 1
+   */
+  const periodStart = useMemo(() => {
+    const currentWeekStartDate = new Date(weekBoundary.startDatum);
+    const daysToSubtract = (weekNummer - 1) * 7;
+    const periodStartDate = new Date(currentWeekStartDate);
+    periodStartDate.setDate(currentWeekStartDate.getDate() - daysToSubtract);
+    return periodStartDate.toISOString().split('T')[0];
+  }, [weekBoundary.startDatum, weekNummer]);
 
   // ============================================================================
   // STATE MANAGEMENT
@@ -72,9 +93,9 @@ export default function WeekDagdelenClient({
    * 🔥 FIX FOUT 3: Navigate to previous/next week MET period_start parameter
    * 
    * PROBLEEM: URL miste period_start, waardoor page.tsx error gaf
-   * OPLOSSING: Gebruik weekBoundary.startDatum als period_start
+   * OPLOSSING: Gebruik berekende periodStart constant
    * 
-   * weekBoundary.startDatum bevat de maandag van week 1 van de roosterperiode
+   * periodStart bevat altijd de maandag van week 1 van de roosterperiode
    * Dit wordt gebruikt als anchor point voor alle week navigatie
    */
   const handleNavigateWeek = useCallback(
@@ -87,17 +108,6 @@ export default function WeekDagdelenClient({
         return;
       }
 
-      // 🔥 FIX: Bepaal period_start vanaf week 1 startDatum
-      // Voor week 1: gebruik weekBoundary.startDatum direct
-      // Voor andere weken: bereken terug naar week 1
-      const currentWeekStartDate = new Date(weekBoundary.startDatum);
-      const daysToSubtract = (weekNummer - 1) * 7;
-      const periodStartDate = new Date(currentWeekStartDate);
-      periodStartDate.setDate(currentWeekStartDate.getDate() - daysToSubtract);
-      
-      // Format als YYYY-MM-DD
-      const periodStart = periodStartDate.toISOString().split('T')[0];
-
       // 🔥 FIX: Voeg period_start parameter toe aan URL
       const newUrl = `/planning/design/week-dagdelen/${rosterId}/${targetWeek}?period_start=${periodStart}`;
       
@@ -105,14 +115,13 @@ export default function WeekDagdelenClient({
         from: weekNummer,
         to: targetWeek,
         direction,
-        currentWeekStart: weekBoundary.startDatum,
-        calculatedPeriodStart: periodStart,
+        periodStart,
         url: newUrl
       });
       
       router.push(newUrl);
     },
-    [rosterId, weekNummer, weekBoundary.startDatum, router]
+    [rosterId, weekNummer, periodStart, router]
   );
 
   // ============================================================================
@@ -121,13 +130,15 @@ export default function WeekDagdelenClient({
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header - Sticky top */}
+      {/* 🔥 FIX FOUT 1: Header met ISO weeknummer en period_start voor return button */}
       <PageHeader
         rosterId={rosterId}
         weekNummer={weekNummer}
+        isoWeekNummer={weekBoundary.isoWeekNummer}  // 🔥 NIEUW: ISO week (48, 49, 50...)
         jaar={jaar}
         startDatum={initialWeekData.startDatum}
         eindDatum={initialWeekData.eindDatum}
+        periodStart={periodStart}  // 🔥 NIEUW: Voor return button URL
       />
 
       {/* Action Bar - Sticky below header */}
