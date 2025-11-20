@@ -5,7 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
 interface WeekInfo {
-  weekNumber: number;
+  weekNumber: number; // ISO weeknummer (48-52)
+  weekIndex: number;   // 🔥 NIEUWE: Week positie binnen roosterperiode (1-5)
   startDate: string;
   endDate: string;
   hasChanges: boolean;
@@ -83,8 +84,9 @@ export default function DagdelenDashboardClient() {
         weekEnd.setUTCDate(weekStart.getUTCDate() + 6);
 
         const weekNumber = getWeekNumber(weekStart);
+        const weekIndex = i + 1; // 🔥 OPTIE A: Week index 1-5
         
-        console.log(`✅ Week ${i + 1}: Weeknr ${weekNumber}, Start: ${formatDateNL(weekStart)}, End: ${formatDateNL(weekEnd)}`);
+        console.log(`✅ Week ${weekIndex}: ISO Weeknr ${weekNumber}, Start: ${formatDateNL(weekStart)}, End: ${formatDateNL(weekEnd)}`);
 
         // 🔥 CRITICAL FIX: Query via parent tabel met JOIN
         const weekStartStr = formatDateForQuery(weekStart);
@@ -110,9 +112,9 @@ export default function DagdelenDashboardClient() {
           .lte('date', weekEndStr);
 
         if (queryError) {
-          console.error(`❌ Supabase error week ${weekNumber}:`, queryError);
+          console.error(`❌ Supabase error week ${weekIndex}:`, queryError);
         } else {
-          console.log(`📊 Week ${weekNumber}: ${parentRecords?.length || 0} parent records opgehaald`);
+          console.log(`📊 Week ${weekIndex}: ${parentRecords?.length || 0} parent records opgehaald`);
         }
 
         // 🔧 DRAAD39.3: Defensieve data extractie met null checks
@@ -123,7 +125,7 @@ export default function DagdelenDashboardClient() {
             })
           : [];
         
-        console.log(`📊 Week ${weekNumber}: ${dagdelenRecords.length} dagdelen records gevonden`);
+        console.log(`📊 Week ${weekIndex}: ${dagdelenRecords.length} dagdelen records gevonden`);
         
         const modifiedChanges = dagdelenRecords.filter((d: any) => 
           d && typeof d === 'object' && d.status === 'AANGEPAST'
@@ -147,12 +149,13 @@ export default function DagdelenDashboardClient() {
               lastUpdated = sorted[0].updated_at;
             }
           } catch (err) {
-            console.warn(`⚠️ Error sorting lastUpdated for week ${weekNumber}:`, err);
+            console.warn(`⚠️ Error sorting lastUpdated for week ${weekIndex}:`, err);
           }
         }
 
         weeks.push({
-          weekNumber,
+          weekNumber,    // ISO weeknummer (48-52) voor display
+          weekIndex,     // 🔥 Week index (1-5) voor routing!
           startDate: formatDate(weekStart),
           endDate: formatDate(weekEnd),
           hasChanges,
@@ -161,7 +164,7 @@ export default function DagdelenDashboardClient() {
       }
 
       // 🔧 DRAAD39.3: Debug logging vóór setState
-      console.log('📊 Gegenereerde weken:', weeks.map(w => `Week ${w.weekNumber}: ${w.startDate}-${w.endDate}`).join(', '));
+      console.log('📊 Gegenereerde weken:', weeks.map(w => `Week ${w.weekIndex} (ISO: ${w.weekNumber}): ${w.startDate}-${w.endDate}`).join(', '));
       console.log('🔍 weekData details:', JSON.stringify(weeks, null, 2));
       
       // ✅ FASE 1: Validatie voordat state wordt gezet
@@ -250,17 +253,17 @@ export default function DagdelenDashboardClient() {
   };
 
   /**
-   * 🔥 DRAAD40B BUGFIX: Week click handler - Nu MET period_start parameter!
-   * Route: /planning/design/week-dagdelen/[rosterId]/[weekNummer]?period_start=[periodStart]
-   * FIX: period_start wordt nu altijd meegestuurd om UUID null errors te voorkomen
+   * 🔥 OPTIE A FIX: Week click handler - Gebruikt nu weekIndex (1-5) i.p.v. ISO weeknummer!
+   * Route: /planning/design/week-dagdelen/[rosterId]/[weekIndex]?period_start=[periodStart]
+   * weekIndex = positie binnen 5-weekse roosterperiode (1, 2, 3, 4, 5)
    */
-  const handleWeekClick = (weekNummer: number) => {
-    console.log(`🔗 DRAAD40B: Navigeren naar week ${weekNummer}`);
-    console.log(`📝 Parameters: rosterId=${rosterId}, periodStart=${periodStart}`);
+  const handleWeekClick = (weekIndex: number) => {
+    console.log(`🔗 OPTIE A: Navigeren naar week INDEX ${weekIndex}`);
+    console.log(`📝 Parameters: rosterId=${rosterId}, weekIndex=${weekIndex}, periodStart=${periodStart}`);
     
-    // 🔥 CRITICAL FIX: Voeg period_start toe als query parameter!
+    // 🔥 OPTIE A: Gebruik weekIndex (1-5) in URL, niet ISO weeknummer!
     router.push(
-      `/planning/design/week-dagdelen/${rosterId}/${weekNummer}?period_start=${periodStart}`
+      `/planning/design/week-dagdelen/${rosterId}/${weekIndex}?period_start=${periodStart}`
     );
   };
 
@@ -443,7 +446,7 @@ export default function DagdelenDashboardClient() {
           </p>
         </div>
 
-        {/* 🎯 FASE 3: Week Cards met klikbare navigatie en hover styling */}
+        {/* 🎯 OPTIE A: Week Cards - onClick gebruikt nu weekIndex (1-5)! */}
         <div className="space-y-4">
           {weekData.map((week, index) => {
             // Extra validatie per week
@@ -452,7 +455,8 @@ export default function DagdelenDashboardClient() {
               return null;
             }
             
-            const weekNum = week.weekNumber || 0;
+            const weekNum = week.weekNumber || 0;  // ISO weeknummer voor display
+            const weekIdx = week.weekIndex || 0;    // 🔥 Week index voor routing
             const startDt = week.startDate || '?';
             const endDt = week.endDate || '?';
             const hasChg = Boolean(week.hasChanges);
@@ -460,8 +464,8 @@ export default function DagdelenDashboardClient() {
             
             return (
               <button
-                key={`week-${weekNum}-${index}`}
-                onClick={() => handleWeekClick(weekNum)}
+                key={`week-${weekIdx}-${index}`}
+                onClick={() => handleWeekClick(weekIdx)}
                 className="w-full bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg shadow-sm hover:shadow-lg transition-all duration-200 p-6 text-left border-2 border-blue-200 hover:border-blue-400 hover:bg-blue-100 hover:-translate-y-0.5 cursor-pointer relative"
               >
                 <div className="flex items-center justify-between">
@@ -513,15 +517,16 @@ export default function DagdelenDashboardClient() {
         {/* Debug info (development only) */}
         {process.env.NODE_ENV === 'development' && (
           <div className="mt-6 bg-gray-800 text-gray-100 rounded-lg p-4 text-xs font-mono">
-            <div className="font-bold mb-2">🐛 Debug Info (DRAAD40B BUGFIX):</div>
+            <div className="font-bold mb-2">🐛 Debug Info (OPTIE A FIX):</div>
             <div>isLoading: {String(isLoading)}</div>
             <div>hasError: {String(hasError)}</div>
             <div>isDataReady: {String(isDataReady)}</div>
             <div>weekData.length: {weekData?.length || 0}</div>
             <div>roster_id: {rosterId}</div>
             <div>period_start: {periodStart}</div>
-            <div className="mt-2 text-green-400">✅ DRAAD40B: period_start wordt nu meegestuurd!</div>
-            <div className="text-green-400">✅ Route: /planning/design/week-dagdelen/[rosterId]/[weekNr]?period_start=[date]</div>
+            <div className="mt-2 text-green-400">✅ OPTIE A: Gebruikt weekIndex (1-5) voor routing!</div>
+            <div className="text-green-400">✅ Display: ISO weeknummer (48-52)</div>
+            <div className="text-green-400">✅ Route: /planning/design/week-dagdelen/[rosterId]/[1-5]?period_start=[date]</div>
           </div>
         )}
       </div>
