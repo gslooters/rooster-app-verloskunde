@@ -364,11 +364,11 @@ export default function WeekDagdelenClient({
       <PageHeader
         rosterId={rosterId}
         weekNummer={weekNummer}
-        isoWeekNummer={weekBoundary.isoWeekNummer}  // 🔥 NIEUW: ISO week (48, 49, 50...)
+        isoWeekNummer={weekBoundary.isoWeekNummer}
         jaar={jaar}
         startDatum={initialWeekData.startDatum}
         eindDatum={initialWeekData.eindDatum}
-        periodStart={periodStart}  // 🔥 NIEUW: Voor return button URL
+        periodStart={periodStart}
       />
 
       {/* Action Bar - Sticky below header */}
@@ -386,7 +386,7 @@ export default function WeekDagdelenClient({
         <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
           <Suspense fallback={<WeekTableSkeleton />}>
             <WeekDagdelenTable 
-              weekData={convertedWeekData}  {/* ✅ Geconverteerde data */}
+              weekData={convertedWeekData}
               teamFilters={teamFilters}
             />
           </Suspense>
