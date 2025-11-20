@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import PageHeader from './PageHeader';
 import ActionBar, { type TeamFilters, type SaveStatus, type TeamDagdeel } from './ActionBar';
 import WeekDagdelenTable from './WeekDagdelenTable';
+import { WeekTableSkeleton } from './WeekTableSkeleton';
 import type { WeekDagdeelData, WeekNavigatieBounds } from '@/lib/planning/weekDagdelenData';
 import type { WeekBoundary } from '@/lib/planning/weekBoundaryCalculator';
 
@@ -20,6 +21,10 @@ interface WeekDagdelenClientProps {
 /**
  * Client wrapper component for week dagdelen view
  * Handles interactive features and state management
+ * 
+ * DRAAD40B5 FASE 5: UI Refinements
+ * ✅ Nieuwe WeekTableSkeleton component geïntegreerd
+ * ✅ Skeleton toont tijdens navigatie en laden
  * 
  * DRAAD40B FASE 3 - FINAL FIXES:
  * ✅ FOUT 3: Period_start parameter toegevoegd aan navigatie URL
@@ -163,40 +168,15 @@ export default function WeekDagdelenClient({
             - Hele sticky div met border en shadow styling
         */}
 
-        {/* WeekDagdelenTable - DRAAD 39.3 ✅ COMPLEET */}
+        {/* WeekDagdelenTable - DRAAD 39.3 ✅ COMPLEET + FASE 5 Skeleton */}
         <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
-          <Suspense fallback={<TableLoadingSkeleton weekNummer={weekNummer} />}>
+          <Suspense fallback={<WeekTableSkeleton />}>
             <WeekDagdelenTable 
               weekData={initialWeekData}
               teamFilters={teamFilters}
             />
           </Suspense>
         </div>
-      </div>
-    </div>
-  );
-}
-
-/**
- * Loading skeleton component
- * Shows placeholder while table data loads
- */
-function TableLoadingSkeleton({ weekNummer }: { weekNummer: number }) {
-  return (
-    <div className="p-6">
-      <div className="text-center text-gray-500 mb-6">
-        <div className="animate-pulse">
-          {/* Header skeleton */}
-          <div className="h-8 bg-gray-200 rounded mb-4 max-w-md mx-auto"></div>
-          
-          {/* Grid skeleton - 7 columns (days) x 4 rows (dagdelen) */}
-          <div className="grid grid-cols-7 gap-4">
-            {[...Array(28)].map((_, i) => (
-              <div key={i} className="h-24 bg-gray-200 rounded"></div>
-            ))}
-          </div>
-        </div>
-        <p className="mt-6 text-sm">Week {weekNummer} laden...</p>
       </div>
     </div>
   );
