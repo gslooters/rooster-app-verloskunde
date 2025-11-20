@@ -250,13 +250,17 @@ export default function DagdelenDashboardClient() {
   };
 
   /**
-   * 🎯 FASE 3: Week click handler - Navigeert naar week detail scherm
-   * Route: /planning/design/week-dagdelen/[rosterId]/[weekNummer]
+   * 🔥 DRAAD40B BUGFIX: Week click handler - Nu MET period_start parameter!
+   * Route: /planning/design/week-dagdelen/[rosterId]/[weekNummer]?period_start=[periodStart]
+   * FIX: period_start wordt nu altijd meegestuurd om UUID null errors te voorkomen
    */
   const handleWeekClick = (weekNummer: number) => {
-    console.log(`🔗 FASE 3: Navigeren naar week ${weekNummer}`);
+    console.log(`🔗 DRAAD40B: Navigeren naar week ${weekNummer}`);
+    console.log(`📝 Parameters: rosterId=${rosterId}, periodStart=${periodStart}`);
+    
+    // 🔥 CRITICAL FIX: Voeg period_start toe als query parameter!
     router.push(
-      `/planning/design/week-dagdelen/${rosterId}/${weekNummer}`
+      `/planning/design/week-dagdelen/${rosterId}/${weekNummer}?period_start=${periodStart}`
     );
   };
 
@@ -509,15 +513,15 @@ export default function DagdelenDashboardClient() {
         {/* Debug info (development only) */}
         {process.env.NODE_ENV === 'development' && (
           <div className="mt-6 bg-gray-800 text-gray-100 rounded-lg p-4 text-xs font-mono">
-            <div className="font-bold mb-2">🐛 Debug Info (FASE 3):</div>
+            <div className="font-bold mb-2">🐛 Debug Info (DRAAD40B BUGFIX):</div>
             <div>isLoading: {String(isLoading)}</div>
             <div>hasError: {String(hasError)}</div>
             <div>isDataReady: {String(isDataReady)}</div>
             <div>weekData.length: {weekData?.length || 0}</div>
             <div>roster_id: {rosterId}</div>
             <div>period_start: {periodStart}</div>
-            <div className="mt-2 text-green-400">✅ FASE 3: Week cards zijn klikbaar</div>
-            <div className="text-green-400">✅ Route: /planning/design/week-dagdelen/[rosterId]/[weekNummer]</div>
+            <div className="mt-2 text-green-400">✅ DRAAD40B: period_start wordt nu meegestuurd!</div>
+            <div className="text-green-400">✅ Route: /planning/design/week-dagdelen/[rosterId]/[weekNr]?period_start=[date]</div>
           </div>
         )}
       </div>
