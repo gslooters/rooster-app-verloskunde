@@ -91,8 +91,17 @@ export default async function WeekDagdelenPage({ params, searchParams }: PagePro
     
     console.log('✅ FIX 2: weekBoundary opgehaald:', weekBoundary);
     
-    // Fetch data on server side for initial render
-    const weekData = await getWeekDagdelenData(params.rosterId, weekNummer, jaar);
+    // 🔥 FIX 4 - DRAAD40B.2: Geef period_start door aan getWeekDagdelenData!
+    // Dit voorkomt ISO-week berekening en gebruikt boundaries van weekBoundaryCalculator
+    console.log('🔄 FIX 4: Calling getWeekDagdelenData met periodStart parameter...');
+    
+    const weekData = await getWeekDagdelenData(
+      params.rosterId,
+      weekNummer,
+      jaar,
+      searchParams.period_start  // ← FIX 4: KRITIEKE PARAMETER!
+    );
+    
     const navigatieBounds = await getWeekNavigatieBounds(params.rosterId, weekNummer);
 
     // Check if week exists in roster
