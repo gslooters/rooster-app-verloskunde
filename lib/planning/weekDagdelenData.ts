@@ -1,6 +1,7 @@
 import { getSupabaseServer } from '@/lib/supabase-server';
-import { getISOWeek, startOfWeek, endOfWeek, format } from 'date-fns';
+import { addDays, parseISO, format } from 'date-fns';
 import { nl } from 'date-fns/locale';
+import { getWeekBoundary } from './weekBoundaryCalculator';
 
 export interface WeekDagdeelData {
   rosterId: string;
@@ -37,55 +38,81 @@ export interface WeekNavigatieBounds {
 }
 
 /**
- * Calculate start and end dates for a given ISO week number
+ * 🔥 CRITICAL FIX - DRAAD40B.2: Verwijder ISO-week berekening!
+ * Gebruik altijd weekBoundaryCalculator die werkt met period_start + offset
+ * 
+ * DEPRECATED - Gebruik getWeekBoundary() i.p.v. deze functie!
  */
 export function calculateWeekDates(weekNummer: number, jaar: number): { startDatum: Date; eindDatum: Date } {
+  console.warn('⚠️ DEPRECATED: calculateWeekDates() moet niet meer gebruikt worden!');
+  console.warn('⚠️ Gebruik getWeekBoundary() met period_start parameter!');
+  
+  // Fallback voor backward compatibility (wordt niet meer aangeroepen na refactor)
   const firstDayOfYear = new Date(jaar, 0, 1);
-  const firstMonday = startOfWeek(firstDayOfYear, { weekStartsOn: 1 });
+  const dayOfWeek = firstDayOfYear.getDay();
+  const daysToMonday = dayOfWeek === 0 ? 1 : (8 - dayOfWeek);
+  const firstMonday = new Date(jaar, 0, 1 + daysToMonday);
   
   const targetWeekStart = new Date(firstMonday);
   targetWeekStart.setDate(firstMonday.getDate() + (weekNummer - 1) * 7);
   
-  const startDatum = startOfWeek(targetWeekStart, { weekStartsOn: 1 });
-  const eindDatum = endOfWeek(targetWeekStart, { weekStartsOn: 1 });
+  const startDatum = targetWeekStart;
+  const eindDatum = new Date(startDatum);
+  eindDatum.setDate(startDatum.getDate() + 6);
   
   return { startDatum, eindDatum };
 }
 
 /**
- * Get week dagdelen data for a specific roster and week
+ * 🔥 CRITICAL FIX - DRAAD40B.2: Refactored getWeekDagdelenData
  * 
- * DIAGNOSE VERSIE met uitgebreide logging en string-based datum vergelijking
- * Fix: Gebruikt string comparison voor datums om timezone issues te voorkomen
- * DRAAD39.6 FIX: Gecorrigeerde kolomnamen naar start_date/end_date (database schema)
+ * NIEUW SYSTEEM:
+ * - weekNummer is nu weekIndex (1-5) binnen roosterperiode
+ * - Haalt boundaries op via getWeekBoundary() die period_start gebruikt
+ * - Geen ISO-week berekening meer!
+ * - Geen jaar parameter meer nodig (maar behouden voor backward compatibility)
+ * 
+ * @param rosterId - UUID van het rooster
+ * @param weekNummer - Week index binnen roosterperiode (1-5)
+ * @param jaar - DEPRECATED maar behouden voor compatibility
+ * @param periodStart - NIEUW: Expliciete period_start (YYYY-MM-DD)
  */
 export async function getWeekDagdelenData(
   rosterId: string,
   weekNummer: number,
-  jaar: number
+  jaar: number,
+  periodStart?: string
 ): Promise<WeekDagdeelData | null> {
   console.log('═'.repeat(60));
-  console.log(`🔍 [DIAGNOSE] START Week ${weekNummer}/${jaar}`);
+  console.log(`🔍 [REFACTOR] START Week ${weekNummer} (weekIndex binnen roosterperiode)`);
   console.log('═'.repeat(60));
   
   try {
     const supabase = getSupabaseServer();
     
-    // STAP 1: Bereken week datums
-    const { startDatum, eindDatum } = calculateWeekDates(weekNummer, jaar);
-    const weekStartStr = format(startDatum, 'yyyy-MM-dd');
-    const weekEndStr = format(eindDatum, 'yyyy-MM-dd');
+    // 🔥 STAP 1: Haal week boundaries op via weekBoundaryCalculator
+    // Dit gebruikt period_start + offset i.p.v. ISO-week berekening!
+    console.log('
+🔄 [REFACTOR] STAP 1: Fetching week boundary...');
+    console.log('Input:', { rosterId, weekNummer, periodStart });
     
-    console.log('📊 [DIAGNOSE] Input parameters:', {
-      rosterId,
-      weekNummer,
-      jaar,
-      weekStartStr,
-      weekEndStr
+    const weekBoundary = await getWeekBoundary(rosterId, weekNummer, periodStart);
+    
+    console.log('✅ [REFACTOR] Week boundary opgehaald:', weekBoundary);
+    
+    const weekStartStr = weekBoundary.startDatum;
+    const weekEndStr = weekBoundary.eindDatum;
+    
+    console.log('📅 [REFACTOR] Week periode:', {
+      weekIndex: weekNummer,
+      start: weekStartStr,
+      end: weekEndStr,
+      label: weekBoundary.weekLabel
     });
     
-    // STAP 2: Haal roster op
-    console.log('\n🔄 [DIAGNOSE] STAP 2: Fetching roster...');
+    // STAP 2: Haal roster op (voor validatie)
+    console.log('
+🔄 [REFACTOR] STAP 2: Fetching roster...');
     
     const { data: roster, error: rosterError } = await supabase
       .from('roosters')
@@ -94,20 +121,21 @@ export async function getWeekDagdelenData(
       .single();
     
     if (rosterError || !roster) {
-      console.error('❌ [DIAGNOSE] STOP POINT 1: Roster niet gevonden');
+      console.error('❌ [REFACTOR] STOP POINT 1: Roster niet gevonden');
       console.error('Error:', rosterError);
       console.log('═'.repeat(60));
       return null;
     }
     
-    console.log('✅ [DIAGNOSE] Roster gevonden:', {
+    console.log('✅ [REFACTOR] Roster gevonden:', {
       id: roster.id,
       start_date: roster.start_date,
       end_date: roster.end_date
     });
     
     // STAP 3: Check datum overlap (STRING COMPARISON - geen timezone issues)
-    console.log('\n🔄 [DIAGNOSE] STAP 3: Checking datum overlap...');
+    console.log('
+🔄 [REFACTOR] STAP 3: Checking datum overlap...');
     
     const rosterStartStr = roster.start_date;
     const rosterEndStr = roster.end_date;
@@ -117,7 +145,7 @@ export async function getWeekDagdelenData(
     const weekEndsBeforeRosterStarts = weekEndStr < rosterStartStr;
     const hasNoOverlap = weekStartsAfterRosterEnds || weekEndsBeforeRosterStarts;
     
-    console.log('📊 [DIAGNOSE] Overlap analyse:', {
+    console.log('📊 [REFACTOR] Overlap analyse:', {
       weekPeriod: `${weekStartStr} t/m ${weekEndStr}`,
       rosterPeriod: `${rosterStartStr} t/m ${rosterEndStr}`,
       weekStartsAfterRosterEnds,
@@ -127,15 +155,17 @@ export async function getWeekDagdelenData(
     });
     
     if (hasNoOverlap) {
-      console.error('❌ [DIAGNOSE] STOP POINT 2: Week valt volledig buiten rooster');
+      console.error('❌ [REFACTOR] STOP POINT 2: Week valt volledig buiten rooster');
+      console.error('⚠️ Dit zou NIET moeten gebeuren met correcte period_start!');
       console.log('═'.repeat(60));
       return null;
     }
     
-    console.log('✅ [DIAGNOSE] Week heeft overlap met roster - proceeding');
+    console.log('✅ [REFACTOR] Week heeft overlap met roster - proceeding');
     
     // STAP 4: Haal period data op
-    console.log('\n🔄 [DIAGNOSE] STAP 4: Fetching period data...');
+    console.log('
+🔄 [REFACTOR] STAP 4: Fetching period data...');
     console.log('Query params:', {
       table: 'roster_period_staffing',
       rosterId,
@@ -162,38 +192,37 @@ export async function getWeekDagdelenData(
       .order('date', { ascending: true });
     
     if (periodError) {
-      console.error('❌ [DIAGNOSE] STOP POINT 3: Supabase query error');
+      console.error('❌ [REFACTOR] STOP POINT 3: Supabase query error');
       console.error('Error:', periodError);
       console.log('═'.repeat(60));
       return null;
     }
     
     const recordCount = periodData?.length || 0;
-    console.log(`✅ [DIAGNOSE] Query succesvol. Records: ${recordCount}`);
+    console.log(`✅ [REFACTOR] Query succesvol. Records: ${recordCount}`);
     
     if (recordCount === 0) {
-      console.warn('⚠️  [DIAGNOSE] STOP POINT 4: Geen period data gevonden');
-      console.warn('Query werkte, maar gaf 0 resultaten terug');
+      console.warn('⚠️  [REFACTOR] Geen period data gevonden (dit is OK voor lege week)');
       console.log('═'.repeat(60));
-      return null;
+      // 🔥 NIET null returnen - genereer lege week!
     }
     
     // STAP 5: Analyseer dagdelen data
-    console.log('\n🔄 [DIAGNOSE] STAP 5: Analyzing dagdelen...');
+    console.log('
+🔄 [REFACTOR] STAP 5: Analyzing dagdelen...');
     
-    const totalDagdelen = periodData.reduce((sum, p) => 
-      sum + (p.roster_period_staffing_dagdelen?.length || 0), 0
-    );
+    const totalDagdelen = periodData?.reduce((sum, p) => 
+      sum + (p.roster_period_staffing_dagdelen?.length || 0), 0) || 0;
     
-    console.log('📊 [DIAGNOSE] Dagdelen summary:', {
+    console.log('📊 [REFACTOR] Dagdelen summary:', {
       totalParentRecords: recordCount,
       totalDagdelenRecords: totalDagdelen,
       avgPerParent: recordCount > 0 ? (totalDagdelen / recordCount).toFixed(1) : '0'
     });
     
     // Log eerste record als sample
-    if (periodData[0]) {
-      console.log('📋 [DIAGNOSE] Sample record:', {
+    if (periodData && periodData[0]) {
+      console.log('📋 [REFACTOR] Sample record:', {
         date: periodData[0].date,
         dagdelenCount: periodData[0].roster_period_staffing_dagdelen?.length || 0,
         firstDagdeel: periodData[0].roster_period_staffing_dagdelen?.[0]
@@ -201,12 +230,16 @@ export async function getWeekDagdelenData(
     }
     
     // STAP 6: Build days array
-    console.log('\n🔄 [DIAGNOSE] STAP 6: Building days array...');
+    console.log('
+🔄 [REFACTOR] STAP 6: Building days array...');
     
     const days: DayDagdeelData[] = [];
-    const currentDate = new Date(startDatum);
+    
+    // 🔥 GEBRUIK BOUNDARIES VAN weekBoundary (niet opnieuw berekenen!)
+    const startDate = parseISO(weekStartStr);
     
     for (let i = 0; i < 7; i++) {
+      const currentDate = addDays(startDate, i);
       const dateStr = format(currentDate, 'yyyy-MM-dd');
       const dayName = format(currentDate, 'EEEE', { locale: nl });
       
@@ -216,7 +249,7 @@ export async function getWeekDagdelenData(
       
       // Log alleen eerste dag voor details
       if (i === 0) {
-        console.log(`📅 [DIAGNOSE] Eerste dag (${dateStr}):`, {
+        console.log(`📅 [REFACTOR] Eerste dag (${dateStr}):`, {
           dagNaam: dayName,
           gevondenInDB: !!dayPeriod,
           aantalDagdelen: dagdelenRecords.length
@@ -260,26 +293,25 @@ export async function getWeekDagdelenData(
         dagNaam: dayName,
         dagdelen,
       });
-      
-      currentDate.setDate(currentDate.getDate() + 1);
     }
     
-    console.log(`✅ [DIAGNOSE] Days array gebouwd: ${days.length} dagen`);
+    console.log(`✅ [REFACTOR] Days array gebouwd: ${days.length} dagen`);
     
     // STAP 7: Build result object
     const result = {
       rosterId,
       weekNummer,
       jaar,
-      startDatum: format(startDatum, 'd MMMM yyyy', { locale: nl }),
-      eindDatum: format(eindDatum, 'd MMMM yyyy', { locale: nl }),
+      startDatum: format(startDate, 'd MMMM yyyy', { locale: nl }),
+      eindDatum: format(addDays(startDate, 6), 'd MMMM yyyy', { locale: nl }),
       days,
     };
     
-    console.log('\n✅ [DIAGNOSE] SUCCESS - Returning data');
-    console.log('📦 [DIAGNOSE] Result:', {
+    console.log('
+✅ [REFACTOR] SUCCESS - Returning data');
+    console.log('📦 [REFACTOR] Result:', {
       rosterId: result.rosterId,
-      week: `${result.weekNummer}/${result.jaar}`,
+      weekIndex: result.weekNummer,
       period: `${result.startDatum} - ${result.eindDatum}`,
       daysCount: result.days.length
     });
@@ -288,7 +320,8 @@ export async function getWeekDagdelenData(
     return result;
     
   } catch (error) {
-    console.error('\n❌ [DIAGNOSE] EXCEPTION CAUGHT');
+    console.error('
+❌ [REFACTOR] EXCEPTION CAUGHT');
     console.error('Error:', error);
     console.error('Message:', error instanceof Error ? error.message : 'Unknown');
     console.error('Stack:', error instanceof Error ? error.stack : undefined);
@@ -298,58 +331,42 @@ export async function getWeekDagdelenData(
 }
 
 /**
- * Get navigation boundaries for week navigation
- * DRAAD39.6 FIX: Gecorrigeerde kolomnamen naar start_date/end_date (database schema)
+ * 🔥 CRITICAL FIX - DRAAD40B.2: Refactored getWeekNavigatieBounds
+ * 
+ * NIEUW SYSTEEM:
+ * - Gebruikt weekIndex (1-5) i.p.v. ISO-weeknummers
+ * - Navigatie binnen 5-weekse roosterperiode
  */
 export async function getWeekNavigatieBounds(
   rosterId: string,
   currentWeek: number
 ): Promise<WeekNavigatieBounds> {
+  console.log('🧭 [REFACTOR] getWeekNavigatieBounds - weekIndex systeem');
+  console.log('Input:', { rosterId, currentWeekIndex: currentWeek });
+  
   try {
-    const supabase = getSupabaseServer();
-    
-    const { data: roster, error } = await supabase
-      .from('roosters')
-      .select('start_date, end_date')
-      .eq('id', rosterId)
-      .single();
-    
-    if (error || !roster) {
-      console.error('❌ [SERVER] Error fetching roster for navigation:', error);
-      return {
-        minWeek: 1,
-        maxWeek: 52,
-        currentWeek,
-        hasPrevious: currentWeek > 1,
-        hasNext: currentWeek < 52,
-      };
-    }
-    
-    const startDate = new Date(roster.start_date);
-    const endDate = new Date(roster.end_date);
-    
-    const minWeek = getISOWeek(startDate);
-    const maxWeek = getISOWeek(endDate);
-    
+    // 🔥 NIEUWE LOGICA: Week index binnen 5-weekse periode
+    // Min = 1, Max = 5, altijd!
     const bounds = {
-      minWeek,
-      maxWeek,
+      minWeek: 1,
+      maxWeek: 5,
       currentWeek,
-      hasPrevious: currentWeek > minWeek,
-      hasNext: currentWeek < maxWeek,
+      hasPrevious: currentWeek > 1,
+      hasNext: currentWeek < 5,
     };
     
-    console.log('✅ [SERVER] Week navigation bounds:', bounds);
+    console.log('✅ [REFACTOR] Week navigation bounds:', bounds);
     
     return bounds;
   } catch (error) {
-    console.error('❌ [SERVER] Error in getWeekNavigatieBounds:', error);
+    console.error('❌ [REFACTOR] Error in getWeekNavigatieBounds:', error);
+    // Fallback
     return {
       minWeek: 1,
-      maxWeek: 52,
+      maxWeek: 5,
       currentWeek,
       hasPrevious: currentWeek > 1,
-      hasNext: currentWeek < 52,
+      hasNext: currentWeek < 5,
     };
   }
 }
