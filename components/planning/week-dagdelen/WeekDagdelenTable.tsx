@@ -3,54 +3,22 @@
 import React from 'react';
 import { WeekTableHeader } from './WeekTableHeader';
 import WeekTableBody from './WeekTableBody';
-import type { DienstDagdelenWeek, DagdeelStatus } from '@/lib/types/week-dagdelen';
+import type { WeekDagdelenData, DienstDagdelenWeek, DagdeelStatus } from '@/lib/types/week-dagdelen';
 import type { TeamFilters } from './ActionBar';
 
 interface WeekDagdelenTableProps {
-  weekData: {
-    diensten: DienstDagdelenWeek[];
-    context: {
-      weekNumber: number;
-      startDate: string;
-      endDate: string;
-    };
-  };
+  weekData: WeekDagdelenData;
   teamFilters?: TeamFilters;
   onDagdeelUpdate?: (dagdeelId: string, nieuweStatus: DagdeelStatus, nieuwAantal: number) => Promise<void>;
   disabled?: boolean;
 }
 
-/**
- * HOTFIX DRAAD40B5: WeekDagdelenTable Compleet Herschreven
- * 
- * PROBLEEM: Oude versie toonde dagdelen als rijen (Ochtend/Middag/Avond/Nacht)
- * OPLOSSING: Nieuwe versie toont diensten als groepen met teams als sub-rijen
- * 
- * Structuur:
- * - Header: WeekTableHeader met emoji's en dagdeel labels
- * - Body: WeekTableBody met dienst-groepen en team-rijen
- * - 21 dagdeel cellen per team rij (7 dagen × 3 dagdelen)
- * 
- * Gebruikt componenten:
- * - WeekTableHeader: Emoji symbolen en volledige dagdeel namen
- * - WeekTableBody: Dienst groepering met team badges "Praktijk"
- * - DagdeelCell: Inline editable cellen (via WeekTableBody)
- * 
- * Data flow:
- * weekData → filter op teams → render table
- * 
- * DRAAD39.3 + DRAAD40B5 FASE 5 Compliant
- */
 export default function WeekDagdelenTable({
   weekData,
   teamFilters,
   onDagdeelUpdate,
   disabled = false
 }: WeekDagdelenTableProps) {
-  // ============================================================================
-  // DATA VALIDATION
-  // ============================================================================
-  
   if (!weekData || !weekData.diensten || weekData.diensten.length === 0) {
     return (
       <div className="p-8 text-center text-gray-500">
@@ -162,8 +130,6 @@ export default function WeekDagdelenTable({
           />
         </table>
       </div>
-
-      {/* Metadata footer (optioneel, kan gebruikt worden voor debugging) */}
       {process.env.NODE_ENV === 'development' && (
         <div className="mt-4 p-3 bg-gray-100 rounded text-xs text-gray-600 font-mono">
           <div>Debug Info:</div>
