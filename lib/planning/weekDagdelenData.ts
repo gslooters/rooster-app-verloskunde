@@ -57,6 +57,7 @@ export function calculateWeekDates(weekNummer: number, jaar: number): { startDat
  * 
  * DIAGNOSE VERSIE met uitgebreide logging en string-based datum vergelijking
  * Fix: Gebruikt string comparison voor datums om timezone issues te voorkomen
+ * DRAAD39 FIX: Gecorrigeerde kolomnamen startdate/enddate (was start_datum/eind_datum)
  */
 export async function getWeekDagdelenData(
   rosterId: string,
@@ -88,7 +89,7 @@ export async function getWeekDagdelenData(
     
     const { data: roster, error: rosterError } = await supabase
       .from('roosters')
-      .select('id, start_datum, eind_datum')
+      .select('id, startdate, enddate')
       .eq('id', rosterId)
       .single();
     
@@ -101,15 +102,15 @@ export async function getWeekDagdelenData(
     
     console.log('✅ [DIAGNOSE] Roster gevonden:', {
       id: roster.id,
-      start_datum: roster.start_datum,
-      eind_datum: roster.eind_datum
+      startdate: roster.startdate,
+      enddate: roster.enddate
     });
     
     // STAP 3: Check datum overlap (STRING COMPARISON - geen timezone issues)
     console.log('\n🔄 [DIAGNOSE] STAP 3: Checking datum overlap...');
     
-    const rosterStartStr = roster.start_datum;
-    const rosterEndStr = roster.eind_datum;
+    const rosterStartStr = roster.startdate;
+    const rosterEndStr = roster.enddate;
     
     // Check: Week mag niet VOLLEDIG buiten roster vallen
     const weekStartsAfterRosterEnds = weekStartStr > rosterEndStr;
@@ -298,6 +299,7 @@ export async function getWeekDagdelenData(
 
 /**
  * Get navigation boundaries for week navigation
+ * DRAAD39 FIX: Gecorrigeerde kolomnamen startdate/enddate
  */
 export async function getWeekNavigatieBounds(
   rosterId: string,
@@ -308,7 +310,7 @@ export async function getWeekNavigatieBounds(
     
     const { data: roster, error } = await supabase
       .from('roosters')
-      .select('start_datum, eind_datum')
+      .select('startdate, enddate')
       .eq('id', rosterId)
       .single();
     
@@ -323,8 +325,8 @@ export async function getWeekNavigatieBounds(
       };
     }
     
-    const startDate = new Date(roster.start_datum);
-    const endDate = new Date(roster.eind_datum);
+    const startDate = new Date(roster.startdate);
+    const endDate = new Date(roster.enddate);
     
     const minWeek = getISOWeek(startDate);
     const maxWeek = getISOWeek(endDate);
