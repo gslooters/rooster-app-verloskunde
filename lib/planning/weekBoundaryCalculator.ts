@@ -3,26 +3,29 @@
  * 
  * Bepaalt voor elke week binnen een 5-weekse rooster periode:
  * - Start en einddatum (maandag t/m zondag)
+ * - ISO weeknummer (48, 49, 50, etc.)
  * - Navigatie mogelijkheden (canGoBack/canGoForward)
- * - Week labeling ("Week X van 5")
+ * - Week labeling ("Week X van 5" + ISO nummer)
  * 
  * FIX 3 - DRAAD40B: Gebruik period_start parameter i.p.v. roster.start_date
+ * FIX 1 - DRAAD40B FOUT 1: Voeg ISO weeknummer toe voor display
  */
 
 import { getSupabaseServer } from '@/lib/supabase-server';
-import { addDays, parseISO, format } from 'date-fns';
+import { addDays, parseISO, format, getWeek } from 'date-fns';
 
 // ============================================================================
 // TYPE DEFINITIES
 // ============================================================================
 
 export interface WeekBoundary {
-  weekNummer: number;           // 1-5
+  weekNummer: number;           // 1-5 (positie binnen roosterperiode)
+  isoWeekNummer: number;        // 🔥 FIX 1: ISO weeknummer (48, 49, 50, etc.)
   startDatum: string;           // ISO string maandag
   eindDatum: string;            // ISO string zondag
   canGoBack: boolean;           // false voor week 1
   canGoForward: boolean;        // false voor week 5
-  weekLabel: string;            // "Week 1 van 5"
+  weekLabel: string;            // "Week 1 van 5" (intern gebruik)
   rosterId: string;
 }
 
@@ -40,6 +43,7 @@ export interface RosterPeriodInfo {
 
 /**
  * 🔥 FIX 3 - DRAAD40B: Haalt volledige rooster periode informatie op met alle 5 weken
+ * 🔥 FIX 1 - DRAAD40B FOUT 1: Bereken ook ISO weeknummer per week
  * @param rosterId - UUID van het rooster
  * @param periodStart - OPTIONEEL: Expliciete period_start (YYYY-MM-DD). Indien niet gegeven, wordt roster.start_date gebruikt.
  */
@@ -98,19 +102,22 @@ export async function getRosterPeriodInfo(
   const weken: WeekBoundary[] = [];
   
   for (let weekNummer = 1; weekNummer <= 5; weekNummer++) {
-    const weekStartDatum = format(
-      addDays(startDate, (weekNummer - 1) * 7),
-      'yyyy-MM-dd'
-    );
+    const weekStartDate = addDays(startDate, (weekNummer - 1) * 7);
+    const weekStartDatum = format(weekStartDate, 'yyyy-MM-dd');
     const weekEindDatum = format(
       addDays(startDate, (weekNummer - 1) * 7 + 6),
       'yyyy-MM-dd'
     );
     
-    console.log(`✅ FIX 3: Week ${weekNummer} boundaries - start: ${weekStartDatum}, eind: ${weekEindDatum}`);
+    // 🔥 FIX 1: Bereken ISO weeknummer
+    // getWeek() geeft het ISO weeknummer (1-53) voor de gegeven datum
+    const isoWeekNummer = getWeek(weekStartDate, { weekStartsOn: 1 });
+    
+    console.log(`✅ Week ${weekNummer} - start: ${weekStartDatum}, eind: ${weekEindDatum}, ISO week: ${isoWeekNummer}`);
 
     weken.push({
       weekNummer,
+      isoWeekNummer, // 🔥 FIX 1: Nieuw veld!
       startDatum: weekStartDatum,
       eindDatum: weekEindDatum,
       canGoBack: weekNummer > 1,
@@ -131,6 +138,7 @@ export async function getRosterPeriodInfo(
 
 /**
  * 🔥 FIX 3 - DRAAD40B: Haalt specifieke week boundary op
+ * 🔥 FIX 1 - DRAAD40B FOUT 1: Inclusief ISO weeknummer
  * @param rosterId - UUID van het rooster
  * @param weekNummer - Week index (1-5)
  * @param periodStart - OPTIONEEL: Expliciete period_start (YYYY-MM-DD). Indien niet gegeven, wordt roster.start_date gebruikt.
@@ -154,14 +162,14 @@ export async function getWeekBoundary(
   
   console.log('✅ FIX 3: periodInfo opgehaald:', periodInfo);
 
-  // 3. Return specifieke week
+  // 3. Return specifieke week (inclusief isoWeekNummer)
   const week = periodInfo.weken.find(w => w.weekNummer === weekNummer);
   
   if (!week) {
     throw new Error(`Week ${weekNummer} niet gevonden in roster periode`);
   }
   
-  console.log(`✅ FIX 3: Week ${weekNummer} boundary geretourneerd:`, week);
+  console.log(`✅ Week ${weekNummer} boundary geretourneerd - ISO week: ${week.isoWeekNummer}`);
 
   return week;
 }
