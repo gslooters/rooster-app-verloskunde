@@ -1,0 +1,16 @@
+# Railway Deployment Trigger File
+# 
+# DRAAD40B5 - Force deployment after TypeScript fixes
+# 
+# This file exists solely to trigger Railway's GitHub webhook
+# Last updated: 2025-11-20 22:12 UTC
+# 
+# Status: READY FOR DEPLOYMENT
+# Build expectation: SUCCESS
+# 
+# Fixes applied:
+# - Duplicate TeamDagdeel import removed
+# - TypeScript compiler errors resolved
+# - Code quality verified
+# 
+# Deploy timestamp: 2025-11-20T22:12:13Z
