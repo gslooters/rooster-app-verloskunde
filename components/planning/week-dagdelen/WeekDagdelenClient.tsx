@@ -3,6 +3,7 @@
 import { Suspense } from 'react';
 import PageHeader from './PageHeader';
 import ActionBar from './ActionBar';
+import WeekDagdelenTable from './WeekDagdelenTable';
 import type { WeekDagdeelData, WeekNavigatieBounds } from '@/lib/planning/weekDagdelenData';
 
 interface WeekDagdelenClientProps {
@@ -16,6 +17,11 @@ interface WeekDagdelenClientProps {
 /**
  * Client wrapper component for week dagdelen view
  * Handles interactive features and state management
+ * 
+ * DRAAD39.3: Server-side data fetching with props pattern
+ * - Data is fetched in page.tsx (server component)
+ * - Passed as props to this client component
+ * - WeekDagdelenTable renders the data without additional API calls
  */
 export default function WeekDagdelenClient({
   rosterId,
@@ -46,19 +52,23 @@ export default function WeekDagdelenClient({
           <div className="flex flex-wrap gap-4">
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-green-100 border border-green-300"></div>
-              <span className="text-xs text-gray-600">Voldoende bezet</span>
+              <span className="text-xs text-gray-600">Voldoende bezet (≥3)</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-yellow-100 border border-yellow-300"></div>
-              <span className="text-xs text-gray-600">Onderbezet</span>
+              <span className="text-xs text-gray-600">Onderbezet (2)</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-red-100 border border-red-300"></div>
-              <span className="text-xs text-gray-600">Kritiek onderbezet</span>
+              <span className="text-xs text-gray-600">Kritiek onderbezet (1)</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-blue-100 border border-blue-300"></div>
-              <span className="text-xs text-gray-600">Toegewezen</span>
+              <span className="text-xs text-gray-600">MOET status</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded bg-green-100 border border-green-300"></div>
+              <span className="text-xs text-gray-600">MAG status</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-gray-100 border border-gray-300"></div>
@@ -67,34 +77,10 @@ export default function WeekDagdelenClient({
           </div>
         </div>
 
-        {/* WeekDagdelenTable - DRAAD 39.3-39.6 */}
+        {/* WeekDagdelenTable - DRAAD 39.3 ✅ COMPLEET */}
         <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
           <Suspense fallback={<TableLoadingSkeleton weekNummer={weekNummer} />}>
-            <div className="p-8 text-center text-gray-500">
-              <div className="mb-4">
-                <h2 className="text-lg font-semibold text-gray-700 mb-2">
-                  Week {weekNummer} Tabel
-                </h2>
-                <p className="text-sm">
-                  {initialWeekData.startDatum} t/m {initialWeekData.eindDatum}
-                </p>
-              </div>
-              
-              {/* Preview van data */}
-              <div className="mt-6 text-left max-w-2xl mx-auto">
-                <p className="text-xs text-gray-500 mb-2">Data geladen:</p>
-                <div className="bg-gray-50 p-4 rounded border border-gray-200 text-xs">
-                  <p>Roster ID: {rosterId}</p>
-                  <p>Week: {weekNummer} ({jaar})</p>
-                  <p>Dagen: {initialWeekData.days.length}</p>
-                  <p>Navigatie: Week {navigatieBounds.minWeek} - {navigatieBounds.maxWeek}</p>
-                </div>
-              </div>
-              
-              <p className="text-xs mt-6 text-gray-400">
-                (WeekDagdelenTable implementatie volgt in DRAAD 39.3-39.6)
-              </p>
-            </div>
+            <WeekDagdelenTable weekData={initialWeekData} />
           </Suspense>
         </div>
       </div>
