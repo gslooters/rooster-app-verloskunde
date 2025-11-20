@@ -21,10 +21,14 @@ interface WeekDagdelenClientProps {
  * Client wrapper component for week dagdelen view
  * Handles interactive features and state management
  * 
- * DRAAD40B FASE 2: Toegevoegd state management voor:
+ * DRAAD40B FASE 3 - FIXES:
+ * ✅ FOUT 3: Period_start parameter toegevoegd aan navigatie URL
+ * ✅ FOUT 2: Overbodige legenda verwijderd
+ * 
+ * State management voor:
  * - Team filters (Groen/Oranje/Praktijk)
  * - Save status (idle/saving/saved/error)
- * - Week navigatie
+ * - Week navigatie met period_start
  */
 export default function WeekDagdelenClient({
   rosterId,
@@ -65,7 +69,13 @@ export default function WeekDagdelenClient({
   }, []);
 
   /**
-   * Navigate to previous/next week
+   * 🔥 FIX FOUT 3: Navigate to previous/next week MET period_start parameter
+   * 
+   * PROBLEEM: URL miste period_start, waardoor page.tsx error gaf
+   * OPLOSSING: Gebruik weekBoundary.startDatum als period_start
+   * 
+   * weekBoundary.startDatum bevat de maandag van week 1 van de roosterperiode
+   * Dit wordt gebruikt als anchor point voor alle week navigatie
    */
   const handleNavigateWeek = useCallback(
     (direction: 'prev' | 'next') => {
@@ -73,15 +83,36 @@ export default function WeekDagdelenClient({
       
       // Boundary check (extra veiligheid)
       if (targetWeek < 1 || targetWeek > 5) {
-        console.warn(`Cannot navigate to week ${targetWeek} (out of bounds)`);
+        console.warn(`🚫 Cannot navigate to week ${targetWeek} (out of bounds 1-5)`);
         return;
       }
 
-      // Navigate to new week URL
-      const newUrl = `/planning/design/week-dagdelen/${rosterId}/${targetWeek}`;
+      // 🔥 FIX: Bepaal period_start vanaf week 1 startDatum
+      // Voor week 1: gebruik weekBoundary.startDatum direct
+      // Voor andere weken: bereken terug naar week 1
+      const currentWeekStartDate = new Date(weekBoundary.startDatum);
+      const daysToSubtract = (weekNummer - 1) * 7;
+      const periodStartDate = new Date(currentWeekStartDate);
+      periodStartDate.setDate(currentWeekStartDate.getDate() - daysToSubtract);
+      
+      // Format als YYYY-MM-DD
+      const periodStart = periodStartDate.toISOString().split('T')[0];
+
+      // 🔥 FIX: Voeg period_start parameter toe aan URL
+      const newUrl = `/planning/design/week-dagdelen/${rosterId}/${targetWeek}?period_start=${periodStart}`;
+      
+      console.log('🔀 Week navigatie:', {
+        from: weekNummer,
+        to: targetWeek,
+        direction,
+        currentWeekStart: weekBoundary.startDatum,
+        calculatedPeriodStart: periodStart,
+        url: newUrl
+      });
+      
       router.push(newUrl);
     },
-    [rosterId, weekNummer, router]
+    [rosterId, weekNummer, weekBoundary.startDatum, router]
   );
 
   // ============================================================================
@@ -110,36 +141,16 @@ export default function WeekDagdelenClient({
 
       {/* Main Content Container */}
       <div className="container mx-auto px-6 py-6">
-        {/* Status Legenda - Sticky binnen container */}
-        <div className="sticky top-[144px] z-10 bg-white border border-gray-200 rounded-lg p-4 mb-6 shadow-sm">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">Status Legenda</h3>
-          <div className="flex flex-wrap gap-4">
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-green-100 border border-green-300"></div>
-              <span className="text-xs text-gray-600">Voldoende bezet (≥3)</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-yellow-100 border border-yellow-300"></div>
-              <span className="text-xs text-gray-600">Onderbezet (2)</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-red-100 border border-red-300"></div>
-              <span className="text-xs text-gray-600">Kritiek onderbezet (1)</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-blue-100 border border-blue-300"></div>
-              <span className="text-xs text-gray-600">MOET status</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-green-100 border border-green-300"></div>
-              <span className="text-xs text-gray-600">MAG status</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-gray-100 border border-gray-300"></div>
-              <span className="text-xs text-gray-600">Leeg</span>
-            </div>
-          </div>
-        </div>
+        {/* 🔥 FIX FOUT 2: Legenda VERWIJDERD volgens PLANDRAAD40.pdf specificatie
+            
+            REDEN: Legenda sloeg nergens op en bevatte verkeerde statussen
+            TODO: Komt later terug in verbeterde vorm
+            
+            VERWIJDERD BLOK (was regel 115-148):
+            - Status Legenda sectie met 6 verschillende statussen
+            - "MOET status", "MAG status" waren niet van toepassing
+            - Hele sticky div met border en shadow styling
+        */}
 
         {/* WeekDagdelenTable - DRAAD 39.3 ✅ COMPLEET */}
         <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
