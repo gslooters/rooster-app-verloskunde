@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import type { WeekDagdeelData } from '@/lib/planning/weekDagdelenData';
 import { DagdeelCell } from './DagdeelCell';
 import { StatusBadge } from './StatusBadge';
@@ -9,6 +10,8 @@ import { nl } from 'date-fns/locale';
 
 interface WeekDagdelenTableProps {
   weekData: WeekDagdeelData;
+  rosterId: string;
+  periodStart: string;
 }
 
 /**
@@ -23,7 +26,7 @@ interface WeekDagdelenTableProps {
  * 
  * AANGEPAST: Berekent totalen op basis van team aantallen
  */
-export function WeekDagdelenTable({ weekData }: WeekDagdelenTableProps) {
+export function WeekDagdelenTable({ weekData, rosterId, periodStart }: WeekDagdelenTableProps) {
   const dagdelen = [
     { key: 'ochtend' as const, label: 'Ochtend', tijd: '07:00 - 15:00' },
     { key: 'middag' as const, label: 'Middag', tijd: '15:00 - 23:00' },
@@ -51,15 +54,19 @@ export function WeekDagdelenTable({ weekData }: WeekDagdelenTableProps) {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-bold text-gray-900">
-              Week {weekData.weekNummer} - {weekData.jaar}
+              Diensten per week aanpassen: Week {weekData.weekNummer} - {weekData.jaar}
             </h2>
             <p className="text-sm text-gray-600 mt-1">
               {weekData.startDatum} t/m {weekData.eindDatum}
             </p>
           </div>
-          <div className="text-right">
-            <p className="text-sm text-gray-600">Rooster ID</p>
-            <p className="text-xs font-mono text-gray-500 break-all max-w-xs">{weekData.rosterId}</p>
+          <div>
+            <Link
+              href={`/planning/design/dagdelen-dashboard?roster_id=${rosterId}&period_start=${periodStart}`}
+              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+            >
+              Terug naar Dashboard
+            </Link>
           </div>
         </div>
       </div>
