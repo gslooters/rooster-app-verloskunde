@@ -1,228 +1,178 @@
 'use client';
 
-import type { WeekDagdeelData, DayDagdeelData, DagdeelAssignment } from '@/lib/planning/weekDagdelenData';
+import React from 'react';
+import { WeekTableHeader } from './WeekTableHeader';
+import WeekTableBody from './WeekTableBody';
+import type { DienstDagdelenWeek, DagdeelStatus } from '@/lib/types/week-dagdelen';
 import type { TeamFilters } from './ActionBar';
 
 interface WeekDagdelenTableProps {
-  weekData: WeekDagdeelData;
+  weekData: {
+    diensten: DienstDagdelenWeek[];
+    context: {
+      weekNumber: number;
+      startDate: string;
+      endDate: string;
+    };
+  };
   teamFilters?: TeamFilters;
+  onDagdeelUpdate?: (dagdeelId: string, nieuweStatus: DagdeelStatus, nieuwAantal: number) => Promise<void>;
+  disabled?: boolean;
 }
 
 /**
- * Main table component for displaying week dagdelen data
- * Shows 7 days (Ma-Zo) with 4 dagdelen per day (ochtend, middag, avond, nacht)
+ * HOTFIX DRAAD40B5: WeekDagdelenTable Compleet Herschreven
  * 
- * DRAAD40B FASE 2: Support voor team filtering
+ * PROBLEEM: Oude versie toonde dagdelen als rijen (Ochtend/Middag/Avond/Nacht)
+ * OPLOSSING: Nieuwe versie toont diensten als groepen met teams als sub-rijen
+ * 
+ * Structuur:
+ * - Header: WeekTableHeader met emoji's en dagdeel labels
+ * - Body: WeekTableBody met dienst-groepen en team-rijen
+ * - 21 dagdeel cellen per team rij (7 dagen × 3 dagdelen)
+ * 
+ * Gebruikt componenten:
+ * - WeekTableHeader: Emoji symbolen en volledige dagdeel namen
+ * - WeekTableBody: Dienst groepering met team badges "Praktijk"
+ * - DagdeelCell: Inline editable cellen (via WeekTableBody)
+ * 
+ * Data flow:
+ * weekData → filter op teams → render table
+ * 
+ * DRAAD39.3 + DRAAD40B5 FASE 5 Compliant
  */
-export default function WeekDagdelenTable({ weekData, teamFilters }: WeekDagdelenTableProps) {
-  if (!weekData || !weekData.days || weekData.days.length === 0) {
+export default function WeekDagdelenTable({
+  weekData,
+  teamFilters,
+  onDagdeelUpdate,
+  disabled = false
+}: WeekDagdelenTableProps) {
+  // ============================================================================
+  // DATA VALIDATION
+  // ============================================================================
+  
+  if (!weekData || !weekData.diensten || weekData.diensten.length === 0) {
     return (
       <div className="p-8 text-center text-gray-500">
-        <p className="text-sm">Geen data beschikbaar voor week {weekData?.weekNummer}</p>
+        <div className="mb-4">
+          <svg className="w-16 h-16 mx-auto text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        </div>
+        <p className="text-base font-medium text-gray-700 mb-2">Geen rooster data beschikbaar</p>
+        <p className="text-sm text-gray-500">
+          {weekData?.context?.weekNumber 
+            ? `Week ${weekData.context.weekNumber} bevat geen diensten` 
+            : 'Selecteer een week om de rooster data te bekijken'}
+        </p>
       </div>
     );
   }
 
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-collapse">
-        {/* Header: Days of week */}
-        <thead>
-          <tr>
-            <th className="sticky left-0 z-20 bg-gray-100 border border-gray-300 p-3 text-left text-sm font-semibold text-gray-700 min-w-[120px]">
-              Dagdeel
-            </th>
-            {weekData.days.map((day, index) => (
-              <th
-                key={index}
-                className="border border-gray-300 p-3 text-center text-sm font-semibold text-gray-700 min-w-[140px] bg-gray-50"
-              >
-                <div className="font-bold">{day.dagNaam}</div>
-                <div className="text-xs font-normal text-gray-500 mt-1">
-                  {formatDateShort(day.datum)}
-                </div>
-              </th>
-            ))}
-          </tr>
-        </thead>
-
-        <tbody>
-          {/* Row: Ochtend */}
-          <DagdeelRow
-            label="Ochtend"
-            days={weekData.days}
-            dagdeelType="ochtend"
-            teamFilters={teamFilters}
-          />
-
-          {/* Row: Middag */}
-          <DagdeelRow
-            label="Middag"
-            days={weekData.days}
-            dagdeelType="middag"
-            teamFilters={teamFilters}
-          />
-
-          {/* Row: Avond */}
-          <DagdeelRow
-            label="Avond"
-            days={weekData.days}
-            dagdeelType="avond"
-            teamFilters={teamFilters}
-          />
-
-          {/* Row: Nacht */}
-          <DagdeelRow
-            label="Nacht"
-            days={weekData.days}
-            dagdeelType="nacht"
-            teamFilters={teamFilters}
-          />
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-/**
- * Row component for a single dagdeel type across all days
- */
-interface DagdeelRowProps {
-  label: string;
-  days: DayDagdeelData[];
-  dagdeelType: 'ochtend' | 'middag' | 'avond' | 'nacht';
-  teamFilters?: TeamFilters;
-}
-
-function DagdeelRow({ label, days, dagdeelType, teamFilters }: DagdeelRowProps) {
-  return (
-    <tr>
-      {/* Row header - dagdeel label */}
-      <td className="sticky left-0 z-10 bg-gray-50 border border-gray-300 p-3 text-sm font-medium text-gray-700">
-        {label}
-      </td>
-
-      {/* Cells for each day */}
-      {days.map((day, dayIndex) => {
-        const assignments = day.dagdelen[dagdeelType] || [];
-        return (
-          <DagdeelCell
-            key={dayIndex}
-            assignments={assignments}
-            date={day.datum}
-            dagNaam={day.dagNaam}
-            dagdeelType={dagdeelType}
-            teamFilters={teamFilters}
-          />
-        );
-      })}
-    </tr>
-  );
-}
-
-/**
- * Individual cell component for a single dagdeel on a single day
- */
-interface DagdeelCellProps {
-  assignments: DagdeelAssignment[];
-  date: string;
-  dagNaam: string;
-  dagdeelType: string;
-  teamFilters?: TeamFilters;
-}
-
-function DagdeelCell({ assignments, date, dagNaam, dagdeelType, teamFilters }: DagdeelCellProps) {
-  // Filter assignments based on team filters (if provided)
-  const filteredAssignments = teamFilters
-    ? assignments.filter(a => {
-        // Map team names to filter keys (GRO, ORA, TOT)
-        const teamKey = a.team?.toUpperCase();
-        if (teamKey === 'GRO') return teamFilters.GRO;
-        if (teamKey === 'ORA') return teamFilters.ORA;
-        if (teamKey === 'TOT' || teamKey === 'PRA') return teamFilters.TOT;
-        return true; // Show unknown teams by default
-      })
-    : assignments;
-
-  // Calculate total aantal from filtered assignments
-  const totalAantal = filteredAssignments.reduce((sum, a) => sum + (a.aantal || 0), 0);
+  // ============================================================================
+  // DATA FILTERING
+  // ============================================================================
   
-  // Determine cell background color based on total aantal
-  const getBgColor = () => {
-    if (totalAantal === 0) return 'bg-gray-50';
-    if (totalAantal >= 3) return 'bg-green-50 border-green-200';
-    if (totalAantal === 2) return 'bg-yellow-50 border-yellow-200';
-    return 'bg-red-50 border-red-200';
-  };
+  /**
+   * Filter diensten based on team filters
+   * Als alle teams uitstaan: toon lege table
+   * Anders: filter diensten met minimaal 1 team dat data heeft voor geselecteerde teams
+   */
+  const filteredDiensten = teamFilters
+    ? weekData.diensten.filter(dienst => {
+        // Check if any selected team has data
+        const hasGroenData = teamFilters.GRO && dienst.teams.groen;
+        const hasOranjeData = teamFilters.ORA && dienst.teams.oranje;
+        const hasTotaalData = teamFilters.TOT && dienst.teams.totaal;
+        
+        return hasGroenData || hasOranjeData || hasTotaalData;
+      })
+    : weekData.diensten;
 
+  // Check if no teams are selected
+  const noTeamsSelected = teamFilters && !teamFilters.GRO && !teamFilters.ORA && !teamFilters.TOT;
+
+  if (noTeamsSelected) {
+    return (
+      <div className="p-8 text-center text-gray-500">
+        <div className="mb-4">
+          <svg className="w-16 h-16 mx-auto text-orange-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+        </div>
+        <p className="text-base font-medium text-gray-700 mb-2">Geen teams geselecteerd</p>
+        <p className="text-sm text-gray-500">
+          Gebruik de team filters bovenaan om minimaal één team te selecteren
+        </p>
+      </div>
+    );
+  }
+
+  if (filteredDiensten.length === 0) {
+    return (
+      <div className="p-8 text-center text-gray-500">
+        <div className="mb-4">
+          <svg className="w-16 h-16 mx-auto text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+          </svg>
+        </div>
+        <p className="text-base font-medium text-gray-700 mb-2">Geen diensten gevonden</p>
+        <p className="text-sm text-gray-500">
+          De geselecteerde team filters tonen geen resultaten voor deze week
+        </p>
+      </div>
+    );
+  }
+
+  // ============================================================================
+  // BUILD WEEK DAGEN ARRAY
+  // ============================================================================
+  
+  /**
+   * Extract unique days from first dienst (all diensten have same days)
+   * Build WeekDag array for header
+   */
+  const weekDagen = filteredDiensten[0].teams.groen.dagen.map(dag => ({
+    datum: dag.datum,
+    dagSoort: dag.dagNaam as 'ma' | 'di' | 'wo' | 'do' | 'vr' | 'za' | 'zo'
+  }));
+
+  // Validate we have 7 days
+  if (weekDagen.length !== 7) {
+    console.warn(`⚠️ Week heeft ${weekDagen.length} dagen ipv 7. Data mogelijk incompleet.`);
+  }
+
+  // ============================================================================
+  // RENDER TABLE
+  // ============================================================================
+  
   return (
-    <td
-      className={`border border-gray-300 p-2 text-sm hover:bg-blue-50 cursor-pointer transition-colors ${getBgColor()}`}
-      title={`${dagNaam} ${date} - ${dagdeelType}`}
-    >
-      {filteredAssignments.length === 0 ? (
-        <div className="text-gray-400 text-xs text-center py-2">-</div>
-      ) : (
-        <div className="space-y-1">
-          {filteredAssignments.map((assignment, index) => (
-            <AssignmentBadge key={index} assignment={assignment} />
-          ))}
-          {filteredAssignments.length > 1 && (
-            <div className="text-xs text-gray-500 font-semibold mt-2 pt-1 border-t border-gray-300">
-              Totaal: {totalAantal}
-            </div>
-          )}
+    <div className="relative">
+      {/* Horizontal scroll container */}
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse">
+          {/* Header: Datum row + Dagdeel row met emoji's */}
+          <WeekTableHeader weekDagen={weekDagen} />
+          
+          {/* Body: Dienst groepen met team rijen */}
+          <WeekTableBody
+            diensten={filteredDiensten}
+            onDagdeelUpdate={onDagdeelUpdate}
+            disabled={disabled}
+          />
+        </table>
+      </div>
+
+      {/* Metadata footer (optioneel, kan gebruikt worden voor debugging) */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="mt-4 p-3 bg-gray-100 rounded text-xs text-gray-600 font-mono">
+          <div>Debug Info:</div>
+          <div>- Totaal diensten: {weekData.diensten.length}</div>
+          <div>- Gefilterde diensten: {filteredDiensten.length}</div>
+          <div>- Week periode: {weekData.context.startDate} → {weekData.context.endDate}</div>
+          <div>- Aantal dagen: {weekDagen.length}</div>
         </div>
       )}
-    </td>
-  );
-}
-
-/**
- * Badge component for displaying a single team assignment
- */
-interface AssignmentBadgeProps {
-  assignment: DagdeelAssignment;
-}
-
-function AssignmentBadge({ assignment }: AssignmentBadgeProps) {
-  // Determine badge color based on status
-  const getStatusColor = () => {
-    if (!assignment.status) return 'bg-gray-100 text-gray-700';
-    
-    const status = assignment.status.toUpperCase();
-    if (status.includes('MOET')) return 'bg-blue-100 text-blue-800 border-blue-300';
-    if (status.includes('MAG')) return 'bg-green-100 text-green-800 border-green-300';
-    if (status.includes('NIET')) return 'bg-gray-100 text-gray-600 border-gray-300';
-    
-    return 'bg-purple-100 text-purple-800 border-purple-300';
-  };
-
-  return (
-    <div
-      className={`flex items-center justify-between px-2 py-1 rounded border text-xs ${getStatusColor()}`}
-    >
-      <span className="font-medium">
-        Team {assignment.team || '?'}
-      </span>
-      <span className="ml-2 font-bold">
-        {assignment.aantal || 0}x
-      </span>
     </div>
   );
-}
-
-/**
- * Format date string to short format (e.g., "24 nov")
- */
-function formatDateShort(dateStr: string): string {
-  try {
-    const date = new Date(dateStr);
-    const day = date.getDate();
-    const monthNames = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
-    const month = monthNames[date.getMonth()];
-    return `${day} ${month}`;
-  } catch (error) {
-    return dateStr;
-  }
 }
