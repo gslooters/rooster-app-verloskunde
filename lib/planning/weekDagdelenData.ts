@@ -92,8 +92,7 @@ export async function getWeekDagdelenData(
     
     // 🔥 STAP 1: Haal week boundaries op via weekBoundaryCalculator
     // Dit gebruikt period_start + offset i.p.v. ISO-week berekening!
-    console.log('
-🔄 [REFACTOR] STAP 1: Fetching week boundary...');
+    console.log('\n🔄 [REFACTOR] STAP 1: Fetching week boundary...');
     console.log('Input:', { rosterId, weekNummer, periodStart });
     
     const weekBoundary = await getWeekBoundary(rosterId, weekNummer, periodStart);
@@ -111,8 +110,7 @@ export async function getWeekDagdelenData(
     });
     
     // STAP 2: Haal roster op (voor validatie)
-    console.log('
-🔄 [REFACTOR] STAP 2: Fetching roster...');
+    console.log('\n🔄 [REFACTOR] STAP 2: Fetching roster...');
     
     const { data: roster, error: rosterError } = await supabase
       .from('roosters')
@@ -134,8 +132,7 @@ export async function getWeekDagdelenData(
     });
     
     // STAP 3: Check datum overlap (STRING COMPARISON - geen timezone issues)
-    console.log('
-🔄 [REFACTOR] STAP 3: Checking datum overlap...');
+    console.log('\n🔄 [REFACTOR] STAP 3: Checking datum overlap...');
     
     const rosterStartStr = roster.start_date;
     const rosterEndStr = roster.end_date;
@@ -164,8 +161,7 @@ export async function getWeekDagdelenData(
     console.log('✅ [REFACTOR] Week heeft overlap met roster - proceeding');
     
     // STAP 4: Haal period data op
-    console.log('
-🔄 [REFACTOR] STAP 4: Fetching period data...');
+    console.log('\n🔄 [REFACTOR] STAP 4: Fetching period data...');
     console.log('Query params:', {
       table: 'roster_period_staffing',
       rosterId,
@@ -208,8 +204,7 @@ export async function getWeekDagdelenData(
     }
     
     // STAP 5: Analyseer dagdelen data
-    console.log('
-🔄 [REFACTOR] STAP 5: Analyzing dagdelen...');
+    console.log('\n🔄 [REFACTOR] STAP 5: Analyzing dagdelen...');
     
     const totalDagdelen = periodData?.reduce((sum, p) => 
       sum + (p.roster_period_staffing_dagdelen?.length || 0), 0) || 0;
@@ -230,8 +225,7 @@ export async function getWeekDagdelenData(
     }
     
     // STAP 6: Build days array
-    console.log('
-🔄 [REFACTOR] STAP 6: Building days array...');
+    console.log('\n🔄 [REFACTOR] STAP 6: Building days array...');
     
     const days: DayDagdeelData[] = [];
     
@@ -307,8 +301,7 @@ export async function getWeekDagdelenData(
       days,
     };
     
-    console.log('
-✅ [REFACTOR] SUCCESS - Returning data');
+    console.log('\n✅ [REFACTOR] SUCCESS - Returning data');
     console.log('📦 [REFACTOR] Result:', {
       rosterId: result.rosterId,
       weekIndex: result.weekNummer,
@@ -320,8 +313,7 @@ export async function getWeekDagdelenData(
     return result;
     
   } catch (error) {
-    console.error('
-❌ [REFACTOR] EXCEPTION CAUGHT');
+    console.error('\n❌ [REFACTOR] EXCEPTION CAUGHT');
     console.error('Error:', error);
     console.error('Message:', error instanceof Error ? error.message : 'Unknown');
     console.error('Stack:', error instanceof Error ? error.stack : undefined);
