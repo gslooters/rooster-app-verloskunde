@@ -1,0 +1,126 @@
+/* =================================================================
+   DRAAD 39.3: Sticky Headers & Frozen Columns Styling
+   ================================================================= */
+
+/* Frozen Left Column 1: Dienst */
+.frozen-left-1 {
+  position: sticky;
+  left: 0;
+  z-index: 20;
+  background: #EBF5FF;
+  border-right: 2px solid #CBD5E0;
+  width: 200px;
+  min-width: 200px;
+}
+
+/* Frozen Left Column 2: Team */
+.frozen-left-2 {
+  position: sticky;
+  left: 200px;
+  z-index: 20;
+  background: #EBF5FF;
+  border-right: 2px solid #CBD5E0;
+  width: 100px;
+  min-width: 100px;
+}
+
+/* Header cells that are frozen get higher z-index */
+thead th.frozen-left-1,
+thead th.frozen-left-2 {
+  z-index: 30;
+}
+
+/* Scroll shadow effect on frozen column 2 */
+.frozen-left-2::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: -8px;
+  bottom: 0;
+  width: 8px;
+  background: linear-gradient(to right, rgba(0, 0, 0, 0.1), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.table-container.scrolled .frozen-left-2::after {
+  opacity: 1;
+}
+
+/* Table Container */
+.table-container {
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: calc(100vh - 144px - 80px);
+  scroll-behavior: smooth;
+  position: relative;
+}
+
+/* Custom Scrollbar Styling (Webkit browsers) */
+.table-container::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.table-container::-webkit-scrollbar-track {
+  background: #F7FAFC;
+  border-radius: 6px;
+}
+
+.table-container::-webkit-scrollbar-thumb {
+  background: #CBD5E0;
+  border-radius: 6px;
+  border: 2px solid #F7FAFC;
+}
+
+.table-container::-webkit-scrollbar-thumb:hover {
+  background: #A0AEC0;
+}
+
+/* Dagdeel Header Cells */
+.dagdeel-header {
+  font-size: 12px;
+  padding: 8px 4px;
+  background: #EBF5FF;
+}
+
+.dagdeel-header:hover {
+  background: #DBEAFE;
+}
+
+/* Status Legenda */
+.status-legenda {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.status-dot {
+  flex-shrink: 0;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1024px) {
+  .frozen-left-1 {
+    width: 160px;
+    min-width: 160px;
+  }
+  
+  .frozen-left-2 {
+    left: 160px;
+    width: 80px;
+    min-width: 80px;
+  }
+}
+
+/* Print-friendly styles */
+@media print {
+  .table-container {
+    overflow: visible;
+    max-height: none;
+  }
+  
+  .frozen-left-1::after,
+  .frozen-left-2::after {
+    display: none;
+  }
+}
