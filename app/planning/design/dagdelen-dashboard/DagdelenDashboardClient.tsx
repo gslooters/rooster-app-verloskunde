@@ -18,10 +18,14 @@ export default function DagdelenDashboardClient() {
   const rosterId = searchParams.get('roster_id');
   const periodStart = searchParams.get('period_start');
   
+  // ✅ FASE 1: Loading State Management
   const [weekData, setWeekData] = useState<WeekInfo[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rosterInfo, setRosterInfo] = useState<any>(null);
+  const [isDataReady, setIsDataReady] = useState(false); // ✅ Extra state voor render safety
+  
   const supabase = createClientComponentClient();
 
   useEffect(() => {
@@ -29,14 +33,18 @@ export default function DagdelenDashboardClient() {
       loadWeekData();
     } else {
       setError('Geen roster_id of period_start gevonden in URL');
-      setLoading(false);
+      setHasError(true);
+      setIsLoading(false);
     }
   }, [rosterId, periodStart]);
 
   const loadWeekData = async () => {
     try {
-      setLoading(true);
+      // ✅ Reset states
+      setIsLoading(true);
+      setHasError(false);
       setError(null);
+      setIsDataReady(false);
 
       console.log('🔄 Start laden weekdata voor roster:', rosterId, 'periode:', periodStart);
 
@@ -156,20 +164,29 @@ export default function DagdelenDashboardClient() {
       console.log('📊 Gegenereerde weken:', weeks.map(w => `Week ${w.weekNumber}: ${w.startDate}-${w.endDate}`).join(', '));
       console.log('🔍 weekData details:', JSON.stringify(weeks, null, 2));
       
-      if (weeks.length === 0) {
-        console.warn('⚠️ Geen weken gegenereerd!');
-        setError('Geen weekdata kunnen genereren');
-      } else {
-        console.log('✅ weekData succesvol gezet, aantal weken:', weeks.length);
+      // ✅ FASE 1: Validatie voordat state wordt gezet
+      if (!Array.isArray(weeks) || weeks.length === 0) {
+        console.error('❌ Geen geldige weken gegenereerd!');
+        throw new Error('Geen weekdata kunnen genereren');
       }
       
+      console.log('✅ weekData succesvol gezet, aantal weken:', weeks.length);
+      
+      // ✅ KRITIEK: Eerst weekData zetten, dan pas isDataReady
       setWeekData(weeks);
+      
+      // ✅ Gebruik setTimeout om render cycle te garanderen
+      setTimeout(() => {
+        setIsDataReady(true);
+        console.log('✅ isDataReady gezet op true');
+      }, 100);
       
     } catch (error) {
       console.error('❌ Fout bij laden weekdata:', error);
       setError(error instanceof Error ? error.message : 'Onbekende fout bij laden data');
+      setHasError(true);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
@@ -263,20 +280,25 @@ export default function DagdelenDashboardClient() {
     }
   };
 
-  // 🔧 Loading state
-  if (loading) {
+  // ✅ FASE 2: Conditional Rendering Guards
+  
+  // Guard 1: Loading state
+  if (isLoading) {
+    console.log('🔄 Rendering loading state...');
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Laden weekdata...</p>
+          <p className="text-gray-600 font-medium">Weekdata laden...</p>
+          <p className="text-gray-400 text-sm mt-2">Even geduld...</p>
         </div>
       </div>
     );
   }
 
-  // 🔧 Error state
-  if (error) {
+  // Guard 2: Error state
+  if (hasError || error) {
+    console.log('❌ Rendering error state:', error);
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-6">
@@ -286,21 +308,80 @@ export default function DagdelenDashboardClient() {
             </svg>
             <h3 className="text-lg font-semibold text-gray-900">Fout bij laden</h3>
           </div>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <button
-            onClick={handleBack}
-            className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Terug naar Dashboard
-          </button>
+          <p className="text-gray-600 mb-4">{error || 'Onbekende fout opgetreden'}</p>
+          <div className="flex gap-3">
+            <button
+              onClick={handleBack}
+              className="flex-1 bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300 transition-colors"
+            >
+              Terug naar Dashboard
+            </button>
+            <button
+              onClick={() => loadWeekData()}
+              className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Opnieuw proberen
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
+  // Guard 3: Data niet klaar
+  if (!isDataReady) {
+    console.log('⏳ Data wordt verwerkt, isDataReady:', isDataReady);
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <div className="animate-pulse">
+            <div className="h-8 w-48 bg-gray-300 rounded mx-auto mb-4"></div>
+            <div className="h-4 w-32 bg-gray-200 rounded mx-auto"></div>
+          </div>
+          <p className="text-gray-500 mt-4 text-sm">Data verwerken...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Guard 4: Geen weekData
+  if (!weekData || !Array.isArray(weekData) || weekData.length === 0) {
+    console.log('⚠️ Geen weekData beschikbaar, weekData:', weekData);
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="max-w-md w-full bg-yellow-50 border border-yellow-200 rounded-lg shadow-lg p-6">
+          <div className="flex items-center mb-4">
+            <svg className="w-6 h-6 text-yellow-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            <h3 className="text-lg font-semibold text-gray-900">Geen weekdata</h3>
+          </div>
+          <p className="text-gray-600 mb-4">Er is geen weekdata beschikbaar voor deze periode.</p>
+          <div className="flex gap-3">
+            <button
+              onClick={handleBack}
+              className="flex-1 bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300 transition-colors"
+            >
+              Terug
+            </button>
+            <button
+              onClick={() => loadWeekData()}
+              className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Opnieuw laden
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ✅ Als we hier komen, hebben we gevalideerde data
+  console.log('✅ Rendering main content met', weekData.length, 'weken');
+
   // 🔧 DRAAD39.3: Safe access met defaults
-  const firstWeek = weekData.length > 0 ? weekData[0] : null;
-  const lastWeek = weekData.length >= 5 ? weekData[4] : null;
+  const firstWeek = weekData[0];
+  const lastWeek = weekData[4] || weekData[weekData.length - 1];
   
   // ✅ VERBETERING 2: Titel ZONDER datums tussen haakjes
   const periodTitle = firstWeek && lastWeek 
@@ -313,10 +394,6 @@ export default function DagdelenDashboardClient() {
   periodEndDate.setUTCDate(periodStartDate.getUTCDate() + 34); // 5 weken - 1 dag
   
   const rosterPeriodText = `${formatDateFull(periodStartDate)} - ${formatDateFull(periodEndDate)}`;
-
-  // 🔧 DRAAD39.3: Extra logging vóór render
-  console.log('🎨 About to render, weekData length:', weekData.length);
-  console.log('🎨 weekData:', weekData);
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
@@ -357,78 +434,56 @@ export default function DagdelenDashboardClient() {
 
         {/* Week Buttons */}
         <div className="space-y-4">
-          {/* 🔧 CRITICAL FIX: Altijd weekdata tonen, ook als deze leeg zijn */}
-          {Array.isArray(weekData) && weekData.length > 0 ? (
-            weekData.map((week, index) => {
-              // Extra validatie per week
-              if (!week || typeof week !== 'object') {
-                console.warn(`⚠️ Invalid week at index ${index}:`, week);
-                return null;
-              }
-              
-              const weekNum = week.weekNumber || 0;
-              const startDt = week.startDate || '?';
-              const endDt = week.endDate || '?';
-              const hasChg = Boolean(week.hasChanges);
-              const lastUpd = week.lastUpdated;
-              
-              return (
-                <button
-                  key={`week-${weekNum}-${index}`}
-                  onClick={() => handleWeekClick(weekNum)}
-                  className="w-full bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg shadow-sm hover:shadow-md transition-all p-6 text-left border-2 border-blue-200 hover:border-blue-400 relative"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                        Week {weekNum}: {startDt} – {endDt}
-                      </h3>
-                      
-                      {lastUpd && (
-                        <p className="text-sm text-gray-500">
-                          Laatst gewijzigd: {formatLastUpdated(lastUpd)}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="flex items-center space-x-3">
-                      {hasChg && (
-                        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-amber-100 text-amber-800">
-                          <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                          </svg>
-                          Aangepast
-                        </span>
-                      )}
-                      
-                      <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </div>
-                  </div>
-                </button>
-              );
-            })
-          ) : (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-8 text-center">
-              <svg className="w-12 h-12 text-yellow-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Geen weekdata beschikbaar</h3>
-              <p className="text-gray-600 mb-4">
-                Er kon geen weekdata worden geladen voor deze periode.
-              </p>
+          {weekData.map((week, index) => {
+            // Extra validatie per week
+            if (!week || typeof week !== 'object') {
+              console.warn(`⚠️ Invalid week at index ${index}:`, week);
+              return null;
+            }
+            
+            const weekNum = week.weekNumber || 0;
+            const startDt = week.startDate || '?';
+            const endDt = week.endDate || '?';
+            const hasChg = Boolean(week.hasChanges);
+            const lastUpd = week.lastUpdated;
+            
+            return (
               <button
-                onClick={() => loadWeekData()}
-                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                key={`week-${weekNum}-${index}`}
+                onClick={() => handleWeekClick(weekNum)}
+                className="w-full bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg shadow-sm hover:shadow-md transition-all p-6 text-left border-2 border-blue-200 hover:border-blue-400 relative"
               >
-                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Opnieuw laden
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                      Week {weekNum}: {startDt} – {endDt}
+                    </h3>
+                    
+                    {lastUpd && (
+                      <p className="text-sm text-gray-500">
+                        Laatst gewijzigd: {formatLastUpdated(lastUpd)}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center space-x-3">
+                    {hasChg && (
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-amber-100 text-amber-800">
+                        <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                        Aangepast
+                      </span>
+                    )}
+                    
+                    <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </div>
               </button>
-            </div>
-          )}
+            );
+          })}
         </div>
 
         {/* Info sectie */}
@@ -443,6 +498,19 @@ export default function DagdelenDashboardClient() {
             </div>
           </div>
         </div>
+
+        {/* Debug info (development only) */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="mt-6 bg-gray-800 text-gray-100 rounded-lg p-4 text-xs font-mono">
+            <div className="font-bold mb-2">🐛 Debug Info (DRAAD39.3):</div>
+            <div>isLoading: {String(isLoading)}</div>
+            <div>hasError: {String(hasError)}</div>
+            <div>isDataReady: {String(isDataReady)}</div>
+            <div>weekData.length: {weekData?.length || 0}</div>
+            <div>roster_id: {rosterId}</div>
+            <div>period_start: {periodStart}</div>
+          </div>
+        )}
       </div>
     </div>
   );
