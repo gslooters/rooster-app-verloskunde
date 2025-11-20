@@ -11,6 +11,7 @@ interface PageProps {
   };
   searchParams: {
     jaar?: string;
+    period_start?: string; // 🔥 DRAAD40B: Nieuwe parameter toegevoegd
   };
 }
 
@@ -25,14 +26,32 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function WeekDagdelenPage({ params, searchParams }: PageProps) {
   const weekNummer = parseInt(params.weekNummer);
-  const jaar = searchParams.jaar ? parseInt(searchParams.jaar) : new Date().getFullYear();
+  
+  // 🔥 DRAAD40B BUGFIX: Bepaal jaar uit period_start OF gebruik jaar parameter als fallback
+  let jaar: number;
+  
+  if (searchParams.period_start) {
+    // Parse jaar uit period_start (format: YYYY-MM-DD)
+    const periodStartDate = new Date(searchParams.period_start + 'T00:00:00Z');
+    jaar = periodStartDate.getUTCFullYear();
+    console.log('✅ DRAAD40B: Jaar bepaald uit period_start:', jaar);
+  } else if (searchParams.jaar) {
+    jaar = parseInt(searchParams.jaar);
+    console.log('✅ Jaar bepaald uit jaar parameter:', jaar);
+  } else {
+    jaar = new Date().getFullYear();
+    console.log('⚠️ Geen period_start of jaar parameter, gebruik huidig jaar:', jaar);
+  }
 
   // Validate week number (1-5 voor 5-weekse roosterperiode)
   if (isNaN(weekNummer) || weekNummer < 1 || weekNummer > 5) {
+    console.error('❌ Invalid weekNummer:', weekNummer);
     notFound();
   }
 
   try {
+    console.log(`📊 DRAAD40B: Fetching data voor roster ${params.rosterId}, week ${weekNummer}, jaar ${jaar}`);
+    
     // Fetch data on server side for initial render
     const weekData = await getWeekDagdelenData(params.rosterId, weekNummer, jaar);
     const navigatieBounds = await getWeekNavigatieBounds(params.rosterId, weekNummer);
@@ -42,8 +61,11 @@ export default async function WeekDagdelenPage({ params, searchParams }: PagePro
 
     // Check if week exists in roster
     if (!weekData) {
+      console.error('❌ Week niet gevonden in rooster');
       notFound();
     }
+
+    console.log('✅ DRAAD40B: Data succesvol opgehaald, rendering client component');
 
     return (
       <WeekDagdelenClient
@@ -56,7 +78,7 @@ export default async function WeekDagdelenPage({ params, searchParams }: PagePro
       />
     );
   } catch (error) {
-    console.error('Error loading week data:', error);
+    console.error('❌ DRAAD40B: Error loading week data:', error);
     notFound();
   }
 }
