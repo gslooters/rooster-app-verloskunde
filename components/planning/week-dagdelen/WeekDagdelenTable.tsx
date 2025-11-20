@@ -1,16 +1,20 @@
 'use client';
 
 import type { WeekDagdeelData, DayDagdeelData, DagdeelAssignment } from '@/lib/planning/weekDagdelenData';
+import type { TeamFilters } from './ActionBar';
 
 interface WeekDagdelenTableProps {
   weekData: WeekDagdeelData;
+  teamFilters?: TeamFilters;
 }
 
 /**
  * Main table component for displaying week dagdelen data
  * Shows 7 days (Ma-Zo) with 4 dagdelen per day (ochtend, middag, avond, nacht)
+ * 
+ * DRAAD40B FASE 2: Support voor team filtering
  */
-export default function WeekDagdelenTable({ weekData }: WeekDagdelenTableProps) {
+export default function WeekDagdelenTable({ weekData, teamFilters }: WeekDagdelenTableProps) {
   if (!weekData || !weekData.days || weekData.days.length === 0) {
     return (
       <div className="p-8 text-center text-gray-500">
@@ -48,6 +52,7 @@ export default function WeekDagdelenTable({ weekData }: WeekDagdelenTableProps) 
             label="Ochtend"
             days={weekData.days}
             dagdeelType="ochtend"
+            teamFilters={teamFilters}
           />
 
           {/* Row: Middag */}
@@ -55,6 +60,7 @@ export default function WeekDagdelenTable({ weekData }: WeekDagdelenTableProps) 
             label="Middag"
             days={weekData.days}
             dagdeelType="middag"
+            teamFilters={teamFilters}
           />
 
           {/* Row: Avond */}
@@ -62,6 +68,7 @@ export default function WeekDagdelenTable({ weekData }: WeekDagdelenTableProps) 
             label="Avond"
             days={weekData.days}
             dagdeelType="avond"
+            teamFilters={teamFilters}
           />
 
           {/* Row: Nacht */}
@@ -69,6 +76,7 @@ export default function WeekDagdelenTable({ weekData }: WeekDagdelenTableProps) 
             label="Nacht"
             days={weekData.days}
             dagdeelType="nacht"
+            teamFilters={teamFilters}
           />
         </tbody>
       </table>
@@ -83,9 +91,10 @@ interface DagdeelRowProps {
   label: string;
   days: DayDagdeelData[];
   dagdeelType: 'ochtend' | 'middag' | 'avond' | 'nacht';
+  teamFilters?: TeamFilters;
 }
 
-function DagdeelRow({ label, days, dagdeelType }: DagdeelRowProps) {
+function DagdeelRow({ label, days, dagdeelType, teamFilters }: DagdeelRowProps) {
   return (
     <tr>
       {/* Row header - dagdeel label */}
@@ -103,6 +112,7 @@ function DagdeelRow({ label, days, dagdeelType }: DagdeelRowProps) {
             date={day.datum}
             dagNaam={day.dagNaam}
             dagdeelType={dagdeelType}
+            teamFilters={teamFilters}
           />
         );
       })}
@@ -118,11 +128,24 @@ interface DagdeelCellProps {
   date: string;
   dagNaam: string;
   dagdeelType: string;
+  teamFilters?: TeamFilters;
 }
 
-function DagdeelCell({ assignments, date, dagNaam, dagdeelType }: DagdeelCellProps) {
-  // Calculate total aantal from all assignments
-  const totalAantal = assignments.reduce((sum, a) => sum + (a.aantal || 0), 0);
+function DagdeelCell({ assignments, date, dagNaam, dagdeelType, teamFilters }: DagdeelCellProps) {
+  // Filter assignments based on team filters (if provided)
+  const filteredAssignments = teamFilters
+    ? assignments.filter(a => {
+        // Map team names to filter keys (GRO, ORA, TOT)
+        const teamKey = a.team?.toUpperCase();
+        if (teamKey === 'GRO') return teamFilters.GRO;
+        if (teamKey === 'ORA') return teamFilters.ORA;
+        if (teamKey === 'TOT' || teamKey === 'PRA') return teamFilters.TOT;
+        return true; // Show unknown teams by default
+      })
+    : assignments;
+
+  // Calculate total aantal from filtered assignments
+  const totalAantal = filteredAssignments.reduce((sum, a) => sum + (a.aantal || 0), 0);
   
   // Determine cell background color based on total aantal
   const getBgColor = () => {
@@ -137,14 +160,14 @@ function DagdeelCell({ assignments, date, dagNaam, dagdeelType }: DagdeelCellPro
       className={`border border-gray-300 p-2 text-sm hover:bg-blue-50 cursor-pointer transition-colors ${getBgColor()}`}
       title={`${dagNaam} ${date} - ${dagdeelType}`}
     >
-      {assignments.length === 0 ? (
+      {filteredAssignments.length === 0 ? (
         <div className="text-gray-400 text-xs text-center py-2">-</div>
       ) : (
         <div className="space-y-1">
-          {assignments.map((assignment, index) => (
+          {filteredAssignments.map((assignment, index) => (
             <AssignmentBadge key={index} assignment={assignment} />
           ))}
-          {assignments.length > 1 && (
+          {filteredAssignments.length > 1 && (
             <div className="text-xs text-gray-500 font-semibold mt-2 pt-1 border-t border-gray-300">
               Totaal: {totalAantal}
             </div>
