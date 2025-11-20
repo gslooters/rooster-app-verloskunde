@@ -58,6 +58,12 @@ Een Next.js applicatie voor roosterplanning in de verloskunde praktijk.
 4. Controleer browser cache is gecleared
 5. Test in incognito mode
 
+**Als Railway builder crasht:**
+1. Error "frontend grpc server closed unexpectedly" = infrastructuur probleem
+2. Code is correct - Railway builder was overbelast
+3. Oplossing: dummy commit om rebuild te triggeren
+4. Gebeurt soms bij drukke builders - niet code gerelateerd
+
 **Route Confusion Preventie:**
 - ⚠️ Vertrouw NOOIT op scherm naam alleen
 - ✅ ALTIJD URL uit browser vragen
