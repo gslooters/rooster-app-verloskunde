@@ -87,7 +87,7 @@ export async function getWeekDagdelenData(
     console.log('\n🔄 [DIAGNOSE] STAP 2: Fetching roster...');
     
     const { data: roster, error: rosterError } = await supabase
-      .from('rosters')
+      .from('roosters')
       .select('id, start_datum, eind_datum')
       .eq('id', rosterId)
       .single();
@@ -307,7 +307,7 @@ export async function getWeekNavigatieBounds(
     const supabase = getSupabaseServer();
     
     const { data: roster, error } = await supabase
-      .from('rosters')
+      .from('roosters')
       .select('start_datum, eind_datum')
       .eq('id', rosterId)
       .single();
