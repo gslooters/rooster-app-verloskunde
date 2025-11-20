@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* DRAAD 39.3: Week Dagdelen Table Styles */
+@import './styles/week-dagdelen-table.css';
+
 :root {
   /* Primitive Color Tokens */
   --color-white: rgba(255, 255, 255, 1);
