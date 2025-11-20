@@ -81,22 +81,6 @@ export default async function WeekDetailPage({ params, searchParams }: PageProps
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-[1400px] mx-auto">
-        {/* Back Navigation */}
-        <Link
-          href={`/planning/design/dagdelen-dashboard?roster_id=${rosterId}&period_start=${periodStart}`}
-          className="inline-flex items-center text-gray-600 hover:text-gray-900 mb-6 transition-colors group"
-        >
-          <svg 
-            className="w-5 h-5 mr-2 transform group-hover:-translate-x-1 transition-transform" 
-            fill="none" 
-            stroke="currentColor" 
-            viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          Terug naar Dashboard
-        </Link>
-
         {/* Main Content */}
         <div className="bg-white rounded-lg shadow-lg p-6">
           <Suspense
@@ -109,7 +93,11 @@ export default async function WeekDetailPage({ params, searchParams }: PageProps
               </div>
             }
           >
-            <WeekDagdelenTable weekData={weekData} />
+            <WeekDagdelenTable 
+              weekData={weekData}
+              rosterId={rosterId}
+              periodStart={periodStart}
+            />
           </Suspense>
         </div>
 
