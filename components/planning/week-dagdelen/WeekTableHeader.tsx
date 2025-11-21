@@ -19,17 +19,6 @@ const DAGDEEL_EMOJI = {
   A: '🌙'
 } as const;
 
-/**
- * WeekTableHeader Component
- * 
- * 🔥 DRAAD40B5 #8 - STICKY HEADER FIX:
- * ✅ Fixed z-index layering:
- *    - thead: z-40 (boven normal content)
- *    - frozen cells: z-45 (hoogste - dual-axis sticky)
- * ✅ Correct sticky positioning
- * ✅ Performance optimizations met will-change
- * ✅ Consistente backgrounds voor frozen columns
- */
 export function WeekTableHeader({ weekDagen }: WeekTableHeaderProps) {
   const formatDatum = (datum: string) => {
     const date = new Date(datum);
@@ -41,10 +30,9 @@ export function WeekTableHeader({ weekDagen }: WeekTableHeaderProps) {
       className="sticky top-[64px] bg-blue-50"
       style={{
         zIndex: 40,
-        willChange: 'transform' // Performance hint for smooth scrolling
+        willChange: 'transform'
       }}
     >
-      {/* Row 1: Dienst + Team (rowSpan=2) + Dag namen BOVEN emoji's */}
       <tr>
         <th 
           rowSpan={2}
@@ -52,12 +40,12 @@ export function WeekTableHeader({ weekDagen }: WeekTableHeaderProps) {
           style={{ 
             position: 'sticky', 
             left: 0, 
-            zIndex: 45, // 🔥 FIX: Hoogste z-index voor dual-axis sticky
+            zIndex: 45,
             willChange: 'transform',
-            backgroundColor: 'white' // Explicit background
+            backgroundColor: 'white'
           }}
         >
-          Dienst <span style={{ color: 'red', fontWeight: 'bold', fontSize: '18px' }}>Test02</span>
+          Dienst <span style={{ color: 'red', fontWeight: 700, fontSize: '18px' }}>test03</span>
         </th>
         <th 
           rowSpan={2}
@@ -65,9 +53,9 @@ export function WeekTableHeader({ weekDagen }: WeekTableHeaderProps) {
           style={{ 
             position: 'sticky', 
             left: '120px', 
-            zIndex: 45, // 🔥 FIX: Hoogste z-index voor dual-axis sticky
+            zIndex: 45,
             willChange: 'transform',
-            backgroundColor: 'white' // Explicit background
+            backgroundColor: 'white'
           }}
         >
           Team
@@ -89,8 +77,6 @@ export function WeekTableHeader({ weekDagen }: WeekTableHeaderProps) {
           </th>
         ))}
       </tr>
-      
-      {/* Row 2: Emoji's ONDER de dag namen (Dienst/Team hebben rowSpan dus geen cellen hier) */}
       <tr>
         {weekDagen.map((dag) => (
           <React.Fragment key={`dagdelen-${dag.datum}`}>
