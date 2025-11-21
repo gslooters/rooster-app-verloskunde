@@ -233,6 +233,11 @@ function extractShortDagNaam(fullName: string): string {
  * ✅ Table header now directly connects to ActionBar
  * ✅ No more empty space between ActionBar and table
  * 
+ * DRAAD40B5 #8 - STICKY HEADER FIX:
+ * ✅ Removed overflow-hidden from outer wrapper
+ * ✅ Sticky header can now function correctly
+ * ✅ Z-index layering preserved
+ * 
  * State management voor:
  * - Team filters (Groen/Oranje/Praktijk)
  * - Save status (idle/saving/saved/error)
@@ -422,8 +427,14 @@ export default function WeekDagdelenClient({
           De tabel header sluit nu direct aan op ActionBar
       */}
       <div className="container mx-auto px-6 py-0">
-        {/* 🔥 QUICK WIN: WeekDagdelenTable VOLLEDIG GEACTIVEERD */}
-        <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+        {/* 🔥 DRAAD40B5 #8 FIX: Wrapper zonder overflow-hidden
+            
+            VOOR: overflow-hidden blokkeerde sticky header
+            NA:   border + shadow ZONDER overflow-hidden
+            
+            Sticky header werkt nu correct!
+        */}
+        <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
           <Suspense fallback={<WeekTableSkeleton />}>
             <WeekDagdelenTable 
               weekData={gefilterdeWeekData}
