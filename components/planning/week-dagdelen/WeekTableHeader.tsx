@@ -19,6 +19,15 @@ const DAGDEEL_EMOJI = {
   A: '🌙'
 } as const;
 
+/**
+ * WeekTableHeader Component
+ * 
+ * 🔥 DRAAD40C - STICKY HEADER FIX:
+ * ✅ Thead sticky met expliciete backgroundColor (geen className)
+ * ✅ Z-index: thead(40) < frozen-cols(45)
+ * ✅ BoxShadow op frozen columns voor visuele scheiding
+ * ✅ Background-clip voor smooth scrolling
+ */
 export function WeekTableHeader({ weekDagen }: WeekTableHeaderProps) {
   const formatDatum = (datum: string) => {
     const date = new Date(datum);
@@ -27,35 +36,39 @@ export function WeekTableHeader({ weekDagen }: WeekTableHeaderProps) {
 
   return (
     <thead 
-      className="sticky top-[64px] bg-blue-50"
+      className="sticky top-[64px]"
       style={{
         zIndex: 40,
-        willChange: 'transform'
+        backgroundColor: 'rgb(239 246 255)', // bg-blue-50 explicit
+        willChange: 'transform',
+        backgroundClip: 'padding-box'
       }}
     >
       <tr>
         <th 
           rowSpan={2}
-          className="frozen-left-1 text-center font-semibold text-gray-700 border border-gray-300 p-2 min-w-[120px] bg-white"
+          className="text-center font-semibold text-gray-700 border border-gray-300 p-2 min-w-[120px]"
           style={{ 
             position: 'sticky', 
             left: 0, 
             zIndex: 45,
+            backgroundColor: 'white',
             willChange: 'transform',
-            backgroundColor: 'white'
+            boxShadow: '2px 0 4px rgba(0,0,0,0.05)'
           }}
         >
-          Dienst <span style={{ color: 'red', fontWeight: 700, fontSize: '18px' }}>test03</span>
+          Dienst
         </th>
         <th 
           rowSpan={2}
-          className="frozen-left-2 text-center font-semibold text-gray-700 border border-gray-300 p-2 min-w-[100px] bg-white"
+          className="text-center font-semibold text-gray-700 border border-gray-300 p-2 min-w-[100px]"
           style={{ 
             position: 'sticky', 
             left: '120px', 
             zIndex: 45,
+            backgroundColor: 'white',
             willChange: 'transform',
-            backgroundColor: 'white'
+            boxShadow: '2px 0 4px rgba(0,0,0,0.05)'
           }}
         >
           Team
