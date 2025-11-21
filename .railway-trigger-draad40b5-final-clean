@@ -1,0 +1,34 @@
+# Railway Deployment Trigger - DRAAD40B5 Final Clean
+
+Timestamp: 2025-11-21T12:36:00+01:00
+
+## Wijzigingen
+
+### 1. WeekTableHeader.tsx
+- ❌ TEST123 marker verwijderd uit "Dienst" kolom
+- ✅ Compacte emoji-only layout behouden (🌅 ☀️ 🌙)
+- ✅ Text-3xl emoji grootte behouden
+- ✅ Compacte padding (p-1) behouden
+
+### 2. PageHeader.tsx
+- ❌ TEST DRAAD40B5 rode box verwijderd
+- ✅ ISO weeknummer display behouden (Week 48, 49, 50...)
+- ✅ Correcte return URL met period_start parameter behouden
+- ✅ Schone productie-klare layout
+
+## Commits
+- 277cb56a: feat: Verwijder TEST123 marker uit WeekTableHeader
+- a25980fa: feat: Verwijder TEST DRAAD40B5 box uit PageHeader
+
+## Verificatie URL
+https://rooster-app-verloskunde-production.up.railway.app/planning/design/week-dagdelen/9c4c01d4-3ff2-4790-a569-a4a25380da39/1?period_start=2025-11-24
+
+## Verwacht Resultaat
+1. Geen TEST markers meer zichtbaar
+2. Compacte header met alleen emoji's (🌅 ☀️ 🌙)
+3. Schone PageHeader zonder rode box
+4. Alle 7 dagen zichtbaar op 100% zoom
+5. ISO weeknummer correct weergegeven (Week 48)
+
+---
+Dit bestand triggert een nieuwe Railway deployment.
