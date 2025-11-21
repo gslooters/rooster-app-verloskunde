@@ -1,0 +1,15 @@
+EMERGENCY RAILWAY DEPLOYMENT - ATTEMPT #3
+
+Timestamp: 2025-11-21 14:49:34 UTC
+
+DRAD40B5 nummer 7 - py-6 naar py-0 wijziging
+
+Dit is de DERDE poging om de deployment te triggeren.
+
+Wijziging zit in:
+components/planning/week-dagdelen/WeekDagdelenClient.tsx
+Regel 372: py-0
+
+Railway: DEPLOY NU ALSJEBLIEFT!
+
+Build ID: EMERGENCY-DRAAD40B5-7-ATTEMPT-3-20251121-1449
