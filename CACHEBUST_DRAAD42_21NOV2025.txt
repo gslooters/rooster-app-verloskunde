@@ -1,0 +1,23 @@
+DRAAD42 FIX DEPLOYMENT
+======================
+
+Timestamp: 1732226642000
+Date: 21-NOV-2025 23:24 CET
+
+FIXES APPLIED:
+--------------
+✅ Vervangen niet-bestaande 'roster_period' tabel door 'roosters'
+✅ Toegevoegd period_start parameter uit searchParams  
+✅ Week berekening nu vanaf period_start i.p.v. database query
+✅ Defensieve validatie voor ontbrekende parameters
+✅ Service types filter 'is_active' → 'actief'
+✅ Verbeterde error handling met duidelijke messages
+✅ Uitgebreide logging voor debugging
+
+BREAKING CHANGE FIX:
+De originele code gebruikte een niet-bestaande 'roster_period' tabel,
+waardoor week-dagdelen pagina's crashten met 'relation does not exist' error.
+
+Impact: Week navigatie vanaf DagdelenDashboard werkt nu correct.
+
+Deploy ID: DRAAD42-7c981b68
