@@ -13,6 +13,15 @@ interface WeekDagdelenTableProps {
   disabled?: boolean;
 }
 
+/**
+ * WeekDagdelenTable Component
+ * 
+ * 🔥 DRAAD40B5 #8 - CONTAINER STRUCTURE FIX:
+ * ✅ Removed overflow-hidden wrapper (blocked sticky)
+ * ✅ Direct overflow-auto on table container
+ * ✅ Position relative for z-index stacking context
+ * ✅ Vertical scroll with max-height
+ */
 export default function WeekDagdelenTable({
   weekData,
   teamFilters,
@@ -116,8 +125,13 @@ export default function WeekDagdelenTable({
   
   return (
     <div className="relative">
-      {/* Horizontal scroll container */}
-      <div className="overflow-x-auto">
+      {/* 🔥 DRAAD40B5 #8 FIX: Direct scroll container zonder blocking overflow wrapper */}
+      <div 
+        className="overflow-x-auto max-h-[calc(100vh-200px)] overflow-y-auto"
+        style={{
+          position: 'relative' // Stacking context for z-index
+        }}
+      >
         <table className="w-full border-collapse">
           {/* Header: Datum row + Dagdeel row met emoji's */}
           <WeekTableHeader weekDagen={weekDagen} />
