@@ -1,0 +1,15 @@
+# Railway Deployment Trigger - Test02 Zichtbaarheidstest
+# Timestamp: 2025-11-21T18:18:00+01:00
+# Draad: DRAAD40B5
+# Commit: bc9295dcdacd5c1765e93dae056065dabbb05d92
+
+DEPLOYMENT_TRIGGER=test02-visibility-check
+TEST_MARKER=Test02
+COMPONENT=WeekTableHeader
+LOCATIE=components/planning/week-dagdelen/WeekTableHeader.tsx
+DOEL=Verificatie dat wijzigingen daadwerkelijk zichtbaar zijn in productie
+
+# Verwachte uitkomst:
+# - "Test02" zichtbaar in ROOD naast "Dienst" kolom
+# - In WeekTableHeader component
+# - Op scherm "Diensten per Dagdeel periode"
