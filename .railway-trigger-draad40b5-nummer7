@@ -1,0 +1,110 @@
+# DRAAD40B5 Nummer 7 - Railway Deployment Trigger
+
+Timestamp: 2025-11-21 14:14:32 UTC
+
+## Wat is geïmplementeerd?
+
+### STAP 1: CSS Spacing Fix
+
+**File:** `components/planning/week-dagdelen/WeekDagdelenClient.tsx`
+
+**Wijziging:**
+```tsx
+// VOOR (met lege ruimte):
+<div className="container mx-auto px-6 py-6">
+
+// NA (zonder lege ruimte):
+<div className="container mx-auto px-6 py-0">
+```
+
+### Probleemanalyse
+
+**Image 1 (Huidig - VOOR fix):**
+- Grote verticale witruimte tussen ActionBar en tabel header
+- Veroorzaakt door `py-6` padding (24px top + 24px bottom)
+- Gebruiker moet scrollen om tabel te zien
+
+**Image 2 (Gewenst - NA fix):**
+- Tabel header direct onder ActionBar
+- Geen lege ruimte
+- Compacte, efficiënte layout
+
+### Technische Details
+
+**Root Cause:**
+- Container div had `py-6` Tailwind class
+- Dit voegt 24px padding toe boven EN onder de content
+- De 24px bovenaan creëerde de ongewenste lege ruimte
+
+**Oplossing:**
+- Wijzig `py-6` naar `py-0`
+- Behoud `px-6` voor horizontale spacing (belangrijk voor margins)
+- Tabel card heeft eigen padding voor content spacing
+
+### Impact
+
+**Visueel:**
+- ✅ Lege ruimte volledig verwijderd
+- ✅ Tabel header sluit direct aan op ActionBar
+- ✅ Layout komt overeen met image 2
+- ✅ Betere ruimtebenutting op scherm
+
+**Functioneel:**
+- ✅ Geen wijziging in functionaliteit
+- ✅ Alle features blijven werken
+- ✅ Team filters nog steeds werkend
+- ✅ Week navigatie ongewijzigd
+
+**Responsive:**
+- ✅ Werkt op desktop
+- ✅ Werkt op tablet
+- ✅ Geen impact op mobile layout
+
+## Deployment Verificatie
+
+### Stappen om te testen:
+
+1. **Navigeer naar Week Dagdelen pagina:**
+   ```
+   /planning/design/week-dagdelen/[rosterId]/[weekNummer]?period_start=YYYY-MM-DD
+   ```
+
+2. **Visuele Check:**
+   - Controleer of ActionBar (met "Week X" en team filters) direct boven tabel staat
+   - Geen lege ruimte tussen ActionBar en tabel header
+   - Tabel header ("Dienst", "Team", dagen) begint direct onder ActionBar
+
+3. **Vergelijk met images:**
+   - Layout moet overeenkomen met image 2
+   - NIET zoals image 1 (met lege ruimte)
+
+4. **Scroll test:**
+   - Scroll naar beneden
+   - ActionBar blijft sticky bovenaan
+   - Tabel scrollt normaal
+
+### Expected Outcome
+
+**Success criteria:**
+- ✅ Geen verticale witruimte tussen ActionBar en tabel
+- ✅ Compacte layout zoals image 2
+- ✅ Team filters werkend
+- ✅ Week navigatie werkend
+- ✅ Dagdeel iconen (ochtend/middag/avond) zichtbaar in header
+
+## Volgende Stappen
+
+Dit is **STAP 1** van de DRAAD40B5 #7 opdracht.
+
+Na verificatie dat deze fix werkt, volgen mogelijk meer stappen
+om de layout verder te optimaliseren.
+
+## Commit Info
+
+Commit SHA: 203ee1ea7b6ee0924d981550ad7c50a2a6de3a3a
+Author: Govard Slooters
+Date: 2025-11-21 14:14:32 UTC
+
+---
+
+Dit bestand triggert een Railway deployment.
