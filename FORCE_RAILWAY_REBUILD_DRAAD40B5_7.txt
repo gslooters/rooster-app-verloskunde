@@ -1,0 +1,59 @@
+# FORCE RAILWAY REBUILD - DRAAD40B5 #7
+
+Timestamp: 2025-11-21 14:47:00 UTC
+
+## CRITICAL ISSUE
+
+Code wijziging in WeekDagdelenClient.tsx (py-6 → py-0) is:
+- ✅ Committed naar GitHub (32 minuten geleden)
+- ✅ Zichtbaar in main branch  
+- ❌ NIET LIVE in productie omgeving
+
+## FORCE REBUILD TRIGGER
+
+Dit bestand triggert een VOLLEDIGE Railway rebuild met:
+
+1. **Cache Clearing**
+   - Verwijder .next/ cache
+   - Verwijder node_modules/
+   - Clear build artifacts
+
+2. **Fresh Installation**
+   - npm ci (clean install)
+   - Nieuwe dependencies
+   - Fresh TypeScript compile
+
+3. **Complete Build**
+   - next build (production)
+   - Alle pages regenereren
+   - Nieuwe static assets
+
+4. **New Deployment**
+   - Stop oude container
+   - Start nieuwe container
+   - Health check validatie
+
+## EXPECTED OUTCOME
+
+Na deze rebuild MOET de wijziging zichtbaar zijn:
+- Geen lege ruimte tussen ActionBar en tabel
+- Tabel header direct onder ActionBar
+- Layout volgens image 2
+
+## VERIFICATION
+
+1. Wacht 3-5 minuten op rebuild
+2. Hard refresh browser (Cmd+Shift+R)
+3. Check spacing tussen ActionBar en tabel
+4. Vergelijk met image 2
+
+Als dit niet werkt, is er een dieper probleem met:
+- Railway configuration
+- Next.js cache strategy  
+- Build process errors
+
+---
+
+Deze rebuild is **URGENT** - code moet nu live gaan.
+
+Rebuild ID: DRAAD40B5-7-FORCE-REBUILD-20251121-1447
