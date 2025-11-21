@@ -13,18 +13,6 @@ interface WeekTableHeaderProps {
   weekDagen: WeekDag[];
 }
 
-/**
- * DRAAD40B5: Compacte Header Layout - Dienst/Team vast onder Week header
- * 
- * Wijzigingen:
- * - Dienst/Team blok direct onder Week 48 balk geplaatst
- * - Sticky positioning voor betere scroll behavior
- * - Alleen emoji's, geen dagdeel teksten (Ochtend/Middag/Avond)
- * - Compactere kolommen voor 100% zoom zichtbaarheid
- * - Emoji's groter (text-3xl) voor betere leesbaarheid
- * - Kleinere padding voor space efficiency
- */
-
 const DAGDEEL_EMOJI = {
   O: '🌅',
   M: '☀️',
@@ -39,19 +27,18 @@ export function WeekTableHeader({ weekDagen }: WeekTableHeaderProps) {
 
   return (
     <thead className="sticky top-[64px] z-30 bg-blue-50">
-      {/* Row 1: Dienst/Team + Datums */}
       <tr>
         <th 
           rowSpan={2} 
-          className="frozen-left-1 text-center font-semibold text-gray-700 border border-gray-300 p-2 min-w-[140px] bg-white"
+          className="frozen-left-1 text-center font-semibold text-gray-700 border border-gray-300 p-2 min-w-[120px] bg-white"
           style={{ position: 'sticky', left: 0, zIndex: 35 }}
         >
           Dienst
         </th>
         <th 
           rowSpan={2} 
-          className="frozen-left-2 text-center font-semibold text-gray-700 border border-gray-300 p-2 min-w-[110px] bg-white"
-          style={{ position: 'sticky', left: '140px', zIndex: 35 }}
+          className="frozen-left-2 text-center font-semibold text-gray-700 border border-gray-300 p-2 min-w-[100px] bg-white"
+          style={{ position: 'sticky', left: '120px', zIndex: 35 }}
         >
           Team
         </th>
@@ -59,13 +46,13 @@ export function WeekTableHeader({ weekDagen }: WeekTableHeaderProps) {
           <th
             key={dag.datum}
             colSpan={3}
-            className="text-center border-l-2 border-gray-400 border-t border-r border-gray-300 p-1.5 bg-blue-100"
+            className="text-center border-l-2 border-gray-400 border-t border-r border-gray-300 p-1 bg-blue-100"
           >
-            <div className="flex flex-col items-center gap-0.5">
-              <span className="font-bold text-sm text-gray-800 uppercase">
+            <div className="flex flex-col items-center gap-0">
+              <span className="font-bold text-xs text-gray-800 uppercase">
                 {dag.dagSoort}
               </span>
-              <span className="text-xs text-gray-600 font-medium">
+              <span className="text-[10px] text-gray-600 font-medium">
                 {formatDatum(dag.datum)}
               </span>
             </div>
@@ -73,25 +60,21 @@ export function WeekTableHeader({ weekDagen }: WeekTableHeaderProps) {
         ))}
       </tr>
       
-      {/* Row 2: Dagdeel emoji's (ALLEEN emoji's, geen tekst) */}
       <tr>
         {weekDagen.map((dag) => (
           <React.Fragment key={`dagdelen-${dag.datum}`}>
-            {/* Ochtend - Alleen emoji */}
-            <th className="dagdeel-header text-center border border-gray-300 p-1 bg-orange-50 min-w-[50px]">
-              <span className="text-3xl" role="img" aria-label="Ochtend">
+            <th className="dagdeel-header text-center border border-gray-300 p-0.5 bg-orange-50 min-w-[40px]">
+              <span className="text-2xl" role="img" aria-label="Ochtend">
                 {DAGDEEL_EMOJI.O}
               </span>
             </th>
-            {/* Middag - Alleen emoji */}
-            <th className="dagdeel-header text-center border border-gray-300 p-1 bg-yellow-50 min-w-[50px]">
-              <span className="text-3xl" role="img" aria-label="Middag">
+            <th className="dagdeel-header text-center border border-gray-300 p-0.5 bg-yellow-50 min-w-[40px]">
+              <span className="text-2xl" role="img" aria-label="Middag">
                 {DAGDEEL_EMOJI.M}
               </span>
             </th>
-            {/* Avond - Alleen emoji */}
-            <th className="dagdeel-header text-center border border-gray-300 p-1 bg-indigo-50 min-w-[50px]">
-              <span className="text-3xl" role="img" aria-label="Avond">
+            <th className="dagdeel-header text-center border border-gray-300 p-0.5 bg-indigo-50 min-w-[40px]">
+              <span className="text-2xl" role="img" aria-label="Avond">
                 {DAGDEEL_EMOJI.A}
               </span>
             </th>
