@@ -1,10 +1,20 @@
 # Railway Deployment Trigger
-# DRAAD40C HOTFIX: Fullwidth table fix
+# DRAAD40C CRITICAL: ROOT CAUSE FIX - page.tsx container removed
 
-Last updated: 2025-11-21T18:21:00Z
-Build ID: 98562314
-Reason: Remove container wrapper blocking fullwidth table
+Last updated: 2025-11-21T18:48:00Z
+Build ID: 73529841
+Reason: CRITICAL - Removed max-w-[1400px] container blocking fullwidth table
 
-HOTFIX: Container mx-auto verwijderd
-STATUS: Critical fix for production
-DEPLOY: Immediate
+🔥 ROOT CAUSE IDENTIFIED:
+- page.tsx had max-w-[1400px] mx-auto wrapper
+- This blocked table from reaching fullwidth
+- Child component fixes were ineffective because parent limited width
+
+FIX APPLIED:
+- Removed max-w container
+- Removed bg-white wrapper
+- Table now gets w-full (100% viewport width)
+
+STATUS: Critical production fix
+DEPLOY: IMMEDIATE
+Random: 73529841
