@@ -18,7 +18,15 @@ interface WeekDagdelenVaststellingTableProps {
 }
 
 /**
- * DRAAD42 FASE 9 - Main Container Component
+ * DRAAD42D FIX - Database Column Name Correction
+ * 
+ * PROBLEEM: 
+ * - Query gebruikte "datum" maar database kolom heet "date"
+ * - Error: "column roster_period_staffing.datum does not exist"
+ * 
+ * OPLOSSING:
+ * - Alle "datum" vervangen door "date" in Supabase queries
+ * - Consistent met database schema
  * 
  * Functionaliteit:
  * - Client-side data fetching voor staffing dagdelen
@@ -48,13 +56,13 @@ export default function WeekDagdelenVaststellingTable({
       setIsLoading(true);
       setError(null);
 
-      // Haal eerst roster_period_staffing op voor deze week
+      // ✅ DRAAD42D FIX: Gebruik "date" in plaats van "datum"
       const { data: staffingRecords, error: staffingError } = await supabase
         .from('roster_period_staffing')
-        .select('id, datum, service_type_id')
+        .select('id, date, service_type_id')
         .eq('roster_period_id', rosterId)
-        .gte('datum', weekStart.split('T')[0])
-        .lte('datum', weekEnd.split('T')[0]);
+        .gte('date', weekStart.split('T')[0])
+        .lte('date', weekEnd.split('T')[0]);
 
       if (staffingError) throw staffingError;
 
@@ -74,13 +82,13 @@ export default function WeekDagdelenVaststellingTable({
 
       if (dagdelenError) throw dagdelenError;
 
-      // Combineer data met service_type_id en datum info
+      // ✅ DRAAD42D FIX: Gebruik "date" property
       const enrichedData = (dagdelenData || []).map(dagdeel => {
         const staffingRecord = staffingRecords.find(r => r.id === dagdeel.roster_period_staffing_id);
         return {
           ...dagdeel,
           service_type_id: staffingRecord?.service_type_id,
-          datum: staffingRecord?.datum,
+          date: staffingRecord?.date,
         };
       });
 
