@@ -17,10 +17,11 @@ interface WeekTableBodyProps {
  * - Team in aparte kolom met badge
  * - Compactere styling voor 100% zoom zichtbaarheid  
  * - Sortering op dienstcode (alfabetisch)
- * - Teamrijen gefilterd via parent component
+ * - Teamrijen gefilterd: skip rendering als team.dagen leeg is
+ * - Dienst wordt altijd getoond (ook als alle teams gefilterd zijn)
  * 
  * Layout per dienst:
- * - Dienst kolom: Code + Naam (rowspan=3, alleen bij Groen)
+ * - Dienst kolom: Code + Naam (rowspan=aantal zichtbare teams)
  * - Team kolom: Groen / Oranje / Praktijk badge
  * - 21 dagdeel cellen (7 dagen × 3 dagdelen)
  */
@@ -128,10 +129,29 @@ export default function WeekTableBody({
         const groupBg = getDienstGroupBg(dienstIndex);
         const isLastDienst = dienstIndex === gesorteerdeDiensten.length - 1;
         
+        // DRAAD40B5: Bepaal welke teams zichtbaar zijn (hebben dagen data)
+        const zichtbareTeams = TEAM_ORDER.filter(teamCode => {
+          const teamData = dienst.teams[
+            teamCode === 'GRO' ? 'groen' : 
+            teamCode === 'ORA' ? 'oranje' : 
+            'totaal'
+          ];
+          return teamData.dagen.length > 0;
+        });
+        
+        // Als geen enkel team zichtbaar is, skip deze dienst
+        if (zichtbareTeams.length === 0) {
+          return null;
+        }
+        
+        // Bereken rowspan voor dienst kolom (aantal zichtbare teams)
+        const dienstRowSpan = zichtbareTeams.length;
+        
         return (
           <React.Fragment key={dienst.dienstId}>
-            {TEAM_ORDER.map((teamCode, teamIndex) => {
-              const isFirstRow = teamIndex === 0;
+            {zichtbareTeams.map((teamCode, visibleTeamIndex) => {
+              const isFirstRow = visibleTeamIndex === 0;
+              const isLastRow = visibleTeamIndex === zichtbareTeams.length - 1;
               const teamData = dienst.teams[
                 teamCode === 'GRO' ? 'groen' : 
                 teamCode === 'ORA' ? 'oranje' : 
@@ -145,17 +165,17 @@ export default function WeekTableBody({
                     `${groupBg}
                     hover:bg-gray-100
                     transition-colors
-                    ${!isLastDienst && teamIndex === 2 ? 'border-b-2 border-gray-400' : ''}`
+                    ${isLastDienst && isLastRow ? 'border-b-2 border-gray-400' : ''}`
                   }
                 >
                   {/* DRAAD40B5: Kolom 1 - Dienst (CODE + NAAM)
                       - Frozen left
-                      - Rowspan=3 (alleen in eerste rij = Groen team)
+                      - Rowspan = aantal zichtbare teams
                       - Code + Naam op aparte regels
                    */}
                   {isFirstRow && (
                     <td
-                      rowSpan={3}
+                      rowSpan={dienstRowSpan}
                       className="
                         sticky left-0 z-10
                         px-3 py-2
