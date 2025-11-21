@@ -18,11 +18,12 @@ interface WeekDagdelenVaststellingTableProps {
 }
 
 /**
- * DRAAD42 - Main Container Component
+ * DRAAD42 FASE 9 - Main Container Component
  * 
  * Functionaliteit:
  * - Client-side data fetching voor staffing dagdelen
- * - State management voor bewerkbare cellen
+ * - Passes initial data to child component
+ * - Child component handles all state management
  * - Coordinatie tussen header, navigatie en data tabel
  */
 export default function WeekDagdelenVaststellingTable({
@@ -92,32 +93,6 @@ export default function WeekDagdelenVaststellingTable({
     }
   }
 
-  async function handleCellUpdate(dagdeelId: string, newAantal: number) {
-    // Optimistic update
-    setStaffingData(prev =>
-      prev.map(item =>
-        item.id === dagdeelId ? { ...item, aantal: newAantal } : item
-      )
-    );
-
-    try {
-      const response = await fetch(`/api/planning/dagdelen/${dagdeelId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ aantal: newAantal }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Update failed');
-      }
-    } catch (error) {
-      console.error('Error updating cell:', error);
-      // Rollback bij fout
-      await fetchStaffingData();
-      alert('Fout bij opslaan. Probeer opnieuw.');
-    }
-  }
-
   if (error) {
     return (
       <div className="min-h-screen w-full bg-gray-50 flex items-center justify-center">
@@ -160,10 +135,9 @@ export default function WeekDagdelenVaststellingTable({
       ) : (
         <VaststellingDataTable
           serviceTypes={serviceTypes}
-          staffingData={staffingData}
+          initialStaffingData={staffingData}
           weekStart={weekStart}
           weekEnd={weekEnd}
-          onCellUpdate={handleCellUpdate}
         />
       )}
     </div>
