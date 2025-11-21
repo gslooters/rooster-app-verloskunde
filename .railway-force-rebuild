@@ -1,0 +1,19 @@
+# Railway Force Rebuild Trigger
+
+Timestamp: 2025-11-21 15:55:19 UTC
+
+Dit bestand triggert een volledige rebuild in Railway.
+
+Gecombineerd met next.config.js cache disable:
+- Next.js incremental cache: DISABLED
+- Webpack persistent cache: DISABLED  
+- Next.js private cache: DISABLED
+- Build ID: Uniek per milliseconde
+
+Effect:
+- ELKE className wijziging wordt nu gezien
+- Tailwind CSS utilities worden ALTIJD opnieuw gecompileerd
+- Geen "slim" caching dat wijzigingen skipte
+- py-6 → py-0 fix wordt nu zichtbaar
+
+DRAD40B5 nummer 7 - Cache disable + force rebuild
