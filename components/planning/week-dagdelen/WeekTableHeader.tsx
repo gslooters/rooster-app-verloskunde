@@ -14,14 +14,15 @@ interface WeekTableHeaderProps {
 }
 
 /**
- * DRAAD40B5: Compacte Header Layout - DEFINITIEVE VERSIE
+ * DRAAD40B5: Compacte Header Layout - Dienst/Team vast onder Week header
  * 
  * Wijzigingen:
+ * - Dienst/Team blok direct onder Week 48 balk geplaatst
+ * - Sticky positioning voor betere scroll behavior
  * - Alleen emoji's, geen dagdeel teksten (Ochtend/Middag/Avond)
  * - Compactere kolommen voor 100% zoom zichtbaarheid
  * - Emoji's groter (text-3xl) voor betere leesbaarheid
  * - Kleinere padding voor space efficiency
- * - TEST markers verwijderd - productie-klaar
  */
 
 const DAGDEEL_EMOJI = {
@@ -37,18 +38,20 @@ export function WeekTableHeader({ weekDagen }: WeekTableHeaderProps) {
   };
 
   return (
-    <thead className="sticky top-[144px] z-30 bg-blue-50">
-      {/* Row 1: Datums */}
+    <thead className="sticky top-[64px] z-30 bg-blue-50">
+      {/* Row 1: Dienst/Team + Datums */}
       <tr>
         <th 
           rowSpan={2} 
-          className="frozen-left-1 text-center font-semibold text-gray-700 border border-gray-300 p-2 min-w-[140px]"
+          className="frozen-left-1 text-center font-semibold text-gray-700 border border-gray-300 p-2 min-w-[140px] bg-white"
+          style={{ position: 'sticky', left: 0, zIndex: 35 }}
         >
           Dienst
         </th>
         <th 
           rowSpan={2} 
-          className="frozen-left-2 text-center font-semibold text-gray-700 border border-gray-300 p-2 min-w-[110px]"
+          className="frozen-left-2 text-center font-semibold text-gray-700 border border-gray-300 p-2 min-w-[110px] bg-white"
+          style={{ position: 'sticky', left: '140px', zIndex: 35 }}
         >
           Team
         </th>
