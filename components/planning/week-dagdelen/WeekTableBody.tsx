@@ -11,6 +11,7 @@ interface WeekTableBodyProps {
 
 /**
  * DRAAD40B5: Verbeterde Layout voor Diensten per Dagdeel
+ * DRAAD40C: BoxShadow op frozen columns voor visuele consistency
  * 
  * Wijzigingen:
  * - CODE + NAAM in één kolom ("Dienst"), alleen getoond bij eerste team (Groen)
@@ -19,6 +20,7 @@ interface WeekTableBodyProps {
  * - Sortering op dienstcode (alfabetisch)
  * - Teamrijen gefilterd: skip rendering als team.dagen leeg is
  * - Dienst wordt altijd getoond (ook als alle teams gefilterd zijn)
+ * - BoxShadow op sticky columns voor visuele scheiding
  * 
  * Layout per dienst:
  * - Dienst kolom: Code + Naam (rowspan=aantal zichtbare teams)
@@ -168,10 +170,11 @@ export default function WeekTableBody({
                     ${isLastDienst && isLastRow ? 'border-b-2 border-gray-400' : ''}`
                   }
                 >
-                  {/* DRAAD40B5: Kolom 1 - Dienst (CODE + NAAM)
+                  {/* DRAAD40B5/40C: Kolom 1 - Dienst (CODE + NAAM)
                       - Frozen left
                       - Rowspan = aantal zichtbare teams
                       - Code + Naam op aparte regels
+                      - BoxShadow voor visuele scheiding
                    */}
                   {isFirstRow && (
                     <td
@@ -184,6 +187,9 @@ export default function WeekTableBody({
                         min-w-[140px] max-w-[140px]
                         align-middle
                       "
+                      style={{
+                        boxShadow: '2px 0 4px rgba(0,0,0,0.05)'
+                      }}
                     >
                       <div className="flex flex-col gap-0.5">
                         <div className="font-bold text-gray-900 text-xs leading-tight">
@@ -196,9 +202,10 @@ export default function WeekTableBody({
                     </td>
                   )}
 
-                  {/* DRAAD40B5: Kolom 2 - Team badge (frozen left) 
+                  {/* DRAAD40B5/40C: Kolom 2 - Team badge (frozen left) 
                       - Compacter, kleinere badge
                       - Elke rij heeft eigen team
+                      - BoxShadow voor visuele scheiding
                    */}
                   <td
                     className="
@@ -209,6 +216,9 @@ export default function WeekTableBody({
                       min-w-[110px] max-w-[110px]
                       align-middle
                     "
+                    style={{
+                      boxShadow: '2px 0 4px rgba(0,0,0,0.05)'
+                    }}
                   >
                     <TeamBadge team={teamCode} />
                   </td>
