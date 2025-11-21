@@ -20,8 +20,8 @@ interface PageHeaderProps {
  * ✅ FIX 1: Toon ISO weeknummer (48, 49, 50) i.p.v. weekIndex (1, 2, 3)
  * ✅ FIX 2: Return button naar correct dashboard met period_start parameter
  * 
- * DRAAD40B5 FASE 5:
- * ✅ TEST: Toevoegen "WERKSCHERM" indicator voor schermidentificatie
+ * DRAAD40B5 TEST:
+ * ✅ Opvallende TEST indicator voor build verificatie
  * 
  * Display voorbeeld:
  * - Titel: "Diensten per Dagdeel periode: Week 49"
@@ -40,16 +40,7 @@ export default function PageHeader({
   return (
     <header className="sticky top-0 z-20 bg-white border-b border-gray-200">
       <div className="px-6 py-4">
-        {/* 🔥 FIX 2: Back Button naar CORRECT dashboard met parameters
-            
-            FOUT: Was /planning/design/dagdelen-dashboard
-            CORRECT: /planning/design/dashboard
-            
-            Dashboard Rooster Ontwerp is de parent van dit scherm.
-            Parameters:
-            - roster_id: Voor identificatie welk rooster
-            - period_start: Voor consistentie (optioneel maar handig)
-        */}
+        {/* 🔥 FIX 2: Back Button naar CORRECT dashboard met parameters */}
         <Link
           href={`/planning/design/dashboard?roster_id=${rosterId}&period_start=${periodStart}`}
           className="inline-flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors mb-3"
@@ -58,34 +49,22 @@ export default function PageHeader({
           <span>Terug naar Dashboard Rooster Ontwerp</span>
         </Link>
 
-        {/* 🔥 DRAAD40B5 FASE 5: TEST INDICATOR
-            Toevoegen van "WERKSCHERM" tekst rechts bovenaan
-            Dit helpt identificeren of we in het juiste scherm werken
+        {/* 🔥 DRAAD40B5: OPVALLENDE TEST INDICATOR
+            Grote rode tekst rechts bovenaan om direct te zien of nieuwe code actief is
         */}
         <div className="flex items-start justify-between mb-1">
-          {/* 🔥 FIX 1: Title met ISO weeknummer
-              
-              FOUT: weekNummer toonde weekIndex (1, 2, 3, 4, 5)
-              CORRECT: isoWeekNummer toont ISO week (48, 49, 50, 51, 52)
-              
-              Voor roosterperiode vanaf 24 november 2025:
-              - Week 1 (index) = Week 48 (ISO)
-              - Week 2 (index) = Week 49 (ISO)
-              - Week 3 (index) = Week 50 (ISO)
-              - Week 4 (index) = Week 51 (ISO)  
-              - Week 5 (index) = Week 52 (ISO)
-          */}
+          {/* 🔥 FIX 1: Title met ISO weeknummer */}
           <h1 className="text-2xl font-bold text-gray-900">
             Diensten per Dagdeel periode: Week {isoWeekNummer}
           </h1>
 
-          {/* 🔥 DRAAD40B5 FASE 5: WERKSCHERM indicator */}
-          <div className="px-4 py-2 bg-blue-100 border-2 border-blue-500 rounded-lg">
-            <span className="text-sm font-bold text-blue-700">WERKSCHERM</span>
+          {/* 🔥 DRAAD40B5: ZEER OPVALLENDE TEST INDICATOR */}
+          <div className="px-6 py-3 bg-red-600 border-4 border-yellow-400 rounded-lg shadow-2xl animate-pulse">
+            <span className="text-3xl font-black text-white tracking-widest">TEST DRAAD40B5</span>
           </div>
         </div>
 
-        {/* Subtitle met datums - geen wijziging nodig */}
+        {/* Subtitle met datums */}
         <p className="text-sm text-gray-600">
           Van {startDatum} t/m {eindDatum}
         </p>
