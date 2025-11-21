@@ -16,9 +16,10 @@ interface PageHeaderProps {
 /**
  * PageHeader component voor Week Dagdelen Detail scherm
  * 
- * DRAAD40B FIXES - DEFINITIEVE VERSIE:
+ * DRAAD40B5 UPDATES:
  * ✅ FIX 1: Toon ISO weeknummer (48, 49, 50) i.p.v. weekIndex (1, 2, 3)
  * ✅ FIX 2: Return button naar correct dashboard met period_start parameter
+ * ✅ FIX 3: Z-index verhoogd naar 40 voor correcte layering boven table header
  * ✅ TEST markers verwijderd - productie-klaar
  * 
  * Display voorbeeld:
@@ -36,7 +37,7 @@ export default function PageHeader({
   periodStart,
 }: PageHeaderProps) {
   return (
-    <header className="sticky top-0 z-20 bg-white border-b border-gray-200">
+    <header className="sticky top-0 z-40 bg-white border-b border-gray-200">
       <div className="px-6 py-4">
         {/* Back Button naar CORRECT dashboard met parameters */}
         <Link
