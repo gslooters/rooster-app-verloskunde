@@ -14,24 +14,19 @@ interface WeekTableHeaderProps {
 }
 
 /**
- * DRAAD40B5 FASE 5: UI Refinements - Emoji Symbolen in Header
+ * DRAAD40B5: Compacte Header Layout
  * 
  * Wijzigingen:
- * - Emoji's groter gemaakt (text-2xl)
- * - Toegevoegd: volledige dagdeel namen onder emoji's
- * - Consistente spacing en styling
+ * - Alleen emoji's, geen dagdeel teksten (Ochtend/Middag/Avond)
+ * - Compactere kolommen voor 100% zoom zichtbaarheid
+ * - Emoji's groter (text-3xl) voor betere leesbaarheid
+ * - Kleinere padding voor space efficiency
  */
 
 const DAGDEEL_EMOJI = {
   O: '🌅',
   M: '☀️',
   A: '🌙'
-} as const;
-
-const DAGDEEL_LABELS = {
-  O: 'Ochtend',
-  M: 'Middag',
-  A: 'Avond'
 } as const;
 
 export function WeekTableHeader({ weekDagen }: WeekTableHeaderProps) {
@@ -46,13 +41,13 @@ export function WeekTableHeader({ weekDagen }: WeekTableHeaderProps) {
       <tr>
         <th 
           rowSpan={2} 
-          className="frozen-left-1 text-center font-semibold text-gray-700 border border-gray-300 p-3"
+          className="frozen-left-1 text-center font-semibold text-gray-700 border border-gray-300 p-2 min-w-[140px]"
         >
           Dienst
         </th>
         <th 
           rowSpan={2} 
-          className="frozen-left-2 text-center font-semibold text-gray-700 border border-gray-300 p-3"
+          className="frozen-left-2 text-center font-semibold text-gray-700 border border-gray-300 p-2 min-w-[110px]"
         >
           Team
         </th>
@@ -60,13 +55,13 @@ export function WeekTableHeader({ weekDagen }: WeekTableHeaderProps) {
           <th
             key={dag.datum}
             colSpan={3}
-            className="text-center border-l-2 border-gray-400 border-t border-r border-gray-300 p-2 bg-blue-100"
+            className="text-center border-l-2 border-gray-400 border-t border-r border-gray-300 p-1.5 bg-blue-100"
           >
-            <div className="flex flex-col items-center gap-1">
-              <span className="font-bold text-base text-gray-800 uppercase">
+            <div className="flex flex-col items-center gap-0.5">
+              <span className="font-bold text-sm text-gray-800 uppercase">
                 {dag.dagSoort}
               </span>
-              <span className="text-sm text-gray-600 font-medium">
+              <span className="text-xs text-gray-600 font-medium">
                 {formatDatum(dag.datum)}
               </span>
             </div>
@@ -74,42 +69,27 @@ export function WeekTableHeader({ weekDagen }: WeekTableHeaderProps) {
         ))}
       </tr>
       
-      {/* Row 2: Dagdeel symbolen en labels */}
+      {/* Row 2: Dagdeel emoji's (ALLEEN emoji's, geen tekst) */}
       <tr>
         {weekDagen.map((dag) => (
           <React.Fragment key={`dagdelen-${dag.datum}`}>
-            {/* Ochtend */}
-            <th className="dagdeel-header text-center border border-gray-300 p-2 bg-orange-50">
-              <div className="flex flex-col items-center gap-1">
-                <span className="text-2xl" role="img" aria-label="Ochtend">
-                  {DAGDEEL_EMOJI.O}
-                </span>
-                <span className="text-xs font-medium text-gray-700 block">
-                  {DAGDEEL_LABELS.O}
-                </span>
-              </div>
+            {/* Ochtend - Alleen emoji */}
+            <th className="dagdeel-header text-center border border-gray-300 p-1 bg-orange-50 min-w-[50px]">
+              <span className="text-3xl" role="img" aria-label="Ochtend">
+                {DAGDEEL_EMOJI.O}
+              </span>
             </th>
-            {/* Middag */}
-            <th className="dagdeel-header text-center border border-gray-300 p-2 bg-yellow-50">
-              <div className="flex flex-col items-center gap-1">
-                <span className="text-2xl" role="img" aria-label="Middag">
-                  {DAGDEEL_EMOJI.M}
-                </span>
-                <span className="text-xs font-medium text-gray-700 block">
-                  {DAGDEEL_LABELS.M}
-                </span>
-              </div>
+            {/* Middag - Alleen emoji */}
+            <th className="dagdeel-header text-center border border-gray-300 p-1 bg-yellow-50 min-w-[50px]">
+              <span className="text-3xl" role="img" aria-label="Middag">
+                {DAGDEEL_EMOJI.M}
+              </span>
             </th>
-            {/* Avond */}
-            <th className="dagdeel-header text-center border border-gray-300 p-2 bg-indigo-50">
-              <div className="flex flex-col items-center gap-1">
-                <span className="text-2xl" role="img" aria-label="Avond">
-                  {DAGDEEL_EMOJI.A}
-                </span>
-                <span className="text-xs font-medium text-gray-700 block">
-                  {DAGDEEL_LABELS.A}
-                </span>
-              </div>
+            {/* Avond - Alleen emoji */}
+            <th className="dagdeel-header text-center border border-gray-300 p-1 bg-indigo-50 min-w-[50px]">
+              <span className="text-3xl" role="img" aria-label="Avond">
+                {DAGDEEL_EMOJI.A}
+              </span>
             </th>
           </React.Fragment>
         ))}
