@@ -14,13 +14,14 @@ interface WeekTableHeaderProps {
 }
 
 /**
- * DRAAD40B5: Compacte Header Layout
+ * DRAAD40B5: Compacte Header Layout + TEST123 Marker
  * 
  * Wijzigingen:
  * - Alleen emoji's, geen dagdeel teksten (Ochtend/Middag/Avond)
  * - Compactere kolommen voor 100% zoom zichtbaarheid
  * - Emoji's groter (text-3xl) voor betere leesbaarheid
  * - Kleinere padding voor space efficiency
+ * - TEST123 marker toegevoegd voor build verificatie
  */
 
 const DAGDEEL_EMOJI = {
@@ -43,7 +44,12 @@ export function WeekTableHeader({ weekDagen }: WeekTableHeaderProps) {
           rowSpan={2} 
           className="frozen-left-1 text-center font-semibold text-gray-700 border border-gray-300 p-2 min-w-[140px]"
         >
-          Dienst
+          <div className="flex flex-col items-center">
+            <span>Dienst</span>
+            <span className="text-xs font-black text-red-600 bg-yellow-300 px-2 py-0.5 rounded mt-1 animate-pulse">
+              TEST123
+            </span>
+          </div>
         </th>
         <th 
           rowSpan={2} 
