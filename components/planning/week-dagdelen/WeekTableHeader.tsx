@@ -57,7 +57,7 @@ export function WeekTableHeader({ weekDagen }: WeekTableHeaderProps) {
             backgroundColor: 'white' // Explicit background
           }}
         >
-          Dienst
+          Dienst <span style={{ color: 'red', fontWeight: 'bold', fontSize: '18px' }}>Test02</span>
         </th>
         <th 
           rowSpan={2}
