@@ -1,0 +1,10 @@
+DRAAD41 - Route Fix Deployment
+================================
+Timestamp: 1732221195792
+Reason: Bestand aangemaakt op correcte route voor week-dagdelen navigatie
+
+Changes:
+- CREATED: app/planning/design/week-dagdelen/[rosterId]/[weekIndex]/page.tsx
+- Route nu correct gekoppeld aan navigatie vanuit DagdelenDashboardClient
+
+Dit bestand forceert cache-busting voor Railway deployment.
