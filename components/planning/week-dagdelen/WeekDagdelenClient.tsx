@@ -215,15 +215,12 @@ function extractShortDagNaam(fullName: string): string {
  * Client wrapper component for week dagdelen view
  * Handles interactive features and state management
  * 
- * 🔥 DRAAD40B5 QUICK WIN - COMPLETE FIX:
+ * 🔥 DRAAD40B5 - COMPLETE FIX:
  * ✅ Conversie functie geïmplementeerd
  * ✅ WeekDagdelenTable volledig geactiveerd
  * ✅ Volledige functionaliteit hersteld
  * ✅ DRAAD40B5: Fixed duplicate TeamDagdeel import
- * 
- * DRAAD40B5 FASE 5: UI Refinements
- * ✅ Nieuwe WeekTableSkeleton component geïntegreerd
- * ✅ Skeleton toont tijdens navigatie en laden
+ * ✅ DRAAD40B5: Teamfiltering implementeren
  * 
  * DRAAD40B FASE 3 - FINAL FIXES:
  * ✅ FOUT 3: Period_start parameter toegevoegd aan navigatie URL
@@ -307,6 +304,37 @@ export default function WeekDagdelenClient({
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
 
   // ============================================================================
+  // DRAAD40B5: Gefilterde data op basis van team selectie
+  // ============================================================================
+
+  /**
+   * DRAAD40B5: Filter diensten om alleen zichtbare teams te tonen
+   * 
+   * Wanneer een team uitgeschakeld is in de filters, verwijderen we die team data
+   * uit de dienst structuur. Dit zorgt ervoor dat WeekTableBody de rij niet rendert.
+   */
+  const gefilterdeDiensten = useMemo(() => {
+    return convertedWeekData.diensten.map(dienst => {
+      // Maak nieuwe dienst met gefilterde teams
+      const gefilterdeTeams: DienstDagdelenWeek['teams'] = {
+        groen: teamFilters.GRO ? dienst.teams.groen : { team: 'GRO', dagen: [] },
+        oranje: teamFilters.ORA ? dienst.teams.oranje : { team: 'ORA', dagen: [] },
+        totaal: teamFilters.TOT ? dienst.teams.totaal : { team: 'TOT', dagen: [] }
+      };
+
+      return {
+        ...dienst,
+        teams: gefilterdeTeams
+      };
+    });
+  }, [convertedWeekData.diensten, teamFilters]);
+
+  const gefilterdeWeekData: WeekDagdelenData = {
+    ...convertedWeekData,
+    diensten: gefilterdeDiensten
+  };
+
+  // ============================================================================
   // EVENT HANDLERS
   // ============================================================================
 
@@ -387,7 +415,7 @@ export default function WeekDagdelenClient({
         <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
           <Suspense fallback={<WeekTableSkeleton />}>
             <WeekDagdelenTable 
-              weekData={convertedWeekData}
+              weekData={gefilterdeWeekData}
               teamFilters={teamFilters}
             />
           </Suspense>
@@ -414,6 +442,14 @@ export default function WeekDagdelenClient({
                     <li>Groen: {convertedWeekData.diensten[0]?.teams.groen.dagen.length} dagen</li>
                     <li>Oranje: {convertedWeekData.diensten[0]?.teams.oranje.dagen.length} dagen</li>
                     <li>Totaal: {convertedWeekData.diensten[0]?.teams.totaal.dagen.length} dagen</li>
+                  </ul>
+                </div>
+                <div className="p-2 bg-purple-50 rounded border border-purple-200">
+                  <p className="font-semibold text-purple-700">🎯 Actieve Filters:</p>
+                  <ul className="list-disc list-inside mt-1 text-[10px] space-y-1">
+                    <li>Groen: {teamFilters.GRO ? '✅ Zichtbaar' : '❌ Verborgen'}</li>
+                    <li>Oranje: {teamFilters.ORA ? '✅ Zichtbaar' : '❌ Verborgen'}</li>
+                    <li>Praktijk: {teamFilters.TOT ? '✅ Zichtbaar' : '❌ Verborgen'}</li>
                   </ul>
                 </div>
               </div>
