@@ -1,0 +1,58 @@
+# Railway Deployment Trigger - DRAAD40B5 Verplaats Blok
+
+Timestamp: 2025-11-21T13:37:00+01:00
+
+## Wijzigingen
+
+### 1. WeekTableHeader.tsx
+- ✅ Dienst/Team blok verplaatst naar direct onder Week header
+- ✅ Sticky positioning toegepast (top: 64px, z-index: 30)
+- ✅ Frozen columns voor Dienst (left: 0) en Team (left: 140px)
+- ✅ Z-index 35 voor Dienst/Team kolommen (boven table body)
+- ✅ Compacte emoji-only layout behouden (🌅 ☀️ 🌙)
+- ✅ Text-3xl emoji grootte behouden
+- ✅ 100% zoom zichtbaarheid gegarandeerd
+
+### 2. PageHeader.tsx
+- ✅ Z-index verhoogd van 20 naar 40
+- ✅ Correcte layering boven table header (z-30)
+- ✅ ISO weeknummer display behouden
+- ✅ Correcte return URL met period_start parameter
+
+## Commits
+- b5db6d6b: feat: Verplaats Dienst/Team blok direct onder Week header
+- 8d22db91: feat: Verhoog PageHeader z-index voor correcte layering
+
+## Verificatie URL
+https://rooster-app-verloskunde-production.up.railway.app/planning/design/week-dagdelen/9c4c01d4-3ff2-4790-a569-a4a25380da39/1?period_start=2025-11-24
+
+## Verwacht Resultaat
+1. Dienst/Team blok direct zichtbaar onder "Week 48" balk
+2. Dienst/Team kolommen blijven vast bij horizontaal scrollen
+3. Header blijft vast bij verticaal scrollen
+4. Compacte emoji's (🌅 ☀️ 🌙) groot en duidelijk
+5. Alle 7 dagen zichtbaar op 100% zoom
+6. ISO weeknummer correct weergegeven (Week 48)
+7. Geen overlap tussen header elementen
+
+## Technische Details
+
+### Z-index Hierarchy
+- PageHeader: z-40 (hoogste)
+- WeekTableHeader: z-30
+- Dienst/Team frozen columns: z-35 (boven table body, onder PageHeader)
+
+### Sticky Positioning
+- PageHeader: top: 0
+- WeekTableHeader: top: 64px (hoogte PageHeader)
+- Dienst kolom: left: 0
+- Team kolom: left: 140px
+
+### Responsive Design
+- Min-width per dagdeel kolom: 50px
+- Dienst kolom: 140px
+- Team kolom: 110px
+- Totale breedte: ~1400px voor 7 dagen
+
+---
+Dit bestand triggert een nieuwe Railway deployment.
