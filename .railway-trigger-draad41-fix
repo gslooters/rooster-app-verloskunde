@@ -1,18 +1,26 @@
-RAILWAY DEPLOYMENT TRIGGER - DRAAD41 FIX
-==========================================
-Random: 892417
-Timestamp: 1732221208356
+RAILWAY DEPLOYMENT TRIGGER - DRAAD41 HOTFIX v2
+==============================================
+Random: 734291
+Timestamp: 1732221422108
 
 DEPLOYMENT REASON:
-Route mismatch opgelost - bestand aangemaakt op correcte locatie
+Route conflict opgelost - oude [weekNummer] route verwijderd
 
 WAT IS GEFIXED:
-- Nieuw bestand: app/planning/design/week-dagdelen/[rosterId]/[weekIndex]/page.tsx
-- Navigatie vanuit DagdelenDashboardClient werkt nu correct
-- Browser URL matcht nu met bestaande route
+- DELETED: app/planning/design/week-dagdelen/[rosterId]/[weekNummer]/page.tsx (conflict)
+- KEPT: app/planning/design/week-dagdelen/[rosterId]/[weekIndex]/page.tsx (nieuw)
+- Next.js build error opgelost: different slug names on same path
+
+PROBLEEM:
+Next.js detecteerde twee routes met verschillende parameter namen:
+- [weekNummer] (oud, nu verwijderd)
+- [weekIndex] (nieuw, behouden)
+
+OPLOSSING:
+Oude route volledig verwijderd, alleen nieuwe route blijft bestaan.
 
 VERIFICATIE:
 - Check: https://rooster-app-verloskunde-production.up.railway.app/planning/design/week-dagdelen/[rosterId]/[weekIndex]
-- Verwacht: Placeholder "In Ontwikkeling" scherm met rooster info
+- Verwacht: Build succesvol, placeholder scherm werkt
 
 This file triggers Railway auto-deployment.
