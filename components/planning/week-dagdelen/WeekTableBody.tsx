@@ -10,12 +10,19 @@ interface WeekTableBodyProps {
 }
 
 /**
- * DRAAD40B5 FASE 5: Team Label Mapping
+ * DRAAD40B5: Verbeterde Layout voor Diensten per Dagdeel
  * 
  * Wijzigingen:
- * - TOT wordt consequent getoond als "Praktijk" in UI
- * - Team badge kleuren consistent met ActionBar
- * - Verbeterde badge styling met grotere tekst
+ * - CODE + NAAM in één kolom ("Dienst"), alleen getoond bij eerste team (Groen)
+ * - Team in aparte kolom met badge
+ * - Compactere styling voor 100% zoom zichtbaarheid  
+ * - Sortering op dienstcode (alfabetisch)
+ * - Teamrijen gefilterd via parent component
+ * 
+ * Layout per dienst:
+ * - Dienst kolom: Code + Naam (rowspan=3, alleen bij Groen)
+ * - Team kolom: Groen / Oranje / Praktijk badge
+ * - 21 dagdeel cellen (7 dagen × 3 dagdelen)
  */
 
 // Team label mapping: database gebruikt TOT, UI toont Praktijk
@@ -47,29 +54,18 @@ const TEAM_BADGE_COLORS: Record<TeamDagdeel, { icon: string; bgColor: string; bo
   }
 };
 
-/**
- * DRAAD39.4/39.5: Table Body met Dienst Groepering en Inline Editing
- * 
- * Layout per dienst:
- * - 3 rijen: Groen, Oranje, Praktijk (TOT)
- * - Eerste kolom: frozen left, rowspan=3 met dienstcode + naam
- * - Tweede kolom: team badge per rij
- * - 21 dagdeel cellen per rij (7 dagen × 3 dagdelen)
- * 
- * Styling:
- * - Alternerende achtergrond per dienst-groep
- * - Border tussen groepen
- * - Frozen eerste kolom voor horizontaal scrollen
- * 
- * DRAAD39.5 Update:
- * - Inline editable cells met onUpdate handler
- * - Proper context passed to DagdeelCell (dienst code, team label, dagdeel label)
- */
 export default function WeekTableBody({
   diensten,
   onDagdeelUpdate,
   disabled = false
 }: WeekTableBodyProps) {
+  
+  /**
+   * DRAAD40B5: Sorteer diensten op code (alfabetisch)
+   */
+  const gesorteerdeDiensten = React.useMemo(() => {
+    return [...diensten].sort((a, b) => a.dienstCode.localeCompare(b.dienstCode));
+  }, [diensten]);
   
   /**
    * Get team badge component
@@ -80,18 +76,18 @@ export default function WeekTableBody({
     
     return (
       <div
-        className={`
-          inline-flex items-center gap-2
-          px-3 py-1.5
+        className={
+          `inline-flex items-center gap-1.5
+          px-2.5 py-1
           rounded-md
           border
           ${badge.bgColor}
           ${badge.borderColor}
-          ${badge.textColor}
-        `}
+          ${badge.textColor}`
+        }
       >
-        <span className="text-base">{badge.icon}</span>
-        <span className="text-sm font-semibold">{label}</span>
+        <span className="text-sm">{badge.icon}</span>
+        <span className="text-xs font-semibold">{label}</span>
       </div>
     );
   };
@@ -128,9 +124,9 @@ export default function WeekTableBody({
 
   return (
     <tbody>
-      {diensten.map((dienst, dienstIndex) => {
+      {gesorteerdeDiensten.map((dienst, dienstIndex) => {
         const groupBg = getDienstGroupBg(dienstIndex);
-        const isLastDienst = dienstIndex === diensten.length - 1;
+        const isLastDienst = dienstIndex === gesorteerdeDiensten.length - 1;
         
         return (
           <React.Fragment key={dienst.dienstId}>
@@ -145,45 +141,52 @@ export default function WeekTableBody({
               return (
                 <tr
                   key={`${dienst.dienstId}-${teamCode}`}
-                  className={`
-                    ${groupBg}
+                  className={
+                    `${groupBg}
                     hover:bg-gray-100
                     transition-colors
-                    ${!isLastDienst && teamIndex === 2 ? 'border-b-2 border-gray-400' : ''}
-                  `}
+                    ${!isLastDienst && teamIndex === 2 ? 'border-b-2 border-gray-400' : ''}`
+                  }
                 >
-                  {/* Kolom 1: Dienst info (frozen left, rowspan=3 alleen in eerste rij) */}
+                  {/* DRAAD40B5: Kolom 1 - Dienst (CODE + NAAM)
+                      - Frozen left
+                      - Rowspan=3 (alleen in eerste rij = Groen team)
+                      - Code + Naam op aparte regels
+                   */}
                   {isFirstRow && (
                     <td
                       rowSpan={3}
                       className="
                         sticky left-0 z-10
-                        px-4 py-3
+                        px-3 py-2
                         bg-inherit
                         border-r-2 border-gray-300
-                        min-w-[180px]
+                        min-w-[140px] max-w-[140px]
                         align-middle
                       "
                     >
-                      <div className="flex flex-col gap-1">
-                        <div className="font-bold text-gray-900 text-sm">
+                      <div className="flex flex-col gap-0.5">
+                        <div className="font-bold text-gray-900 text-xs leading-tight">
                           {dienst.dienstCode}
                         </div>
-                        <div className="text-xs text-gray-600">
+                        <div className="text-[11px] text-gray-600 leading-tight">
                           {dienst.dienstNaam}
                         </div>
                       </div>
                     </td>
                   )}
 
-                  {/* Kolom 2: Team badge (frozen left) */}
+                  {/* DRAAD40B5: Kolom 2 - Team badge (frozen left) 
+                      - Compacter, kleinere badge
+                      - Elke rij heeft eigen team
+                   */}
                   <td
                     className="
-                      sticky left-[180px] z-10
-                      px-3 py-2
+                      sticky left-[140px] z-10
+                      px-2 py-1.5
                       bg-inherit
                       border-r-2 border-gray-300
-                      min-w-[130px]
+                      min-w-[110px] max-w-[110px]
                       align-middle
                     "
                   >
