@@ -1,0 +1,10 @@
+DRAAD40B5 - Force Rebuild Trigger
+Timestamp: 2025-11-21T10:28:00Z
+
+Wijzigingen:
+- WeekTableHeader: Alleen emoji's, geen tekst labels
+- WeekTableBody: Dienst CODE+NAAM in één kolom, Team in aparte kolom
+- WeekDagdelenClient: Teamfiltering geïmplementeerd
+- Compactere layout voor 100% zoom zichtbaarheid
+
+Dit bestand triggert een force rebuild in Railway.
