@@ -178,10 +178,10 @@ export default function DagblokMatrix({
                 {ALLE_DAGBLOKKEN.map(dagblok => (
                   <th key={dagblok} className="text-center text-xs font-medium text-gray-500 pb-2 px-2">
                     <div className="flex flex-col items-center">
-                      <span className="text-lg mb-1">
+                      <span className="mb-1">{DAGBLOK_NAMEN[dagblok]}</span>
+                      <span className="text-lg">
                         {dagblok === 'O' ? '🌅' : dagblok === 'M' ? '☀️' : '🌙'}
                       </span>
-                      <span>{DAGBLOK_NAMEN[dagblok]}</span>
                     </div>
                   </th>
                 ))}
