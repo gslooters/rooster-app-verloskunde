@@ -1,0 +1,5 @@
+DRAAD42D Deployment Trigger
+Timestamp: ${Date.now()}
+Random: ${Math.random().toString(36).substring(7)}
+Fix: Database column datum → date
+Impact: Week navigation now works correctly
