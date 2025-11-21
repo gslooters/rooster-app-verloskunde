@@ -1,0 +1,8 @@
+DRAAD42 DEPLOYMENT FIX
+Timestamp: 1732222565789
+Random: 47851
+
+Fixes:
+- Removed conflicting [weekIndex] route
+- Updated client components to use weekNummer
+- Resolved Next.js build error
