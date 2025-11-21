@@ -1,0 +1,18 @@
+RAILWAY DEPLOYMENT TRIGGER - DRAAD41 FIX
+==========================================
+Random: 892417
+Timestamp: 1732221208356
+
+DEPLOYMENT REASON:
+Route mismatch opgelost - bestand aangemaakt op correcte locatie
+
+WAT IS GEFIXED:
+- Nieuw bestand: app/planning/design/week-dagdelen/[rosterId]/[weekIndex]/page.tsx
+- Navigatie vanuit DagdelenDashboardClient werkt nu correct
+- Browser URL matcht nu met bestaande route
+
+VERIFICATIE:
+- Check: https://rooster-app-verloskunde-production.up.railway.app/planning/design/week-dagdelen/[rosterId]/[weekIndex]
+- Verwacht: Placeholder "In Ontwikkeling" scherm met rooster info
+
+This file triggers Railway auto-deployment.
