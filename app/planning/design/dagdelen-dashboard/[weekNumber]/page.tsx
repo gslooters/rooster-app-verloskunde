@@ -15,6 +15,12 @@ interface PageProps {
 /**
  * Week Detail Page - Server Component
  * 
+ * 🔥 DRAAD40C CRITICAL FIX:
+ * - VERWIJDERD: max-w-[1400px] mx-auto (blokkeerde fullwidth!)
+ * - VERWIJDERD: bg-white rounded-lg shadow-lg wrapper
+ * - BEHOUDEN: min-h-screen bg-gray-50 voor consistent background
+ * - TABLE KRIJGT NU VOLLEDIGE BREEDTE
+ * 
  * Toont volledige weekplanning met dagdelen per dag.
  * Fetched data server-side en geeft door aan client component.
  */
@@ -80,39 +86,37 @@ export default async function WeekDetailPage({ params, searchParams }: PageProps
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
-      <div className="max-w-[1400px] mx-auto">
-        {/* Main Content */}
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <Suspense
-            fallback={
-              <div className="flex items-center justify-center min-h-[400px]">
-                <div className="text-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                  <p className="text-gray-600">Weekplanning laden...</p>
-                </div>
+      {/* 🔥 DRAAD40C: GEEN max-w container meer! Table krijgt volledige breedte */}
+      <div className="w-full">
+        <Suspense
+          fallback={
+            <div className="flex items-center justify-center min-h-[400px]">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <p className="text-gray-600">Weekplanning laden...</p>
               </div>
-            }
-          >
-            <WeekDagdelenTable 
-              weekData={weekData}
-              rosterId={rosterId}
-              periodStart={periodStart}
-            />
-          </Suspense>
-        </div>
-
-        {/* Debug Info (alleen in development) */}
-        {process.env.NODE_ENV === 'development' && (
-          <div className="mt-6 bg-gray-800 text-gray-100 rounded-lg p-4 text-xs font-mono">
-            <div className="font-bold mb-2">🐛 Debug Info:</div>
-            <div>Week: {weekNumber}</div>
-            <div>Jaar: {jaar}</div>
-            <div>Roster ID: {rosterId}</div>
-            <div>Dagen geladen: {weekData.days.length}</div>
-            <div>Periode: {weekData.startDatum} - {weekData.eindDatum}</div>
-          </div>
-        )}
+            </div>
+          }
+        >
+          <WeekDagdelenTable 
+            weekData={weekData}
+            rosterId={rosterId}
+            periodStart={periodStart}
+          />
+        </Suspense>
       </div>
+
+      {/* Debug Info (alleen in development) */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="mt-6 bg-gray-800 text-gray-100 rounded-lg p-4 text-xs font-mono max-w-4xl mx-auto">
+          <div className="font-bold mb-2">🐛 Debug Info:</div>
+          <div>Week: {weekNumber}</div>
+          <div>Jaar: {jaar}</div>
+          <div>Roster ID: {rosterId}</div>
+          <div>Dagen geladen: {weekData.days.length}</div>
+          <div>Periode: {weekData.startDatum} - {weekData.eindDatum}</div>
+        </div>
+      )}
     </div>
   );
 }
