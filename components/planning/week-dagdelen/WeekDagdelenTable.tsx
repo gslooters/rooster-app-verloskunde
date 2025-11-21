@@ -16,11 +16,10 @@ interface WeekDagdelenTableProps {
 /**
  * WeekDagdelenTable Component
  * 
- * 🔥 DRAAD40C - STICKY HEADER & FROZEN COLUMNS FIX:
- * ✅ Container structuur met proper nesting voor z-index stacking
- * ✅ Position relative wrapper voor z-index context
- * ✅ Direct overflow-auto op table container (geen blocking wrapper)
- * ✅ Vertical scroll met max-height
+ * 🔥 DRAAD40C HOTFIX - FULLWIDTH TABLE:
+ * ✅ VERWIJDERD: container wrapper (blokkeerde breedte)
+ * ✅ BEHOUDEN: relative wrapper voor z-index stacking
+ * ✅ BEHOUDEN: overflow-auto voor scrolling
  * ✅ Z-index hierarchy: thead(40) < frozen-cols(45)
  */
 export default function WeekDagdelenTable({
@@ -125,40 +124,35 @@ export default function WeekDagdelenTable({
   // ============================================================================
   
   return (
-    <div className="container mx-auto px-6 py-0">
-      <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
-        {/* 🔥 DRAAD40C: Relative wrapper voor z-index stacking context */}
-        <div className="relative">
-          {/* 🔥 DRAAD40C: Direct scroll container zonder blocking overflow wrapper */}
-          <div 
-            className="overflow-x-auto max-h-[calc(100vh-200px)] overflow-y-auto"
-            style={{
-              isolation: 'isolate' // Create stacking context
-            }}
-          >
-            <table className="w-full border-collapse">
-              {/* Header: Datum row + Dagdeel row met emoji's */}
-              <WeekTableHeader weekDagen={weekDagen} />
-              
-              {/* Body: Dienst groepen met team rijen */}
-              <WeekTableBody
-                diensten={filteredDiensten}
-                onDagdeelUpdate={onDagdeelUpdate}
-                disabled={disabled}
-              />
-            </table>
-          </div>
-        </div>
-        {process.env.NODE_ENV === 'development' && (
-          <div className="mt-4 p-3 bg-gray-100 rounded text-xs text-gray-600 font-mono">
-            <div>Debug Info:</div>
-            <div>- Totaal diensten: {weekData.diensten.length}</div>
-            <div>- Gefilterde diensten: {filteredDiensten.length}</div>
-            <div>- Week periode: {weekData.context.startDate} → {weekData.context.endDate}</div>
-            <div>- Aantal dagen: {weekDagen.length}</div>
-          </div>
-        )}
+    <div className="relative">
+      {/* 🔥 DRAAD40C HOTFIX: Direct scroll container - GEEN container wrapper */}
+      <div 
+        className="overflow-x-auto max-h-[calc(100vh-200px)] overflow-y-auto"
+        style={{
+          isolation: 'isolate' // Create stacking context for z-index
+        }}
+      >
+        <table className="w-full border-collapse">
+          {/* Header: Datum row + Dagdeel row met emoji's */}
+          <WeekTableHeader weekDagen={weekDagen} />
+          
+          {/* Body: Dienst groepen met team rijen */}
+          <WeekTableBody
+            diensten={filteredDiensten}
+            onDagdeelUpdate={onDagdeelUpdate}
+            disabled={disabled}
+          />
+        </table>
       </div>
+      {process.env.NODE_ENV === 'development' && (
+        <div className="mt-4 p-3 bg-gray-100 rounded text-xs text-gray-600 font-mono">
+          <div>Debug Info:</div>
+          <div>- Totaal diensten: {weekData.diensten.length}</div>
+          <div>- Gefilterde diensten: {filteredDiensten.length}</div>
+          <div>- Week periode: {weekData.context.startDate} → {weekData.context.endDate}</div>
+          <div>- Aantal dagen: {weekDagen.length}</div>
+        </div>
+      )}
     </div>
   );
 }
