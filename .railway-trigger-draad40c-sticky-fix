@@ -1,0 +1,20 @@
+# DRAAD40C: Sticky Table Header & Frozen Columns Fix
+
+Timestamp: 1732210000000
+Random: 847293
+
+Wijzigingen:
+- Container structuur met proper nesting voor z-index stacking
+- Z-index hierarchy: thead(40) < frozen-cols(45)
+- Expliciete backgroundColor voor alle sticky elements
+- BoxShadow op frozen columns (thead + tbody) voor visuele scheiding
+- Verwijderd: test03 debug tekst
+- isolation: isolate op scroll container
+- backgroundClip: padding-box voor smooth scrolling
+
+Bestanden gewijzigd:
+- components/planning/week-dagdelen/WeekDagdelenTable.tsx
+- components/planning/week-dagdelen/WeekTableHeader.tsx
+- components/planning/week-dagdelen/WeekTableBody.tsx
+
+Deploy trigger: Railway auto-deploy from main branch
