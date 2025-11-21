@@ -1,0 +1,7 @@
+# DRAAD40B5 - Test03 deployment - cache-busting
+# 
+# Trigger file voor Railway zodat build zeker opnieuw uitgevoerd wordt.
+# Logboek: Test03 marker in header + py-0 validatie.
+# Timestamp: 2025-11-21T18:30
+# Random value: 2146789
+CACHE_BUST=2146789
