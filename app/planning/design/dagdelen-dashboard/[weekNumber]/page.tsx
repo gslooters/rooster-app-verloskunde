@@ -2,7 +2,7 @@ import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { getWeekDagdelenData } from '@/lib/planning/weekDagdelenData';
-import { WeekDagdelenTable } from './components/WeekDagdelenTable';
+import { WeekDagdelenTableV2 } from './components/WeekDagdelenTableV2';
 
 interface PageProps {
   params: Promise<{ weekNumber: string }>;
@@ -15,14 +15,14 @@ interface PageProps {
 /**
  * Week Detail Page - Server Component
  * 
- * 🔥 DRAAD40C CRITICAL FIX:
- * - VERWIJDERD: max-w-[1400px] mx-auto (blokkeerde fullwidth!)
- * - VERWIJDERD: bg-white rounded-lg shadow-lg wrapper
- * - BEHOUDEN: min-h-screen bg-gray-50 voor consistent background
- * - TABLE KRIJGT NU VOLLEDIGE BREEDTE
+ * 🔥 DRAAD40C V2 - NUCLEAR OPTION:
+ * - Gebruikt WeekDagdelenTableV2 met pure inline CSS
+ * - GEEN Tailwind container conflicts
+ * - GEEN max-width limitaties
+ * - FULLWIDTH GEGARANDEERD
  * 
  * Toont volledige weekplanning met dagdelen per dag.
- * Fetched data server-side en geeft door aan client component.
+ * Fetched data server-side en geeft door aan V2 client component.
  */
 export default async function WeekDetailPage({ params, searchParams }: PageProps) {
   // Resolve async params en searchParams
@@ -37,11 +37,19 @@ export default async function WeekDetailPage({ params, searchParams }: PageProps
   if (!rosterId || !periodStart) {
     console.error('❌ Ontbrekende parameters: roster_id of period_start');
     return (
-      <div className="min-h-screen bg-gray-50 py-8 px-4">
-        <div className="max-w-6xl mx-auto">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
-            <h1 className="text-2xl font-bold text-red-900 mb-2">Fout</h1>
-            <p className="text-red-700">Ontbrekende parameters voor weekweergave.</p>
+      <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', padding: '32px 16px' }}>
+        <div style={{ maxWidth: '1536px', margin: '0 auto' }}>
+          <div style={{
+            backgroundColor: '#fef2f2',
+            border: '1px solid #fecaca',
+            borderRadius: '8px',
+            padding: '24px',
+            textAlign: 'center'
+          }}>
+            <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#7f1d1d', marginBottom: '8px' }}>
+              Fout
+            </h1>
+            <p style={{ color: '#991b1b' }}>Ontbrekende parameters voor weekweergave.</p>
           </div>
         </div>
       </div>
@@ -63,16 +71,33 @@ export default async function WeekDetailPage({ params, searchParams }: PageProps
   if (!weekData) {
     console.error('❌ Geen week data gevonden');
     return (
-      <div className="min-h-screen bg-gray-50 py-8 px-4">
-        <div className="max-w-6xl mx-auto">
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
-            <h1 className="text-2xl font-bold text-yellow-900 mb-2">Geen Data</h1>
-            <p className="text-yellow-700">
+      <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', padding: '32px 16px' }}>
+        <div style={{ maxWidth: '1536px', margin: '0 auto' }}>
+          <div style={{
+            backgroundColor: '#fefce8',
+            border: '1px solid #fef08a',
+            borderRadius: '8px',
+            padding: '24px',
+            textAlign: 'center'
+          }}>
+            <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#713f12', marginBottom: '8px' }}>
+              Geen Data
+            </h1>
+            <p style={{ color: '#854d0e' }}>
               Er is geen planning beschikbaar voor week {weekNumber} van {jaar}.
             </p>
             <Link
               href={`/planning/design/dagdelen-dashboard?roster_id=${rosterId}&period_start=${periodStart}`}
-              className="mt-4 inline-block px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              style={{
+                marginTop: '16px',
+                display: 'inline-block',
+                padding: '8px 16px',
+                backgroundColor: '#2563eb',
+                color: 'white',
+                borderRadius: '8px',
+                textDecoration: 'none',
+                transition: 'background-color 0.2s'
+              }}
             >
               Terug naar Dashboard
             </Link>
@@ -85,20 +110,33 @@ export default async function WeekDetailPage({ params, searchParams }: PageProps
   console.log(`✅ Week data geladen: ${weekData.days.length} dagen`);
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4">
-      {/* 🔥 DRAAD40C: GEEN max-w container meer! Table krijgt volledige breedte */}
-      <div className="w-full">
+    <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', padding: '32px 16px' }}>
+      {/* 🔥 DRAAD40C V2: PURE FULLWIDTH - GEEN CONTAINERS! */}
+      <div style={{ width: '100%' }}>
         <Suspense
           fallback={
-            <div className="flex items-center justify-center min-h-[400px]">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                <p className="text-gray-600">Weekplanning laden...</p>
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              minHeight: '400px' 
+            }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{
+                  animation: 'spin 1s linear infinite',
+                  borderRadius: '50%',
+                  height: '48px',
+                  width: '48px',
+                  borderTop: '2px solid #2563eb',
+                  borderRight: '2px solid transparent',
+                  margin: '0 auto 16px'
+                }} />
+                <p style={{ color: '#4b5563' }}>Weekplanning laden...</p>
               </div>
             </div>
           }
         >
-          <WeekDagdelenTable 
+          <WeekDagdelenTableV2 
             weekData={weekData}
             rosterId={rosterId}
             periodStart={periodStart}
@@ -108,13 +146,24 @@ export default async function WeekDetailPage({ params, searchParams }: PageProps
 
       {/* Debug Info (alleen in development) */}
       {process.env.NODE_ENV === 'development' && (
-        <div className="mt-6 bg-gray-800 text-gray-100 rounded-lg p-4 text-xs font-mono max-w-4xl mx-auto">
-          <div className="font-bold mb-2">🐛 Debug Info:</div>
+        <div style={{
+          marginTop: '24px',
+          backgroundColor: '#1f2937',
+          color: '#f3f4f6',
+          borderRadius: '8px',
+          padding: '16px',
+          fontSize: '12px',
+          fontFamily: 'monospace',
+          maxWidth: '1024px',
+          margin: '24px auto 0'
+        }}>
+          <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>🐛 Debug Info (V2):</div>
           <div>Week: {weekNumber}</div>
           <div>Jaar: {jaar}</div>
           <div>Roster ID: {rosterId}</div>
           <div>Dagen geladen: {weekData.days.length}</div>
           <div>Periode: {weekData.startDatum} - {weekData.eindDatum}</div>
+          <div style={{ marginTop: '8px', color: '#10b981' }}>Using: WeekDagdelenTableV2 (pure CSS)</div>
         </div>
       )}
     </div>
