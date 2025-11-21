@@ -19,6 +19,17 @@ const DAGDEEL_EMOJI = {
   A: '🌙'
 } as const;
 
+/**
+ * WeekTableHeader Component
+ * 
+ * 🔥 DRAAD40B5 #8 - STICKY HEADER FIX:
+ * ✅ Fixed z-index layering:
+ *    - thead: z-40 (boven normal content)
+ *    - frozen cells: z-45 (hoogste - dual-axis sticky)
+ * ✅ Correct sticky positioning
+ * ✅ Performance optimizations met will-change
+ * ✅ Consistente backgrounds voor frozen columns
+ */
 export function WeekTableHeader({ weekDagen }: WeekTableHeaderProps) {
   const formatDatum = (datum: string) => {
     const date = new Date(datum);
@@ -26,20 +37,38 @@ export function WeekTableHeader({ weekDagen }: WeekTableHeaderProps) {
   };
 
   return (
-    <thead className="sticky top-[64px] z-30 bg-blue-50">
+    <thead 
+      className="sticky top-[64px] bg-blue-50"
+      style={{
+        zIndex: 40,
+        willChange: 'transform' // Performance hint for smooth scrolling
+      }}
+    >
       {/* Row 1: Dienst + Team (rowSpan=2) + Dag namen BOVEN emoji's */}
       <tr>
         <th 
           rowSpan={2}
           className="frozen-left-1 text-center font-semibold text-gray-700 border border-gray-300 p-2 min-w-[120px] bg-white"
-          style={{ position: 'sticky', left: 0, zIndex: 35 }}
+          style={{ 
+            position: 'sticky', 
+            left: 0, 
+            zIndex: 45, // 🔥 FIX: Hoogste z-index voor dual-axis sticky
+            willChange: 'transform',
+            backgroundColor: 'white' // Explicit background
+          }}
         >
           Dienst
         </th>
         <th 
           rowSpan={2}
           className="frozen-left-2 text-center font-semibold text-gray-700 border border-gray-300 p-2 min-w-[100px] bg-white"
-          style={{ position: 'sticky', left: '120px', zIndex: 35 }}
+          style={{ 
+            position: 'sticky', 
+            left: '120px', 
+            zIndex: 45, // 🔥 FIX: Hoogste z-index voor dual-axis sticky
+            willChange: 'transform',
+            backgroundColor: 'white' // Explicit background
+          }}
         >
           Team
         </th>
