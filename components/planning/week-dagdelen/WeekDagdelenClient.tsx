@@ -228,6 +228,11 @@ function extractShortDagNaam(fullName: string): string {
  * ✅ FOUT 1: ISO weeknummer doorgegeven aan PageHeader
  * ✅ Return button: Correct period_start parameter voor dashboard
  * 
+ * DRAAD40B5 #7 - SPACING FIX:
+ * ✅ Removed py-6 padding from main container
+ * ✅ Table header now directly connects to ActionBar
+ * ✅ No more empty space between ActionBar and table
+ * 
  * State management voor:
  * - Team filters (Groen/Oranje/Praktijk)
  * - Save status (idle/saving/saved/error)
@@ -409,8 +414,14 @@ export default function WeekDagdelenClient({
         saveStatus={saveStatus}
       />
 
-      {/* Main Content Container */}
-      <div className="container mx-auto px-6 py-6">
+      {/* 🔥 DRAAD40B5 #7 FIX: Main Content Container 
+          
+          VOOR: py-6 (24px top/bottom padding) → grote lege ruimte
+          NA:   py-0 (geen vertical padding) → directe aansluiting
+          
+          De tabel header sluit nu direct aan op ActionBar
+      */}
+      <div className="container mx-auto px-6 py-0">
         {/* 🔥 QUICK WIN: WeekDagdelenTable VOLLEDIG GEACTIVEERD */}
         <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
           <Suspense fallback={<WeekTableSkeleton />}>
