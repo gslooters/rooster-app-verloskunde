@@ -1,0 +1,34 @@
+RAILWAY DEPLOYMENT TRIGGER - DRAAD42-H
+========================================
+Random: 78924
+Timestamp: 1732290150
+Build ID: draad42h-sticky-cols-221122
+
+DEPLOYMENT DETAILS:
+-------------------
+Feature: Sticky Columns + Team Width Optimization
+Files Changed:
+  - components/planning/week-dagdelen/VaststellingDataTable.tsx
+
+Key Changes:
+  1. Team kolom 100px fixed width
+  2. Dienst sticky (left: 0, z: 20)
+  3. Team sticky (left: 140px, z: 20)
+  4. Header sticky (top: 0, z: 15)
+  5. Corner cells (z: 30)
+  6. Box shadows + tooltips
+
+Expected Result:
+  - Betere horizontale ruimte
+  - Altijd zichtbare dienst/team bij scrollen
+  - Smooth UX
+
+Verification:
+  [ ] Dienst kolom blijft links bij horizontaal scrollen
+  [ ] Team kolom blijft naast dienst bij scrollen
+  [ ] Headers blijven boven bij verticaal scrollen
+  [ ] Team kolom is 100px breed
+  [ ] Tooltips werken bij hover
+
+Deployed: 2025-11-22 15:22:30 UTC
+Commit: de1ec431a64966da00cb4e5d607f2e5fe45c38fd
