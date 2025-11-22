@@ -1,0 +1,19 @@
+RAILWAY DEPLOYMENT TRIGGER
+==========================
+
+Deploy ID: DRAAD1B-DEPLOYMENT
+Timestamp: 2025-11-22T21:18:00Z
+Trigger: 89234
+
+ACTION: Force nieuwe Railway build
+REASON: Cache-bust voor zondag bug fix
+
+EXPECTED:
+- Railway detecteert file change
+- Start nieuwe build automatisch
+- Deployed binnen 2-3 minuten
+
+VERIFY:
+✅ Check Railway dashboard voor nieuwe deployment
+✅ Check live URL voor maandag als eerste dag
+✅ Check console logs voor correcte week validatie
