@@ -5,6 +5,7 @@ import { getRosterIdFromParams } from '@/lib/utils/getRosterIdFromParams';
 import { loadRosterDesignData, updateEmployeeMaxShifts, syncRosterDesignWithEmployeeData } from '@/lib/planning/rosterDesign';
 import { fetchNetherlandsHolidays, createHolidaySet, findHolidayByDate } from '@/lib/services/holidays-api';
 import { loadServiceTypes } from '@/lib/services/service-types-loader';
+import { getMondayOfWeek } from '@/lib/utils/date-helpers';
 import type { RosterDesignData, RosterEmployee } from '@/lib/types/roster';
 import type { Holiday } from '@/lib/types/holiday';
 import { TeamType, DienstverbandType } from '@/lib/types/employee';
@@ -262,11 +263,16 @@ export default function DesignPageClient() {
       };
     }
     const startDate = new Date(startISO + 'T00:00:00');
-    const endDate = new Date(startDate); 
-    endDate.setDate(startDate.getDate() + (4 * 7) + 6);
+    
+    // FIX: Zorg dat we beginnen op de maandag van de week waarin startDate valt
+    const mondayOfStartWeek = getMondayOfWeek(startDate);
+    
+    const endDate = new Date(mondayOfStartWeek); 
+    endDate.setDate(mondayOfStartWeek.getDate() + (5 * 7) - 1); // 5 weken, eindigend op zondag
+    
     const weeks = Array.from({ length: 5 }, (_, i) => {
-      const weekStart = new Date(startDate); 
-      weekStart.setDate(startDate.getDate() + (i * 7));
+      const weekStart = new Date(mondayOfStartWeek); 
+      weekStart.setDate(mondayOfStartWeek.getDate() + (i * 7));
       const weekNumber = getWeekNumber(weekStart);
       return { 
         number: weekNumber, 
@@ -280,7 +286,7 @@ export default function DesignPageClient() {
     const firstWeek = weeks[0];
     const lastWeek = weeks[weeks.length - 1];
     const periodTitle = `Medewerkers per periode : Week ${firstWeek?.number || ''} - Week ${lastWeek?.number || ''} ${startDate.getFullYear()}`;
-    const dateSubtitle = `Van ${formatDutchDate(startISO)} tot en met ${formatDutchDate(endDate.toISOString().split('T')[0])}`;
+    const dateSubtitle = `Van ${formatDutchDate(mondayOfStartWeek.toISOString().split('T')[0])} tot en met ${formatDutchDate(endDate.toISOString().split('T')[0])}`;
     return { startISO, startDate, endDate, weeks, periodTitle, dateSubtitle };
   }, [designData]);
   if (loading) { 
