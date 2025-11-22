@@ -18,26 +18,31 @@ interface WeekDagdelenVaststellingTableProps {
 }
 
 /**
- * DRAAD43 FIX - Database Column Name Correction: serviceid -> service_id
+ * 🔥 DRAAD42F FIX - DEFINITIEVE OPLOSSING
  * 
- * PROBLEEM #1 (OPGELOST - DRAAD42D): 
+ * FOUT #1 (OPGELOST - DRAAD42D): 
  * - Query gebruikte "datum" maar database kolom heet "date"
  * - Error: "column roster_period_staffing.datum does not exist"
  * - OPLOSSING: Alle "datum" vervangen door "date" ✅
  * 
- * PROBLEEM #2 (DRAAD42D - VERKEERDE DIAGNOSE):
- * - Query gebruikte "service_type_id" maar dachten database kolom heet "serviceid"
- * - WERKELIJKE SITUATIE: Database kolom heet "service_id" (MET underscore!)
+ * FOUT #2 (OPGELOST - DRAAD43):
+ * - Query gebruikte "serviceid" maar database kolom heet "service_id"
  * - Error: "column roster_period_staffing.serviceid does not exist"
- * - JUISTE OPLOSSING: Alle "serviceid" vervangen door "service_id" ✅
+ * - OPLOSSING: Alle "serviceid" vervangen door "service_id" ✅
  * 
- * Database Schema (roster_period_staffing):
+ * FOUT #3 (OPGELOST - DRAAD42F):
+ * - Query gebruikte "roster_period_id" maar database kolom heet "roster_id"
+ * - Error: "column roster_period_staffing.roster_period_id does not exist"
+ * - OPLOSSING: "roster_period_id" vervangen door "roster_id" ✅
+ * 
+ * ✅ DEFINITIEF DATABASE SCHEMA (roster_period_staffing):
  * - id (uuid)
- * - service_id (uuid)        ← Correcte naam MET underscore!
- * - date (date)
- * - minstaff (integer)
- * - maxstaff (integer)
- * - roster_period_id (uuid)
+ * - roster_id (uuid)          ← CORRECT VELD
+ * - service_id (uuid)          ← CORRECT VELD
+ * - date (date)                ← CORRECT VELD
+ * - min_staff (integer)
+ * - max_staff (integer)
+ * - team_tot, team_gro, team_ora (boolean)
  * 
  * Functionaliteit:
  * - Client-side data fetching voor staffing dagdelen
@@ -67,12 +72,13 @@ export default function WeekDagdelenVaststellingTable({
       setIsLoading(true);
       setError(null);
 
-      // ✅ DRAAD42D FIX #1: Gebruik "date" in plaats van "datum"
+      // ✅ DRAAD42D FIX: Gebruik "date" in plaats van "datum"
       // ✅ DRAAD43 FIX: Gebruik "service_id" in plaats van "serviceid"
+      // ✅ DRAAD42F FIX: Gebruik "roster_id" in plaats van "roster_period_id"
       const { data: staffingRecords, error: staffingError } = await supabase
         .from('roster_period_staffing')
         .select('id, date, service_id')
-        .eq('roster_period_id', rosterId)
+        .eq('roster_id', rosterId)
         .gte('date', weekStart.split('T')[0])
         .lte('date', weekEnd.split('T')[0]);
 
@@ -94,7 +100,7 @@ export default function WeekDagdelenVaststellingTable({
 
       if (dagdelenError) throw dagdelenError;
 
-      // ✅ DRAAD42D FIX #1: Gebruik "date" property
+      // ✅ DRAAD42D FIX: Gebruik "date" property
       // ✅ DRAAD43 FIX: Gebruik "service_id" property
       const enrichedData = (dagdelenData || []).map(dagdeel => {
         const staffingRecord = staffingRecords.find(r => r.id === dagdeel.roster_period_staffing_id);
