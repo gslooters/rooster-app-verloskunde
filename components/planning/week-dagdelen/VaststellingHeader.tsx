@@ -10,15 +10,19 @@ interface VaststellingHeaderProps {
   weekEnd: string;
   periodName: string;
   rosterId: string;
+  periodStart: string; // 🔥 DRAAD42G: NIEUW - voor correcte routing terug
 }
 
 /**
- * DRAAD42 - Header Component
+ * DRAAD42G - Header Component (ROUTING FIX)
+ * 
+ * FIX: Terug knop miste period_start parameter in URL
+ * Nu: /planning/design/dagdelen-dashboard?roster_id=XXX&period_start=YYYY-MM-DD
  * 
  * Layout:
  * - Linksboven: Grote titel met weeknummer
  * - Daaronder: Datumbereik
- * - Rechtsboven: Terug naar dashboard button
+ * - Rechtsboven: Terug naar dashboard button (MET period_start!)
  */
 export default function VaststellingHeader({
   weekNummer,
@@ -26,6 +30,7 @@ export default function VaststellingHeader({
   weekEnd,
   periodName,
   rosterId,
+  periodStart, // 🔥 DRAAD42G: NIEUW
 }: VaststellingHeaderProps) {
   const formatDatum = (dateStr: string) => {
     try {
@@ -53,8 +58,9 @@ export default function VaststellingHeader({
           </div>
 
           {/* Rechts: Terug button */}
+          {/* 🔥 DRAAD42G FIX: Toegevoegd &period_start=${periodStart} */}
           <Link
-            href={`/planning/design/dagdelen-dashboard?roster_id=${rosterId}`}
+            href={`/planning/design/dagdelen-dashboard?roster_id=${rosterId}&period_start=${periodStart}`}
             className="flex-shrink-0"
           >
             <button className="px-5 py-2.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium shadow-sm">
