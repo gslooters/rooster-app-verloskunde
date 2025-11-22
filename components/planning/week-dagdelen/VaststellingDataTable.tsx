@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { format, eachDayOfInterval } from 'date-fns';
+import { format, eachDayOfInterval, addDays } from 'date-fns';
 import { nl } from 'date-fns/locale';
 import EditableCell from './EditableCell';
 import type { ServiceType, StaffingDagdeel } from '@/types/planning';
@@ -38,24 +38,33 @@ const DAGDEEL_ICONS = {
 };
 
 /**
- * 🔥 DRAAD42L - DEFINITIEVE FIX ZONDAG BUG (COMPLETE REFACTOR)
+ * 🔥 DRAAD42M - DEFINITIEVE FIX ZONDAG BUG (8 DAGEN → 7 DAGEN)
  * 
  * CHANGELOG:
  * ✅ DRAAD42-H: Sticky columns implementation
  * ✅ DRAAD42K: UTC parsing fix voor weekStart/weekEnd
- * ✅ DRAAD42L: +1 dag correctie voor eachDayOfInterval (DEFINITIEF!)
+ * ❌ DRAAD42L: +1 dag correctie VERKEERD (veroorzaakte 8 dagen bug!)
+ * ✅ DRAAD42M: CORRECTE fix - eachDayOfInterval is WEL inclusief!
  * 
- * PROBLEEM (NU OPGELOST):
- * - weekEnd wordt getrunceerd van "2025-11-30T23:59:59.999Z" naar "2025-11-30T00:00:00Z"
- * - eachDayOfInterval({ start: MA 00:00, end: ZO 00:00 }) is NIET inclusief van laatste dag
- * - Date-fns compenseert door TERUG te gaan → genereert ZO, MA, DI, WO, DO, VR, ZA, ZO (8 dagen!)
- * - Eerste dag (zondag) werd getoond maar hoorde er niet bij
+ * ROOT CAUSE (NU OPGELOST):
+ * - DRAAD42L voegde FOUTIEF +1 dag toe aan weekEnd
+ * - Misinterpretatie: "eachDayOfInterval is NIET inclusief" → FOUT!
+ * - Werkelijkheid: eachDayOfInterval IS WEL inclusief van end date
+ * - Resultaat DRAAD42L: 8 dagen (zo, ma, di, wo, do, vr, za, zo)
+ * - Eerste dag was zondag 23-11 (verkeerd), moest maandag 24-11 zijn
  * 
- * OPLOSSING:
- * - Parse weekEnd naar UTC 00:00:00
- * - Voeg 1 dag toe: endDate.setUTCDate(endDate.getUTCDate() + 1)
- * - Nu: eachDayOfInterval({ start: MA 00:00, end: MA 00:00 (volgende week) })
- * - Resultaat: MA, DI, WO, DO, VR, ZA, ZO (7 dagen, correct!)
+ * CORRECTE OPLOSSING (DRAAD42M):
+ * - Parse weekStart als UTC 00:00:00 (maandag)
+ * - Parse weekEnd als UTC 00:00:00 (zondag)
+ * - GEEN +1 dag toevoegen!
+ * - eachDayOfInterval({ start: MA, end: ZO }) geeft 7 dagen ✅
+ * - Alternatief: addDays(start, 6) voor extra zekerheid
+ * 
+ * VALIDATIE:
+ * - Moet altijd 7 dagen genereren
+ * - Eerste dag moet maandag zijn (getUTCDay() === 1)
+ * - Laatste dag moet zondag zijn (getUTCDay() === 0)
+ * - Console logs voor verificatie
  * 
  * Features:
  * - Client-side state voor real-time updates
@@ -86,40 +95,70 @@ export default function VaststellingDataTable({
     type: 'success' | 'error';
   } | null>(null);
 
-  // 🔥 DRAAD42L FIX: +1 dag correctie voor eachDayOfInterval
-  // eachDayOfInterval is NIET inclusief van end date
-  // weekEnd komt binnen als "2025-11-30T23:59:59.999Z" (zondag einde)
-  // Truncatie naar 00:00:00 maakt het "begin van zondag"
-  // eachDayOfInterval({ start: MA, end: ZO 00:00 }) genereert tot (niet inclusief) zondag
-  // Oplossing: Voeg 1 dag toe aan end → end = MA 00:00 (volgende week)
+  // 🔥 DRAAD42M FIX: CORRECTE week berekening (7 dagen, start maandag)
+  // BELANGRIJKE CORRECTIE:
+  // - eachDayOfInterval IS WEL inclusief van end date!
+  // - DRAAD42L's +1 dag was FOUT en veroorzaakte 8 dagen bug
+  // - weekEnd "2025-11-30T23:59:59.999Z" trunceren naar "2025-11-30T00:00:00Z" is CORRECT
+  // - eachDayOfInterval({ start: MA 24-11, end: ZO 30-11 }) = 7 dagen ✅
   const weekDays = useMemo(() => {
     // Parse weekStart in UTC (begin van de dag)
     const startDateStr = weekStart.includes('T') ? weekStart.split('T')[0] : weekStart;
     const start = new Date(startDateStr + 'T00:00:00Z');
     
-    // Parse weekEnd in UTC maar VOEG 1 dag toe voor inclusieve interval
-    // weekEnd komt binnen als "2025-11-30T23:59:59.999Z" (zondag einde)
-    // eachDayOfInterval werkt tot (maar niet inclusief) de end date
-    // Dus voeg 1 dag toe: 2025-12-01T00:00:00Z
+    // Parse weekEnd in UTC (begin van de dag)
+    // GEEN +1 dag toevoegen! eachDayOfInterval is inclusief!
     const endDateStr = weekEnd.includes('T') ? weekEnd.split('T')[0] : weekEnd;
-    const endDate = new Date(endDateStr + 'T00:00:00Z');
-    endDate.setUTCDate(endDate.getUTCDate() + 1); // +1 dag voor inclusief
+    const end = new Date(endDateStr + 'T00:00:00Z');
     
-    console.log('🔥 DRAAD42L: Week dagen berekening (DEFINITIEF):');
+    // Validatie: start moet maandag zijn
+    const startDay = start.getUTCDay();
+    if (startDay !== 1) {
+      console.error('⚠️ DRAAD42M VALIDATIE FOUT: Start dag is geen maandag!', {
+        startDate: start.toISOString(),
+        dag: startDay,
+        verwacht: 1
+      });
+    }
+    
+    // Validatie: end moet zondag zijn
+    const endDay = end.getUTCDay();
+    if (endDay !== 0) {
+      console.error('⚠️ DRAAD42M VALIDATIE FOUT: End dag is geen zondag!', {
+        endDate: end.toISOString(),
+        dag: endDay,
+        verwacht: 0
+      });
+    }
+    
+    console.log('✅ DRAAD42M: Week dagen berekening (CORRECT):');
     console.log('  weekStart input:', weekStart);
     console.log('  weekEnd input:', weekEnd);
     console.log('  Parsed start (UTC):', start.toISOString());
-    console.log('  Parsed end+1 (UTC):', endDate.toISOString());
-    console.log('  Start dag (0=zo, 1=ma):', start.getUTCDay(), '← MOET 1 ZIJN');
-    console.log('  End+1 dag (0=zo, 1=ma):', endDate.getUTCDay(), '← MOET 1 ZIJN (ma na zo)');
+    console.log('  Parsed end (UTC):', end.toISOString());
+    console.log('  Start dag (0=zo, 1=ma):', startDay, startDay === 1 ? '✅ CORRECT' : '❌ FOUT');
+    console.log('  End dag (0=zo, 1=ma):', endDay, endDay === 0 ? '✅ CORRECT' : '❌ FOUT');
     
-    const days = eachDayOfInterval({ start, end: endDate });
+    // Genereer dagen (inclusief van start tot end)
+    const days = eachDayOfInterval({ start, end });
     
-    console.log('  Aantal gegenereerde dagen:', days.length, '← MOET 7 ZIJN');
+    // Validatie: moet exact 7 dagen zijn
+    if (days.length !== 7) {
+      console.error('⚠️ DRAAD42M VALIDATIE FOUT: Aantal dagen is niet 7!', {
+        aantalDagen: days.length,
+        verwacht: 7,
+        eersteDag: days[0]?.toISOString(),
+        laatsteDag: days[days.length - 1]?.toISOString()
+      });
+    }
+    
+    console.log('  Aantal gegenereerde dagen:', days.length, days.length === 7 ? '✅ CORRECT' : '❌ FOUT');
     console.log('  Eerste dag:', format(days[0], 'yyyy-MM-dd', { locale: nl }), 
-                '(', format(days[0], 'EEEE', { locale: nl }), ') ← MOET MAANDAG ZIJN');
+                '(', format(days[0], 'EEEE', { locale: nl }), ')', 
+                days[0].getUTCDay() === 1 ? '✅ MAANDAG' : '❌ FOUT');
     console.log('  Laatste dag:', format(days[days.length - 1], 'yyyy-MM-dd', { locale: nl }), 
-                '(', format(days[days.length - 1], 'EEEE', { locale: nl }), ') ← MOET ZONDAG ZIJN');
+                '(', format(days[days.length - 1], 'EEEE', { locale: nl }), ')',
+                days[days.length - 1].getUTCDay() === 0 ? '✅ ZONDAG' : '❌ FOUT');
     
     return days.map(date => {
       const dayName = format(date, 'EEEE', { locale: nl }).substring(0, 2);
