@@ -1,0 +1,41 @@
+# Railway Deployment Trigger - DRAAD1C Health Check Fix
+
+Timestamp: 2025-11-22T22:24:30Z
+Commit: 79d499d414abd996dd34e6b769cc7c65ce870bac
+
+Dit bestand triggert Railway deployment voor:
+
+## CRITICAL FIX: Health Check Endpoint
+
+### Probleem
+- Oude health check te simpel (alleen 200 response)
+- Geen database verificatie
+- Container crashte door timeout
+
+### Oplossing  
+- Robuuste health check met Supabase test
+- 5 seconden timeout voor database query
+- Detailed logging voor debugging
+- Graceful degradation (503 bij DB issues)
+
+### Verwacht Resultaat
+1. ✅ Container blijft draaien
+2. ✅ Health check passed
+3. ✅ Database connectie verified
+4. ✅ Datum fix wordt zichtbaar (DRAAD1A #2)
+
+### Deployment Info
+- Build: NO_CACHE=1 (clean build)
+- Health Check Path: /api/health
+- Health Check Timeout: 100s
+- Expected Response Time: <5s
+
+### Verification Steps
+1. Check Railway logs voor "🏥 Health check gestart..."
+2. Verify "✅ Health check PASSED"
+3. Check browser: https://[app-url]/api/health
+4. Test datum fix op "Niet Beschikbaar" scherm
+
+---
+
+Deployment triggered at: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
