@@ -19,7 +19,7 @@ interface WeekDagdelenVaststellingTableProps {
 }
 
 /**
- * 🔥 DRAAD42G FIX - ROUTING NAAR DASHBOARD
+ * 🔥 DRAAD42G FIX - COMPLETE ROUTING FIX
  * 
  * FOUT #1 (OPGELOST - DRAAD42D): 
  * - Query gebruikte "datum" maar database kolom heet "date"
@@ -33,14 +33,18 @@ interface WeekDagdelenVaststellingTableProps {
  * - Query gebruikte "roster_period_id" maar database kolom heet "roster_id"
  * - OPLOSSING: "roster_period_id" vervangen door "roster_id" ✅
  * 
- * FOUT #4 (OPGELOST - DRAAD42G):
+ * FOUT #4 (OPGELOST - DRAAD42G #1):
  * - Terug knop miste period_start parameter in URL
  * - OPLOSSING: periodStart prop toegevoegd en doorgegeven aan VaststellingHeader ✅
+ * 
+ * FOUT #5 (OPGELOST - DRAAD42G #2):
+ * - Week navigatie links misten period_start parameter
+ * - OPLOSSING: periodStart prop doorgegeven aan WeekNavigation ✅
  * 
  * Functionaliteit:
  * - Client-side data fetching voor staffing dagdelen
  * - Passes initial data + periodStart to child components
- * - Child components kunnen nu correct terug navigeren
+ * - Child components kunnen nu correct terug navigeren EN tussen weken navigeren
  * - Coordinatie tussen header, navigatie en data tabel
  */
 export default function WeekDagdelenVaststellingTable({
@@ -132,7 +136,7 @@ export default function WeekDagdelenVaststellingTable({
 
   return (
     <div className="min-h-screen w-full bg-gray-50">
-      {/* 🔥 DRAAD42G FIX: periodStart toegevoegd */}
+      {/* 🔥 DRAAD42G FIX #1: periodStart toegevoegd voor terug navigatie */}
       <VaststellingHeader
         weekNummer={actualWeekNumber}
         weekStart={weekStart}
@@ -142,10 +146,12 @@ export default function WeekDagdelenVaststellingTable({
         periodStart={periodStart}
       />
 
+      {/* 🔥 DRAAD42G FIX #2: periodStart toegevoegd voor week navigatie */}
       <WeekNavigation
         currentWeek={weekNummer}
         totalWeeks={5}
         rosterId={rosterId}
+        periodStart={periodStart}
       />
 
       {isLoading ? (
