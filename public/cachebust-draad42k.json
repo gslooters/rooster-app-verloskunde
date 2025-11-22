@@ -1,0 +1,12 @@
+{
+  "deployment": "DRAAD42K-zondag-fix",
+  "timestamp": 1732294477000,
+  "version": "DRAAD42K-20251122-1614",
+  "description": "Fix voor zondag start bug in week-dagdelen scherm",
+  "changes": [
+    "Maandag correctie toegevoegd aan calculateWeekDates()",
+    "Elke week start nu altijd op maandag",
+    "Gebaseerd op DRAAD26R fix voor unavailability scherm",
+    "Extra logging voor debugging"
+  ]
+}
