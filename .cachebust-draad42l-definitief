@@ -1,0 +1,5 @@
+DRAAD42L - DEFINITIEVE FIX ZONDAG BUG
+Timestamp: 1732293332000
+Random: 0.8472651234
+Doel: Force Railway rebuild voor eachDayOfInterval +1 dag correctie
+Fix: weekEnd + 1 dag voor correcte 7-dagen interval (MA-ZO)
