@@ -1,0 +1,42 @@
+# Cache Bust - DRAAD1C Health Check Fix
+
+Timestamp: 2025-11-22T22:25:00Z
+Build ID: DRAAD1C-HEALTHCHECK-FIX-$(date +%s)
+
+## Force Clean Build
+
+Dit bestand forceert Railway om:
+1. Build cache te clearen
+2. Nieuwe dependencies te installeren  
+3. Health check endpoint opnieuw te compilen
+4. Fresh deployment te maken
+
+## Changes in Deze Deployment
+
+### app/api/health/route.ts
+- ✅ Supabase database verificatie toegevoegd
+- ✅ 5 seconden timeout voor DB queries
+- ✅ Detailed error logging
+- ✅ Graceful degradation (503 bij DB errors)
+
+### Expected Behavior
+1. Container start (131ms)
+2. Health check triggered binnen 5-10 seconden
+3. Database query executed (<1 seconde normaal)
+4. Response 200 + JSON met status
+5. Container blijft DRAAIEN
+
+### Debug Info
+Bij problemen check Railway logs voor:
+- "🏥 Health check gestart..."
+- "✅ Environment variables OK"
+- "🔍 Testing database connection..."
+- "✅ Health check PASSED (XXms)"
+
+Bij failures verwacht:
+- "❌ Health check FAILED: ..."
+- "❌ Database check FAILED: ..."
+
+---
+
+Cache bust ID: CB-DRAAD1C-HC-$(date +%Y%m%d%H%M%S)
