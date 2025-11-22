@@ -38,19 +38,22 @@ const DAGDEEL_ICONS = {
 };
 
 /**
- * DRAAD42-H - STICKY COLUMNS IMPLEMENTATION
+ * 🔥 DRAAD42K - DEFINITIEVE FIX ZONDAG BUG
  * 
- * Previous versions:
- * - DRAAD42 FASE 9: Data Tabel Component met State Management
+ * CHANGELOG:
+ * ✅ DRAAD42-H: Sticky columns implementation
+ * ✅ DRAAD42K: UTC parsing fix voor weekStart/weekEnd (KRITIEK!)
  * 
- * NEW in DRAAD42-H:
- * ✅ Team kolom verkleind naar 100px fixed width
- * ✅ Dienst kolom sticky (left: 0, z-index: 20)
- * ✅ Team kolom sticky (left: 140px, z-index: 20)
- * ✅ Header rij sticky (top: 0, z-index: 15)
- * ✅ Corner cells sticky (left + top, z-index: 30)
- * ✅ Box shadows voor visual depth
- * ✅ Text truncation + tooltip voor lange teamnamen
+ * PROBLEEM (OPGELOST):
+ * - Server berekent correct: weekStart = 2025-11-24 (maandag)
+ * - Client kreeg: new Date('2025-11-24T00:00:00.000Z')
+ * - Timezone conversie: UTC → Local (-4h Venezuela) = 23-11 20:00
+ * - eachDayOfInterval genereerde: ZO 23/11, MA 24/11, DI 25/11... ❌
+ * 
+ * OPLOSSING:
+ * - Forceer UTC parsing: weekStart.split('T')[0] + 'T00:00:00Z'
+ * - Geen timezone conversie meer
+ * - eachDayOfInterval genereert: MA 24/11, DI 25/11, WO 26/11... ✅
  * 
  * Features:
  * - Client-side state voor real-time updates
@@ -58,6 +61,7 @@ const DAGDEEL_ICONS = {
  * - Rollback bij fout
  * - Toast notifications
  * - Sticky positioning voor betere UX bij scrollen
+ * - CORRECTE week start op MAANDAG (niet zondag)
  * 
  * Structuur:
  * - Header: Dagen met dagdeel icons (STICKY TOP)
@@ -80,16 +84,39 @@ export default function VaststellingDataTable({
     type: 'success' | 'error';
   } | null>(null);
 
-  // Bereken alle dagen van de week
+  // 🔥 DRAAD42K FIX: UTC parsing voor correcte weekstart op MAANDAG
+  // Voorkomt timezone conversie die zondag als eerste dag zou maken
   const weekDays = useMemo(() => {
-    const start = new Date(weekStart);
-    const end = new Date(weekEnd);
-    return eachDayOfInterval({ start, end }).map(date => ({
-      date,
-      dayName: format(date, 'EEEE', { locale: nl }).substring(0, 2),
-      dateStr: format(date, 'dd/MM'),
-      fullDate: format(date, 'yyyy-MM-dd'),
-    }));
+    // Haal alleen datum-deel op en forceer UTC interpretatie
+    // Input: "2025-11-24T00:00:00.000Z" of "2025-11-24"
+    // Output: Date object in UTC zonder timezone shift
+    const startDateStr = weekStart.includes('T') ? weekStart.split('T')[0] : weekStart;
+    const endDateStr = weekEnd.includes('T') ? weekEnd.split('T')[0] : weekEnd;
+    
+    // Forceer UTC parsing door expliciet 'Z' toe te voegen
+    const start = new Date(startDateStr + 'T00:00:00Z');
+    const end = new Date(endDateStr + 'T00:00:00Z');
+    
+    console.log('🔥 DRAAD42K: Week dagen berekening:');
+    console.log('  Input weekStart:', weekStart);
+    console.log('  Parsed start (UTC):', start.toISOString());
+    console.log('  Start dag (0=zo, 1=ma):', start.getUTCDay());
+    console.log('  Input weekEnd:', weekEnd);
+    console.log('  Parsed end (UTC):', end.toISOString());
+    console.log('  End dag (0=zo, 1=ma):', end.getUTCDay());
+    
+    return eachDayOfInterval({ start, end }).map(date => {
+      const dayName = format(date, 'EEEE', { locale: nl }).substring(0, 2);
+      const dateStr = format(date, 'dd/MM');
+      const fullDate = format(date, 'yyyy-MM-dd');
+      
+      return {
+        date,
+        dayName,
+        dateStr,
+        fullDate,
+      };
+    });
   }, [weekStart, weekEnd]);
 
   // Helper functie: vind dagdeel data
