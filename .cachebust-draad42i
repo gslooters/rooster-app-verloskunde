@@ -1,0 +1,13 @@
+# Cache Bust - DRAAD42I
+# Fix: Rooster weken beginnen nu altijd op maandag
+# Timestamp: 1732291347
+# Random: 847295
+# Deployment trigger voor Railway.app
+
+Dit bestand forceert een nieuwe deployment op Railway.
+Wijzigingen:
+- getMondayOfWeek() helper toegevoegd aan date-helpers.ts
+- Weekberekening in page.client.tsx gecorrigeerd
+- Weken starten nu correct op maandag (was zondag)
+
+Test met Week 48 en Week 49 zoals getoond in bijlagen.
