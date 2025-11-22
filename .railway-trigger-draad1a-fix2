@@ -1,0 +1,21 @@
+# RAILWAY DEPLOYMENT TRIGGER
+# DRAAD1A FIX #2 - CLIENT-SIDE ZONDAG BUG FIX
+# 
+# Trigger timestamp: 1732309627000
+# Random: 592847
+# 
+# Deze file triggert Railway deployment voor client-side fix
+# 
+# Wijzigingen:
+# - VaststellingDataTable.tsx: eachDayOfInterval() vervangen
+# - Expliciete 7-dagen loop (for i=0 to 6)
+# - addDays(start, i) voor timezone-safe incrementatie
+# - Pre-validatie: weekStart MOET maandag zijn
+# - Post-validatie: days[0] maandag, days[6] zondag, length=7
+# - Throw error bij validatie fouten
+# - Uitgebreide console logging voor debugging
+# 
+# Verwacht resultaat:
+# - Rooster start ALTIJD op maandag
+# - Exact 7 dagen (ma-zo)
+# - Geen timezone bugs meer
