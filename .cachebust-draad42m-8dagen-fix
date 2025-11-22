@@ -1,0 +1,10 @@
+DRAAD42M: 8-dagen bug gefixed - verwijderd foutieve +1 dag correctie
+Timestamp: 1732303038000
+Commit: 111bf42de15766b8514a4d5d5ca2092bc290e9fd
+Datum: 2025-11-22T20:15:38Z
+
+FIX:
+- Verwijderd +1 dag correctie die 8 dagen veroorzaakte
+- eachDayOfInterval is WEL inclusief van end date
+- Week begint nu correct op maandag (7 dagen exact)
+- Geen extra zondag meer aan het begin
