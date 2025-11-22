@@ -121,3 +121,29 @@ export function getWeekNumber(date: Date): number {
   
   return weekNo;
 }
+
+/**
+ * Krijg de maandag van de week waarin een datum valt
+ * 
+ * @param date - JavaScript Date object
+ * @returns Date object van de maandag van die week
+ * 
+ * @example
+ * getMondayOfWeek(new Date('2025-11-23')); // Zondag 23 nov -> Retourneert maandag 17 nov
+ * getMondayOfWeek(new Date('2025-11-24')); // Maandag 24 nov -> Retourneert maandag 24 nov
+ * getMondayOfWeek(new Date('2025-11-26')); // Woensdag 26 nov -> Retourneert maandag 24 nov
+ */
+export function getMondayOfWeek(date: Date): Date {
+  const d = new Date(date);
+  const day = d.getDay(); // 0=zondag, 1=maandag, ..., 6=zaterdag
+  
+  // Bereken verschil naar maandag
+  // Als zondag (0): ga 6 dagen terug (-6)
+  // Als maandag (1): ga 0 dagen terug (1-1=0)
+  // Als dinsdag (2): ga 1 dag terug (1-2=-1)
+  // etc.
+  const diff = day === 0 ? -6 : 1 - day;
+  
+  d.setDate(d.getDate() + diff);
+  return d;
+}
