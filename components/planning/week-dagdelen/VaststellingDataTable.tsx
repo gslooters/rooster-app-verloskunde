@@ -38,18 +38,33 @@ const DAGDEEL_ICONS = {
 };
 
 /**
- * DRAAD42 FASE 9 - Data Tabel Component met State Management
+ * DRAAD42-H - STICKY COLUMNS IMPLEMENTATION
+ * 
+ * Previous versions:
+ * - DRAAD42 FASE 9: Data Tabel Component met State Management
+ * 
+ * NEW in DRAAD42-H:
+ * ✅ Team kolom verkleind naar 100px fixed width
+ * ✅ Dienst kolom sticky (left: 0, z-index: 20)
+ * ✅ Team kolom sticky (left: 140px, z-index: 20)
+ * ✅ Header rij sticky (top: 0, z-index: 15)
+ * ✅ Corner cells sticky (left + top, z-index: 30)
+ * ✅ Box shadows voor visual depth
+ * ✅ Text truncation + tooltip voor lange teamnamen
  * 
  * Features:
  * - Client-side state voor real-time updates
  * - Optimistic UI updates (instant feedback)
  * - Rollback bij fout
  * - Toast notifications
+ * - Sticky positioning voor betere UX bij scrollen
  * 
  * Structuur:
- * - Header: Dagen met dagdeel icons
+ * - Header: Dagen met dagdeel icons (STICKY TOP)
  * - Per dienst: 3 team-rijen (Groen, Oranje, Praktijk)
  * - Per team-rij: 7 dagen x 3 dagdelen = 21 cellen
+ * - Dienst kolom: STICKY LEFT (position 0)
+ * - Team kolom: STICKY LEFT (position 140px)
  */
 export default function VaststellingDataTable({
   serviceTypes,
@@ -156,16 +171,40 @@ export default function VaststellingDataTable({
       )}
 
       <div className="px-6 py-4">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-x-auto">
+        {/* 🔥 DRAAD42-H: Scroll container voor sticky positioning */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-x-auto overflow-y-auto relative" style={{ maxHeight: 'calc(100vh - 200px)' }}>
           <table className="w-full border-collapse">
-            <thead className="sticky top-0 bg-blue-50 z-10">
+            {/* 🔥 DRAAD42-H: Sticky header rij (top: 0) */}
+            <thead className="sticky top-0 z-[15] bg-blue-50">
               <tr>
-                <th className="border border-gray-300 p-3 bg-blue-100 font-semibold text-gray-800 min-w-[200px]">
+                {/* 🔥 DRAAD42-H: Corner cell - Dienst header (sticky left + top, z-30) */}
+                <th 
+                  className="sticky left-0 top-0 z-[30] border border-gray-300 p-3 bg-blue-100 font-semibold text-gray-800" 
+                  style={{ 
+                    minWidth: '140px',
+                    width: '140px',
+                    boxShadow: '2px 2px 4px rgba(0, 0, 0, 0.08)'
+                  }}
+                >
                   Dienst
                 </th>
-                <th className="border border-gray-300 p-3 bg-blue-100 font-semibold text-gray-800 min-w-[120px]">
+                
+                {/* 🔥 DRAAD42-H: Corner cell - Team header (sticky left + top, z-30) */}
+                <th 
+                  className="sticky top-0 z-[30] border border-gray-300 p-3 bg-blue-100 font-semibold text-gray-800"
+                  style={{ 
+                    left: '140px',
+                    minWidth: '100px',
+                    width: '100px',
+                    maxWidth: '100px',
+                    boxShadow: '2px 2px 4px rgba(0, 0, 0, 0.08)'
+                  }}
+                  title="Team kolom"
+                >
                   Team
                 </th>
+                
+                {/* Dagdeel headers (alleen sticky top) */}
                 {weekDays.map(day => (
                   <th
                     key={day.fullDate}
@@ -191,11 +230,16 @@ export default function VaststellingDataTable({
                 <React.Fragment key={service.id}>
                   {TEAMS.map((team, teamIndex) => (
                     <tr key={`${service.id}-${team}`} className="hover:bg-gray-50">
-                      {/* Dienst kolom (rowspan voor 3 teams) */}
+                      {/* 🔥 DRAAD42-H: Dienst kolom - STICKY LEFT (position 0, z-20) */}
                       {teamIndex === 0 && (
                         <td
                           rowSpan={3}
-                          className="border border-gray-300 p-3 font-medium align-top"
+                          className="sticky left-0 z-[20] border border-gray-300 p-3 font-medium align-top bg-white"
+                          style={{
+                            minWidth: '140px',
+                            width: '140px',
+                            boxShadow: '2px 0 4px rgba(0, 0, 0, 0.08)'
+                          }}
                         >
                           <div className="flex items-center gap-2">
                             <span
@@ -209,8 +253,18 @@ export default function VaststellingDataTable({
                         </td>
                       )}
 
-                      {/* Team kolom */}
-                      <td className="border border-gray-300 p-2">
+                      {/* 🔥 DRAAD42-H: Team kolom - STICKY LEFT (position 140px, z-20, width 100px) */}
+                      <td 
+                        className="sticky z-[20] border border-gray-300 p-2 bg-white overflow-hidden text-ellipsis whitespace-nowrap"
+                        style={{
+                          left: '140px',
+                          minWidth: '100px',
+                          width: '100px',
+                          maxWidth: '100px',
+                          boxShadow: '2px 0 4px rgba(0, 0, 0, 0.08)'
+                        }}
+                        title={TEAM_LABELS[team]} // 🔥 DRAAD42-H: Tooltip voor lange namen
+                      >
                         <span
                           className="inline-block px-3 py-1 rounded text-white font-medium text-sm"
                           style={{ backgroundColor: TEAM_COLORS[team] }}
@@ -219,7 +273,7 @@ export default function VaststellingDataTable({
                         </span>
                       </td>
 
-                      {/* Dagdeel cellen per dag */}
+                      {/* Dagdeel cellen per dag (niet sticky) */}
                       {weekDays.map(day =>
                         DAGDELEN.map(dagdeel => {
                           const dagdeelData = findDagdeelData(
