@@ -1,0 +1,22 @@
+DEPLOYMENT FORCE - DRAAD1B FIX
+================================
+
+Timestamp: 2025-11-22T21:17:00Z
+Random ID: 47823
+
+PROBLEEM:
+- Zondag verschijnt als eerste dag in week-dagdelen scherm
+- Code fixes zijn correct (DRAAD42K + DRAAD1A #2)
+- Railway deployment cache probleem
+
+OPLOSSING:
+- Deze file forceert nieuwe build
+- Cache-bust alle browser caches
+- Versie-bump voor Railway
+
+VERWACHT RESULTAAT:
+✅ Week start op MAANDAG (niet zondag)
+✅ Alle 7 dagen correct (ma-zo)
+✅ Console logs tonen correcte validatie
+
+Deploy ID: DRAAD1B-${Date.now()}-47823
