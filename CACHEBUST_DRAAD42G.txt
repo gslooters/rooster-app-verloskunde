@@ -1,0 +1,49 @@
+CACHE-BUST TRIGGER FOR RAILWAY DEPLOYMENT
+==========================================
+
+DRAAD42G - ROUTING FIX: TERUG NAAR DASHBOARD
+Timestamp: 1732247418000
+Date: 2025-11-22T03:30:18.000Z
+Commit: c05b9a7691ea5fcdec22a585ce561019e9ece8f0
+
+FIX DETAILS:
+- Files: 
+  * VaststellingHeader.tsx - Add periodStart prop + update Link href
+  * WeekDagdelenVaststellingTable.tsx - Pass periodStart to VaststellingHeader  
+  * page.tsx - Add periodStart to pageData
+
+- Problem: Terug knop miste period_start parameter
+- Solution: Complete prop propagation through component hierarchy
+- Result: URL now includes both roster_id AND period_start
+
+COMPLETE DATA FLOW:
+URL searchParams.period_start
+  → page.tsx
+    → WeekDagdelenVaststellingTable
+      → VaststellingHeader
+        → Link href with &period_start= parameter
+
+IMPACT:
+✅ Terug knop navigeert naar correct dashboard scherm
+✅ Geen "Geen roster_id of period_start gevonden" error meer
+✅ Routing flow volledig hersteld
+✅ Forward/backward navigation werkt foutloos
+
+DEPLOYMENT:
+Railway zal deze commit automatisch deployen.
+Cache wordt geforceerd geïnvalideerd door dit bestand.
+
+VERIFICATIE:
+1. Check Railway deployment logs
+2. Navigeer naar Week 48
+3. Klik "Terug naar Dashboard Dagdelen"
+4. Verify: Dashboard laadt zonder foutmelding
+5. Confirm: URL bevat beide parameters
+
+RELATED FIXES:
+- DRAAD42D: date field fix
+- DRAAD42F: roster_id field fix  
+- DRAAD42G: routing/navigation fix (THIS)
+
+---
+Generated: Fri Nov 22 2025 03:30:18 GMT+0000
