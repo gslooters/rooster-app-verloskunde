@@ -1,0 +1,10 @@
+GLOBAL CACHE BUST
+DRAAD42L Deployment
+Timestamp: 1732293438000
+Build ID: draad42l-definitief-zondag-fix
+Random: 0.2847561923
+
+Force nieuwe build voor:
+- VaststellingDataTable.tsx refactor
+- eachDayOfInterval +1 dag correctie
+- Zondag bug definitief opgelost
