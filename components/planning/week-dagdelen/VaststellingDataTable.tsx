@@ -38,22 +38,24 @@ const DAGDEEL_ICONS = {
 };
 
 /**
- * 🔥 DRAAD42K - DEFINITIEVE FIX ZONDAG BUG
+ * 🔥 DRAAD42L - DEFINITIEVE FIX ZONDAG BUG (COMPLETE REFACTOR)
  * 
  * CHANGELOG:
  * ✅ DRAAD42-H: Sticky columns implementation
- * ✅ DRAAD42K: UTC parsing fix voor weekStart/weekEnd (KRITIEK!)
+ * ✅ DRAAD42K: UTC parsing fix voor weekStart/weekEnd
+ * ✅ DRAAD42L: +1 dag correctie voor eachDayOfInterval (DEFINITIEF!)
  * 
- * PROBLEEM (OPGELOST):
- * - Server berekent correct: weekStart = 2025-11-24 (maandag)
- * - Client kreeg: new Date('2025-11-24T00:00:00.000Z')
- * - Timezone conversie: UTC → Local (-4h Venezuela) = 23-11 20:00
- * - eachDayOfInterval genereerde: ZO 23/11, MA 24/11, DI 25/11... ❌
+ * PROBLEEM (NU OPGELOST):
+ * - weekEnd wordt getrunceerd van "2025-11-30T23:59:59.999Z" naar "2025-11-30T00:00:00Z"
+ * - eachDayOfInterval({ start: MA 00:00, end: ZO 00:00 }) is NIET inclusief van laatste dag
+ * - Date-fns compenseert door TERUG te gaan → genereert ZO, MA, DI, WO, DO, VR, ZA, ZO (8 dagen!)
+ * - Eerste dag (zondag) werd getoond maar hoorde er niet bij
  * 
  * OPLOSSING:
- * - Forceer UTC parsing: weekStart.split('T')[0] + 'T00:00:00Z'
- * - Geen timezone conversie meer
- * - eachDayOfInterval genereert: MA 24/11, DI 25/11, WO 26/11... ✅
+ * - Parse weekEnd naar UTC 00:00:00
+ * - Voeg 1 dag toe: endDate.setUTCDate(endDate.getUTCDate() + 1)
+ * - Nu: eachDayOfInterval({ start: MA 00:00, end: MA 00:00 (volgende week) })
+ * - Resultaat: MA, DI, WO, DO, VR, ZA, ZO (7 dagen, correct!)
  * 
  * Features:
  * - Client-side state voor real-time updates
@@ -61,7 +63,7 @@ const DAGDEEL_ICONS = {
  * - Rollback bij fout
  * - Toast notifications
  * - Sticky positioning voor betere UX bij scrollen
- * - CORRECTE week start op MAANDAG (niet zondag)
+ * - CORRECTE week start op MAANDAG (7 dagen exact)
  * 
  * Structuur:
  * - Header: Dagen met dagdeel icons (STICKY TOP)
@@ -84,28 +86,42 @@ export default function VaststellingDataTable({
     type: 'success' | 'error';
   } | null>(null);
 
-  // 🔥 DRAAD42K FIX: UTC parsing voor correcte weekstart op MAANDAG
-  // Voorkomt timezone conversie die zondag als eerste dag zou maken
+  // 🔥 DRAAD42L FIX: +1 dag correctie voor eachDayOfInterval
+  // eachDayOfInterval is NIET inclusief van end date
+  // weekEnd komt binnen als "2025-11-30T23:59:59.999Z" (zondag einde)
+  // Truncatie naar 00:00:00 maakt het "begin van zondag"
+  // eachDayOfInterval({ start: MA, end: ZO 00:00 }) genereert tot (niet inclusief) zondag
+  // Oplossing: Voeg 1 dag toe aan end → end = MA 00:00 (volgende week)
   const weekDays = useMemo(() => {
-    // Haal alleen datum-deel op en forceer UTC interpretatie
-    // Input: "2025-11-24T00:00:00.000Z" of "2025-11-24"
-    // Output: Date object in UTC zonder timezone shift
+    // Parse weekStart in UTC (begin van de dag)
     const startDateStr = weekStart.includes('T') ? weekStart.split('T')[0] : weekStart;
-    const endDateStr = weekEnd.includes('T') ? weekEnd.split('T')[0] : weekEnd;
-    
-    // Forceer UTC parsing door expliciet 'Z' toe te voegen
     const start = new Date(startDateStr + 'T00:00:00Z');
-    const end = new Date(endDateStr + 'T00:00:00Z');
     
-    console.log('🔥 DRAAD42K: Week dagen berekening:');
-    console.log('  Input weekStart:', weekStart);
+    // Parse weekEnd in UTC maar VOEG 1 dag toe voor inclusieve interval
+    // weekEnd komt binnen als "2025-11-30T23:59:59.999Z" (zondag einde)
+    // eachDayOfInterval werkt tot (maar niet inclusief) de end date
+    // Dus voeg 1 dag toe: 2025-12-01T00:00:00Z
+    const endDateStr = weekEnd.includes('T') ? weekEnd.split('T')[0] : weekEnd;
+    const endDate = new Date(endDateStr + 'T00:00:00Z');
+    endDate.setUTCDate(endDate.getUTCDate() + 1); // +1 dag voor inclusief
+    
+    console.log('🔥 DRAAD42L: Week dagen berekening (DEFINITIEF):');
+    console.log('  weekStart input:', weekStart);
+    console.log('  weekEnd input:', weekEnd);
     console.log('  Parsed start (UTC):', start.toISOString());
-    console.log('  Start dag (0=zo, 1=ma):', start.getUTCDay());
-    console.log('  Input weekEnd:', weekEnd);
-    console.log('  Parsed end (UTC):', end.toISOString());
-    console.log('  End dag (0=zo, 1=ma):', end.getUTCDay());
+    console.log('  Parsed end+1 (UTC):', endDate.toISOString());
+    console.log('  Start dag (0=zo, 1=ma):', start.getUTCDay(), '← MOET 1 ZIJN');
+    console.log('  End+1 dag (0=zo, 1=ma):', endDate.getUTCDay(), '← MOET 1 ZIJN (ma na zo)');
     
-    return eachDayOfInterval({ start, end }).map(date => {
+    const days = eachDayOfInterval({ start, end: endDate });
+    
+    console.log('  Aantal gegenereerde dagen:', days.length, '← MOET 7 ZIJN');
+    console.log('  Eerste dag:', format(days[0], 'yyyy-MM-dd', { locale: nl }), 
+                '(', format(days[0], 'EEEE', { locale: nl }), ') ← MOET MAANDAG ZIJN');
+    console.log('  Laatste dag:', format(days[days.length - 1], 'yyyy-MM-dd', { locale: nl }), 
+                '(', format(days[days.length - 1], 'EEEE', { locale: nl }), ') ← MOET ZONDAG ZIJN');
+    
+    return days.map(date => {
       const dayName = format(date, 'EEEE', { locale: nl }).substring(0, 2);
       const dateStr = format(date, 'dd/MM');
       const fullDate = format(date, 'yyyy-MM-dd');
