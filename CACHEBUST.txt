@@ -1,0 +1,17 @@
+CACHE INVALIDATION TRIGGER
+==========================
+
+Random Number: 87346
+Timestamp: 1732247311000
+Date: Fri Nov 22 2025 03:08:31 GMT+0000
+
+Last Update: DRAAD42F roster_id fix
+Commit: f1970096a2acb0ff4785f8068524c01d224fa705
+
+DEPLOYMENT STATUS:
+- Railway auto-deploy: ACTIVE
+- Cache: INVALIDATED
+- Build: TRIGGERED
+
+This file forces Railway to rebuild and deploy.
+Random number ensures unique commits.
