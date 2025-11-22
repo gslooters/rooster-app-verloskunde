@@ -18,15 +18,25 @@ interface WeekDagdelenVaststellingTableProps {
 }
 
 /**
- * DRAAD42D FIX - Database Column Name Correction
+ * DRAAD42D FIX #2 - Database Column Name Correction
  * 
- * PROBLEEM: 
+ * PROBLEEM #1 (OPGELOST): 
  * - Query gebruikte "datum" maar database kolom heet "date"
  * - Error: "column roster_period_staffing.datum does not exist"
+ * - OPLOSSING: Alle "datum" vervangen door "date" ✅
  * 
- * OPLOSSING:
- * - Alle "datum" vervangen door "date" in Supabase queries
- * - Consistent met database schema
+ * PROBLEEM #2 (DEZE FIX):
+ * - Query gebruikte "service_type_id" maar database kolom heet "serviceid"
+ * - Error: "column roster_period_staffing.service_type_id does not exist"
+ * - OPLOSSING: Alle "service_type_id" vervangen door "serviceid" ✅
+ * 
+ * Database Schema (roster_period_staffing):
+ * - id (uuid)
+ * - serviceid (uuid)        ← Correcte naam!
+ * - date (date)
+ * - minstaff (integer)
+ * - maxstaff (integer)
+ * - roster_period_id (uuid)
  * 
  * Functionaliteit:
  * - Client-side data fetching voor staffing dagdelen
@@ -56,10 +66,11 @@ export default function WeekDagdelenVaststellingTable({
       setIsLoading(true);
       setError(null);
 
-      // ✅ DRAAD42D FIX: Gebruik "date" in plaats van "datum"
+      // ✅ DRAAD42D FIX #1: Gebruik "date" in plaats van "datum"
+      // ✅ DRAAD42D FIX #2: Gebruik "serviceid" in plaats van "service_type_id"
       const { data: staffingRecords, error: staffingError } = await supabase
         .from('roster_period_staffing')
-        .select('id, date, service_type_id')
+        .select('id, date, serviceid')
         .eq('roster_period_id', rosterId)
         .gte('date', weekStart.split('T')[0])
         .lte('date', weekEnd.split('T')[0]);
@@ -82,12 +93,13 @@ export default function WeekDagdelenVaststellingTable({
 
       if (dagdelenError) throw dagdelenError;
 
-      // ✅ DRAAD42D FIX: Gebruik "date" property
+      // ✅ DRAAD42D FIX #1: Gebruik "date" property
+      // ✅ DRAAD42D FIX #2: Gebruik "serviceid" property
       const enrichedData = (dagdelenData || []).map(dagdeel => {
         const staffingRecord = staffingRecords.find(r => r.id === dagdeel.roster_period_staffing_id);
         return {
           ...dagdeel,
-          service_type_id: staffingRecord?.service_type_id,
+          serviceid: staffingRecord?.serviceid,
           date: staffingRecord?.date,
         };
       });
