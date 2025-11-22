@@ -1,0 +1,9 @@
+{
+  "version": "DRAAD42E-serviceid-fix",
+  "timestamp": 1732243895000,
+  "build": "98472651",
+  "deployed": "2025-11-22T02:31:35Z",
+  "fix": "WeekDagdelenVaststellingTable serviceid correctie",
+  "status": "deploying",
+  "cacheBust": "DRAAD42E-1732243895000"
+}
