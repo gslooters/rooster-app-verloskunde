@@ -1,0 +1,14 @@
+# DRAAD1A - ZONDAG START BUG FIX
+# Timestamp: 1732309215000
+# Date: 2025-11-22T20:40:15Z
+# 
+# FIX DETAILS:
+# - API Layer validatie in weekDagdelenData.ts
+# - Filter zondag als eerste dag
+# - Limiteer tot exact 7 dagen (ma-zo)
+# - Uitgebreide logging en validatie
+# 
+# IMPACT:
+# - Diensten per Dagdeel scherm start NU op maandag
+# - Consistent met Niet Beschikbaar scherm
+# - Geen breaking changes
