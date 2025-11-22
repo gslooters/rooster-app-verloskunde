@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { nl } from 'date-fns/locale';
 
 interface WeekDag {
@@ -22,6 +22,11 @@ const DAGDEEL_EMOJI = {
 /**
  * WeekTableHeader Component
  * 
+ * 🔥 DRAAD1D - WEEKHEADER FIX:
+ * ✅ Gebruik weekDagen[0] (maandag) en weekDagen[6] (zondag) voor periodeweergave
+ * ✅ Standaard date-fns formatting: dd-MM-yyyy
+ * ✅ Validatie: check dat weekDagen array 7 dagen bevat
+ * 
  * 🔥 DRAAD40C - STICKY HEADER FIX:
  * ✅ Thead sticky met expliciete backgroundColor (geen className)
  * ✅ Z-index: thead(40) < frozen-cols(45)
@@ -29,10 +34,51 @@ const DAGDEEL_EMOJI = {
  * ✅ Background-clip voor smooth scrolling
  */
 export function WeekTableHeader({ weekDagen }: WeekTableHeaderProps) {
+  /**
+   * Format datum voor individuele dag headers (d/M formaat)
+   */
   const formatDatum = (datum: string) => {
-    const date = new Date(datum);
-    return format(date, 'd/M', { locale: nl });
+    try {
+      const date = parseISO(datum);
+      return format(date, 'd/M', { locale: nl });
+    } catch (error) {
+      console.error('❌ WeekTableHeader: Fout bij formatteren datum', datum, error);
+      return datum; // Fallback to original string
+    }
   };
+
+  /**
+   * 🔥 DRAAD1D FIX: Genereer periode string direct vanuit weekDagen array
+   * Gebruik altijd weekDagen[0] (maandag) en weekDagen[6] (zondag)
+   */
+  const getPeriodeString = () => {
+    if (!weekDagen || weekDagen.length !== 7) {
+      console.warn('⚠️ WeekTableHeader: weekDagen array bevat niet exact 7 dagen:', weekDagen?.length);
+      return 'Periode onbekend';
+    }
+
+    try {
+      // Gebruik ALTIJD eerste en laatste dag uit weekDagen array
+      const maandag = parseISO(weekDagen[0].datum);
+      const zondag = parseISO(weekDagen[6].datum);
+      
+      const maandagStr = format(maandag, 'dd-MM-yyyy', { locale: nl });
+      const zondagStr = format(zondag, 'dd-MM-yyyy', { locale: nl });
+      
+      console.log('✅ WeekTableHeader periode:', {
+        maandag: weekDagen[0].datum,
+        zondag: weekDagen[6].datum,
+        formatted: `${maandagStr} - ${zondagStr}`
+      });
+      
+      return `${maandagStr} - ${zondagStr}`;
+    } catch (error) {
+      console.error('❌ WeekTableHeader: Fout bij genereren periode string', error);
+      return 'Periode fout';
+    }
+  };
+
+  const periodeString = getPeriodeString();
 
   return (
     <thead 
@@ -44,6 +90,24 @@ export function WeekTableHeader({ weekDagen }: WeekTableHeaderProps) {
         backgroundClip: 'padding-box'
       }}
     >
+      {/* 🔥 DRAAD1D: Nieuwe periode header row */}
+      <tr>
+        <th 
+          colSpan={2 + (weekDagen.length * 3)}
+          className="text-center font-bold text-gray-800 border border-gray-300 p-2 bg-blue-100"
+          style={{
+            position: 'sticky',
+            left: 0,
+            zIndex: 45,
+            backgroundClip: 'padding-box'
+          }}
+        >
+          <div className="text-sm">
+            Periode: {periodeString}
+          </div>
+        </th>
+      </tr>
+      
       <tr>
         <th 
           rowSpan={2}
