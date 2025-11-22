@@ -1,0 +1,22 @@
+RAILWAY DEPLOYMENT TRIGGER - DRAAD1D
+=====================================
+Deploy Timestamp: 2025-11-22T23:57:00Z
+Random ID: 92734
+Trigger: DRAAD1D-WEEKHEADER-FIX
+
+CRITICAL FIX:
+- WeekTableHeader nu gebruikt weekDagen[0] en weekDagen[6]
+- Periode header toegevoegd met correcte dd-MM-yyyy formaat
+- Validatie voor 7-dagen array
+- Console logging voor debugging
+
+TEST NA DEPLOYMENT:
+1. Open rooster weekweergave
+2. Verificeer periode header toont: "DD-MM-YYYY - DD-MM-YYYY"
+3. Check console logs voor periode generatie
+4. Controleer dat maandag en zondag correct zijn
+
+VERWACHT RESULTAAT:
+- Periode header: maandag t/m zondag van huidige week
+- Format: dd-MM-yyyy (bijv. 18-11-2025 - 24-11-2025)
+- Geen "undefined" of "NaN" in headers
