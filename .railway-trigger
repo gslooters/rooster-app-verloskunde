@@ -1,23 +1,34 @@
 # Railway Deployment Trigger
-# DRAAD40C V2 - NUCLEAR OPTION: Pure CSS Component
+# DRAAD42E - Force redeploy voor serviceid correctie
 
-Last updated: 2025-11-21T19:06:00Z
-Build ID: 42751983
-Reason: NEW WeekDagdelenTableV2 with pure inline CSS - NO Tailwind conflicts
+Last updated: 2025-11-22T02:31:30Z
+Build ID: 98472651
+Reason: Force Railway redeploy - serviceid fix moet live
 
-🔥 V2 IMPLEMENTATION:
-- NEW component: WeekDagdelenTableV2.tsx
-- Pure inline CSS styles (no Tailwind)
-- NO container mx-auto wrappers
-- 100% viewport width GUARANTEED
-- Sticky headers with z-index control
-- Frozen left column
+🔥 DRAAD42E CRITICAL FIX:
+- Code op Github al correct: gebruikt 'serviceid'
+- Railway draait nog oude versie
+- Console toont error: database heeft 'serviceid' kolom
+- Query moet 'serviceid' gebruiken (ZONDER underscore)
 
-CHANGES:
-1. Created: WeekDagdelenTableV2.tsx (pure CSS)
-2. Updated: page.tsx (imports V2 component)
-3. All styles inline - no external CSS conflicts
+PROBLEEM:
+- Error: "column roster_period_staffing.serviceid does not exist"
+- Oorzaak: Railway cache met oude code
+- Impact: Week 48 selectie werkt niet
 
-STATUS: Critical V2 implementation
+OPLOSSING:
+✅ 1. Code al gefixt in commit 4a3ce72
+✅ 2. Cache-bust bestand toegevoegd
+✅ 3. Railway trigger geforceerd (DEZE COMMIT)
+⏳ 4. Wacht op Railway rebuild
+
+VERIFICATION NA DEPLOY:
+- Open app: https://rooster-app-verloskunde-production.up.railway.app
+- Klik op Week 48
+- Verwacht: Geen foutmelding, data wordt geladen
+- Check console: Geen "serviceid does not exist" error
+
+STATUS: Critical fix deployment
 DEPLOY: IMMEDIATE
-Random: 42751983
+Random: 98472651
+Cache-bust: DRAAD42E-1732243890000
