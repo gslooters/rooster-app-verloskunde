@@ -1,0 +1,23 @@
+DRAAD42K - ZONDAG BUG FIX
+=========================
+
+Timestamp: 1732293468000
+Date: 2025-11-22T16:37:48Z
+
+Fix Details:
+- Component: VaststellingDataTable.tsx
+- Issue: Week starting on SUNDAY instead of MONDAY
+- Root cause: Timezone conversion in new Date(weekStart)
+- Solution: Force UTC parsing with .split('T')[0] + 'T00:00:00Z'
+
+Before:
+- weekStart='2025-11-24T00:00:00.000Z' → parsed as 2025-11-23 20:00 local time
+- eachDayOfInterval generated: SUN 23/11, MON 24/11, TUE 25/11...
+
+After:
+- Explicit UTC: '2025-11-24T00:00:00Z' → stays 2025-11-24 00:00 UTC
+- eachDayOfInterval generates: MON 24/11, TUE 25/11, WED 26/11... ✅
+
+Deploy this to force cache invalidation and ensure new logic is used.
+
+Cachebust ID: draad42k-utc-parsing-fix-1732293468
