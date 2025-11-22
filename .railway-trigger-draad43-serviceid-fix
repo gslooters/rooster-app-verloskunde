@@ -1,0 +1,21 @@
+DRAAD43 DEPLOYMENT TRIGGER
+=========================
+Datum: 22 november 2025 03:41 CET
+Doel: Force rebuild na serviceid -> service_id database column fix
+
+WAT IS AANGEPAST:
+- components/planning/week-dagdelen/WeekDagdelenVaststellingTable.tsx
+  * "serviceid" vervangen door "service_id" (met underscore)
+  * Query naar roster_period_staffing tabel nu correct
+
+WAAROm DEZE FIX:
+- Database kolom heet "service_id" (MET underscore)
+- Code gebruikte "serviceid" (ZONDER underscore)  
+- Error: "column roster_period_staffing.serviceid does not exist"
+
+EXPECTED RESULT:
+- Geen database errors meer
+- Dagdelen vaststelling werkt correct
+- Data wordt correct opgehaald en getoond
+
+Commit: 2f73b38de174e71166c4b22dea0a3a24de772843
