@@ -1,0 +1,12 @@
+# RAILWAY DEPLOYMENT TRIGGER
+# DRAAD1A - ZONDAG START BUG FIX
+# 
+# Trigger timestamp: 1732309251000
+# Random: 847293
+# 
+# Deze file triggert Railway deployment
+#Wijzigingen:
+# - API Layer validatie weekDagdelenData.ts
+# - Zondag filter bij eerste dag
+# - Exact 7 dagen limiet (ma-zo)
+# - Uitgebreide debug logging
