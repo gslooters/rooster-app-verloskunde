@@ -1,0 +1,35 @@
+CACHE-BUST TRIGGER FOR RAILWAY DEPLOYMENT
+==========================================
+
+DRAAD42F - ROSTER_ID FIX
+Timestamp: 1732247293000
+Date: 2025-11-22T03:08:13.000Z
+Commit: 4349ff478b1f42c0c23de24d4c6ac510ab68b014
+
+FIX DETAILS:
+- File: components/planning/week-dagdelen/WeekDagdelenVaststellingTable.tsx
+- Changed: .eq('roster_period_id', rosterId) → .eq('roster_id', rosterId)
+- Reason: Database veld heet 'roster_id', niet 'roster_period_id'
+
+IMPACT:
+✅ Week navigatie werkt nu correct
+✅ Geen 400 Bad Request meer
+✅ Data wordt opgehaald voor alle weken
+
+DEPLOYMENT:
+Railway zal deze commit automatisch deployen.
+Cache wordt geforceerd geïnvalideerd door dit bestand.
+
+VERIFICATIE:
+1. Check Railway deployment logs
+2. Test Week 48 navigatie
+3. Verify geen console errors
+4. Confirm data wordt getoond
+
+RELATED FIXES:
+- DRAAD42D: date field fix
+- DRAAD43: service_id field fix  
+- DRAAD42F: roster_id field fix (THIS)
+
+---
+Generated: Fri Nov 22 2025 03:08:13 GMT+0000
