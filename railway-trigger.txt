@@ -1,6 +1,8 @@
-DRAAD42D FIX #2 Deployment Trigger
-Timestamp: ${Date.now()}
-Random: ${Math.random().toString(36).substring(7)}
-Fix #1: Database column datum → date ✅
-Fix #2: Database column service_type_id → serviceid ✅
-Impact: Week navigation now fully operational
+DRAAD42K-DEPLOYMENT-TRIGGER-8742691
+Timestamp: 2025-11-22T16:15:30Z
+Reason: Fix zondag start bug in week-dagdelen scherm
+Random: 8742691
+
+Fix: calculateWeekDates() nu met maandag correctie
+Impact: Elke week start nu correct op MAANDAG (niet zondag)
+Gebaseerd op: DRAAD26R unavailability fix
