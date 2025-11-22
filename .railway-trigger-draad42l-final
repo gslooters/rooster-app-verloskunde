@@ -1,0 +1,16 @@
+RAILWAY DEPLOYMENT TRIGGER
+DRAAD42L - DEFINITIEVE ZONDAG BUG FIX
+Timestamp: 1732293349000
+Random trigger: 0.5628473912
+Commit: eede3555008599412463d9bdf240af99bcf7a7cf
+
+Veranderingen:
+- VaststellingDataTable.tsx: +1 dag correctie voor eachDayOfInterval
+- weekEnd.setUTCDate(weekEnd.getUTCDate() + 1) voor inclusief interval
+- Uitgebreide console logging voor verificatie
+
+Verwacht resultaat:
+✅ 7 dagen (MA-ZO)
+✅ Eerste kolom: MA 24/11
+✅ Laatste kolom: ZO 30/11
+❌ Geen zondag 23/11 meer!
