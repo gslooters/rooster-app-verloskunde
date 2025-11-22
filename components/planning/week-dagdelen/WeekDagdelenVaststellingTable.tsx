@@ -15,39 +15,32 @@ interface WeekDagdelenVaststellingTableProps {
   weekStart: string;
   weekEnd: string;
   serviceTypes: ServiceType[];
+  periodStart: string; // 🔥 DRAAD42G: NIEUW - voor routing terug naar dashboard
 }
 
 /**
- * 🔥 DRAAD42F FIX - DEFINITIEVE OPLOSSING
+ * 🔥 DRAAD42G FIX - ROUTING NAAR DASHBOARD
  * 
  * FOUT #1 (OPGELOST - DRAAD42D): 
  * - Query gebruikte "datum" maar database kolom heet "date"
- * - Error: "column roster_period_staffing.datum does not exist"
  * - OPLOSSING: Alle "datum" vervangen door "date" ✅
  * 
  * FOUT #2 (OPGELOST - DRAAD43):
  * - Query gebruikte "serviceid" maar database kolom heet "service_id"
- * - Error: "column roster_period_staffing.serviceid does not exist"
  * - OPLOSSING: Alle "serviceid" vervangen door "service_id" ✅
  * 
  * FOUT #3 (OPGELOST - DRAAD42F):
  * - Query gebruikte "roster_period_id" maar database kolom heet "roster_id"
- * - Error: "column roster_period_staffing.roster_period_id does not exist"
  * - OPLOSSING: "roster_period_id" vervangen door "roster_id" ✅
  * 
- * ✅ DEFINITIEF DATABASE SCHEMA (roster_period_staffing):
- * - id (uuid)
- * - roster_id (uuid)          ← CORRECT VELD
- * - service_id (uuid)          ← CORRECT VELD
- * - date (date)                ← CORRECT VELD
- * - min_staff (integer)
- * - max_staff (integer)
- * - team_tot, team_gro, team_ora (boolean)
+ * FOUT #4 (OPGELOST - DRAAD42G):
+ * - Terug knop miste period_start parameter in URL
+ * - OPLOSSING: periodStart prop toegevoegd en doorgegeven aan VaststellingHeader ✅
  * 
  * Functionaliteit:
  * - Client-side data fetching voor staffing dagdelen
- * - Passes initial data to child component
- * - Child component handles all state management
+ * - Passes initial data + periodStart to child components
+ * - Child components kunnen nu correct terug navigeren
  * - Coordinatie tussen header, navigatie en data tabel
  */
 export default function WeekDagdelenVaststellingTable({
@@ -58,6 +51,7 @@ export default function WeekDagdelenVaststellingTable({
   weekStart,
   weekEnd,
   serviceTypes,
+  periodStart, // 🔥 DRAAD42G: NIEUW
 }: WeekDagdelenVaststellingTableProps) {
   const [staffingData, setStaffingData] = useState<StaffingDagdeel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -138,12 +132,14 @@ export default function WeekDagdelenVaststellingTable({
 
   return (
     <div className="min-h-screen w-full bg-gray-50">
+      {/* 🔥 DRAAD42G FIX: periodStart toegevoegd */}
       <VaststellingHeader
         weekNummer={actualWeekNumber}
         weekStart={weekStart}
         weekEnd={weekEnd}
         periodName={periodName}
         rosterId={rosterId}
+        periodStart={periodStart}
       />
 
       <WeekNavigation
