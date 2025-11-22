@@ -1,12 +1,13 @@
 GLOBAL CACHE BUST
-DRAAD42M Deployment - KRITIEKE FIX
-Timestamp: 1732303163000
-Build ID: draad42m-8dagen-bug-definitief-gefixed
-Random: 0.9247816352
+DRAAD1D Deployment - WEEKHEADER CORRECTIE
+Timestamp: 1732319880000
+Build ID: draad1d-weekheader-periode-fix
+Random: 0.7389272451
 
 Force nieuwe build voor:
-- VaststellingDataTable.tsx DRAAD42M fix
-- VERWIJDERD foutieve +1 dag correctie
-- eachDayOfInterval is WEL inclusief (DRAAD42L was FOUT)
-- Week nu correct: 7 dagen, start maandag
-- Geen extra zondag meer aan begin
+- WeekTableHeader.tsx DRAAD1D fix
+- Gebruik weekDagen[0] (ma) en weekDagen[6] (zo) voor periode
+- Nieuwe periode header row met dd-MM-yyyy formaat
+- Validatie dat weekDagen exact 7 dagen bevat
+- Console logging voor debugging
+- Voorkomt foutieve datum weergave
