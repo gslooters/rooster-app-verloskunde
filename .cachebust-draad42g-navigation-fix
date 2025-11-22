@@ -1,0 +1,33 @@
+DRAAD42G WEEK NAVIGATION FIX - CACHE BUST
+==========================================
+
+Timestamp: 1732287089000
+Random: 7294
+Date: 2025-11-22 14:51:29 UTC
+
+FIX DETAILS:
+-----------
+✅ WeekNavigation.tsx - period_start parameter toegevoegd aan URLs
+✅ WeekDagdelenVaststellingTable.tsx - periodStart doorgegeven aan WeekNavigation
+✅ Complete navigatie keten hersteld: page.tsx -> VaststellingTable -> WeekNavigation
+✅ Alle week navigatie URLs bevatten nu correcte period_start parameter
+
+IMPACT:
+-------
+- Week navigatie werkt end-to-end correct
+- Geen "Geen period_start gevonden" errors meer
+- Consistente URL structuur door hele applicatie
+- Gebruikers kunnen probleemloos tussen weken navigeren
+
+VERIFICATIE:
+-----------
+1. Ga naar: /planning/design/week-dagdelen/{rosterId}/1?period_start=2025-11-24
+2. Klik "Volgende week"
+3. Verwacht: URL bevat ?period_start=2025-11-24
+4. Verwacht: Pagina laadt correct zonder error
+5. Herhaal voor alle 5 weken (heen en terug)
+
+GITHUB COMMITS:
+--------------
+- c2e456927e58b125d8f0548ac8476fdc23192e4c - WeekNavigation.tsx update
+- a8417bb044853dd56d3162af593bf71263416b68 - WeekDagdelenVaststellingTable.tsx update
