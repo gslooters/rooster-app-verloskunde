@@ -1,0 +1,20 @@
+# DRAAD1A FIX #2 - CLIENT-SIDE ZONDAG BUG FIX
+# Timestamp: 1732309591000
+# Date: 2025-11-22T20:53:11Z
+# 
+# FIX DETAILS:
+# - Vervangen eachDayOfInterval() door expliciete 7-dagen loop
+# - addDays(start, i) voor i=0 tot i=6
+# - Uitgebreide pre/post validatie
+# - Eerste dag MOET maandag zijn
+# - Laatste dag MOET zondag zijn
+# - Totaal MOET 7 dagen zijn
+# 
+# IMPACT:
+# - Rooster start NU correct op maandag (geen zondag meer!)
+# - Geen 8-dagen bug meer
+# - Timezone-safe implementatie
+# - Consistent met backend en "Niet Beschikbaar" scherm
+# 
+# FILES GEWIJZIGD:
+# - components/planning/week-dagdelen/VaststellingDataTable.tsx
