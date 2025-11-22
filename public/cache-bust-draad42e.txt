@@ -1,0 +1,17 @@
+DRAAD42E Cache Bust - Railway Redeploy
+=======================================
+Timestamp: 1732243890000
+Reden: Forceer Railway redeploy na serviceid correctie
+Fix: WeekDagdelenVaststellingTable.tsx gebruikt correcte 'serviceid' kolom
+Database: roster_period_staffing.serviceid (uuid, NOT NULL)
+Commit: Laatste fix al aanwezig in repo
+Actie: Railway moet nieuwe build maken met correcte code
+
+VERIFICATION CHECKLIST:
+✅ Code gebruikt 'serviceid' (zonder underscore)
+✅ Database schema bevestigd: serviceid kolom bestaat
+✅ Console error bevestigt: oude code draait nog op Railway
+⏳ Railway redeploy getriggerd door deze commit
+🎯 Na deploy: Week 48 selectie moet werken zonder error
+
+Cache-bust ID: DRAAD42E-railway-redeploy-1732243890000
