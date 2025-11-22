@@ -1,0 +1,45 @@
+RAILWAY DEPLOYMENT TRIGGER - DRAAD42G
+=====================================
+
+Random Number: 3856
+Timestamp: 1732287119000
+Deploy Time: 2025-11-22 14:51:59 UTC
+
+DEPLOYMENT DETAILS:
+------------------
+Fix: DRAAD42G Week Navigation period_start parameter
+Priority: HIGH - Kritieke gebruiksfunctionaliteit
+Status: READY FOR DEPLOYMENT
+
+CHANGES INCLUDED:
+-----------------
+1. WeekNavigation.tsx - period_start in URLs
+2. WeekDagdelenVaststellingTable.tsx - periodStart prop doorgifte
+3. Cache-bust bestand aangemaakt
+
+EXPECTED RESULT:
+---------------
+✅ Week navigatie werkt correct
+✅ URLs bevatten period_start parameter
+✅ Geen errors bij navigatie tussen weken
+✅ Consistente URL structuur
+
+VERIFICATION STEPS:
+------------------
+1. Check Railway deployment logs
+2. Verify build succeeds
+3. Test week navigation on production
+4. Confirm no console errors
+5. Test all 5 weeks (forward and backward)
+
+ROLLBACK PLAN:
+-------------
+If issues occur:
+1. Revert commits: db451783, a8417bb0, c2e45692
+2. Railway will auto-deploy previous working version
+3. Investigate issue in local environment
+
+DEPLOY COMMAND:
+--------------
+This file triggers automatic Railway deployment via GitHub integration
+No manual intervention required
