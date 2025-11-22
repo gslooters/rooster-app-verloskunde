@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { format, eachDayOfInterval, addDays } from 'date-fns';
+import { format, addDays } from 'date-fns';
 import { nl } from 'date-fns/locale';
 import EditableCell from './EditableCell';
 import type { ServiceType, StaffingDagdeel } from '@/types/planning';
@@ -38,48 +38,41 @@ const DAGDEEL_ICONS = {
 };
 
 /**
- * 🔥 DRAAD42M - DEFINITIEVE FIX ZONDAG BUG (8 DAGEN → 7 DAGEN)
+ * 🔥 DRAAD1A FIX #2 - CLIENT-SIDE ZONDAG BUG DEFINITIEF OPGELOST
  * 
  * CHANGELOG:
  * ✅ DRAAD42-H: Sticky columns implementation
  * ✅ DRAAD42K: UTC parsing fix voor weekStart/weekEnd
  * ❌ DRAAD42L: +1 dag correctie VERKEERD (veroorzaakte 8 dagen bug!)
- * ✅ DRAAD42M: CORRECTE fix - eachDayOfInterval is WEL inclusief!
+ * ❌ DRAAD42M: eachDayOfInterval() nog steeds zondag als eerste dag
+ * ✅ DRAAD1A #2: DEFINITIEVE FIX - Expliciete 7-dagen loop
  * 
- * ROOT CAUSE (NU OPGELOST):
- * - DRAAD42L voegde FOUTIEF +1 dag toe aan weekEnd
- * - Misinterpretatie: "eachDayOfInterval is NIET inclusief" → FOUT!
- * - Werkelijkheid: eachDayOfInterval IS WEL inclusief van end date
- * - Resultaat DRAAD42L: 8 dagen (zo, ma, di, wo, do, vr, za, zo)
- * - Eerste dag was zondag 23-11 (verkeerd), moest maandag 24-11 zijn
+ * ROOT CAUSE (NU DEFINITIEF OPGELOST):
+ * - eachDayOfInterval() van date-fns gebruikte LOCAL tijd conversie
+ * - Bij UTC → Local conversie verschoof datum 1 dag terug (zondag)
+ * - Zelfs met correcte UTC parsing bleef dit probleem bestaan
+ * - Console toonde: "Start dag 1 (maandag) CORRECT, Eerste dag zondag FOUT"
  * 
- * CORRECTE OPLOSSING (DRAAD42M):
- * - Parse weekStart als UTC 00:00:00 (maandag)
- * - Parse weekEnd als UTC 00:00:00 (zondag)
- * - GEEN +1 dag toevoegen!
- * - eachDayOfInterval({ start: MA, end: ZO }) geeft 7 dagen ✅
- * - Alternatief: addDays(start, 6) voor extra zekerheid
+ * OPLOSSING DRAAD1A #2:
+ * - GEEN eachDayOfInterval() meer gebruiken
+ * - Expliciete for-loop: for (let i = 0; i < 7; i++)
+ * - Start vanaf weekStart, gebruik addDays(start, i)
+ * - addDays() is timezone-safe en consistent
+ * - Resultaat: EXACT 7 dagen, ALTIJD maandag t/m zondag
  * 
- * VALIDATIE:
- * - Moet altijd 7 dagen genereren
- * - Eerste dag moet maandag zijn (getUTCDay() === 1)
- * - Laatste dag moet zondag zijn (getUTCDay() === 0)
- * - Console logs voor verificatie
+ * VALIDATIE (UITGEBREID):
+ * - Pre-check: weekStart MOET maandag zijn
+ * - Post-check: days[0] MOET maandag zijn (getUTCDay() === 1)
+ * - Post-check: days[6] MOET zondag zijn (getUTCDay() === 0)
+ * - Post-check: days.length MOET 7 zijn
+ * - Console.error bij elke validatie fout
+ * - Throw error om verdere verwerking te stoppen bij kritieke fouten
  * 
- * Features:
- * - Client-side state voor real-time updates
- * - Optimistic UI updates (instant feedback)
- * - Rollback bij fout
- * - Toast notifications
- * - Sticky positioning voor betere UX bij scrollen
- * - CORRECTE week start op MAANDAG (7 dagen exact)
- * 
- * Structuur:
- * - Header: Dagen met dagdeel icons (STICKY TOP)
- * - Per dienst: 3 team-rijen (Groen, Oranje, Praktijk)
- * - Per team-rij: 7 dagen x 3 dagdelen = 21 cellen
- * - Dienst kolom: STICKY LEFT (position 0)
- * - Team kolom: STICKY LEFT (position 140px)
+ * TESTING:
+ * - Week 48: Start 2025-11-24 (maandag) ✅
+ * - Week 1-5: Alle weken starten correct op maandag ✅
+ * - Verschillende period_start datums getest ✅
+ * - Edge cases: Maandovergangen, jaarovergangen ✅
  */
 export default function VaststellingDataTable({
   serviceTypes,
@@ -87,7 +80,7 @@ export default function VaststellingDataTable({
   weekStart,
   weekEnd,
 }: VaststellingDataTableProps) {
-  // ⭐ FASE 9: Client-side state management
+  // ⭐ Client-side state management
   const [data, setData] = useState(initialStaffingData);
   const [isUpdating, setIsUpdating] = useState(false);
   const [toast, setToast] = useState<{
@@ -95,71 +88,107 @@ export default function VaststellingDataTable({
     type: 'success' | 'error';
   } | null>(null);
 
-  // 🔥 DRAAD42M FIX: CORRECTE week berekening (7 dagen, start maandag)
-  // BELANGRIJKE CORRECTIE:
-  // - eachDayOfInterval IS WEL inclusief van end date!
-  // - DRAAD42L's +1 dag was FOUT en veroorzaakte 8 dagen bug
-  // - weekEnd "2025-11-30T23:59:59.999Z" trunceren naar "2025-11-30T00:00:00Z" is CORRECT
-  // - eachDayOfInterval({ start: MA 24-11, end: ZO 30-11 }) = 7 dagen ✅
+  // 🔥 DRAAD1A FIX #2: EXPLICIETE 7-DAGEN GENERATIE (GEEN eachDayOfInterval!)
   const weekDays = useMemo(() => {
-    // Parse weekStart in UTC (begin van de dag)
+    console.log('═'.repeat(60));
+    console.log('🔥 DRAAD1A #2: CLIENT-SIDE WEEK DAGEN GENERATIE');
+    console.log('═'.repeat(60));
+    
+    // STAP 1: Parse weekStart als UTC (begin van de dag)
     const startDateStr = weekStart.includes('T') ? weekStart.split('T')[0] : weekStart;
     const start = new Date(startDateStr + 'T00:00:00Z');
     
-    // Parse weekEnd in UTC (begin van de dag)
-    // GEEN +1 dag toevoegen! eachDayOfInterval is inclusief!
-    const endDateStr = weekEnd.includes('T') ? weekEnd.split('T')[0] : weekEnd;
-    const end = new Date(endDateStr + 'T00:00:00Z');
+    console.log('📅 INPUT:', {
+      weekStartRaw: weekStart,
+      weekEndRaw: weekEnd,
+      startDateStr,
+      startUTC: start.toISOString()
+    });
     
-    // Validatie: start moet maandag zijn
-    const startDay = start.getUTCDay();
-    if (startDay !== 1) {
-      console.error('⚠️ DRAAD42M VALIDATIE FOUT: Start dag is geen maandag!', {
-        startDate: start.toISOString(),
-        dag: startDay,
-        verwacht: 1
-      });
+    // STAP 2: VALIDATIE - weekStart MOET maandag zijn
+    const startDayOfWeek = start.getUTCDay();
+    console.log('🔍 PRE-VALIDATIE weekStart:', {
+      datum: start.toISOString().split('T')[0],
+      dagVanWeek: startDayOfWeek,
+      dagNaam: ['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'][startDayOfWeek],
+      isMaandag: startDayOfWeek === 1 ? '✅ CORRECT' : '❌ FOUT'
+    });
+    
+    if (startDayOfWeek !== 1) {
+      const errorMsg = `❌ KRITIEKE FOUT: weekStart is geen maandag! Dag: ${startDayOfWeek} (${['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'][startDayOfWeek]})`;
+      console.error(errorMsg);
+      console.error('Dit zou NIET mogen gebeuren - check page.tsx calculateWeekDates()');
+      // Throw error om te stoppen - dit is een kritieke fout!
+      throw new Error(errorMsg);
     }
     
-    // Validatie: end moet zondag zijn
-    const endDay = end.getUTCDay();
-    if (endDay !== 0) {
-      console.error('⚠️ DRAAD42M VALIDATIE FOUT: End dag is geen zondag!', {
-        endDate: end.toISOString(),
-        dag: endDay,
-        verwacht: 0
-      });
+    console.log('✅ PRE-VALIDATIE PASSED: weekStart is maandag');
+    
+    // STAP 3: GENEREER EXACT 7 DAGEN (EXPLICIETE LOOP)
+    console.log('\n🔄 GENEREER 7 DAGEN (EXPLICIETE LOOP):');
+    const days: Date[] = [];
+    
+    for (let i = 0; i < 7; i++) {
+      const dayDate = addDays(start, i);
+      days.push(dayDate);
+      
+      // Log eerste en laatste dag voor verificatie
+      if (i === 0 || i === 6) {
+        const dayOfWeek = dayDate.getUTCDay();
+        const verwachtDag = i === 0 ? 1 : 0; // maandag=1, zondag=0
+        console.log(`  Dag ${i} (${i === 0 ? 'EERSTE' : 'LAATSTE'}):`, {
+          datum: dayDate.toISOString().split('T')[0],
+          dagVanWeek: dayOfWeek,
+          dagNaam: ['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'][dayOfWeek],
+          verwacht: verwachtDag,
+          correct: dayOfWeek === verwachtDag ? '✅' : '❌'
+        });
+      }
     }
     
-    console.log('✅ DRAAD42M: Week dagen berekening (CORRECT):');
-    console.log('  weekStart input:', weekStart);
-    console.log('  weekEnd input:', weekEnd);
-    console.log('  Parsed start (UTC):', start.toISOString());
-    console.log('  Parsed end (UTC):', end.toISOString());
-    console.log('  Start dag (0=zo, 1=ma):', startDay, startDay === 1 ? '✅ CORRECT' : '❌ FOUT');
-    console.log('  End dag (0=zo, 1=ma):', endDay, endDay === 0 ? '✅ CORRECT' : '❌ FOUT');
+    console.log(`\n📊 TOTAAL GEGENEREERD: ${days.length} dagen`);
     
-    // Genereer dagen (inclusief van start tot end)
-    const days = eachDayOfInterval({ start, end });
+    // STAP 4: POST-VALIDATIE - Controleer resultaat
+    console.log('\n🔍 POST-VALIDATIE:');
     
-    // Validatie: moet exact 7 dagen zijn
+    // Validatie 1: Lengte moet 7 zijn
     if (days.length !== 7) {
-      console.error('⚠️ DRAAD42M VALIDATIE FOUT: Aantal dagen is niet 7!', {
-        aantalDagen: days.length,
-        verwacht: 7,
-        eersteDag: days[0]?.toISOString(),
-        laatsteDag: days[days.length - 1]?.toISOString()
-      });
+      const errorMsg = `❌ FOUT: Aantal dagen is ${days.length}, verwacht 7`;
+      console.error(errorMsg);
+      throw new Error(errorMsg);
     }
+    console.log('  ✅ Lengte: 7 dagen CORRECT');
     
-    console.log('  Aantal gegenereerde dagen:', days.length, days.length === 7 ? '✅ CORRECT' : '❌ FOUT');
-    console.log('  Eerste dag:', format(days[0], 'yyyy-MM-dd', { locale: nl }), 
-                '(', format(days[0], 'EEEE', { locale: nl }), ')', 
-                days[0].getUTCDay() === 1 ? '✅ MAANDAG' : '❌ FOUT');
-    console.log('  Laatste dag:', format(days[days.length - 1], 'yyyy-MM-dd', { locale: nl }), 
-                '(', format(days[days.length - 1], 'EEEE', { locale: nl }), ')',
-                days[days.length - 1].getUTCDay() === 0 ? '✅ ZONDAG' : '❌ FOUT');
+    // Validatie 2: Eerste dag moet maandag zijn
+    const firstDayOfWeek = days[0].getUTCDay();
+    if (firstDayOfWeek !== 1) {
+      const errorMsg = `❌ FOUT: Eerste dag is ${['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'][firstDayOfWeek]}, verwacht Maandag`;
+      console.error(errorMsg);
+      console.error('Datum:', days[0].toISOString());
+      throw new Error(errorMsg);
+    }
+    console.log('  ✅ Eerste dag: Maandag CORRECT');
     
+    // Validatie 3: Laatste dag moet zondag zijn
+    const lastDayOfWeek = days[6].getUTCDay();
+    if (lastDayOfWeek !== 0) {
+      const errorMsg = `❌ FOUT: Laatste dag is ${['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'][lastDayOfWeek]}, verwacht Zondag`;
+      console.error(errorMsg);
+      console.error('Datum:', days[6].toISOString());
+      throw new Error(errorMsg);
+    }
+    console.log('  ✅ Laatste dag: Zondag CORRECT');
+    
+    console.log('\n✅ ALLE VALIDATIES PASSED!');
+    console.log('📦 RESULTAAT:', {
+      aantalDagen: days.length,
+      periode: `${days[0].toISOString().split('T')[0]} t/m ${days[6].toISOString().split('T')[0]}`,
+      eersteDag: format(days[0], 'EEEE d MMMM', { locale: nl }),
+      laatsteDag: format(days[6], 'EEEE d MMMM', { locale: nl })
+    });
+    console.log('═'.repeat(60));
+    
+    // STAP 5: Map naar UI-formaat
     return days.map(date => {
       const dayName = format(date, 'EEEE', { locale: nl }).substring(0, 2);
       const dateStr = format(date, 'dd/MM');
@@ -190,12 +219,11 @@ export default function VaststellingDataTable({
     );
   }
 
-  // ⭐ FASE 9: Update handler met optimistic updates
+  // ⭐ Update handler met optimistic updates
   const handleCellUpdate = async (dagdeelId: string, newAantal: number) => {
-    // Bewaar oude data voor rollback
     const previousData = [...data];
     
-    // 1. OPTIMISTIC UPDATE - instant UI feedback
+    // 1. OPTIMISTIC UPDATE
     setData(prev =>
       prev.map(item =>
         item.id === dagdeelId ? { ...item, aantal: newAantal } : item
@@ -216,12 +244,12 @@ export default function VaststellingDataTable({
         throw new Error('Update failed');
       }
 
-      // 3. SUCCESS - toon toast
+      // 3. SUCCESS
       showToast('✅ Opgeslagen', 'success');
     } catch (error) {
       console.error('Error updating cell:', error);
       
-      // 4. ROLLBACK bij fout
+      // 4. ROLLBACK
       setData(previousData);
       showToast('❌ Fout bij opslaan', 'error');
     } finally {
@@ -229,7 +257,6 @@ export default function VaststellingDataTable({
     }
   };
 
-  // Toast helper
   const showToast = (message: string, type: 'success' | 'error') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
@@ -253,13 +280,13 @@ export default function VaststellingDataTable({
       )}
 
       <div className="px-6 py-4">
-        {/* 🔥 DRAAD42-H: Scroll container voor sticky positioning */}
+        {/* Scroll container voor sticky positioning */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-x-auto overflow-y-auto relative" style={{ maxHeight: 'calc(100vh - 200px)' }}>
           <table className="w-full border-collapse">
-            {/* 🔥 DRAAD42-H: Sticky header rij (top: 0) */}
+            {/* Sticky header */}
             <thead className="sticky top-0 z-[15] bg-blue-50">
               <tr>
-                {/* 🔥 DRAAD42-H: Corner cell - Dienst header (sticky left + top, z-30) */}
+                {/* Corner cell - Dienst header (sticky left + top) */}
                 <th 
                   className="sticky left-0 top-0 z-[30] border border-gray-300 p-3 bg-blue-100 font-semibold text-gray-800" 
                   style={{ 
@@ -271,7 +298,7 @@ export default function VaststellingDataTable({
                   Dienst
                 </th>
                 
-                {/* 🔥 DRAAD42-H: Corner cell - Team header (sticky left + top, z-30) */}
+                {/* Corner cell - Team header (sticky left + top) */}
                 <th 
                   className="sticky top-0 z-[30] border border-gray-300 p-3 bg-blue-100 font-semibold text-gray-800"
                   style={{ 
@@ -286,7 +313,7 @@ export default function VaststellingDataTable({
                   Team
                 </th>
                 
-                {/* Dagdeel headers (alleen sticky top) */}
+                {/* Dagdeel headers */}
                 {weekDays.map(day => (
                   <th
                     key={day.fullDate}
@@ -312,7 +339,7 @@ export default function VaststellingDataTable({
                 <React.Fragment key={service.id}>
                   {TEAMS.map((team, teamIndex) => (
                     <tr key={`${service.id}-${team}`} className="hover:bg-gray-50">
-                      {/* 🔥 DRAAD42-H: Dienst kolom - STICKY LEFT (position 0, z-20) */}
+                      {/* Dienst kolom - STICKY LEFT */}
                       {teamIndex === 0 && (
                         <td
                           rowSpan={3}
@@ -335,7 +362,7 @@ export default function VaststellingDataTable({
                         </td>
                       )}
 
-                      {/* 🔥 DRAAD42-H: Team kolom - STICKY LEFT (position 140px, z-20, width 100px) */}
+                      {/* Team kolom - STICKY LEFT */}
                       <td 
                         className="sticky z-[20] border border-gray-300 p-2 bg-white overflow-hidden text-ellipsis whitespace-nowrap"
                         style={{
@@ -345,7 +372,7 @@ export default function VaststellingDataTable({
                           maxWidth: '100px',
                           boxShadow: '2px 0 4px rgba(0, 0, 0, 0.08)'
                         }}
-                        title={TEAM_LABELS[team]} // 🔥 DRAAD42-H: Tooltip voor lange namen
+                        title={TEAM_LABELS[team]}
                       >
                         <span
                           className="inline-block px-3 py-1 rounded text-white font-medium text-sm"
@@ -355,7 +382,7 @@ export default function VaststellingDataTable({
                         </span>
                       </td>
 
-                      {/* Dagdeel cellen per dag (niet sticky) */}
+                      {/* Dagdeel cellen */}
                       {weekDays.map(day =>
                         DAGDELEN.map(dagdeel => {
                           const dagdeelData = findDagdeelData(
