@@ -1,12 +1,12 @@
 CACHE INVALIDATION TRIGGER
 ==========================
 
-Random Number: 87346
-Timestamp: 1732247311000
-Date: Fri Nov 22 2025 03:08:31 GMT+0000
+Random Number: 53982
+Timestamp: 1732247444000
+Date: Fri Nov 22 2025 03:30:44 GMT+0000
 
-Last Update: DRAAD42F roster_id fix
-Commit: f1970096a2acb0ff4785f8068524c01d224fa705
+Last Update: DRAAD42G routing fix
+Commit: dd5f0e4d22931128f7b2722e18acc91c72e7bc44
 
 DEPLOYMENT STATUS:
 - Railway auto-deploy: ACTIVE
