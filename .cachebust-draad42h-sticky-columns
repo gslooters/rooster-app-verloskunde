@@ -1,0 +1,15 @@
+DRAAD42-H CACHE BUSTER
+======================
+Timestamp: 1732290130000
+Random: 42867
+Deployment: Sticky Columns + Team Width Optimization
+
+Changes:
+- Team kolom verkleind naar 100px
+- Dienst kolom sticky (left: 0)
+- Team kolom sticky (left: 140px)  
+- Header rij sticky (top: 0)
+- Corner cells sticky (left + top)
+- Box shadows + tooltips
+
+Deployed: 2025-11-22T15:22:10Z
