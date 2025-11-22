@@ -18,21 +18,22 @@ interface WeekDagdelenVaststellingTableProps {
 }
 
 /**
- * DRAAD42D FIX #2 - Database Column Name Correction
+ * DRAAD43 FIX - Database Column Name Correction: serviceid -> service_id
  * 
- * PROBLEEM #1 (OPGELOST): 
+ * PROBLEEM #1 (OPGELOST - DRAAD42D): 
  * - Query gebruikte "datum" maar database kolom heet "date"
  * - Error: "column roster_period_staffing.datum does not exist"
  * - OPLOSSING: Alle "datum" vervangen door "date" ✅
  * 
- * PROBLEEM #2 (DEZE FIX):
- * - Query gebruikte "service_type_id" maar database kolom heet "serviceid"
- * - Error: "column roster_period_staffing.service_type_id does not exist"
- * - OPLOSSING: Alle "service_type_id" vervangen door "serviceid" ✅
+ * PROBLEEM #2 (DRAAD42D - VERKEERDE DIAGNOSE):
+ * - Query gebruikte "service_type_id" maar dachten database kolom heet "serviceid"
+ * - WERKELIJKE SITUATIE: Database kolom heet "service_id" (MET underscore!)
+ * - Error: "column roster_period_staffing.serviceid does not exist"
+ * - JUISTE OPLOSSING: Alle "serviceid" vervangen door "service_id" ✅
  * 
  * Database Schema (roster_period_staffing):
  * - id (uuid)
- * - serviceid (uuid)        ← Correcte naam!
+ * - service_id (uuid)        ← Correcte naam MET underscore!
  * - date (date)
  * - minstaff (integer)
  * - maxstaff (integer)
@@ -67,10 +68,10 @@ export default function WeekDagdelenVaststellingTable({
       setError(null);
 
       // ✅ DRAAD42D FIX #1: Gebruik "date" in plaats van "datum"
-      // ✅ DRAAD42D FIX #2: Gebruik "serviceid" in plaats van "service_type_id"
+      // ✅ DRAAD43 FIX: Gebruik "service_id" in plaats van "serviceid"
       const { data: staffingRecords, error: staffingError } = await supabase
         .from('roster_period_staffing')
-        .select('id, date, serviceid')
+        .select('id, date, service_id')
         .eq('roster_period_id', rosterId)
         .gte('date', weekStart.split('T')[0])
         .lte('date', weekEnd.split('T')[0]);
@@ -94,12 +95,12 @@ export default function WeekDagdelenVaststellingTable({
       if (dagdelenError) throw dagdelenError;
 
       // ✅ DRAAD42D FIX #1: Gebruik "date" property
-      // ✅ DRAAD42D FIX #2: Gebruik "serviceid" property
+      // ✅ DRAAD43 FIX: Gebruik "service_id" property
       const enrichedData = (dagdelenData || []).map(dagdeel => {
         const staffingRecord = staffingRecords.find(r => r.id === dagdeel.roster_period_staffing_id);
         return {
           ...dagdeel,
-          serviceid: staffingRecord?.serviceid,
+          service_id: staffingRecord?.service_id,
           date: staffingRecord?.date,
         };
       });
