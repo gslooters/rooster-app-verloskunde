@@ -5,23 +5,23 @@ import { notFound, redirect } from 'next/navigation';
 import WeekDagdelenVaststellingTable from '@/components/planning/week-dagdelen/WeekDagdelenVaststellingTable';
 
 /**
- * DRAAD42 FIX - Week Dagdelen Vaststelling Scherm
+ * DRAAD42G FIX - Week Dagdelen Vaststelling Scherm
  * 
  * Route: /planning/design/week-dagdelen/[rosterId]/[weekNummer]?period_start=YYYY-MM-DD
  * 
- * FIX CHANGELOG (21-NOV-2025):
- * ✅ Vervangen 'roster_period' door 'roosters' (correcte tabel)
- * ✅ Toegevoegd period_start uit searchParams lezen
- * ✅ Verwijderd database query voor start_date - gebruik URL parameter
- * ✅ Defensieve validatie voor ontbrekende parameters
- * ✅ Service types filter aangepast: is_active → actief
- * ✅ Verbeterde error messages en logging
+ * FIX CHANGELOG:
+ * ✅ DRAAD42D: Vervangen 'roster_period' door 'roosters'
+ * ✅ DRAAD42D: Toegevoegd period_start uit searchParams lezen
+ * ✅ DRAAD42D: Service types filter: is_active → actief
+ * ✅ DRAAD42F: Database queries gebruik nu roster_id i.p.v. roster_period_id
+ * ✅ DRAAD42G: periodStart doorgegeven aan WeekDagdelenVaststellingTable (ROUTING FIX)
  * 
  * Functionaliteit:
  * - Server-side data fetching voor rooster
  * - Validatie van weekNummer (1-5) en period_start
  * - Service types ophalen
  * - Dynamische week navigatie gebaseerd op period_start
+ * - Terug-navigatie naar dashboard MET period_start parameter
  */
 
 interface PageProps {
@@ -30,7 +30,7 @@ interface PageProps {
     weekNummer: string;
   };
   searchParams: {
-    period_start?: string; // 🔥 FIX 1: Toegevoegd
+    period_start?: string;
     [key: string]: string | string[] | undefined;
   };
 }
@@ -41,14 +41,13 @@ export const metadata = {
 };
 
 /**
- * 🔥 FIX 2: Haal rooster data op van CORRECTE tabel: 'roosters'
- * Oude code gebruikte niet-bestaande 'roster_period' tabel
+ * Haal rooster data op van CORRECTE tabel: 'roosters'
  */
 async function getRosterData(rosterId: string) {
   const supabase = createServerComponentClient({ cookies });
   
   const { data, error } = await supabase
-    .from('roosters') // ✅ FIXED: Was 'roster_period'
+    .from('roosters')
     .select('*')
     .eq('id', rosterId)
     .single();
@@ -68,8 +67,8 @@ async function getServiceTypes() {
   const { data, error } = await supabase
     .from('service_types')
     .select('*')
-    .eq('actief', true) // ✅ FIXED: Was 'is_active', schema heeft 'actief'
-    .order('code'); // ✅ Sorteer op code
+    .eq('actief', true)
+    .order('code');
   
   if (error) {
     console.error('❌ DRAAD42: Error fetching service types:', error);
@@ -81,14 +80,11 @@ async function getServiceTypes() {
 }
 
 /**
- * 🔥 FIX 3: Bereken weekdatums vanaf period_start (uit URL)
+ * Bereken weekdatums vanaf period_start (uit URL)
  * weekIndex = 1-5 (positie binnen roosterperiode)
  */
 function calculateWeekDates(periodStart: string, weekIndex: number) {
-  // Parse period_start als UTC datum
   const startDate = new Date(periodStart + 'T00:00:00Z');
-  
-  // Bereken week offset (weekIndex 1 = week 0, weekIndex 2 = week 1, etc.)
   const weekOffset = (weekIndex - 1) * 7;
   
   const weekStart = new Date(startDate);
@@ -115,11 +111,11 @@ function getWeekNumber(date: Date): number {
 
 export default async function WeekDagdelenPage({ params, searchParams }: PageProps) {
   const { rosterId, weekNummer } = params;
-  const periodStart = searchParams.period_start; // 🔥 FIX 4: Lees uit URL
+  const periodStart = searchParams.period_start;
   
   console.log('🔍 DRAAD42: Page params:', { rosterId, weekNummer, periodStart });
   
-  // 🔥 FIX 5: Validatie period_start parameter
+  // Validatie period_start parameter
   if (!periodStart || typeof periodStart !== 'string') {
     console.error('❌ DRAAD42: Geen period_start gevonden in URL');
     return (
@@ -156,14 +152,14 @@ export default async function WeekDagdelenPage({ params, searchParams }: PagePro
     notFound();
   }
   
-  // 🔥 FIX 6: Haal roster op van CORRECTE tabel
+  // Haal roster op
   const roster = await getRosterData(rosterId);
   if (!roster) {
     console.error('❌ DRAAD42: Roster niet gevonden:', rosterId);
     notFound();
   }
   
-  // 🔥 FIX 7: Bereken week data vanaf period_start (NIET vanaf roster.start_date)
+  // Bereken week data vanaf period_start
   const { weekStart, weekEnd } = calculateWeekDates(periodStart, weekNum);
   const actualWeekNumber = getWeekNumber(weekStart);
   
@@ -179,7 +175,7 @@ export default async function WeekDagdelenPage({ params, searchParams }: PagePro
     serviceTypesCount: serviceTypes.length
   });
   
-  // Props voor client component
+  // 🔥 DRAAD42G FIX: periodStart toegevoegd aan pageData
   const pageData = {
     rosterId,
     weekNummer: weekNum,
@@ -188,6 +184,7 @@ export default async function WeekDagdelenPage({ params, searchParams }: PagePro
     weekStart: weekStart.toISOString(),
     weekEnd: weekEnd.toISOString(),
     serviceTypes,
+    periodStart: periodStart, // 🔥 NIEUW - voor routing terug naar dashboard
   };
   
   return (
