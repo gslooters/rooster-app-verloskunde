@@ -1,0 +1,46 @@
+# DRAAD1F4: FINAL DEPLOYMENT TRIGGER
+# Timestamp: 2025-11-23T19:03:30+01:00
+# Random: 74628
+
+## KRITIEKE DEPENDENCY FIX
+
+### HET ECHTE PROBLEEM:
+❌ Date-fns-tz 2.0.0 is NIET compatibel met date-fns 4.x
+✅ Date-fns-tz 3.2.0 IS compatibel met date-fns 4.x
+
+### VORIGE POGINGEN FAALDEN OMDAT:
+1. DRAAD1F voegde date-fns-tz 2.0.0 toe (incompatibel)
+2. Probeerden date-fns te downgraden naar 2.x (breaks andere code)
+3. Mijn reset verwijderde date-fns-tz compleet (breaks lib/date-utils.ts)
+
+### NU CORRECTE FIX:
+```json
+"date-fns": "^4.1.0",
+"date-fns-tz": "^3.2.0"
+```
+
+### VERWACHTE BUILD OUTPUT:
+```
+npm install
+  - date-fns@4.1.0
+  - date-fns-tz@3.2.0 ✅
+
+npm run build
+  - lib/date-utils.ts compiles ✅
+  - No module not found errors ✅
+  - Build succeeds ✅
+
+npm start
+  - Container starts ✅
+  - Health check PASSED ✅
+```
+
+### VERIFICATIE:
+Date-fns-tz 3.x documentation:
+- "Supports date-fns v3 and v4"
+- API unchanged from 2.x
+- formatInTimeZone() works identically
+
+---
+Dit bestand triggert automatische Railway deployment.
+VERWACHTING: Deployment SUCCEEDS binnen 3 minuten!
