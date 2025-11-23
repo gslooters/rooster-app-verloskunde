@@ -1,8 +1,9 @@
 'use client';
 
 import React from 'react';
-import { format, parseISO } from 'date-fns';
+import { parseISO } from 'date-fns';
 import { nl } from 'date-fns/locale';
+import { formatDateDMY, formatUTC } from '@/lib/date-utils';
 
 interface WeekDag {
   datum: string;
@@ -32,15 +33,22 @@ const DAGDEEL_EMOJI = {
  * ✅ Z-index: thead(40) < frozen-cols(45)
  * ✅ BoxShadow op frozen columns voor visuele scheiding
  * ✅ Background-clip voor smooth scrolling
+ * 
+ * 🔥 DRAAD1F - TIMEZONE BUG FIX:
+ * ✅ Gebruik formatUTC() functies i.p.v. format() voor timezone-veilige formatting
+ * ✅ formatDateDMY() voor dd-MM-yyyy periode formatting
+ * ✅ formatUTC() met d/M pattern voor individuele dag headers
+ * ✅ Resultaat: Correcte datums in ÉLKE timezone (UTC-4, UTC+1, etc.)
  */
 export function WeekTableHeader({ weekDagen }: WeekTableHeaderProps) {
   /**
    * Format datum voor individuele dag headers (d/M formaat)
+   * 🔥 DRAAD1F: Gebruik formatUTC() voor timezone-veilige formatting
    */
   const formatDatum = (datum: string) => {
     try {
       const date = parseISO(datum);
-      return format(date, 'd/M', { locale: nl });
+      return formatUTC(date, 'd/M');
     } catch (error) {
       console.error('❌ WeekTableHeader: Fout bij formatteren datum', datum, error);
       return datum; // Fallback to original string
@@ -48,8 +56,9 @@ export function WeekTableHeader({ weekDagen }: WeekTableHeaderProps) {
   };
 
   /**
-   * 🔥 DRAAD1D FIX: Genereer periode string direct vanuit weekDagen array
+   * 🔥 DRAAD1D FIX + DRAAD1F: Genereer periode string direct vanuit weekDagen array
    * Gebruik altijd weekDagen[0] (maandag) en weekDagen[6] (zondag)
+   * 🔥 DRAAD1F: Gebruik formatDateDMY() voor timezone-veilige formatting
    */
   const getPeriodeString = () => {
     if (!weekDagen || weekDagen.length !== 7) {
@@ -62,10 +71,10 @@ export function WeekTableHeader({ weekDagen }: WeekTableHeaderProps) {
       const maandag = parseISO(weekDagen[0].datum);
       const zondag = parseISO(weekDagen[6].datum);
       
-      const maandagStr = format(maandag, 'dd-MM-yyyy', { locale: nl });
-      const zondagStr = format(zondag, 'dd-MM-yyyy', { locale: nl });
+      const maandagStr = formatDateDMY(maandag);
+      const zondagStr = formatDateDMY(zondag);
       
-      console.log('✅ WeekTableHeader periode:', {
+      console.log('✅ WeekTableHeader periode (DRAAD1F UTC):', {
         maandag: weekDagen[0].datum,
         zondag: weekDagen[6].datum,
         formatted: `${maandagStr} - ${zondagStr}`
