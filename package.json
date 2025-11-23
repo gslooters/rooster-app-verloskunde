@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build --no-lint && node scripts/postbuild.js",
     "start": "HOSTNAME=0.0.0.0 node .next/standalone/server.js",
-    "lint": "next lint"
+    "lint": "next lint",
+    "preinstall": "npm install --package-lock-only || true"
   },
   "dependencies": {
     "@supabase/auth-helpers-nextjs": "^0.10.0",
