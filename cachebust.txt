@@ -1,3 +1,6 @@
-1732385360
-Last update: 2025-11-23T18:32:40+01:00
-Force rebuild trigger
+1732385595
+Last update: 2025-11-23T18:33:15+01:00
+Build trigger: date-fns downgrade v2.30.0
+Compatibility: date-fns-tz@2.0.0 ✓
+Railway rebuild #3
+Fix: legacy-peer-deps + nixpacks config
