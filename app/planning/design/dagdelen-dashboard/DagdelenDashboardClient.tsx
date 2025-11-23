@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
 interface WeekInfo {
   weekNumber: number; // ISO weeknummer (48-52)
-  weekIndex: number;   // 🔥 NIEUWE: Week positie binnen roosterperiode (1-5)
+  weekIndex: number;   // 🔥 Week positie binnen roosterperiode (1-5)
   startDate: string;
   endDate: string;
   hasChanges: boolean;
@@ -25,21 +25,12 @@ export default function DagdelenDashboardClient() {
   const [hasError, setHasError] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rosterInfo, setRosterInfo] = useState<any>(null);
-  const [isDataReady, setIsDataReady] = useState(false); // ✅ Extra state voor render safety
+  const [isDataReady, setIsDataReady] = useState(false);
   
   const supabase = createClientComponentClient();
 
-  useEffect(() => {
-    if (rosterId && periodStart) {
-      loadWeekData();
-    } else {
-      setError('Geen roster_id of period_start gevonden in URL');
-      setHasError(true);
-      setIsLoading(false);
-    }
-  }, [rosterId, periodStart]);
-
-  const loadWeekData = async () => {
+  // 🔧 DRAAD2A FIX: useCallback voor loadWeekData om dependency issues te voorkomen
+  const loadWeekData = useCallback(async () => {
     try {
       // ✅ Reset states
       setIsLoading(true);
@@ -63,8 +54,7 @@ export default function DagdelenDashboardClient() {
       setRosterInfo(roster);
       console.log('✅ Rooster info opgehaald:', roster);
 
-      // ✅ DRAAD37K2-FIX: Forceer UTC parsing en verwijder onnodige normalisatie
-      // periodStart komt AL correct binnen vanaf Dashboard (maandag 24-11-2025)
+      // ✅ DRAAD37K2-FIX: Forceer UTC parsing
       const startDate = new Date(periodStart! + 'T00:00:00Z');
       
       console.log('🔍 Period Start (input):', periodStart);
@@ -74,9 +64,8 @@ export default function DagdelenDashboardClient() {
       
       const weeks: WeekInfo[] = [];
 
-      // Genereer exact 5 weken vanaf startDate (ZONDER normalisatie)
+      // Genereer exact 5 weken vanaf startDate
       for (let i = 0; i < 5; i++) {
-        // ✅ Gebruik UTC methoden om timezone issues te voorkomen
         const weekStart = new Date(startDate);
         weekStart.setUTCDate(startDate.getUTCDate() + (i * 7));
         
@@ -84,19 +73,16 @@ export default function DagdelenDashboardClient() {
         weekEnd.setUTCDate(weekStart.getUTCDate() + 6);
 
         const weekNumber = getWeekNumber(weekStart);
-        const weekIndex = i + 1; // 🔥 OPTIE A: Week index 1-5
+        const weekIndex = i + 1;
         
         console.log(`✅ Week ${weekIndex}: ISO Weeknr ${weekNumber}, Start: ${formatDateNL(weekStart)}, End: ${formatDateNL(weekEnd)}`);
 
-        // 🔥 CRITICAL FIX: Query via parent tabel met JOIN
         const weekStartStr = formatDateForQuery(weekStart);
         const weekEndStr = formatDateForQuery(weekEnd);
         
         console.log(`🔎 Supabase query: roster_period_staffing.date >= ${weekStartStr} AND date <= ${weekEndStr}`);
 
-        // ✅ NIEUWE AANPAK: Query parent tabel + JOIN naar dagdelen
-        // roster_period_staffing heeft wel een date kolom!
-        // roster_period_staffing_dagdelen heeft alleen een foreign key (roster_period_staffing_id)
+        // ✅ Query parent tabel + JOIN naar dagdelen
         const { data: parentRecords, error: queryError } = await supabase
           .from('roster_period_staffing')
           .select(`
@@ -117,10 +103,11 @@ export default function DagdelenDashboardClient() {
           console.log(`📊 Week ${weekIndex}: ${parentRecords?.length || 0} parent records opgehaald`);
         }
 
-        // 🔧 DRAAD39.3: Defensieve data extractie met null checks
+        // 🔧 DRAAD2A: Verbeterde defensieve data extractie
         const dagdelenRecords = Array.isArray(parentRecords) 
           ? parentRecords.flatMap(parent => {
-              const dagdelen = parent?.roster_period_staffing_dagdelen;
+              if (!parent || typeof parent !== 'object') return [];
+              const dagdelen = parent.roster_period_staffing_dagdelen;
               return Array.isArray(dagdelen) ? dagdelen : [];
             })
           : [];
@@ -133,19 +120,19 @@ export default function DagdelenDashboardClient() {
 
         const hasChanges: boolean = modifiedChanges.length > 0;
         
-        // 🔧 DRAAD39.3: Safe lastUpdated met extra validatie
+        // 🔧 DRAAD2A: Type-safe lastUpdated met extra validatie
         let lastUpdated: string | null = null;
         if (modifiedChanges.length > 0) {
           try {
             const sorted = modifiedChanges
-              .filter((c: any) => c.updated_at) // Filter out null/undefined
+              .filter((c: any) => c?.updated_at && typeof c.updated_at === 'string')
               .sort((a: any, b: any) => {
                 const timeA = new Date(a.updated_at).getTime();
                 const timeB = new Date(b.updated_at).getTime();
                 return timeB - timeA;
               });
             
-            if (sorted.length > 0 && sorted[0].updated_at) {
+            if (sorted.length > 0 && sorted[0]?.updated_at) {
               lastUpdated = sorted[0].updated_at;
             }
           } catch (err) {
@@ -154,8 +141,8 @@ export default function DagdelenDashboardClient() {
         }
 
         weeks.push({
-          weekNumber,    // ISO weeknummer (48-52) voor display
-          weekIndex,     // 🔥 Week index (1-5) voor routing!
+          weekNumber,
+          weekIndex,
           startDate: formatDate(weekStart),
           endDate: formatDate(weekEnd),
           hasChanges,
@@ -163,14 +150,17 @@ export default function DagdelenDashboardClient() {
         });
       }
 
-      // 🔧 DRAAD39.3: Debug logging vóór setState
+      // 🔧 DRAAD2A: Debug logging vóór setState
       console.log('📊 Gegenereerde weken:', weeks.map(w => `Week ${w.weekIndex} (ISO: ${w.weekNumber}): ${w.startDate}-${w.endDate}`).join(', '));
-      console.log('🔍 weekData details:', JSON.stringify(weeks, null, 2));
       
-      // ✅ FASE 1: Validatie voordat state wordt gezet
+      // ✅ DRAAD2A FIX: Validatie voordat state wordt gezet
       if (!Array.isArray(weeks) || weeks.length === 0) {
         console.error('❌ Geen geldige weken gegenereerd!');
         throw new Error('Geen weekdata kunnen genereren');
+      }
+      
+      if (weeks.length !== 5) {
+        console.warn('⚠️ Verwachte 5 weken, maar kreeg:', weeks.length);
       }
       
       console.log('✅ weekData succesvol gezet, aantal weken:', weeks.length);
@@ -182,7 +172,7 @@ export default function DagdelenDashboardClient() {
       setTimeout(() => {
         setIsDataReady(true);
         console.log('✅ isDataReady gezet op true');
-      }, 100);
+      }, 50);
       
     } catch (error) {
       console.error('❌ Fout bij laden weekdata:', error);
@@ -191,7 +181,17 @@ export default function DagdelenDashboardClient() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [rosterId, periodStart, supabase]);
+
+  useEffect(() => {
+    if (rosterId && periodStart) {
+      loadWeekData();
+    } else {
+      setError('Geen roster_id of period_start gevonden in URL');
+      setHasError(true);
+      setIsLoading(false);
+    }
+  }, [rosterId, periodStart, loadWeekData]);
 
   /**
    * Berekent ISO-8601 weeknummer voor een gegeven datum
@@ -199,7 +199,7 @@ export default function DagdelenDashboardClient() {
    */
   const getWeekNumber = (date: Date): number => {
     const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-    const dayNum = d.getUTCDay() || 7; // Zondag=7
+    const dayNum = d.getUTCDay() || 7;
     d.setUTCDate(d.getUTCDate() + 4 - dayNum);
     const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
     return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
@@ -207,7 +207,6 @@ export default function DagdelenDashboardClient() {
 
   /**
    * Format datum voor Nederlandse weergave (dd/mm)
-   * ✅ Gebruikt UTC om timezone issues te voorkomen
    */
   const formatDate = (date: Date): string => {
     const day = String(date.getUTCDate()).padStart(2, '0');
@@ -217,7 +216,6 @@ export default function DagdelenDashboardClient() {
 
   /**
    * Format datum voor Nederlandse volledige weergave
-   * ✅ Helper voor logging
    */
   const formatDateNL = (date: Date): string => {
     return date.toLocaleDateString('nl-NL', { 
@@ -229,8 +227,7 @@ export default function DagdelenDashboardClient() {
   };
 
   /**
-   * ✅ VERBETERING 3: Format datum voor volledige Nederlandse weergave
-   * Gebruikt voor rooster periode weergave onder titel
+   * Format datum voor volledige Nederlandse weergave
    */
   const formatDateFull = (date: Date): string => {
     const months = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 
@@ -243,7 +240,6 @@ export default function DagdelenDashboardClient() {
 
   /**
    * Format datum voor Supabase query (YYYY-MM-DD)
-   * ✅ Gebruikt UTC om exacte datum te garanderen
    */
   const formatDateForQuery = (date: Date): string => {
     const year = date.getUTCFullYear();
@@ -253,33 +249,39 @@ export default function DagdelenDashboardClient() {
   };
 
   /**
-   * 🔥 FIX 1 - DRAAD40B: Week click handler met period_start parameter
-   * Route: /planning/design/week-dagdelen/[rosterId]/[weekIndex]?period_start=[periodStart]
-   * weekIndex = positie binnen 5-weekse roosterperiode (1, 2, 3, 4, 5)
+   * 🔥 DRAAD2A: Week click handler met period_start parameter
    */
-  const handleWeekClick = (weekIndex: number) => {
-    console.log(`🔗 OPTIE A: Navigeren naar week INDEX ${weekIndex}`);
+  const handleWeekClick = useCallback((weekIndex: number) => {
+    if (!rosterId || !periodStart) {
+      console.error('❌ Kan niet navigeren: ontbrekende parameters');
+      return;
+    }
+    
+    console.log(`🔗 Navigeren naar week INDEX ${weekIndex}`);
     console.log(`📝 Parameters: rosterId=${rosterId}, weekIndex=${weekIndex}, periodStart=${periodStart}`);
     
-    // 🔥 FIX 1: Voeg period_start parameter toe aan URL
     router.push(
       `/planning/design/week-dagdelen/${rosterId}/${weekIndex}?period_start=${periodStart}`
     );
-  };
+  }, [rosterId, periodStart, router]);
 
-  const handleExportPDF = async () => {
-    // Implementeer PDF export later
+  const handleExportPDF = () => {
     alert('PDF export wordt geïmplementeerd in volgende fase');
   };
 
-  // ✅ VERBETERING 1: Correcte terugnavigatie naar Dashboard Rooster Ontwerp
-  const handleBack = () => {
+  const handleBack = useCallback(() => {
+    if (!rosterId) {
+      router.push('/planning/design/dashboard');
+      return;
+    }
     router.push(`/planning/design/dashboard?roster_id=${rosterId}`);
-  };
+  }, [rosterId, router]);
 
-  // 🔧 DRAAD39.3: Safe date formatting voor lastUpdated
+  /**
+   * 🔧 DRAAD2A: Type-safe date formatting
+   */
   const formatLastUpdated = (dateString: string | null): string => {
-    if (!dateString) return '';
+    if (!dateString || typeof dateString !== 'string') return '';
     
     try {
       const date = new Date(dateString);
@@ -296,9 +298,7 @@ export default function DagdelenDashboardClient() {
 
   // ✅ FASE 2: Conditional Rendering Guards
   
-  // Guard 1: Loading state
   if (isLoading) {
-    console.log('🔄 Rendering loading state...');
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="text-center">
@@ -310,9 +310,7 @@ export default function DagdelenDashboardClient() {
     );
   }
 
-  // Guard 2: Error state
   if (hasError || error) {
-    console.log('❌ Rendering error state:', error);
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-6">
@@ -331,7 +329,7 @@ export default function DagdelenDashboardClient() {
               Terug naar Dashboard
             </button>
             <button
-              onClick={() => loadWeekData()}
+              onClick={loadWeekData}
               className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
             >
               Opnieuw proberen
@@ -342,9 +340,7 @@ export default function DagdelenDashboardClient() {
     );
   }
 
-  // Guard 3: Data niet klaar
   if (!isDataReady) {
-    console.log('⏳ Data wordt verwerkt, isDataReady:', isDataReady);
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="text-center">
@@ -358,9 +354,7 @@ export default function DagdelenDashboardClient() {
     );
   }
 
-  // Guard 4: Geen weekData
   if (!weekData || !Array.isArray(weekData) || weekData.length === 0) {
-    console.log('⚠️ Geen weekData beschikbaar, weekData:', weekData);
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="max-w-md w-full bg-yellow-50 border border-yellow-200 rounded-lg shadow-lg p-6">
@@ -379,7 +373,7 @@ export default function DagdelenDashboardClient() {
               Terug
             </button>
             <button
-              onClick={() => loadWeekData()}
+              onClick={loadWeekData}
               className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
             >
               Opnieuw laden
@@ -391,28 +385,22 @@ export default function DagdelenDashboardClient() {
   }
 
   // ✅ Als we hier komen, hebben we gevalideerde data
-  console.log('✅ Rendering main content met', weekData.length, 'weken');
-
-  // 🔧 DRAAD39.3: Safe access met defaults
   const firstWeek = weekData[0];
   const lastWeek = weekData[4] || weekData[weekData.length - 1];
   
-  // ✅ VERBETERING 2: Titel ZONDER datums tussen haakjes
   const periodTitle = firstWeek && lastWeek 
     ? `Week ${firstWeek.weekNumber || '?'} – Week ${lastWeek.weekNumber || '?'}`
     : '';
 
-  // ✅ VERBETERING 3: Rooster info met volledige datums
   const periodStartDate = new Date(periodStart! + 'T00:00:00Z');
   const periodEndDate = new Date(periodStartDate);
-  periodEndDate.setUTCDate(periodStartDate.getUTCDate() + 34); // 5 weken - 1 dag
+  periodEndDate.setUTCDate(periodStartDate.getUTCDate() + 34);
   
   const rosterPeriodText = `${formatDateFull(periodStartDate)} - ${formatDateFull(periodEndDate)}`;
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto">
-        {/* Header */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
             <button
@@ -440,23 +428,20 @@ export default function DagdelenDashboardClient() {
             Diensten per Dagdeel Aanpassen: Periode {periodTitle}
           </h1>
           
-          {/* ✅ VERBETERING 3: Rooster info met volledige datums in kleine letters */}
           <p className="text-sm text-gray-600 mt-2">
             rooster: {rosterPeriodText}
           </p>
         </div>
 
-        {/* 🎯 OPTIE A: Week Cards - onClick gebruikt nu weekIndex (1-5)! */}
         <div className="space-y-4">
           {weekData.map((week, index) => {
-            // Extra validatie per week
             if (!week || typeof week !== 'object') {
               console.warn(`⚠️ Invalid week at index ${index}:`, week);
               return null;
             }
             
-            const weekNum = week.weekNumber || 0;  // ISO weeknummer voor display
-            const weekIdx = week.weekIndex || 0;    // 🔥 Week index voor routing
+            const weekNum = week.weekNumber || 0;
+            const weekIdx = week.weekIndex || 0;
             const startDt = week.startDate || '?';
             const endDt = week.endDate || '?';
             const hasChg = Boolean(week.hasChanges);
@@ -501,7 +486,6 @@ export default function DagdelenDashboardClient() {
           })}
         </div>
 
-        {/* Info sectie */}
         <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
           <div className="flex">
             <svg className="w-5 h-5 text-blue-600 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
@@ -514,17 +498,16 @@ export default function DagdelenDashboardClient() {
           </div>
         </div>
 
-        {/* Debug info (development only) */}
         {process.env.NODE_ENV === 'development' && (
           <div className="mt-6 bg-gray-800 text-gray-100 rounded-lg p-4 text-xs font-mono">
-            <div className="font-bold mb-2">🐛 Debug Info (FIX 1 - DRAAD40B):</div>
+            <div className="font-bold mb-2">🐛 Debug Info (DRAAD2A):</div>
             <div>isLoading: {String(isLoading)}</div>
             <div>hasError: {String(hasError)}</div>
             <div>isDataReady: {String(isDataReady)}</div>
             <div>weekData.length: {weekData?.length || 0}</div>
             <div>roster_id: {rosterId}</div>
             <div>period_start: {periodStart}</div>
-            <div className="mt-2 text-green-400">✅ FIX 1: period_start parameter toegevoegd aan URL!</div>
+            <div className="mt-2 text-green-400">✅ DRAAD2A: Type safety + useCallback improvements</div>
             <div className="text-green-400">✅ Display: ISO weeknummer (48-52)</div>
             <div className="text-green-400">✅ Route: /planning/design/week-dagdelen/[rosterId]/[1-5]?period_start=[date]</div>
           </div>
