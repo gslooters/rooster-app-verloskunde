@@ -46,22 +46,21 @@ const DAGDEEL_ICONS = {
 };
 
 /**
- * 🔥 DRAAD45.7 FIX: DATUM → DATE PROPERTY MISMATCH
+ * 🔥 DRAAD45.8: TYPESCRIPT TYPE FIX
  * 
- * ROOT CAUSE GEVONDEN:
- * - findDagdeelData() gebruikte item.datum
- * - Database kolom + enriched data gebruikt 'date'
- * - Result: ALLE lookups faalden → fallback data (groen, MAG, 0)
+ * ROOT CAUSE:
+ * - TypeScript type check faalt: team === 'Tot' (mixed case)
+ * - Type definitie: Team = 'Groen' | 'Oranje' | 'TOT' (uppercase TOT)
+ * - Result: "types have no overlap" compile error
  * 
  * FIX:
- * - item.datum → item.date (regel 224)
- * - Added console.log() voor debugging
- * - Matches NU correct met database data
+ * - Verwijder onnodige team mapping (team is al correct type)
+ * - Mapping dagdeel blijft: 'O' (letter) → '0' (cijfer)
+ * - Gebruik service_id voor lookup (was service_type_id)
  * 
  * VERIFICATIE:
- * - Console: [DRAAD45.7] logs met match/no-match status
- * - Visual: Mix van rood/groen/grijs cellen
- * - Data: Variërende aantallen per cel
+ * - TypeScript compile succesvol
+ * - Correcte data matching in UI
  */
 export default function VaststellingDataTable({
   serviceTypes,
@@ -79,11 +78,10 @@ export default function VaststellingDataTable({
 
   // Debug: Log initial data structure
   useMemo(() => {
-    console.log('🔍 [DRAAD45.7] Initial staffing data sample:', {
+    console.log('🔍 [DRAAD45.8] Initial staffing data sample:', {
       totalRecords: initialStaffingData.length,
       sample: initialStaffingData[0],
       hasDateProperty: initialStaffingData[0]?.hasOwnProperty('date'),
-      hasDatumProperty: initialStaffingData[0]?.hasOwnProperty('datum'),
       dateValue: initialStaffingData[0]?.['date' as keyof StaffingDagdeel],
     });
   }, [initialStaffingData]);
@@ -189,7 +187,7 @@ export default function VaststellingDataTable({
     });
   }, [weekStart, weekEnd]);
 
-  // 🔥 DRAAD45.8 FIX: Geavanceerde dagdeel/team mapping
+  // 🔥 DRAAD45.8 FIX: Correcte dagdeel mapping zonder TypeScript errors
   function findDagdeelData(
     serviceTypeId: string,
     datum: string,
@@ -198,13 +196,15 @@ export default function VaststellingDataTable({
   ): StaffingDagdeel | undefined {
     // Mapping dagdeel: verander 'O' (letter) → '0' (cijfer) voor ochtend
     const dagdeelMatch = dagdeel === 'O' ? '0' : dagdeel;
-    // Mapping team: indien nodig, correct translaten ('Groen' ↔ 'Groen'; 'Oranje' ↔ 'Oranje'; 'Tot' ↔ 'TOT')
-    const teamMatch = team === 'Tot' ? 'TOT' : team;
+    
+    // Team mapping niet nodig: type is al correct (Team = 'Groen' | 'Oranje' | 'TOT')
+    // Database verwacht ook exact deze waarden
+    
     return data.find(
       item =>
         item.service_id === serviceTypeId &&
         item.date === datum &&
-        item.team === teamMatch &&
+        item.team === team &&
         item.dagdeel === dagdeelMatch
     );
   }
