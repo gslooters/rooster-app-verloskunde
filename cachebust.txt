@@ -1,6 +1,6 @@
-1732385595
-Last update: 2025-11-23T18:33:15+01:00
-Build trigger: date-fns downgrade v2.30.0
-Compatibility: date-fns-tz@2.0.0 ✓
-Railway rebuild #3
-Fix: legacy-peer-deps + nixpacks config
+1732384987
+Last update: 2025-11-23T19:03:07+01:00
+Build trigger: DRAAD1F4 date-fns-tz upgrade
+Compatibility: date-fns@4.1.0 + date-fns-tz@3.2.0 ✅
+Railway rebuild #5 - CRITICAL FIX
+Fix: Correct dependency versions (3.x compatible)
