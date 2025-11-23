@@ -1,0 +1,27 @@
+DRAAD1F TIMEZONE FIX DEPLOYMENT
+Created: 2025-11-23T17:19:30Z
+Commit: 051994e19258ef810544717f06abe56dd3fe2a58
+
+FIXES IMPLEMENTED:
+1. 📦 date-fns-tz dependency added to package.json
+2. 🛠️ lib/date-utils.ts created with UTC formatting helpers
+3. 🔧 VaststellingDataTable.tsx updated with UTC formatting
+4. 🔧 WeekTableHeader.tsx updated with UTC formatting
+5. 🔧 Server-side page.tsx updated with parseUTCDate + assertMonday
+
+TIMEZONE BUG FIXED:
+- Root cause: format() calls gebruikten browser locale timezone
+- In UTC-4: 2025-11-24T00:00:00Z werd getoond als 23-11 (zondag)
+- Fix: formatInTimeZone() forceert UTC timezone overal
+- Result: Week start ALTIJD op maandag in ALLE timezones
+
+VERIFICATIE:
+- Test URL: /planning/design/week-dagdelen/[rosterId]/48?period_start=2025-11-24
+- Verwacht: Eerste kolom "ma 24/11" (niet "zo 23/11")
+- Periode: "24-11-2025 - 30-11-2025"
+- Console: "✅ DRAAD1F: Timezone validaties PASSED"
+
+TEST IN TIMEZONES:
+- UTC-4 (Curaçao): Maandag ✅
+- UTC+1 (Amsterdam): Maandag ✅
+- UTC-5 (New York): Maandag ✅
