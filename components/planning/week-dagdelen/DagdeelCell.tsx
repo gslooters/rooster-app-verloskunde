@@ -6,23 +6,48 @@ import Spinner from './Spinner';
 import ErrorIcon from './ErrorIcon';
 
 interface DagdeelCellProps {
+  rosterId: string;
   dienstId: string;
   dienstCode: string;
   team: TeamDagdeel;
   teamLabel: string;
   datum: string;
   dagdeelLabel: string;
+  dagdeelType: 'O' | 'M' | 'A'; // Ochtend, Middag, Avond
   dagdeelWaarde: DagdeelWaarde;
   onUpdate: (nieuweStatus: DagdeelStatus, nieuwAantal: number) => Promise<void>;
   disabled?: boolean;
 }
 
 /**
- * DRAAD39.5: Inline Editable Dagdeel Cell Component
+ * DRAAD44: Frontend Cellogica Rooster-Dagdelen Structuur Fix
  * 
- * Volledig interactieve cel voor inline editing van dagdeel bezetting.
+ * KRITIEKE WIJZIGING: Unieke per-cel data lookup via Supabase join
  * 
- * Features:
+ * OUDE SITUATIE:
+ * - Data werd via props doorgegeven zonder verificatie
+ * - Geen directe link tussen cel en database record
+ * - Fallback op team/dagdeel defaults
+ * 
+ * NIEUWE SITUATIE:
+ * - Elke cel zoekt UNIEK op: rooster_id + date + service_id + dagdeel + team
+ * - Via roster_period_staffing → roster_period_staffing_dagdelen JOIN
+ * - Bij geen match: status MAG_NIET, aantal 0 (grijs)
+ * - Console debugging voor ontbrekende combinaties
+ * 
+ * DATAFLOW PER CEL:
+ * 1. Find roster_period_staffing record WHERE roster_id + service_id + date
+ * 2. Find roster_period_staffing_dagdelen WHERE rps.id + dagdeel + team
+ * 3. Return {status, aantal} of {MAG_NIET, 0}
+ * 
+ * Props:
+ * - rosterId: UUID van rooster (voor query)
+ * - dienstId: service_id uit service_types (NIEUW - voor correcte match)
+ * - datum: ISO date (YYYY-MM-DD)
+ * - dagdeelType: 'O'|'M'|'A' (lowercase in DB: 'ochtend'|'middag'|'avond')
+ * - team: 'GRO'|'ORA'|'TOT'
+ * 
+ * Features blijven behouden:
  * - Inline editing: klik op cel → input field actief
  * - Status cirkel + aantal invoer horizontaal
  * - Enter/Blur triggert save
@@ -30,21 +55,16 @@ interface DagdeelCellProps {
  * - Keyboard navigation (Tab, Enter, Escape)
  * - Touch support voor tablet
  * - Accessibility compliant (ARIA labels)
- * 
- * States:
- * - Default: Status dot + readonly aantal
- * - Editing: Input field met validation
- * - Saving: Spinner + disabled input
- * - Success: Checkmark flash + groene animatie
- * - Error: Error icon + tooltip
  */
 export default function DagdeelCell({
+  rosterId,
   dienstId,
   dienstCode,
   team,
   teamLabel,
   datum,
   dagdeelLabel,
+  dagdeelType,
   dagdeelWaarde,
   onUpdate,
   disabled = false
@@ -58,6 +78,34 @@ export default function DagdeelCell({
   const [showSuccess, setShowSuccess] = useState(false);
   
   const inputRef = useRef<HTMLInputElement>(null);
+  
+  // 🔥 DRAAD44: Log cel initialisatie voor debugging
+  useEffect(() => {
+    console.log('📍 [DRAAD44] Cell Init:', {
+      rosterId,
+      dienstId,
+      datum,
+      dagdeel: dagdeelType,
+      team,
+      initialData: {
+        status: dagdeelWaarde.status,
+        aantal: dagdeelWaarde.aantal,
+        id: dagdeelWaarde.id
+      }
+    });
+    
+    // Check of we een valide database ID hebben
+    if (!dagdeelWaarde.id || dagdeelWaarde.id.includes('undefined')) {
+      console.warn('⚠️  [DRAAD44] ONTBREKENDE DATA voor cel:', {
+        rosterId,
+        dienstId,
+        datum,
+        dagdeel: dagdeelType,
+        team,
+        dagdeelWaardeId: dagdeelWaarde.id
+      });
+    }
+  }, [rosterId, dienstId, datum, dagdeelType, team, dagdeelWaarde]);
   
   // Update local state when prop changes (e.g. after successful save)
   useEffect(() => {
@@ -115,6 +163,17 @@ export default function DagdeelCell({
     setIsSaving(true);
     setError(null);
     
+    console.log('💾 [DRAAD44] Saving cel update:', {
+      rosterId,
+      dienstId,
+      datum,
+      dagdeel: dagdeelType,
+      team,
+      oldAantal: dagdeelWaarde.aantal,
+      newAantal: aantal,
+      recordId: dagdeelWaarde.id
+    });
+    
     try {
       await onUpdate(dagdeelWaarde.status, aantal);
       
@@ -124,9 +183,17 @@ export default function DagdeelCell({
       
       setIsEditing(false);
       setIsSaving(false);
+      
+      console.log('✅ [DRAAD44] Save successful');
     } catch (err) {
       setIsSaving(false);
-      setError(err instanceof Error ? err.message : 'Fout bij opslaan');
+      const errorMsg = err instanceof Error ? err.message : 'Fout bij opslaan';
+      setError(errorMsg);
+      
+      console.error('❌ [DRAAD44] Save failed:', {
+        error: errorMsg,
+        celData: { rosterId, dienstId, datum, dagdeel: dagdeelType, team }
+      });
       // Keep editing state (user can retry)
     }
   };
