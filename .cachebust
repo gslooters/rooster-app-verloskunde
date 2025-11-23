@@ -1,39 +1,43 @@
-GLOBAL CACHE BUST - DRAAD1F TIMEZONE FIX
+GLOBAL CACHE BUST - DRAAD2A DAGDELEN DASHBOARD FIX
 DEPLOYMENT VERSION VERIFICATIE
-Timestamp: 1732385916000
-Build ID: draad1f-timezone-utc-formatting-fix
-Random: 0.926841
+Timestamp: 1732389740000
+Build ID: draad2a-dagdelen-type-safety-stability
+Random: 0.738492
 
-DRAAD1F FEATURES:
-✅ UTC date-utils library - timezone-veilige datum formatting
-✅ formatWeekdayDate() - maandag t/m zondag in UTC
-✅ formatDateDMY() - dd-MM-yyyy in UTC
-✅ assertMonday()/assertSunday() - expliciete validatie
-✅ parseUTCDate() - timezone-veilige parsing
-✅ VaststellingDataTable updated - alle format() calls vervangen
-✅ WeekTableHeader updated - periode en dag headers in UTC
-✅ Server-side page.tsx updated - parseUTCDate + assertMonday
+DRAAD2A FEATURES:
+✅ DagdelenDashboardClient - useCallback voor performance
+✅ Type-safe WeekInfo interface enforced
+✅ Verbeterde defensieve data extractie
+✅ useCallback voor loadWeekData, handleWeekClick, handleBack
+✅ Optimale dependency arrays (ESLint compliant)
+✅ Betere error guards voor edge cases
+✅ Type-safe lastUpdated formatting
+✅ Validatie: 5 weken check toegevoegd
+✅ Reduced setTimeout van 100ms naar 50ms
 
-🌍 TIMEZONE FIX:
-- Voor fix: UTC-4 browsers toonden zondag als eerste dag
-- Root cause: format() gebruikte browser locale timezone
-- Oplossing: formatInTimeZone() forceert UTC rendering
-- Resultaat: Week start ALTIJD op maandag in ÉLKE timezone
+FIXES IN DETAIL:
+1. useCallback() wrapper om onnodige re-renders te voorkomen
+2. Strikte type checking: typeof checks + null guards
+3. Enhanced filtering: extra validatie op updated_at type
+4. Dependency arrays compliant met React Hook regels
+5. Console warnings voor invalid data
 
 🔍 VERIFICATIE STAPPEN:
 1. Wacht 2-3 minuten voor Railway build completion
-2. Open: /planning/design/week-dagdelen/[rosterId]/48?period_start=2025-11-24
-3. Check eerste kolom toont "ma 24/11" (niet zondag!)
-4. Check periode header "24-11-2025 - 30-11-2025"
-5. Check console logs: "✅ DRAAD1F: Timezone validaties PASSED"
-6. Test in verschillende timezones (UTC-4, UTC+1)
-7. Check /api/version toont nieuwe commit SHA
+2. Open: /planning/design/dagdelen-dashboard?roster_id=[id]&period_start=2025-11-24
+3. Check 5 weekknoppen worden correct geladen
+4. Check navigatie naar week-dagdelen detail werkt
+5. Check console: geen type errors of warnings
+6. Test: klik op verschillende weken
+7. Check period_start parameter wordt doorgegeven
+8. Verify: React DevTools laat optimale re-renders zien
 
 VOORGAANDE FIXES:
+- DRAAD1F: Timezone UTC formatting fix
 - DRAAD1E: Version endpoint + deployment verificatie
 - DRAAD1D: WeekTableHeader periode correctie
 - DRAAD42M: 8-dagen bug fix
-- DRAAD1A/1B: Zondag als eerste dag fixes (data logic)
-- DRAAD1F: Timezone rendering fix (display logic)
+- DRAAD37E: Dagdelen dashboard implementatie
+- DRAAD2A: Type safety + performance optimalisatie
 
-VERWACHTE COMMIT: 368e156ab9c0cc422fe602ec25bc2fb35a645e1b
+VERWACHTE COMMIT: 03eb45b9f61c44c8b31bf6cdc2614ef43e02bd9c
