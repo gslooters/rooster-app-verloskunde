@@ -1,0 +1,82 @@
+DRAAD45.3 DEPLOYMENT - STAP 3 COMPLETE
+==========================================
+
+DATUM: 23 november 2025, 22:06 CET
+PRIORITEIT: 🔥 CRITICAL FIX
+
+🎯 IMPLEMENTATIE
+-----------------
+
+STAP 3 UITGEVOERD: DagdeelCell Database Lookup
+
+🔧 FILES AANGEPAST:
+
+1. lib/planning/getCelDataClient.ts (NIEUW)
+   - Client-side versie van getCelData
+   - Gebruikt supabase client voor browser calls
+   - Query: roster_period_staffing -> roster_period_staffing_dagdelen
+   - Fallback: { status: 'MAG_NIET', aantal: 0 }
+   - Console logging: [DRAAD45] per query
+
+2. components/planning/week-dagdelen/DagdeelCell.tsx (UPDATE)
+   - useEffect met getCelDataClient() call per cel mount
+   - State: celData met {status, aantal, loading}
+   - Loading state: spinner tijdens fetch
+   - Error handling: fallback bij query failure
+   - Visual: rood/groen/grijs op basis celData.status
+   - Aantal: celData.aantal ipv dagdeelWaarde.aantal
+   - Cleanup: cancelled flag om stale updates te voorkomen
+
+📊 DATAFLOW:
+
+1. Component mount -> useEffect triggered
+2. getCelDataClient(rosterId, dienstId, datum, dagdeel, team)
+3. Query roster_period_staffing (match op roster_id + service_id + date)
+4. Query roster_period_staffing_dagdelen (match op rps.id + dagdeel + team)
+5. setCelData({ status, aantal, loading: false })
+6. Rendering met correcte visual
+
+✅ VERWACHT RESULTAAT:
+
+- VOOR: Alle cellen identiek (groen, MAG, 0)
+- NA: Elke cel toont unieke data uit database
+- Rode cellen (MOET) zichtbaar
+- Groene cellen (MAG) zichtbaar
+- Grijze cellen (MAG_NIET) zichtbaar
+- Aantallen variëren (0-9)
+- Loading state tijdens fetch
+
+🔍 VERIFICATIE:
+
+Console Output:
+```
+[DRAAD45] Cel init - starting fetch: { rosterId, dienstId, datum, dagdeel, team }
+[DRAAD45] getCelDataClient START: { ... }
+[DRAAD45] ✅ roster_period_staffing found: { rpsId }
+[DRAAD45] ✅ SUCCESS - Cel data found: { datum, dagdeel, team, result }
+[DRAAD45] ✅ Cel data loaded: { datum, dagdeel, team, data }
+```
+
+Visual:
+- Ma Ochtend GRO: 🔴 Rood "3" (MOET)
+- Ma Ochtend ORA: 🟢 Groen "2" (MAG)
+- Ma Middag GRO: ⚪ Grijs "-" (MAG_NIET)
+- Di Avond TOT: 🟢 Groen "1" (MAG)
+
+🚨 DEPLOYMENT NOTES:
+
+- Railway auto-deploy triggered
+- Build time: ~2-3 min
+- Test na deploy: Open week dagdelen view
+- Check browser console voor [DRAAD45] logs
+- Verify visual variatie tussen cellen
+- Performance: Veel database calls (21 cellen × 3 teams × diensten)
+  -> DRAAD46: Batch queries voor optimalisatie
+
+🔗 LINKS:
+
+Railway: https://railway.com/project/90165889-1a50-4236-aefe-b1e1ae44dc7f
+Commit: f19a7fd6c0c38a6e0c8e3b61a48872f4d1022e28
+
+---
+EINDE DEPLOYMENT TRIGGER
