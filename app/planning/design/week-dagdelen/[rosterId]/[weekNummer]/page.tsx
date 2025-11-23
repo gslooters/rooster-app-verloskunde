@@ -3,9 +3,10 @@ import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import WeekDagdelenVaststellingTable from '@/components/planning/week-dagdelen/WeekDagdelenVaststellingTable';
+import { parseUTCDate, assertMonday } from '@/lib/date-utils';
 
 /**
- * DRAAD42K FIX - Week Dagdelen Vaststelling Scherm
+ * DRAAD42K FIX + DRAAD1F - Week Dagdelen Vaststelling Scherm
  * 
  * Route: /planning/design/week-dagdelen/[rosterId]/[weekNummer]?period_start=YYYY-MM-DD
  * 
@@ -16,6 +17,7 @@ import WeekDagdelenVaststellingTable from '@/components/planning/week-dagdelen/W
  * ✅ DRAAD42F: Database queries gebruik nu roster_id i.p.v. roster_period_id
  * ✅ DRAAD42G: periodStart doorgegeven aan WeekDagdelenVaststellingTable (ROUTING FIX)
  * ✅ DRAAD42K: FIX ZONDAG START BUG - Week start altijd op maandag (niet zondag)
+ * ✅ DRAAD1F: UTC PARSING - Gebruik parseUTCDate() en assertMonday() voor validatie
  * 
  * Functionaliteit:
  * - Server-side data fetching voor rooster
@@ -24,6 +26,7 @@ import WeekDagdelenVaststellingTable from '@/components/planning/week-dagdelen/W
  * - Dynamische week navigatie gebaseerd op period_start
  * - Terug-navigatie naar dashboard MET period_start parameter
  * - CRITICAL: Week berekening corrigeert automatisch naar maandag
+ * - DRAAD1F: UTC-veilige datum parsing voorkomt timezone bugs
  */
 
 interface PageProps {
@@ -82,10 +85,15 @@ async function getServiceTypes() {
 }
 
 /**
- * 🔥 DRAAD42K FIX - Bereken weekdatums vanaf period_start MET MAANDAG CORRECTIE
+ * 🔥 DRAAD42K FIX + DRAAD1F - Bereken weekdatums vanaf period_start MET MAANDAG CORRECTIE
  * 
  * Deze functie zorgt ervoor dat elke week ALTIJD start op een MAANDAG,
  * ongeacht wat de input datum is.
+ * 
+ * DRAAD1F UPDATE:
+ * - Gebruik parseUTCDate() i.p.v. new Date() voor timezone-veilige parsing
+ * - Gebruik assertMonday() voor expliciete validatie
+ * - Voorkomt timezone conversie bugs
  * 
  * Logica (gebaseerd op DRAAD26R fix):
  * - Als berekende datum = zondag (0) → +1 dag naar maandag
@@ -97,7 +105,8 @@ async function getServiceTypes() {
  * @returns Object met weekStart en weekEnd (beide Date objecten)
  */
 function calculateWeekDates(periodStart: string, weekIndex: number) {
-  const startDate = new Date(periodStart + 'T00:00:00Z');
+  // 🔥 DRAAD1F: Gebruik parseUTCDate() voor timezone-veilige parsing
+  const startDate = parseUTCDate(periodStart);
   const weekOffset = (weekIndex - 1) * 7;
   
   // Bereken ruwe startdatum (zonder maandag correctie)
@@ -127,6 +136,16 @@ function calculateWeekDates(periodStart: string, weekIndex: number) {
   weekStart.setUTCDate(rawWeekStart.getUTCDate() + daysToAdd);
   weekStart.setUTCHours(0, 0, 0, 0);
   
+  // 🔥 DRAAD1F: Valideer dat weekStart nu echt een maandag is
+  try {
+    assertMonday(weekStart, 'Server week start');
+    console.log('✅ DRAAD1F: Server-side maandag validatie PASSED');
+  } catch (error) {
+    console.error('❌ DRAAD1F: KRITIEKE FOUT -', error);
+    // Throw door naar client voor error handling
+    throw error;
+  }
+  
   // Bereken weekEnd (6 dagen na weekStart = zondag)
   const weekEnd = new Date(weekStart);
   weekEnd.setUTCDate(weekStart.getUTCDate() + 6);
@@ -138,14 +157,9 @@ function calculateWeekDates(periodStart: string, weekIndex: number) {
   const weekStartDay = weekStart.getUTCDay();
   const weekEndDay = weekEnd.getUTCDay();
   
-  console.log(`📅 DRAAD42K: Week ${weekIndex} berekend:`);
+  console.log(`📅 DRAAD1F: Week ${weekIndex} berekend:`);
   console.log(`   Start: ${weekStartStr} (dag ${weekStartDay}, moet 1=maandag zijn)`);
   console.log(`   End:   ${weekEndStr} (dag ${weekEndDay}, moet 0=zondag zijn)`);
-  
-  // Validatie: weekStart MOET maandag zijn
-  if (weekStartDay !== 1) {
-    console.error(`❌ DRAAD42K: KRITIEKE FOUT - weekStart is geen maandag! (dag ${weekStartDay})`);
-  }
   
   // Validatie: weekEnd MOET zondag zijn
   if (weekEndDay !== 0) {
@@ -170,7 +184,7 @@ export default async function WeekDagdelenPage({ params, searchParams }: PagePro
   const { rosterId, weekNummer } = params;
   const periodStart = searchParams.period_start;
   
-  console.log('🔍 DRAAD42K: Page params:', { rosterId, weekNummer, periodStart });
+  console.log('🔍 DRAAD1F: Page params:', { rosterId, weekNummer, periodStart });
   
   // Validatie period_start parameter
   if (!periodStart || typeof periodStart !== 'string') {
@@ -216,14 +230,14 @@ export default async function WeekDagdelenPage({ params, searchParams }: PagePro
     notFound();
   }
   
-  // 🔥 DRAAD42K: Bereken week data met MAANDAG CORRECTIE
+  // 🔥 DRAAD1F: Bereken week data met UTC PARSING + MAANDAG CORRECTIE + VALIDATIE
   const { weekStart, weekEnd } = calculateWeekDates(periodStart, weekNum);
   const actualWeekNumber = getWeekNumber(weekStart);
   
   // Haal service types op
   const serviceTypes = await getServiceTypes();
   
-  console.log('✅ DRAAD42K: Page data voorbereid:', {
+  console.log('✅ DRAAD1F: Page data voorbereid:', {
     rosterId,
     weekNum,
     actualWeekNumber,
