@@ -1,26 +1,39 @@
-GLOBAL CACHE BUST - DRAAD1E
+GLOBAL CACHE BUST - DRAAD1F TIMEZONE FIX
 DEPLOYMENT VERSION VERIFICATIE
-Timestamp: 1732357535000
-Build ID: draad1e-version-endpoint-verification
-Random: 0.873621
+Timestamp: 1732385916000
+Build ID: draad1f-timezone-utc-formatting-fix
+Random: 0.926841
 
-DRAAD1E FEATURES:
-✅ /api/version endpoint - toont commit SHA en build info
-✅ Deployment verificatie - detecteert stuck deployments
-✅ Anti-cache headers - voorkomt oude responses
-✅ Railway Git SHA tracking - vergelijkt verwachte vs werkelijke versie
-✅ Environment info - toont NODE_ENV, platform, service
+DRAAD1F FEATURES:
+✅ UTC date-utils library - timezone-veilige datum formatting
+✅ formatWeekdayDate() - maandag t/m zondag in UTC
+✅ formatDateDMY() - dd-MM-yyyy in UTC
+✅ assertMonday()/assertSunday() - expliciete validatie
+✅ parseUTCDate() - timezone-veilige parsing
+✅ VaststellingDataTable updated - alle format() calls vervangen
+✅ WeekTableHeader updated - periode en dag headers in UTC
+✅ Server-side page.tsx updated - parseUTCDate + assertMonday
+
+🌍 TIMEZONE FIX:
+- Voor fix: UTC-4 browsers toonden zondag als eerste dag
+- Root cause: format() gebruikte browser locale timezone
+- Oplossing: formatInTimeZone() forceert UTC rendering
+- Resultaat: Week start ALTIJD op maandag in ÉLKE timezone
 
 🔍 VERIFICATIE STAPPEN:
 1. Wacht 2-3 minuten voor Railway build completion
-2. Open: /api/version endpoint in browser
-3. Check "commit" field begint met "b2bdc486"
-4. Check "isExpectedVersion" = true
-5. Hard refresh browser (Shift+F5)
+2. Open: /planning/design/week-dagdelen/[rosterId]/48?period_start=2025-11-24
+3. Check eerste kolom toont "ma 24/11" (niet zondag!)
+4. Check periode header "24-11-2025 - 30-11-2025"
+5. Check console logs: "✅ DRAAD1F: Timezone validaties PASSED"
+6. Test in verschillende timezones (UTC-4, UTC+1)
+7. Check /api/version toont nieuwe commit SHA
 
 VOORGAANDE FIXES:
+- DRAAD1E: Version endpoint + deployment verificatie
 - DRAAD1D: WeekTableHeader periode correctie
 - DRAAD42M: 8-dagen bug fix
-- DRAAD1A/1B: Zondag als eerste dag fixes
+- DRAAD1A/1B: Zondag als eerste dag fixes (data logic)
+- DRAAD1F: Timezone rendering fix (display logic)
 
-LAATSTE COMMIT: b2bdc486987f84cfa7c60954f4207780e3c44c1a
+VERWACHTE COMMIT: 368e156ab9c0cc422fe602ec25bc2fb35a645e1b
