@@ -4,14 +4,21 @@ import { DienstDagdelenWeek, TeamDagdeel, TEAM_ORDER, DagdeelStatus } from '@/li
 import DagdeelCell from './DagdeelCell';
 
 interface WeekTableBodyProps {
+  rosterId: string; // 🔥 DRAAD44: NIEUW - Nodig voor cel-level data lookup
   diensten: DienstDagdelenWeek[];
   onDagdeelUpdate?: (dagdeelId: string, nieuweStatus: DagdeelStatus, nieuwAantal: number) => Promise<void>;
   disabled?: boolean;
 }
 
 /**
+ * DRAAD44: Frontend Cellogica Fix
  * DRAAD40B5: Verbeterde Layout voor Diensten per Dagdeel
  * DRAAD40C: BoxShadow op frozen columns voor visuele consistency
+ * 
+ * DRAAD44 WIJZIGINGEN:
+ * - Toegevoegd rosterId prop (doorgeven aan DagdeelCell voor DB lookup)
+ * - Toegevoegd dagdeelType mapping ('O'/'M'/'A' voor ochtend/middag/avond)
+ * - Correcte dienstId doorgeven aan elke cel
  * 
  * Wijzigingen:
  * - CODE + NAAM in één kolom ("Dienst"), alleen getoond bij eerste team (Groen)
@@ -57,7 +64,15 @@ const TEAM_BADGE_COLORS: Record<TeamDagdeel, { icon: string; bgColor: string; bo
   }
 };
 
+// 🔥 DRAAD44: Dagdeel type mapping voor database compatibiliteit
+const DAGDEEL_TYPE_MAP: Record<string, 'O' | 'M' | 'A'> = {
+  'ochtend': 'O',
+  'middag': 'M',
+  'avond': 'A'
+};
+
 export default function WeekTableBody({
+  rosterId, // 🔥 DRAAD44: NIEUW
   diensten,
   onDagdeelUpdate,
   disabled = false
@@ -226,38 +241,44 @@ export default function WeekTableBody({
                   {/* Kolom 3-23: Dagdeel cellen (21 cellen: 7 dagen x 3 dagdelen) */}
                   {teamData.dagen.map((dag) => (
                     <React.Fragment key={`${dienst.dienstId}-${teamCode}-${dag.datum}`}>
-                      {/* Ochtend */}
+                      {/* 🔥 DRAAD44: Ochtend - Toegevoegd rosterId, dienstId, dagdeelType */}
                       <DagdeelCell
+                        rosterId={rosterId}
                         dienstId={dienst.dienstId}
                         dienstCode={dienst.dienstCode}
                         team={teamCode}
                         teamLabel={TEAM_LABELS[teamCode]}
                         datum={dag.datum}
                         dagdeelLabel={getDagdeelLabel('0')}
+                        dagdeelType="O"
                         dagdeelWaarde={dag.dagdeelWaarden.ochtend}
                         onUpdate={createUpdateHandler(dag.dagdeelWaarden.ochtend.id)}
                         disabled={disabled}
                       />
-                      {/* Middag */}
+                      {/* 🔥 DRAAD44: Middag - Toegevoegd rosterId, dienstId, dagdeelType */}
                       <DagdeelCell
+                        rosterId={rosterId}
                         dienstId={dienst.dienstId}
                         dienstCode={dienst.dienstCode}
                         team={teamCode}
                         teamLabel={TEAM_LABELS[teamCode]}
                         datum={dag.datum}
                         dagdeelLabel={getDagdeelLabel('M')}
+                        dagdeelType="M"
                         dagdeelWaarde={dag.dagdeelWaarden.middag}
                         onUpdate={createUpdateHandler(dag.dagdeelWaarden.middag.id)}
                         disabled={disabled}
                       />
-                      {/* Avond */}
+                      {/* 🔥 DRAAD44: Avond - Toegevoegd rosterId, dienstId, dagdeelType */}
                       <DagdeelCell
+                        rosterId={rosterId}
                         dienstId={dienst.dienstId}
                         dienstCode={dienst.dienstCode}
                         team={teamCode}
                         teamLabel={TEAM_LABELS[teamCode]}
                         datum={dag.datum}
                         dagdeelLabel={getDagdeelLabel('A')}
+                        dagdeelType="A"
                         dagdeelWaarde={dag.dagdeelWaarden.avond}
                         onUpdate={createUpdateHandler(dag.dagdeelWaarden.avond.id)}
                         disabled={disabled}
