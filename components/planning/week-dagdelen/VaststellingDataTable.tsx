@@ -189,64 +189,47 @@ export default function VaststellingDataTable({
     });
   }, [weekStart, weekEnd]);
 
-  // 🔥 DRAAD45.7 FIX: Helper functie met CORRECTE property naam
+  // 🔥 DRAAD45.8 FIX: Geavanceerde dagdeel/team mapping
   function findDagdeelData(
     serviceTypeId: string,
     datum: string,
     team: Team,
     dagdeel: Dagdeel
   ): StaffingDagdeel | undefined {
-    const result = data.find(
+    // Mapping dagdeel: verander 'O' (letter) → '0' (cijfer) voor ochtend
+    const dagdeelMatch = dagdeel === 'O' ? '0' : dagdeel;
+    // Mapping team: indien nodig, correct translaten ('Groen' ↔ 'Groen'; 'Oranje' ↔ 'Oranje'; 'Tot' ↔ 'TOT')
+    const teamMatch = team === 'Tot' ? 'TOT' : team;
+    return data.find(
       item =>
-        item.service_type_id === serviceTypeId &&
-        item.date === datum &&  // ← FIX: Was item.datum, nu item.date
-        item.team === team &&
-        item.dagdeel === dagdeel
+        item.service_id === serviceTypeId &&
+        item.date === datum &&
+        item.team === teamMatch &&
+        item.dagdeel === dagdeelMatch
     );
-    
-    // Debug logging (eerste 3 queries only om spam te voorkomen)
-    if (Math.random() < 0.01) { // 1% sample rate
-      console.log('[DRAAD45.7] findDagdeelData:', {
-        query: { serviceTypeId: serviceTypeId.substring(0, 8) + '...', datum, team, dagdeel },
-        found: !!result,
-        result: result ? { status: result.status, aantal: result.aantal } : null
-      });
-    }
-    
-    return result;
   }
 
   // ⭐ Update handler met optimistic updates
   const handleCellUpdate = async (dagdeelId: string, newAantal: number) => {
     const previousData = [...data];
-    
-    // 1. OPTIMISTIC UPDATE
     setData(prev =>
       prev.map(item =>
         item.id === dagdeelId ? { ...item, aantal: newAantal } : item
       )
     );
-
     setIsUpdating(true);
-
     try {
-      // 2. API CALL
       const response = await fetch(`/api/planning/dagdelen/${dagdeelId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ aantal: newAantal }),
       });
-
       if (!response.ok) {
         throw new Error('Update failed');
       }
-
-      // 3. SUCCESS
       showToast('✅ Opgeslagen', 'success');
     } catch (error) {
       console.error('Error updating cell:', error);
-      
-      // 4. ROLLBACK
       setData(previousData);
       showToast('❌ Fout bij opslaan', 'error');
     } finally {
@@ -275,7 +258,6 @@ export default function VaststellingDataTable({
           </div>
         </div>
       )}
-
       <div className="px-6 py-4">
         {/* Scroll container voor sticky positioning */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-x-auto overflow-y-auto relative" style={{ maxHeight: 'calc(100vh - 200px)' }}>
@@ -294,8 +276,6 @@ export default function VaststellingDataTable({
                 >
                   Dienst
                 </th>
-                
-                {/* Corner cell - Team header (sticky left + top) */}
                 <th 
                   className="sticky top-0 z-[30] border border-gray-300 p-3 bg-blue-100 font-semibold text-gray-800"
                   style={{ 
@@ -309,7 +289,6 @@ export default function VaststellingDataTable({
                 >
                   Team
                 </th>
-                
                 {/* Dagdeel headers */}
                 {weekDays.map(day => (
                   <th
@@ -358,7 +337,6 @@ export default function VaststellingDataTable({
                           </div>
                         </td>
                       )}
-
                       {/* Team kolom - STICKY LEFT */}
                       <td 
                         className="sticky z-[20] border border-gray-300 p-2 bg-white overflow-hidden text-ellipsis whitespace-nowrap"
@@ -378,7 +356,6 @@ export default function VaststellingDataTable({
                           {TEAM_LABELS[team]}
                         </span>
                       </td>
-
                       {/* Dagdeel cellen */}
                       {weekDays.map(day =>
                         DAGDELEN.map(dagdeel => {
@@ -388,7 +365,6 @@ export default function VaststellingDataTable({
                             team,
                             dagdeel
                           );
-
                           return (
                             <EditableCell
                               key={`${service.id}-${team}-${day.fullDate}-${dagdeel}`}
@@ -407,7 +383,6 @@ export default function VaststellingDataTable({
             </tbody>
           </table>
         </div>
-
         {/* Legenda */}
         <div className="mt-4 p-4 bg-gray-50 rounded-lg">
           <h3 className="font-semibold text-gray-800 mb-2">Legenda:</h3>
@@ -426,7 +401,6 @@ export default function VaststellingDataTable({
             </div>
           </div>
         </div>
-
         {/* Update indicator */}
         {isUpdating && (
           <div className="fixed bottom-4 left-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2">
@@ -438,6 +412,5 @@ export default function VaststellingDataTable({
     </>
   );
 }
-
 // React import voor Fragment
 import React from 'react';
