@@ -1,0 +1,22 @@
+=== RAILWAY DEPLOYMENT TRIGGER: DRAAD1E ===
+Random ID: 87392
+Timestamp: 1732357462000
+Commit: cf4e0ff52aa6e3bf73f8a6ccc4e72164e8627b64
+
+DEPLOYMENT TRIGGER:
+🔍 Version verificatie endpoint toegevoegd
+🔄 Cache-busting actief
+✅ Code syntactisch correct gevalideerd
+🚀 Klaar voor deployment
+
+VERIFICATIE NA DEPLOYMENT:
+1. Wacht 2-3 minuten voor Railway build
+2. Open: https://rooster-app-verloskunde-production.up.railway.app/api/version
+3. Controleer response JSON:
+   - "commit": moet starten met "cf4e0ff5"
+   - "isExpectedVersion": moet true zijn
+   - "buildTime": moet recente tijd zijn
+4. Als alles correct → deployment geslaagd!
+5. Als "commit" oud is → stuck deployment detectie werkt
+
+RAILWAY TRIGGER ID: 87392
