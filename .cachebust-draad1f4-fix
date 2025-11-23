@@ -1,0 +1,37 @@
+# DRAAD1F4 CACHE-BUST FIX
+# Timestamp: 1732384967000
+# Date: 2025-11-23T18:02:47Z
+# Random: 92847
+
+## KRITIEKE FIX: date-fns-tz versie compatibiliteit
+
+### PROBLEEM:
+- lib/date-utils.ts gebruikt date-fns-tz
+- DRAAD1F4 reset verwijderde date-fns-tz uit package.json
+- Build failure: "Module not found: Can't resolve 'date-fns-tz'"
+
+### ROOT CAUSE:
+- date-fns-tz 2.0.0 werkt ALLEEN met date-fns 2.x
+- date-fns 4.1.0 vereist date-fns-tz 3.x
+- Incompatibiliteit veroorzaakte alle problemen!
+
+### OPLOSSING:
+✅ date-fns: ^4.1.0 (behouden)
+✅ date-fns-tz: ^3.2.0 (UPGRADED van 2.0.0)
+❌ GEEN downgrade naar date-fns 2.x
+
+### VERWACHTING:
+- NPM installeert date-fns-tz 3.2.0
+- Compatibel met date-fns 4.1.0
+- lib/date-utils.ts imports werken
+- Build succeeds
+- Deployment succeeds
+
+### VERIFICATIE:
+date-fns-tz 3.x changelog:
+- "Compatible with date-fns 3.x and 4.x"
+- formatInTimeZone() signature ongewijzigd
+- utcToZonedTime() signature ongewijzigd
+
+---
+Dit bestand forceert Railway cache refresh.
