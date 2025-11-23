@@ -23,10 +23,17 @@ export interface DayDagdeelData {
   };
 }
 
+/**
+ * 🔥 DRAAD45.6 FIX: DagdeelAssignment uitgebreid met serviceId
+ * 
+ * VOOR: Alleen team, aantal, status
+ * NA:   Ook serviceId voor database matching
+ */
 export interface DagdeelAssignment {
   team: string;
   aantal: number;
   status: string;
+  serviceId?: string;  // 🔥 NIEUW: CONS, POL, ECHO, etc.
 }
 
 export interface WeekNavigatieBounds {
@@ -64,16 +71,27 @@ export function calculateWeekDates(weekNummer: number, jaar: number): { startDat
 }
 
 /**
- * 🔥 DRAAD1A FINAL FIX - API Layer Validatie
+ * 🔥 DRAAD45.6 COMPLETE FIX - Service ID Pipeline
  * 
- * PROBLEEM: Database query retourneerde soms 8 dagen (zo-zo) i.p.v. 7 (ma-zo)
- * OORZAAK: Zondag vóór de maandag werd meegenomen in het datumbereik
+ * WIJZIGINGEN:
+ * 1. SELECT query: service_id toegevoegd aan roster_period_staffing
+ * 2. DagdeelAssignment mapping: serviceId veld toegevoegd
+ * 3. Logging: service_id info toegevoegd voor debugging
  * 
- * OPLOSSING:
- * 1. Valideer dat weekStartStr (uit weekBoundaryCalculator) een MAANDAG is
- * 2. Filter database resultaten om zondag als eerste dag te verwijderen
- * 3. Forceer exact 7 dagen output (ma-zo)
- * 4. Uitgebreide logging voor debugging
+ * DATABASE STRUCTUUR:
+ * roster_period_staffing:
+ *   - id (PK)
+ *   - roster_id (FK)
+ *   - service_id (FK) ← NU OPGEHAALD!
+ *   - date
+ * 
+ * roster_period_staffing_dagdelen:
+ *   - id (PK)
+ *   - roster_period_staffing_id (FK)
+ *   - dagdeel (ochtend/middag/avond/nacht)
+ *   - team (GRO/ORA/TOT)
+ *   - status (MOET/MAG/MAG_NIET)
+ *   - aantal (0-9)
  * 
  * @param rosterId - UUID van het rooster
  * @param weekNummer - Week index binnen roosterperiode (1-5)
@@ -87,28 +105,28 @@ export async function getWeekDagdelenData(
   periodStart?: string
 ): Promise<WeekDagdeelData | null> {
   console.log('═'.repeat(60));
-  console.log(`🔍 [DRAAD1A] START Week ${weekNummer} - Zondag Start Bug Fix`);
+  console.log(`🔍 [DRAAD45.6] START Week ${weekNummer} - Service ID Pipeline Fix`);
   console.log('═'.repeat(60));
   
   try {
     const supabase = getSupabaseServer();
     
-    // 🔥 STAP 1: Haal week boundaries op via weekBoundaryCalculator
-    console.log('\n🔄 [DRAAD1A] STAP 1: Fetching week boundary...');
+    // STAP 1: Haal week boundaries op
+    console.log('\n🔄 [DRAAD45.6] STAP 1: Fetching week boundary...');
     console.log('Input:', { rosterId, weekNummer, periodStart });
     
     const weekBoundary = await getWeekBoundary(rosterId, weekNummer, periodStart);
     
-    console.log('✅ [DRAAD1A] Week boundary opgehaald:', weekBoundary);
+    console.log('✅ [DRAAD45.6] Week boundary opgehaald:', weekBoundary);
     
     const weekStartStr = weekBoundary.startDatum;
     const weekEndStr = weekBoundary.eindDatum;
     
-    // 🔥 DRAAD1A VALIDATIE: Week MOET starten op maandag
+    // Week validatie
     const weekStartDate = new Date(weekStartStr + 'T00:00:00Z');
     const weekStartDayOfWeek = weekStartDate.getUTCDay();
     
-    console.log('\n🔍 [DRAAD1A] VALIDATIE: Checking week start day...');
+    console.log('\n🔍 [DRAAD45.6] VALIDATIE: Checking week start day...');
     console.log('📅 Week Start:', {
       datum: weekStartStr,
       dagVanWeek: weekStartDayOfWeek,
@@ -117,23 +135,13 @@ export async function getWeekDagdelenData(
     });
     
     if (weekStartDayOfWeek !== 1) {
-      console.error('❌ [DRAAD1A] KRITIEKE FOUT: Week start is GEEN maandag!');
-      console.error('⚠️  Dit zou NIET mogen gebeuren met correcte weekBoundaryCalculator');
-      console.error('⚠️  Mogelijk probleem in calculateWeekDates() in page.tsx');
-      // We gaan NIET stoppen, maar wel loggen voor debugging
+      console.error('❌ [DRAAD45.6] KRITIEKE FOUT: Week start is GEEN maandag!');
     } else {
-      console.log('✅ [DRAAD1A] Week start is correct (maandag)');
+      console.log('✅ [DRAAD45.6] Week start is correct (maandag)');
     }
     
-    console.log('📅 [DRAAD1A] Week periode:', {
-      weekIndex: weekNummer,
-      start: weekStartStr,
-      end: weekEndStr,
-      label: weekBoundary.weekLabel
-    });
-    
-    // STAP 2: Haal roster op (voor validatie)
-    console.log('\n🔄 [DRAAD1A] STAP 2: Fetching roster...');
+    // STAP 2: Haal roster op
+    console.log('\n🔄 [DRAAD45.6] STAP 2: Fetching roster...');
     
     const { data: roster, error: rosterError } = await supabase
       .from('roosters')
@@ -142,21 +150,18 @@ export async function getWeekDagdelenData(
       .single();
     
     if (rosterError || !roster) {
-      console.error('❌ [DRAAD1A] STOP POINT 1: Roster niet gevonden');
-      console.error('Error:', rosterError);
+      console.error('❌ [DRAAD45.6] Roster niet gevonden:', rosterError);
       console.log('═'.repeat(60));
       return null;
     }
     
-    console.log('✅ [DRAAD1A] Roster gevonden:', {
+    console.log('✅ [DRAAD45.6] Roster gevonden:', {
       id: roster.id,
       start_date: roster.start_date,
       end_date: roster.end_date
     });
     
-    // STAP 3: Check datum overlap (STRING COMPARISON - geen timezone issues)
-    console.log('\n🔄 [DRAAD1A] STAP 3: Checking datum overlap...');
-    
+    // STAP 3: Check datum overlap
     const rosterStartStr = roster.start_date;
     const rosterEndStr = roster.end_date;
     
@@ -164,31 +169,22 @@ export async function getWeekDagdelenData(
     const weekEndsBeforeRosterStarts = weekEndStr < rosterStartStr;
     const hasNoOverlap = weekStartsAfterRosterEnds || weekEndsBeforeRosterStarts;
     
-    console.log('📊 [DRAAD1A] Overlap analyse:', {
-      weekPeriod: `${weekStartStr} t/m ${weekEndStr}`,
-      rosterPeriod: `${rosterStartStr} t/m ${rosterEndStr}`,
-      weekStartsAfterRosterEnds,
-      weekEndsBeforeRosterStarts,
-      hasNoOverlap,
-      hasOverlap: !hasNoOverlap
-    });
-    
     if (hasNoOverlap) {
-      console.error('❌ [DRAAD1A] STOP POINT 2: Week valt volledig buiten rooster');
-      console.error('⚠️ Dit zou NIET moeten gebeuren met correcte period_start!');
+      console.error('❌ [DRAAD45.6] Week valt buiten rooster periode');
       console.log('═'.repeat(60));
       return null;
     }
     
-    console.log('✅ [DRAAD1A] Week heeft overlap met roster - proceeding');
+    console.log('✅ [DRAAD45.6] Week heeft overlap met roster');
     
-    // STAP 4: Haal period data op
-    console.log('\n🔄 [DRAAD1A] STAP 4: Fetching period data...');
+    // 🔥 STAP 4: DATABASE QUERY MET SERVICE_ID!
+    console.log('\n🔥 [DRAAD45.6] STAP 4: Fetching period data WITH service_id...');
     console.log('Query params:', {
       table: 'roster_period_staffing',
       rosterId,
       dateGte: weekStartStr,
-      dateLte: weekEndStr
+      dateLte: weekEndStr,
+      NEW_FIELD: 'service_id ← TOEGEVOEGD!'
     });
     
     const { data: periodData, error: periodError } = await supabase
@@ -196,6 +192,7 @@ export async function getWeekDagdelenData(
       .select(`
         id,
         date,
+        service_id,
         roster_period_staffing_dagdelen (
           id,
           dagdeel,
@@ -210,112 +207,80 @@ export async function getWeekDagdelenData(
       .order('date', { ascending: true });
     
     if (periodError) {
-      console.error('❌ [DRAAD1A] STOP POINT 3: Supabase query error');
-      console.error('Error:', periodError);
+      console.error('❌ [DRAAD45.6] Supabase query error:', periodError);
       console.log('═'.repeat(60));
       return null;
     }
     
     const recordCount = periodData?.length || 0;
-    console.log(`✅ [DRAAD1A] Query succesvol. Records: ${recordCount}`);
+    console.log(`✅ [DRAAD45.6] Query succesvol. Records: ${recordCount}`);
     
-    // 🔥 DRAAD1A FIX: Valideer en filter database resultaten
-    console.log('\n🔥 [DRAAD1A] STAP 4B: DATABASE RESULT VALIDATION & FILTERING');
-    
+    // 🔥 Log service_id distribution
     if (periodData && periodData.length > 0) {
-      // Check eerste datum in database resultaat
+      const serviceIdCounts: Record<string, number> = {};
+      periodData.forEach(record => {
+        const sid = record.service_id || 'NULL';
+        serviceIdCounts[sid] = (serviceIdCounts[sid] || 0) + 1;
+      });
+      
+      console.log('📊 [DRAAD45.6] Service ID distributie:', serviceIdCounts);
+    }
+    
+    // Filter zondag als eerste dag
+    if (periodData && periodData.length > 0) {
       const firstDbDate = periodData[0].date;
       const firstDbDateObj = new Date(firstDbDate + 'T00:00:00Z');
       const firstDbDayOfWeek = firstDbDateObj.getUTCDay();
       
-      console.log('📅 [DRAAD1A] Eerste datum in DB resultaat:', {
-        datum: firstDbDate,
-        dagVanWeek: firstDbDayOfWeek,
-        dagNaam: ['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'][firstDbDayOfWeek],
-        isMaandag: firstDbDayOfWeek === 1,
-        isZondag: firstDbDayOfWeek === 0
-      });
-      
-      // 🔥 FIX: Als eerste dag een ZONDAG is, filter die eruit!
       if (firstDbDayOfWeek === 0) {
-        console.warn('⚠️  [DRAAD1A] ZONDAG GEDETECTEERD ALS EERSTE DAG - FILTERING!');
-        console.warn(`⚠️  Zondag ${firstDbDate} wordt verwijderd uit resultaat`);
-        
-        // Filter: verwijder de zondag
+        console.warn('⚠️  [DRAAD45.6] ZONDAG FILTERING...');
         const filteredData = periodData.filter(record => record.date !== firstDbDate);
-        
-        console.log('✅ [DRAAD1A] Zondag gefilterd:', {
-          voorFiltering: periodData.length,
-          naFiltering: filteredData.length,
-          verwijderd: periodData.length - filteredData.length
-        });
-        
-        // Overschrijf periodData met gefilterde data
         periodData.splice(0, periodData.length, ...filteredData);
-      } else if (firstDbDayOfWeek === 1) {
-        console.log('✅ [DRAAD1A] Eerste dag is correct (maandag) - geen filtering nodig');
-      } else {
-        console.warn(`⚠️  [DRAAD1A] ONVERWACHTE EERSTE DAG: ${['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'][firstDbDayOfWeek]}`);
-        console.warn('⚠️  Dit zou niet mogen gebeuren - mogelijk database inconsistentie');
+        console.log(`✅ [DRAAD45.6] Zondag verwijderd: ${filteredData.length} records blijven`);
       }
     }
     
-    // 🔥 DRAAD1A FIX: Limiteer tot EXACT 7 dagen
+    // Limiteer tot 7 dagen
     if (periodData && periodData.length > 7) {
-      console.warn(`⚠️  [DRAAD1A] TE VEEL DAGEN: ${periodData.length} records`);
-      console.warn('⚠️  Limiet tot eerste 7 dagen');
-      periodData.splice(7); // Verwijder alles na index 6
-      console.log(`✅ [DRAAD1A] Gelimiteerd tot ${periodData.length} dagen`);
+      console.warn(`⚠️  [DRAAD45.6] Limiet tot 7 dagen (was: ${periodData.length})`);
+      periodData.splice(7);
     }
-    
-    if (recordCount === 0) {
-      console.warn('⚠️  [DRAAD1A] Geen period data gevonden (dit is OK voor lege week)');
-    }
-    
-    // STAP 5: Analyseer dagdelen data
-    console.log('\n🔄 [DRAAD1A] STAP 5: Analyzing dagdelen...');
     
     const totalDagdelen = periodData?.reduce((sum, p) => 
       sum + (p.roster_period_staffing_dagdelen?.length || 0), 0) || 0;
     
-    console.log('📊 [DRAAD1A] Dagdelen summary:', {
+    console.log('📊 [DRAAD45.6] Dagdelen summary:', {
       totalParentRecords: periodData?.length || 0,
-      totalDagdelenRecords: totalDagdelen,
-      avgPerParent: (periodData?.length || 0) > 0 ? (totalDagdelen / (periodData?.length || 1)).toFixed(1) : '0'
+      totalDagdelenRecords: totalDagdelen
     });
     
-    // STAP 6: Build days array
-    console.log('\n🔄 [DRAAD1A] STAP 6: Building days array...');
+    // 🔥 STAP 5: BUILD DAYS ARRAY MET SERVICE_ID
+    console.log('\n🔥 [DRAAD45.6] STAP 5: Building days array WITH serviceId mapping...');
     
     const days: DayDagdeelData[] = [];
     const startDate = parseISO(weekStartStr);
-    
-    console.log('📅 [DRAAD1A] Genereer 7 dagen vanaf:', weekStartStr);
     
     for (let i = 0; i < 7; i++) {
       const currentDate = addDays(startDate, i);
       const dateStr = format(currentDate, 'yyyy-MM-dd');
       const dayName = format(currentDate, 'EEEE', { locale: nl });
-      const dayOfWeek = currentDate.getUTCDay();
       
       // Zoek data voor deze dag
       const dayPeriod = periodData?.find(p => p.date === dateStr);
       const dagdelenRecords = dayPeriod?.roster_period_staffing_dagdelen || [];
+      const dayServiceId = dayPeriod?.service_id;  // 🔥 NIEUW!
       
-      // Log eerste en laatste dag voor verificatie
-      if (i === 0 || i === 6) {
-        console.log(`📅 [DRAAD1A] Dag ${i} (${i === 0 ? 'EERSTE' : 'LAATSTE'}) - ${dateStr}:`, {
+      // Log voor eerste dag
+      if (i === 0) {
+        console.log(`📅 [DRAAD45.6] Eerste dag - ${dateStr}:`, {
           dagNaam: dayName,
-          dagVanWeek: dayOfWeek,
-          dagVanWeekNaam: ['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'][dayOfWeek],
-          verwachtDag: i === 0 ? 'Maandag (1)' : 'Zondag (0)',
-          correct: i === 0 ? (dayOfWeek === 1 ? '✅' : '❌') : (dayOfWeek === 0 ? '✅' : '❌'),
           gevondenInDB: !!dayPeriod,
+          serviceId: dayServiceId || 'NULL',  // 🔥 LOG service_id
           aantalDagdelen: dagdelenRecords.length
         });
       }
       
-      // Groepeer per dagdeel
+      // 🔥 Groepeer per dagdeel MET serviceId
       const dagdelen = {
         ochtend: dagdelenRecords
           .filter(d => d.dagdeel?.toLowerCase() === 'ochtend')
@@ -323,6 +288,7 @@ export async function getWeekDagdelenData(
             team: d.team || '',
             aantal: d.aantal || 0,
             status: d.status || 'NIET_TOEGEWEZEN',
+            serviceId: dayServiceId  // 🔥 NIEUW: Voeg service_id toe!
           })),
         middag: dagdelenRecords
           .filter(d => d.dagdeel?.toLowerCase() === 'middag')
@@ -330,6 +296,7 @@ export async function getWeekDagdelenData(
             team: d.team || '',
             aantal: d.aantal || 0,
             status: d.status || 'NIET_TOEGEWEZEN',
+            serviceId: dayServiceId  // 🔥 NIEUW
           })),
         avond: dagdelenRecords
           .filter(d => d.dagdeel?.toLowerCase() === 'avond')
@@ -337,6 +304,7 @@ export async function getWeekDagdelenData(
             team: d.team || '',
             aantal: d.aantal || 0,
             status: d.status || 'NIET_TOEGEWEZEN',
+            serviceId: dayServiceId  // 🔥 NIEUW
           })),
         nacht: dagdelenRecords
           .filter(d => d.dagdeel?.toLowerCase() === 'nacht')
@@ -344,6 +312,7 @@ export async function getWeekDagdelenData(
             team: d.team || '',
             aantal: d.aantal || 0,
             status: d.status || 'NIET_TOEGEWEZEN',
+            serviceId: dayServiceId  // 🔥 NIEUW
           })),
       };
       
@@ -354,46 +323,35 @@ export async function getWeekDagdelenData(
       });
     }
     
-    console.log(`✅ [DRAAD1A] Days array gebouwd: ${days.length} dagen`);
+    console.log(`✅ [DRAAD45.6] Days array gebouwd: ${days.length} dagen MET serviceId`);
     
-    // 🔥 DRAAD1A FINAL VALIDATION
-    console.log('\n🔍 [DRAAD1A] FINAL VALIDATION - Days Array Check:');
+    // FINAL VALIDATION
     if (days.length === 7) {
       const firstDayDate = new Date(days[0].datum + 'T00:00:00Z');
       const lastDayDate = new Date(days[6].datum + 'T00:00:00Z');
       const firstDayOfWeek = firstDayDate.getUTCDay();
       const lastDayOfWeek = lastDayDate.getUTCDay();
       
-      console.log('✅ [DRAAD1A] Days array structuur:', {
+      // 🔥 Check serviceId presence
+      const firstDayFirstAssignment = days[0].dagdelen.ochtend[0];
+      const hasServiceId = firstDayFirstAssignment?.serviceId !== undefined;
+      
+      console.log('\n🔍 [DRAAD45.6] FINAL VALIDATION:', {
         aantalDagen: days.length,
         eersteDag: {
           datum: days[0].datum,
-          dagNaam: days[0].dagNaam,
-          dayOfWeek: firstDayOfWeek,
           isMaandag: firstDayOfWeek === 1 ? '✅' : '❌'
         },
         laatsteDag: {
           datum: days[6].datum,
-          dagNaam: days[6].dagNaam,
-          dayOfWeek: lastDayOfWeek,
           isZondag: lastDayOfWeek === 0 ? '✅' : '❌'
         },
-        validatie: (firstDayOfWeek === 1 && lastDayOfWeek === 0) ? '✅ CORRECT (ma-zo)' : '❌ FOUT'
+        serviceIdPresent: hasServiceId ? '✅ JA' : '❌ NEE',
+        sampleServiceId: firstDayFirstAssignment?.serviceId || 'NULL'
       });
-      
-      if (firstDayOfWeek !== 1) {
-        console.error('❌ [DRAAD1A] KRITIEKE FOUT: Eerste dag is GEEN maandag!');
-        console.error('Dit zou niet mogen gebeuren na alle fixes!');
-      }
-      if (lastDayOfWeek !== 0) {
-        console.error('❌ [DRAAD1A] KRITIEKE FOUT: Laatste dag is GEEN zondag!');
-        console.error('Dit zou niet mogen gebeuren na alle fixes!');
-      }
-    } else {
-      console.error(`❌ [DRAAD1A] FOUT: Days array heeft ${days.length} dagen (verwacht: 7)`);
     }
     
-    // STAP 7: Build result object
+    // Build result
     const result = {
       rosterId,
       weekNummer,
@@ -403,22 +361,21 @@ export async function getWeekDagdelenData(
       days,
     };
     
-    console.log('\n✅ [DRAAD1A] SUCCESS - Returning validated data');
-    console.log('📦 [DRAAD1A] Result:', {
+    console.log('\n✅ [DRAAD45.6] SUCCESS - serviceId pipeline complete');
+    console.log('📦 [DRAAD45.6] Result:', {
       rosterId: result.rosterId,
       weekIndex: result.weekNummer,
-      period: `${result.startDatum} - ${result.eindDatum}`,
-      daysCount: result.days.length
+      daysCount: result.days.length,
+      hasServiceIds: result.days[0]?.dagdelen.ochtend[0]?.serviceId ? '✅' : '❌'
     });
     console.log('═'.repeat(60));
     
     return result;
     
   } catch (error) {
-    console.error('\n❌ [DRAAD1A] EXCEPTION CAUGHT');
+    console.error('\n❌ [DRAAD45.6] EXCEPTION CAUGHT');
     console.error('Error:', error);
     console.error('Message:', error instanceof Error ? error.message : 'Unknown');
-    console.error('Stack:', error instanceof Error ? error.stack : undefined);
     console.log('═'.repeat(60));
     return null;
   }
@@ -435,7 +392,7 @@ export async function getWeekNavigatieBounds(
   rosterId: string,
   currentWeek: number
 ): Promise<WeekNavigatieBounds> {
-  console.log('🧭 [DRAAD1A] getWeekNavigatieBounds - weekIndex systeem');
+  console.log('🧭 [DRAAD45.6] getWeekNavigatieBounds - weekIndex systeem');
   console.log('Input:', { rosterId, currentWeekIndex: currentWeek });
   
   try {
@@ -447,11 +404,11 @@ export async function getWeekNavigatieBounds(
       hasNext: currentWeek < 5,
     };
     
-    console.log('✅ [DRAAD1A] Week navigation bounds:', bounds);
+    console.log('✅ [DRAAD45.6] Week navigation bounds:', bounds);
     
     return bounds;
   } catch (error) {
-    console.error('❌ [DRAAD1A] Error in getWeekNavigatieBounds:', error);
+    console.error('❌ [DRAAD45.6] Error in getWeekNavigatieBounds:', error);
     return {
       minWeek: 1,
       maxWeek: 5,
