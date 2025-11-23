@@ -1,0 +1,11 @@
+DRAAD45.1 - STAP 2 VOLTOOID
+Timestamp: 2025-11-23 21:55 CET
+
+Wijzigingen:
+- Nieuwe file: lib/planning/getCelData.ts
+- Centrale utility voor cel-level database lookup
+- roster_period_staffing + dagdelen JOIN query
+- Fallback logica bij geen match
+- Console logging met [DRAAD45] prefix
+
+Volgende stap: DagdeelCell.tsx update
