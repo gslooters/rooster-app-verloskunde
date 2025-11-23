@@ -16,6 +16,8 @@ interface WeekDagdelenTableProps {
 /**
  * WeekDagdelenTable Component
  * 
+ * DRAAD44: Frontend Cellogica Fix - Toegevoegd rosterId prop doorgeven
+ * 
  * 🔥 DRAAD40C HOTFIX - FULLWIDTH TABLE:
  * ✅ VERWIJDERD: container wrapper (blokkeerde breedte)
  * ✅ BEHOUDEN: relative wrapper voor z-index stacking
@@ -45,6 +47,9 @@ export default function WeekDagdelenTable({
       </div>
     );
   }
+
+  // 🔥 DRAAD44: Extract rosterId from weekData context
+  const rosterId = weekData.context.rosterId;
 
   // ============================================================================
   // DATA FILTERING
@@ -137,7 +142,9 @@ export default function WeekDagdelenTable({
           <WeekTableHeader weekDagen={weekDagen} />
           
           {/* Body: Dienst groepen met team rijen */}
+          {/* 🔥 DRAAD44: RosterId prop toegevoegd */}
           <WeekTableBody
+            rosterId={rosterId}
             diensten={filteredDiensten}
             onDagdeelUpdate={onDagdeelUpdate}
             disabled={disabled}
@@ -147,6 +154,7 @@ export default function WeekDagdelenTable({
       {process.env.NODE_ENV === 'development' && (
         <div className="mt-4 p-3 bg-gray-100 rounded text-xs text-gray-600 font-mono">
           <div>Debug Info:</div>
+          <div>- RosterId: {rosterId}</div>
           <div>- Totaal diensten: {weekData.diensten.length}</div>
           <div>- Gefilterde diensten: {filteredDiensten.length}</div>
           <div>- Week periode: {weekData.context.startDate} → {weekData.context.endDate}</div>
