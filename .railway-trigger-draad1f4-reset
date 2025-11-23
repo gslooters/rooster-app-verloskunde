@@ -1,0 +1,30 @@
+# DRAAD1F4: DEPLOYMENT RESET TRIGGER
+# Timestamp: 2025-11-23T18:55:50Z
+# Random: 87294
+
+## KRITIEKE RESET
+
+### PROBLEEM ANALYSE:
+- Deployment failures sinds 17:19 (laatste goede: 1c2e0ae7 om ~17:35)
+- Oorzaak: date-fns downgrade van 4.1.0 naar 2.30.0
+- Bijkomend: date-fns-tz toegevoegd (incompatibel)
+- Gevolg: NPM dependency conflicts, build failures
+
+### ACTIES UITGEVOERD:
+1. ✅ package.json hersteld: date-fns 4.1.0 (GEEN date-fns-tz)
+2. ✅ .npmrc verwijderd (niet nodig)
+3. ✅ nixpacks.toml verwijderd (niet nodig)
+4. ✅ package-lock.json verwijderd (fresh regeneration)
+
+### VERWACHTING:
+- Railway genereert nieuwe package-lock.json met date-fns 4.1.0
+- Clean build zonder dependency conflicts
+- App draait zoals deployment 1c2e0ae7-faa0-412d-ba13-a12c474fa55c
+- Health check PASSED binnen 100 seconden
+
+### DEPLOYMENT TARGET:
+Terug naar werkende code state van commit cf4e0ff52aa6e3bf73f8a6ccc4e72164e8627b64
+(DRAAD1E: Cache-bust voor version endpoint deployment)
+
+---
+Dit bestand triggert automatische Railway deployment.
