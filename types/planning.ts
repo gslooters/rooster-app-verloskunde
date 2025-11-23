@@ -1,7 +1,9 @@
 /**
- * DRAAD42 - Planning Types
+ * DRAAD45.7 FIX - Planning Types
  * 
  * TypeScript interfaces voor week dagdelen vaststelling
+ * 
+ * FIX: datum → date voor consistentie met database schema
  */
 
 export interface ServiceType {
@@ -29,7 +31,7 @@ export interface RosterPeriodStaffing {
   id: string;
   roster_period_id: string;
   service_type_id: string;
-  datum: string;
+  date: string;  // 🔥 FIX: Was 'datum', nu 'date' (matches database)
   created_at?: string;
   updated_at?: string;
 }
@@ -45,7 +47,7 @@ export interface StaffingDagdeel {
   updated_at?: string;
   // Enriched fields (from join)
   service_type_id?: string;
-  datum?: string;
+  date?: string;  // 🔥 FIX: Was 'datum', nu 'date' (matches database)
 }
 
 export interface WeekDay {
