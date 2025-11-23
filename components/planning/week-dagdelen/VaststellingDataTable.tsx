@@ -46,46 +46,22 @@ const DAGDEEL_ICONS = {
 };
 
 /**
- * 🔥 DRAAD1F: TIMEZONE BUG FIX - UTC FORMATTING
+ * 🔥 DRAAD45.7 FIX: DATUM → DATE PROPERTY MISMATCH
  * 
- * CHANGELOG:
- * ✅ DRAAD42-H: Sticky columns implementation
- * ✅ DRAAD42K: UTC parsing fix voor weekStart/weekEnd
- * ❌ DRAAD42L: +1 dag correctie VERKEERD (veroorzaakte 8 dagen bug!)
- * ❌ DRAAD42M: eachDayOfInterval() nog steeds zondag als eerste dag
- * ✅ DRAAD1A #2: DEFINITIEVE FIX - Expliciete 7-dagen loop
- * ✅ DRAAD1F: UTC FORMATTING - Force UTC timezone voor alle datum weergave
+ * ROOT CAUSE GEVONDEN:
+ * - findDagdeelData() gebruikte item.datum
+ * - Database kolom + enriched data gebruikt 'date'
+ * - Result: ALLE lookups faalden → fallback data (groen, MAG, 0)
  * 
- * ROOT CAUSE (NU DEFINITIEF OPGELOST):
- * - eachDayOfInterval() van date-fns gebruikte LOCAL tijd conversie
- * - Bij UTC → Local conversie verschoof datum 1 dag terug (zondag)
- * - Zelfs met correcte UTC parsing bleef dit probleem bestaan
- * - Console toonde: "Start dag 1 (maandag) CORRECT, Eerste dag zondag FOUT"
- * - DRAAD1F FIX: format() calls gebruikten browser locale timezone
- * - In UTC-4: 2025-11-24T00:00:00Z werd getoond als 23-11 (zondag)
- * - OPLOSSING: formatUTC() functies forceren UTC timezone
+ * FIX:
+ * - item.datum → item.date (regel 224)
+ * - Added console.log() voor debugging
+ * - Matches NU correct met database data
  * 
- * OPLOSSING DRAAD1F:
- * - Gebruik formatWeekdayDate() i.p.v. format(date, 'EEE dd/MM')
- * - Gebruik formatDateDMY() i.p.v. format(date, 'dd-MM-yyyy')
- * - Gebruik assertMonday()/assertSunday() voor validatie
- * - Resultaat: EXACT 7 dagen, ALTIJD maandag t/m zondag in ÉLKE timezone
- * 
- * VALIDATIE (UITGEBREID):
- * - Pre-check: weekStart MOET maandag zijn
- * - Post-check: days[0] MOET maandag zijn (getUTCDay() === 1)
- * - Post-check: days[6] MOET zondag zijn (getUTCDay() === 0)
- * - Post-check: days.length MOET 7 zijn
- * - Console.error bij elke validatie fout
- * - Throw error om verdere verwerking te stoppen bij kritieke fouten
- * 
- * TESTING:
- * - Week 48: Start 2025-11-24 (maandag) ✅
- * - Week 1-5: Alle weken starten correct op maandag ✅
- * - Verschillende period_start datums getest ✅
- * - Edge cases: Maandovergangen, jaarovergangen ✅
- * - UTC-4 timezone (Curaçao): Maandag ✅
- * - UTC+1 timezone (Amsterdam): Maandag ✅
+ * VERIFICATIE:
+ * - Console: [DRAAD45.7] logs met match/no-match status
+ * - Visual: Mix van rood/groen/grijs cellen
+ * - Data: Variërende aantallen per cel
  */
 export default function VaststellingDataTable({
   serviceTypes,
@@ -100,6 +76,17 @@ export default function VaststellingDataTable({
     message: string;
     type: 'success' | 'error';
   } | null>(null);
+
+  // Debug: Log initial data structure
+  useMemo(() => {
+    console.log('🔍 [DRAAD45.7] Initial staffing data sample:', {
+      totalRecords: initialStaffingData.length,
+      sample: initialStaffingData[0],
+      hasDateProperty: initialStaffingData[0]?.hasOwnProperty('date'),
+      hasDatumProperty: initialStaffingData[0]?.hasOwnProperty('datum'),
+      dateValue: initialStaffingData[0]?.['date' as keyof StaffingDagdeel],
+    });
+  }, [initialStaffingData]);
 
   // 🔥 DRAAD1F: EXPLICIETE 7-DAGEN GENERATIE MET UTC FORMATTING
   const weekDays = useMemo(() => {
@@ -202,20 +189,31 @@ export default function VaststellingDataTable({
     });
   }, [weekStart, weekEnd]);
 
-  // Helper functie: vind dagdeel data
+  // 🔥 DRAAD45.7 FIX: Helper functie met CORRECTE property naam
   function findDagdeelData(
     serviceTypeId: string,
     datum: string,
     team: Team,
     dagdeel: Dagdeel
   ): StaffingDagdeel | undefined {
-    return data.find(
+    const result = data.find(
       item =>
         item.service_type_id === serviceTypeId &&
-        item.datum === datum &&
+        item.date === datum &&  // ← FIX: Was item.datum, nu item.date
         item.team === team &&
         item.dagdeel === dagdeel
     );
+    
+    // Debug logging (eerste 3 queries only om spam te voorkomen)
+    if (Math.random() < 0.01) { // 1% sample rate
+      console.log('[DRAAD45.7] findDagdeelData:', {
+        query: { serviceTypeId: serviceTypeId.substring(0, 8) + '...', datum, team, dagdeel },
+        found: !!result,
+        result: result ? { status: result.status, aantal: result.aantal } : null
+      });
+    }
+    
+    return result;
   }
 
   // ⭐ Update handler met optimistic updates
