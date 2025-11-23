@@ -1,0 +1,108 @@
+DRAAD44: FRONTEND CELLOGICA ROOSTER-DAGDELEN STRUCTUUR FIX
+========================================================
+
+Timestamp: 2025-11-23 21:17 CET
+Draad: DRAAD44
+Prioriteit: NU
+
+🔥 KRITIEKE WIJZIGINGEN:
+
+1. DagdeelCell.tsx (components/planning/week-dagdelen/)
+   - Toegevoegd rosterId prop voor database lookup
+   - Toegevoegd dienstId prop (service_id) voor correcte match
+   - Toegevoegd dagdeelType prop ('O'/'M'/'A') voor dagdeel identificatie
+   - Uitgebreide console logging voor debugging
+   - Log bij initialisatie: rosterId, dienstId, datum, dagdeel, team
+   - Waarschuwing bij ontbrekende/invalide dagdeelWaarde.id
+
+2. WeekTableBody.tsx (components/planning/week-dagdelen/)
+   - Toegevoegd rosterId prop interface
+   - Dagdeel type mapping: ochtend→'O', middag→'M', avond→'A'
+   - Correcte props doorgeven aan DagdeelCell:
+     * rosterId (uit parent)
+     * dienstId (uit dienst.dienstId)
+     * dagdeelType ('O'/'M'/'A')
+   - Alle 3 dagdelen per dag correct gemapped
+
+3. WeekDagdelenTable.tsx (components/planning/week-dagdelen/)
+   - RosterId extraction uit weekData.context.rosterId
+   - RosterId doorgeven aan WeekTableBody
+   - Debug info uitgebreid met rosterId display
+
+🔍 DATA FLOW PER CEL:
+
+VOOR (DRAAD43):
+- Data via props zonder verificatie
+- Geen directe database link
+- Fallback op team/dagdeel defaults
+
+NA (DRAAD44):
+- Elke cel heeft unieke identificatie:
+  * rosterId: UUID van rooster
+  * dienstId: service_id uit service_types
+  * datum: ISO date (YYYY-MM-DD)
+  * dagdeelType: 'O'|'M'|'A'
+  * team: 'GRO'|'ORA'|'TOT'
+
+- Console logging per cel:
+  * Initialisatie: alle identificatie params
+  * Bij save: old/new values + record ID
+  * Bij fout: error message + cel context
+
+- Correcte database query structuur:
+  1. Find roster_period_staffing WHERE:
+     - roster_id = rosterId
+     - service_id = dienstId
+     - date = datum
+  2. Find roster_period_staffing_dagdelen WHERE:
+     - roster_period_staffing_id = rps.id (uit stap 1)
+     - dagdeel = dagdeelType (lowercase: ochtend/middag/avond)
+     - team = team
+  3. Return {status, aantal} of {MAG_NIET, 0}
+
+✅ VALIDATIE:
+
+- Bij geen match: status MAG_NIET, aantal 0 (grijs cel)
+- Console warnings voor ontbrekende combinaties
+- Edge cases logging:
+  * Undefined dagdeelWaarde.id
+  * Ontbrekende roster_period_staffing records
+  * Ontbrekende dagdelen child records
+
+🚨 DEPLOYMENT NOTES:
+
+- Geen database migraties nodig
+- Geen API endpoint wijzigingen
+- Frontend-only fix
+- Backwards compatible (oude data blijft werken)
+- Console logging kan later verwijderd worden na verificatie
+
+📝 TESTING CHECKLIST:
+
+[ ] Cel initialisatie logt correcte params in console
+[ ] Klik op cel opent inline editor
+[ ] Save logt oude/nieuwe waarden
+[ ] Bij fout: error message + context gelogd
+[ ] MAG_NIET cellen tonen grijs
+[ ] MOET cellen tonen rood
+[ ] MAG cellen tonen groen
+[ ] Aantal 0 toont als "-"
+[ ] Keyboard navigation werkt (Tab, Enter, Escape)
+[ ] Edge case: cel zonder database record toont MAG_NIET
+
+🔗 RELATED FILES:
+
+- components/planning/week-dagdelen/DagdeelCell.tsx
+- components/planning/week-dagdelen/WeekTableBody.tsx  
+- components/planning/week-dagdelen/WeekDagdelenTable.tsx
+
+📊 EXPECTED BEHAVIOR:
+
+Dit lost het kernprobleem op dat elke cel nu EXACT weet welke database record het moet ophalen/updaten via de unieke combinatie van:
+- rooster_id (welk rooster)
+- date (welke dag)
+- service_id (welke dienst)  
+- dagdeel (welk dagdeel: ochtend/middag/avond)
+- team (welk team: GRO/ORA/TOT)
+
+Geen fallbacks, geen assumptions, volledige traceerbaarheid via console logs.
