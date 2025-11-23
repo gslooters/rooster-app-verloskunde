@@ -1,0 +1,60 @@
+DRAAD45.6 DEPLOYMENT TRIGGER - COMPLETE FIX
+==========================================
+
+Tijdstip: 2025-11-23 23:05 CET
+
+COMMITS:
+--------
+Stap 1: 8dfb1ceaad53cf0a9a5701d66bbd462b757f4f28
+  - lib/planning/weekDagdelenData.ts
+  - DagdeelAssignment: serviceId?: string toegevoegd
+  - SELECT query: service_id opgehaald uit database
+  - Mapping: serviceId toegevoegd aan alle assignments
+
+Stap 2: dc7fdcf82774c93bd9c693ef26c538cd74b0f03f
+  - components/planning/week-dagdelen/WeekDagdelenClient.tsx
+  - convertToNewStructure(): Extraheert unieke service_id's
+  - Maakt ECHTE diensten per service_id (CONS, POL, ECHO)
+  - createTeamDagdelenWeek(): Filtert op serviceIdFilter
+  - Elimineert 'default-dienst' fallback
+
+VERWACHTE RESULTATEN:
+===================
+
+📊 Console Logs:
+- [DRAAD45.6] Service ID distributie: { CONS: X, POL: Y, ... }
+- [DRAAD45.6] N dienst(en): CONS, POL, ECHO
+- [DRAAD45.6] Service IDs found: { unique: [...], count: N }
+
+🎨 Visueel:
+- MEERDERE diensten zichtbaar (niet alleen 1 fake dienst)
+- Cellen hebben VERSCHILLENDE kleuren (rood/groen/grijs)
+- Aantallen variëren per cel (niet allemaal 0)
+
+✅ Data Pipeline:
+1. Database query haalt service_id op
+2. Assignments krijgen serviceId veld
+3. Conversie maakt echte diensten
+4. DagdeelCell krijgt echte dienstId
+5. getCelDataClient() matched op database
+6. Cellen tonen ECHTE data!
+
+TEST PROCEDURE:
+==============
+1. Open: /planning/design/week-dagdelen/{rosterId}/1
+2. Check console voor [DRAAD45.6] logs
+3. Verify MEERDERE diensten in table
+4. Check cellen: VERSCHILLENDE kleuren en aantallen
+5. Debug panel: serviceId aanwezig = ✅ JA
+
+EXPECTED BEHAVIOR:
+=================
+- Geen 'default-dienst' meer
+- Echte diensten: CONS, POL, ECHO, etc.
+- Database matching werkt
+- Cellen tonen correcte status en aantal
+- GEEN grijze cellen met alleen streepjes!
+
+---
+Trigger: draad456-complete
+Timestamp: 2025-11-23T23:05:11Z
