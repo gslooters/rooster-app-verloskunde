@@ -1,5 +1,5 @@
 import { format } from 'date-fns';
-import { formatInTimeZone, utcToZonedTime } from 'date-fns-tz';
+import { formatInTimeZone } from 'date-fns-tz';
 import { nl } from 'date-fns/locale';
 
 /**
