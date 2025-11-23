@@ -209,6 +209,45 @@ function extractShortDagNaam(fullName: string): string {
   return map[fullName] || fullName.substring(0, 2).toLowerCase();
 }
 
+/**
+ * 🔥 DRAAD45.6 FIX: Helper om leeg TeamDagdelenWeek te maken
+ */
+function createEmptyTeamDagdelenWeek(
+  team: TeamDagdeel,
+  days: DayDagdeelData[]
+): TeamDagdelenWeek {
+  const dagen: DagDagdelen[] = days.map(day => {
+    const dagdeelWaarden: { ochtend: DagdeelWaarde; middag: DagdeelWaarde; avond: DagdeelWaarde } = {
+      ochtend: {
+        dagdeel: '0',
+        status: 'MAG_NIET',
+        aantal: 0,
+        id: `${day.datum}-0-${team}-empty`
+      },
+      middag: {
+        dagdeel: 'M',
+        status: 'MAG_NIET',
+        aantal: 0,
+        id: `${day.datum}-M-${team}-empty`
+      },
+      avond: {
+        dagdeel: 'A',
+        status: 'MAG_NIET',
+        aantal: 0,
+        id: `${day.datum}-A-${team}-empty`
+      }
+    };
+
+    return {
+      datum: day.datum,
+      dagNaam: extractShortDagNaam(day.dagNaam),
+      dagdeelWaarden
+    };
+  });
+
+  return { team, dagen };
+}
+
 export default function WeekDagdelenClient({
   rosterId,
   weekNummer,
@@ -258,12 +297,12 @@ export default function WeekDagdelenClient({
     return convertedWeekData.diensten.map(dienst => ({
       ...dienst,
       teams: {
-        groen: teamFilters.GRO ? dienst.teams.groen : { team: 'GRO', dagen: [] },
-        oranje: teamFilters.ORA ? dienst.teams.oranje : { team: 'ORA', dagen: [] },
-        totaal: teamFilters.TOT ? dienst.teams.totaal : { team: 'TOT', dagen: [] }
+        groen: teamFilters.GRO ? dienst.teams.groen : createEmptyTeamDagdelenWeek('GRO', initialWeekData.days),
+        oranje: teamFilters.ORA ? dienst.teams.oranje : createEmptyTeamDagdelenWeek('ORA', initialWeekData.days),
+        totaal: teamFilters.TOT ? dienst.teams.totaal : createEmptyTeamDagdelenWeek('TOT', initialWeekData.days)
       }
     }));
-  }, [convertedWeekData.diensten, teamFilters]);
+  }, [convertedWeekData.diensten, teamFilters, initialWeekData.days]);
 
   const gefilterdeWeekData: WeekDagdelenData = {
     ...convertedWeekData,
