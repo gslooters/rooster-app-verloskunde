@@ -1,0 +1,28 @@
+RAILWAY DEPLOYMENT TRIGGER - DRAAD1F
+Timestamp: 2025-11-23T17:19:55Z
+Commit: e0679f1360f203eaed4a8cbfd63a252a08743c8f
+
+DEPLOYMENT PURPOSE:
+DRAAD1F - TIMEZONE BUG FIX: UTC FORMATTING IMPLEMENTATIE
+
+ALL FIXES IMPLEMENTED:
+✅ Package.json updated with date-fns-tz
+✅ lib/date-utils.ts created with UTC helpers
+✅ VaststellingDataTable.tsx updated
+✅ WeekTableHeader.tsx updated
+✅ Server page.tsx updated
+✅ Cache-bust files created
+
+READY FOR DEPLOYMENT!
+
+VERIFICATIE NA DEPLOYMENT:
+1. Check Railway logs voor successful build
+2. Open /api/version - verify commit SHA
+3. Test /planning/design/week-dagdelen/[rosterId]/48?period_start=2025-11-24
+4. Verify eerste kolom toont "ma 24/11"
+5. Check console: "✅ DRAAD1F: Timezone validaties PASSED"
+
+EXPECTED RESULT:
+Week roosters starten op MAANDAG in ALLE timezones (UTC-4, UTC+1, UTC+0, etc.)
+
+This file triggers Railway auto-deployment via Git push detection.
