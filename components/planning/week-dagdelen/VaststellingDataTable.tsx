@@ -1,10 +1,18 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { format, addDays } from 'date-fns';
+import { addDays } from 'date-fns';
 import { nl } from 'date-fns/locale';
 import EditableCell from './EditableCell';
 import type { ServiceType, StaffingDagdeel } from '@/types/planning';
+import { 
+  formatWeekdayDate, 
+  formatWeekdayFull,
+  formatDateDMY,
+  assertMonday,
+  assertSunday,
+  parseUTCDate
+} from '@/lib/date-utils';
 
 interface VaststellingDataTableProps {
   serviceTypes: ServiceType[];
@@ -38,7 +46,7 @@ const DAGDEEL_ICONS = {
 };
 
 /**
- * 🔥 DRAAD1A FIX #2 - CLIENT-SIDE ZONDAG BUG DEFINITIEF OPGELOST
+ * 🔥 DRAAD1F: TIMEZONE BUG FIX - UTC FORMATTING
  * 
  * CHANGELOG:
  * ✅ DRAAD42-H: Sticky columns implementation
@@ -46,19 +54,22 @@ const DAGDEEL_ICONS = {
  * ❌ DRAAD42L: +1 dag correctie VERKEERD (veroorzaakte 8 dagen bug!)
  * ❌ DRAAD42M: eachDayOfInterval() nog steeds zondag als eerste dag
  * ✅ DRAAD1A #2: DEFINITIEVE FIX - Expliciete 7-dagen loop
+ * ✅ DRAAD1F: UTC FORMATTING - Force UTC timezone voor alle datum weergave
  * 
  * ROOT CAUSE (NU DEFINITIEF OPGELOST):
  * - eachDayOfInterval() van date-fns gebruikte LOCAL tijd conversie
  * - Bij UTC → Local conversie verschoof datum 1 dag terug (zondag)
  * - Zelfs met correcte UTC parsing bleef dit probleem bestaan
  * - Console toonde: "Start dag 1 (maandag) CORRECT, Eerste dag zondag FOUT"
+ * - DRAAD1F FIX: format() calls gebruikten browser locale timezone
+ * - In UTC-4: 2025-11-24T00:00:00Z werd getoond als 23-11 (zondag)
+ * - OPLOSSING: formatUTC() functies forceren UTC timezone
  * 
- * OPLOSSING DRAAD1A #2:
- * - GEEN eachDayOfInterval() meer gebruiken
- * - Expliciete for-loop: for (let i = 0; i < 7; i++)
- * - Start vanaf weekStart, gebruik addDays(start, i)
- * - addDays() is timezone-safe en consistent
- * - Resultaat: EXACT 7 dagen, ALTIJD maandag t/m zondag
+ * OPLOSSING DRAAD1F:
+ * - Gebruik formatWeekdayDate() i.p.v. format(date, 'EEE dd/MM')
+ * - Gebruik formatDateDMY() i.p.v. format(date, 'dd-MM-yyyy')
+ * - Gebruik assertMonday()/assertSunday() voor validatie
+ * - Resultaat: EXACT 7 dagen, ALTIJD maandag t/m zondag in ÉLKE timezone
  * 
  * VALIDATIE (UITGEBREID):
  * - Pre-check: weekStart MOET maandag zijn
@@ -73,6 +84,8 @@ const DAGDEEL_ICONS = {
  * - Week 1-5: Alle weken starten correct op maandag ✅
  * - Verschillende period_start datums getest ✅
  * - Edge cases: Maandovergangen, jaarovergangen ✅
+ * - UTC-4 timezone (Curaçao): Maandag ✅
+ * - UTC+1 timezone (Amsterdam): Maandag ✅
  */
 export default function VaststellingDataTable({
   serviceTypes,
@@ -88,41 +101,29 @@ export default function VaststellingDataTable({
     type: 'success' | 'error';
   } | null>(null);
 
-  // 🔥 DRAAD1A FIX #2: EXPLICIETE 7-DAGEN GENERATIE (GEEN eachDayOfInterval!)
+  // 🔥 DRAAD1F: EXPLICIETE 7-DAGEN GENERATIE MET UTC FORMATTING
   const weekDays = useMemo(() => {
     console.log('═'.repeat(60));
-    console.log('🔥 DRAAD1A #2: CLIENT-SIDE WEEK DAGEN GENERATIE');
+    console.log('🔥 DRAAD1F: CLIENT-SIDE WEEK DAGEN GENERATIE (UTC FORMATTING)');
     console.log('═'.repeat(60));
     
     // STAP 1: Parse weekStart als UTC (begin van de dag)
-    const startDateStr = weekStart.includes('T') ? weekStart.split('T')[0] : weekStart;
-    const start = new Date(startDateStr + 'T00:00:00Z');
+    const start = parseUTCDate(weekStart);
     
     console.log('📅 INPUT:', {
       weekStartRaw: weekStart,
       weekEndRaw: weekEnd,
-      startDateStr,
       startUTC: start.toISOString()
     });
     
     // STAP 2: VALIDATIE - weekStart MOET maandag zijn
-    const startDayOfWeek = start.getUTCDay();
-    console.log('🔍 PRE-VALIDATIE weekStart:', {
-      datum: start.toISOString().split('T')[0],
-      dagVanWeek: startDayOfWeek,
-      dagNaam: ['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'][startDayOfWeek],
-      isMaandag: startDayOfWeek === 1 ? '✅ CORRECT' : '❌ FOUT'
-    });
-    
-    if (startDayOfWeek !== 1) {
-      const errorMsg = `❌ KRITIEKE FOUT: weekStart is geen maandag! Dag: ${startDayOfWeek} (${['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'][startDayOfWeek]})`;
-      console.error(errorMsg);
-      console.error('Dit zou NIET mogen gebeuren - check page.tsx calculateWeekDates()');
-      // Throw error om te stoppen - dit is een kritieke fout!
-      throw new Error(errorMsg);
+    try {
+      assertMonday(start, 'Week start');
+      console.log('✅ PRE-VALIDATIE PASSED: weekStart is maandag');
+    } catch (error) {
+      console.error('❌ KRITIEKE FOUT:', error);
+      throw error;
     }
-    
-    console.log('✅ PRE-VALIDATIE PASSED: weekStart is maandag');
     
     // STAP 3: GENEREER EXACT 7 DAGEN (EXPLICIETE LOOP)
     console.log('\n🔄 GENEREER 7 DAGEN (EXPLICIETE LOOP):');
@@ -139,7 +140,7 @@ export default function VaststellingDataTable({
         console.log(`  Dag ${i} (${i === 0 ? 'EERSTE' : 'LAATSTE'}):`, {
           datum: dayDate.toISOString().split('T')[0],
           dagVanWeek: dayOfWeek,
-          dagNaam: ['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'][dayOfWeek],
+          dagNaam: formatWeekdayFull(dayDate),
           verwacht: verwachtDag,
           correct: dayOfWeek === verwachtDag ? '✅' : '❌'
         });
@@ -160,39 +161,37 @@ export default function VaststellingDataTable({
     console.log('  ✅ Lengte: 7 dagen CORRECT');
     
     // Validatie 2: Eerste dag moet maandag zijn
-    const firstDayOfWeek = days[0].getUTCDay();
-    if (firstDayOfWeek !== 1) {
-      const errorMsg = `❌ FOUT: Eerste dag is ${['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'][firstDayOfWeek]}, verwacht Maandag`;
-      console.error(errorMsg);
-      console.error('Datum:', days[0].toISOString());
-      throw new Error(errorMsg);
+    try {
+      assertMonday(days[0], 'Eerste dag');
+      console.log('  ✅ Eerste dag: Maandag CORRECT');
+    } catch (error) {
+      console.error('❌ FOUT:', error);
+      throw error;
     }
-    console.log('  ✅ Eerste dag: Maandag CORRECT');
     
     // Validatie 3: Laatste dag moet zondag zijn
-    const lastDayOfWeek = days[6].getUTCDay();
-    if (lastDayOfWeek !== 0) {
-      const errorMsg = `❌ FOUT: Laatste dag is ${['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'][lastDayOfWeek]}, verwacht Zondag`;
-      console.error(errorMsg);
-      console.error('Datum:', days[6].toISOString());
-      throw new Error(errorMsg);
+    try {
+      assertSunday(days[6], 'Laatste dag');
+      console.log('  ✅ Laatste dag: Zondag CORRECT');
+    } catch (error) {
+      console.error('❌ FOUT:', error);
+      throw error;
     }
-    console.log('  ✅ Laatste dag: Zondag CORRECT');
     
-    console.log('\n✅ ALLE VALIDATIES PASSED!');
+    console.log('\n✅ DRAAD1F: Timezone validaties PASSED');
     console.log('📦 RESULTAAT:', {
       aantalDagen: days.length,
-      periode: `${days[0].toISOString().split('T')[0]} t/m ${days[6].toISOString().split('T')[0]}`,
-      eersteDag: format(days[0], 'EEEE d MMMM', { locale: nl }),
-      laatsteDag: format(days[6], 'EEEE d MMMM', { locale: nl })
+      periode: `${formatDateDMY(days[0])} t/m ${formatDateDMY(days[6])}`,
+      eersteDag: formatWeekdayFull(days[0]),
+      laatsteDag: formatWeekdayFull(days[6])
     });
     console.log('═'.repeat(60));
     
-    // STAP 5: Map naar UI-formaat
+    // STAP 5: Map naar UI-formaat (MET UTC FORMATTING!)
     return days.map(date => {
-      const dayName = format(date, 'EEEE', { locale: nl }).substring(0, 2);
-      const dateStr = format(date, 'dd/MM');
-      const fullDate = format(date, 'yyyy-MM-dd');
+      const dayName = formatWeekdayFull(date).substring(0, 2);
+      const dateStr = formatWeekdayDate(date).split(' ')[1]; // Extract dd/MM deel
+      const fullDate = date.toISOString().split('T')[0]; // yyyy-MM-dd
       
       return {
         date,
