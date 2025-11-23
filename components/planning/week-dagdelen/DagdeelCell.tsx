@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useRef, useEffect, ChangeEvent, KeyboardEvent } from 'react';
 import { DagdeelWaarde, TeamDagdeel, DagdeelStatus } from '@/lib/types/week-dagdelen';
+import { getCelDataClient, CelData } from '@/lib/planning/getCelDataClient';
 import StatusDot from './StatusDot';
 import Spinner from './Spinner';
 import ErrorIcon from './ErrorIcon';
@@ -20,38 +21,37 @@ interface DagdeelCellProps {
 }
 
 /**
- * DRAAD44: Frontend Cellogica Rooster-Dagdelen Structuur Fix
+ * DRAAD45.3: Complete Data Pipeline - Database Lookup per Cel
  * 
- * KRITIEKE WIJZIGING: Unieke per-cel data lookup via Supabase join
+ * PROBLEEM OPGELOST:
+ * - ALLE cellen toonden identieke data (groen, MAG, 0)
+ * - Data werd opgehaald maar niet correct per cel gematcht
+ * - Props waren toegevoegd maar niet gebruikt voor database lookup
  * 
- * OUDE SITUATIE:
- * - Data werd via props doorgegeven zonder verificatie
- * - Geen directe link tussen cel en database record
- * - Fallback op team/dagdeel defaults
- * 
- * NIEUWE SITUATIE:
- * - Elke cel zoekt UNIEK op: rooster_id + date + service_id + dagdeel + team
- * - Via roster_period_staffing → roster_period_staffing_dagdelen JOIN
- * - Bij geen match: status MAG_NIET, aantal 0 (grijs)
- * - Console debugging voor ontbrekende combinaties
+ * NIEUWE IMPLEMENTATIE:
+ * - useEffect haalt per cel data op via getCelDataClient()
+ * - Match via rosterId + dienstId + datum + dagdeel + team
+ * - Query via roster_period_staffing -> roster_period_staffing_dagdelen JOIN
+ * - Bij geen match: fallback naar MAG_NIET, grijs, disabled
+ * - Loading state tijdens fetch
+ * - Error handling met retry optie
  * 
  * DATAFLOW PER CEL:
- * 1. Find roster_period_staffing record WHERE roster_id + service_id + date
- * 2. Find roster_period_staffing_dagdelen WHERE rps.id + dagdeel + team
- * 3. Return {status, aantal} of {MAG_NIET, 0}
+ * 1. Component mount -> useEffect triggered
+ * 2. getCelDataClient() zoekt database record
+ * 3. setState met {status, aantal, loading: false}
+ * 4. Rendering met correcte kleuren en waarden
  * 
- * Props:
- * - rosterId: UUID van rooster (voor query)
- * - dienstId: service_id uit service_types (NIEUW - voor correcte match)
- * - datum: ISO date (YYYY-MM-DD)
- * - dagdeelType: 'O'|'M'|'A' (lowercase in DB: 'ochtend'|'middag'|'avond')
- * - team: 'GRO'|'ORA'|'TOT'
+ * VERIFICATIE:
+ * - Console: [DRAAD45] logs per cel met input/output
+ * - Visual: Rode/groene/grijze cellen
+ * - Data: Variërende aantallen per cel
  * 
- * Features blijven behouden:
- * - Inline editing: klik op cel → input field actief
+ * Features behouden:
+ * - Inline editing: klik op cel -> input field actief
  * - Status cirkel + aantal invoer horizontaal
  * - Enter/Blur triggert save
- * - Visual feedback tijdens save (spinner → checkmark)
+ * - Visual feedback tijdens save (spinner -> checkmark)
  * - Keyboard navigation (Tab, Enter, Escape)
  * - Touch support voor tablet
  * - Accessibility compliant (ARIA labels)
@@ -70,47 +70,90 @@ export default function DagdeelCell({
   disabled = false
 }: DagdeelCellProps) {
   
-  // State management
+  // 🔥 DRAAD45.3: Cel data state met loading indicator
+  const [celData, setCelData] = useState<CelData & { loading: boolean }>({
+    status: dagdeelWaarde.status,  // Initial fallback from prop
+    aantal: dagdeelWaarde.aantal,
+    loading: true
+  });
+  
+  // Editing state
   const [isEditing, setIsEditing] = useState(false);
-  const [aantal, setAantal] = useState(dagdeelWaarde.aantal);
+  const [aantal, setAantal] = useState(celData.aantal);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   
   const inputRef = useRef<HTMLInputElement>(null);
   
-  // 🔥 DRAAD44: Log cel initialisatie voor debugging
+  // 🔥 DRAAD45.3: Database lookup per cel
   useEffect(() => {
-    console.log('📍 [DRAAD44] Cell Init:', {
-      rosterId,
-      dienstId,
-      datum,
-      dagdeel: dagdeelType,
-      team,
-      initialData: {
-        status: dagdeelWaarde.status,
-        aantal: dagdeelWaarde.aantal,
-        id: dagdeelWaarde.id
-      }
-    });
+    let cancelled = false;
     
-    // Check of we een valide database ID hebben
-    if (!dagdeelWaarde.id || dagdeelWaarde.id.includes('undefined')) {
-      console.warn('⚠️  [DRAAD44] ONTBREKENDE DATA voor cel:', {
-        rosterId,
+    async function fetchCelData() {
+      console.log('[DRAAD45] Cel init - starting fetch:', {
+        rosterId: rosterId.substring(0, 8) + '...',
         dienstId,
         datum,
         dagdeel: dagdeelType,
-        team,
-        dagdeelWaardeId: dagdeelWaarde.id
+        team
       });
+      
+      try {
+        const data = await getCelDataClient(
+          rosterId,
+          dienstId,
+          datum,
+          dagdeelType,
+          team
+        );
+        
+        if (!cancelled) {
+          setCelData({
+            ...data,
+            loading: false
+          });
+          
+          // Update aantal in editing state
+          setAantal(data.aantal);
+          
+          console.log('[DRAAD45] ✅ Cel data loaded:', {
+            datum,
+            dagdeel: dagdeelType,
+            team,
+            data
+          });
+        }
+      } catch (error) {
+        console.error('[DRAAD45] ❌ Cel data fetch failed:', {
+          error: error instanceof Error ? error.message : String(error),
+          celInfo: { rosterId: rosterId.substring(0, 8) + '...', dienstId, datum, dagdeel: dagdeelType, team }
+        });
+        
+        if (!cancelled) {
+          // Fallback bij error
+          setCelData({
+            status: 'MAG_NIET',
+            aantal: 0,
+            loading: false
+          });
+          setAantal(0);
+        }
+      }
     }
-  }, [rosterId, dienstId, datum, dagdeelType, team, dagdeelWaarde]);
+    
+    fetchCelData();
+    
+    // Cleanup: prevent state updates na unmount
+    return () => {
+      cancelled = true;
+    };
+  }, [rosterId, dienstId, datum, dagdeelType, team]);
   
-  // Update local state when prop changes (e.g. after successful save)
+  // Update local aantal when celData changes (after fetch or update)
   useEffect(() => {
-    setAantal(dagdeelWaarde.aantal);
-  }, [dagdeelWaarde.aantal]);
+    setAantal(celData.aantal);
+  }, [celData.aantal]);
   
   // Auto-focus input when entering edit mode
   useEffect(() => {
@@ -154,7 +197,7 @@ export default function DagdeelCell({
    */
   const handleSave = async () => {
     // No change, just exit edit mode
-    if (aantal === dagdeelWaarde.aantal) {
+    if (aantal === celData.aantal) {
       setIsEditing(false);
       setError(null);
       return;
@@ -163,19 +206,24 @@ export default function DagdeelCell({
     setIsSaving(true);
     setError(null);
     
-    console.log('💾 [DRAAD44] Saving cel update:', {
-      rosterId,
+    console.log('💾 [DRAAD45] Saving cel update:', {
+      rosterId: rosterId.substring(0, 8) + '...',
       dienstId,
       datum,
       dagdeel: dagdeelType,
       team,
-      oldAantal: dagdeelWaarde.aantal,
-      newAantal: aantal,
-      recordId: dagdeelWaarde.id
+      oldAantal: celData.aantal,
+      newAantal: aantal
     });
     
     try {
-      await onUpdate(dagdeelWaarde.status, aantal);
+      await onUpdate(celData.status, aantal);
+      
+      // Update local state
+      setCelData(prev => ({
+        ...prev,
+        aantal: aantal
+      }));
       
       // Success animation
       setShowSuccess(true);
@@ -184,15 +232,15 @@ export default function DagdeelCell({
       setIsEditing(false);
       setIsSaving(false);
       
-      console.log('✅ [DRAAD44] Save successful');
+      console.log('✅ [DRAAD45] Save successful');
     } catch (err) {
       setIsSaving(false);
       const errorMsg = err instanceof Error ? err.message : 'Fout bij opslaan';
       setError(errorMsg);
       
-      console.error('❌ [DRAAD44] Save failed:', {
+      console.error('❌ [DRAAD45] Save failed:', {
         error: errorMsg,
-        celData: { rosterId, dienstId, datum, dagdeel: dagdeelType, team }
+        celData: { rosterId: rosterId.substring(0, 8) + '...', dienstId, datum, dagdeel: dagdeelType, team }
       });
       // Keep editing state (user can retry)
     }
@@ -205,7 +253,7 @@ export default function DagdeelCell({
     if (e.key === 'Enter') {
       handleSave();
     } else if (e.key === 'Escape') {
-      setAantal(dagdeelWaarde.aantal); // Reset
+      setAantal(celData.aantal); // Reset
       setIsEditing(false);
       setError(null);
     }
@@ -215,7 +263,7 @@ export default function DagdeelCell({
    * Handle cell click (enter edit mode)
    */
   const handleCellClick = () => {
-    if (!disabled && !isEditing) {
+    if (!disabled && !isEditing && !celData.loading) {
       setIsEditing(true);
     }
   };
@@ -231,18 +279,31 @@ export default function DagdeelCell({
       AANGEPAST: 'Aangepast'
     };
     
-    return `${dienstCode}, ${teamLabel}, ${datum} ${dagdeelLabel}, Status ${statusLabels[dagdeelWaarde.status]}, Aantal ${dagdeelWaarde.aantal}`;
+    return `${dienstCode}, ${teamLabel}, ${datum} ${dagdeelLabel}, Status ${statusLabels[celData.status]}, Aantal ${celData.aantal}`;
   };
   
+  // 🔥 DRAAD45.3: Loading state
+  if (celData.loading) {
+    return (
+      <td
+        className="px-2 py-1.5 text-center border border-gray-200 bg-gray-100 min-w-[60px] max-w-[60px] h-12"
+      >
+        <div className="flex items-center justify-center">
+          <Spinner size="sm" className="text-gray-400" />
+        </div>
+      </td>
+    );
+  }
+  
   // Special highlighting for MOET status with 0 aantal (requires attention)
-  const requiresAttention = dagdeelWaarde.status === 'MOET' && dagdeelWaarde.aantal === 0;
+  const requiresAttention = celData.status === 'MOET' && celData.aantal === 0;
   
   return (
     <td
       role="gridcell"
       aria-label={getAriaLabel()}
       tabIndex={disabled ? -1 : 0}
-      onFocus={() => !disabled && setIsEditing(true)}
+      onFocus={() => !disabled && !celData.loading && setIsEditing(true)}
       className={`
         px-2 py-1.5
         text-center
@@ -254,18 +315,18 @@ export default function DagdeelCell({
         ${
           isEditing
             ? 'bg-blue-50 border-blue-400'
-            : dagdeelWaarde.status === 'MOET'
+            : celData.status === 'MOET'
             ? 'bg-red-50 hover:bg-red-100'
-            : dagdeelWaarde.status === 'MAG'
+            : celData.status === 'MAG'
             ? 'bg-green-50 hover:bg-green-100'
-            : dagdeelWaarde.status === 'MAG_NIET'
+            : celData.status === 'MAG_NIET'
             ? 'bg-gray-50 hover:bg-gray-100'
             : 'bg-blue-50 hover:bg-blue-100' // AANGEPAST
         }
         ${
-          !disabled && !isEditing
+          !disabled && !isEditing && !celData.loading
             ? 'cursor-pointer'
-            : disabled
+            : disabled || celData.loading
             ? 'cursor-not-allowed opacity-75'
             : ''
         }
@@ -331,10 +392,10 @@ export default function DagdeelCell({
             focus:ring-blue-400
             focus:ring-inset
           "
-          aria-label={`Bewerk aantal, huidig ${dagdeelWaarde.aantal}`}
-          disabled={disabled}
+          aria-label={`Bewerk aantal, huidig ${celData.aantal}`}
+          disabled={disabled || celData.loading}
         >
-          <StatusDot status={dagdeelWaarde.status} />
+          <StatusDot status={celData.status} />
           <span className={`
             font-mono
             font-medium
@@ -345,7 +406,7 @@ export default function DagdeelCell({
                 : 'text-gray-700'
             }
           `}>
-            {dagdeelWaarde.aantal === 0 ? '-' : dagdeelWaarde.aantal}
+            {celData.aantal === 0 ? '-' : celData.aantal}
           </span>
         </button>
       )}
