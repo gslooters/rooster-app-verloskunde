@@ -22,7 +22,7 @@ import { NextResponse } from 'next/server';
  *   "nodeVersion": "20.x",
  *   "nextVersion": "14.x",
  *   "platform": "railway",
- *   "expectedCommit": "63ea49ad" // Laatste bekende commit
+ *   "expectedCommit": "d0a92afb" // Laatste bekende commit
  * }
  */
 
@@ -32,7 +32,7 @@ export const runtime = 'nodejs';
 
 // Build-time constanten
 const BUILD_TIME = new Date().toISOString();
-const EXPECTED_COMMIT = '63ea49ad'; // Update dit na elke deployment
+const EXPECTED_COMMIT = 'd0a92afb'; // DRAAD1E: Updated naar laatste deployment
 
 export async function GET() {
   try {
