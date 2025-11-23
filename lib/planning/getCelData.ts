@@ -23,7 +23,7 @@
  * 3. Return {status, aantal} of fallback
  */
 
-import { createClient } from '@/lib/supabase/server';
+import { getSupabaseServer } from '@/lib/supabase-server';
 import type { DagdeelStatus } from '@/lib/types/week-dagdelen';
 
 // Dagdeel mapping: UI code → Database waarde
@@ -71,7 +71,7 @@ export async function getCelData(
   });
   
   try {
-    const supabase = createClient();
+    const supabase = getSupabaseServer();
     
     // STAP 1: Find roster_period_staffing record
     // Match op: roster_id + service_id + date
