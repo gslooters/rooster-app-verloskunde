@@ -1,13 +1,26 @@
-GLOBAL CACHE BUST
-DRAAD1D Deployment - WEEKHEADER CORRECTIE
-Timestamp: 1732319880000
-Build ID: draad1d-weekheader-periode-fix
-Random: 0.7389272451
+GLOBAL CACHE BUST - DRAAD1E
+DEPLOYMENT VERSION VERIFICATIE
+Timestamp: 1732357535000
+Build ID: draad1e-version-endpoint-verification
+Random: 0.873621
 
-Force nieuwe build voor:
-- WeekTableHeader.tsx DRAAD1D fix
-- Gebruik weekDagen[0] (ma) en weekDagen[6] (zo) voor periode
-- Nieuwe periode header row met dd-MM-yyyy formaat
-- Validatie dat weekDagen exact 7 dagen bevat
-- Console logging voor debugging
-- Voorkomt foutieve datum weergave
+DRAAD1E FEATURES:
+✅ /api/version endpoint - toont commit SHA en build info
+✅ Deployment verificatie - detecteert stuck deployments
+✅ Anti-cache headers - voorkomt oude responses
+✅ Railway Git SHA tracking - vergelijkt verwachte vs werkelijke versie
+✅ Environment info - toont NODE_ENV, platform, service
+
+🔍 VERIFICATIE STAPPEN:
+1. Wacht 2-3 minuten voor Railway build completion
+2. Open: /api/version endpoint in browser
+3. Check "commit" field begint met "b2bdc486"
+4. Check "isExpectedVersion" = true
+5. Hard refresh browser (Shift+F5)
+
+VOORGAANDE FIXES:
+- DRAAD1D: WeekTableHeader periode correctie
+- DRAAD42M: 8-dagen bug fix
+- DRAAD1A/1B: Zondag als eerste dag fixes
+
+LAATSTE COMMIT: b2bdc486987f84cfa7c60954f4207780e3c44c1a
