@@ -1,0 +1,18 @@
+=== DRAAD1E: DEPLOYMENT VERSION VERIFICATIE ===
+Timestamp: 1732357407000
+Datum: 23 november 2025, 12:03 CET
+
+NIEUW:
+- /api/version endpoint toegevoegd
+- Toont commit SHA, build tijd, environment
+- Anti-cache headers voor accurate verificatie
+- Detecteert "stuck deployments"
+
+VERIFICATIE:
+1. Open: https://your-app.railway.app/api/version
+2. Check "commit" veld
+3. Vergelijk met laatste GitHub commit (3f35c311)
+4. Als match → deployment correct
+5. Als geen match → stuck deployment!
+
+CACHE BUST ID: 1732357407000
