@@ -16,14 +16,12 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "preserve",
-    // BELANGRIJK: alias voor absolute imports (DRAAD48 FIX)
     "baseUrl": ".",
     "paths": {
       "@/*": [
-        "./src/*"
+        "./*"
       ]
     },
-    // Optioneel: betere type-resolutie voor Next + React
     "types": [
       "node",
       "react",
