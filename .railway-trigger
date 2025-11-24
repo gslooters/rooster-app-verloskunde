@@ -1,31 +1,40 @@
 # Railway Deployment Trigger
-# DRAAD48 - Cache-bust module fix + Force redeploy
+# DRAAD50 - CRITICAL TSCONFIG RESTORATION
 
-Last updated: 2025-11-24T18:03:51Z
-Build ID: 17324438915647
-Reason: Fix missing @/lib/cache-bust module
+Last updated: 2025-11-24T18:58:20Z
+Build ID: 1732475900000
+Reason: Herstel werkende tsconfig.json (commit 9b28413)
 
-🔥 DRAAD48 CRITICAL FIX:
-- Build faalde: "Cannot find module '@/lib/cache-bust'"
-- Oorzaak: Module bestond niet in src/lib/
-- Oplossing: cache-bust.ts aangemaakt met correcte exports
-- Deployment trigger geforceerd
+🔥 DRAAD50 ROOT CAUSE FIX:
+- 20+ deployment failures door tsconfig path resolution
+- Root cause: Ontbrekende baseUrl + verkeerde @/* mapping
+- Oplossing: Volledige restore naar laatste werkende versie
 
-FIXES:
-✅ 1. src/lib/cache-bust.ts aangemaakt
-✅ 2. BUILD_ID met Date.now()
-✅ 3. CACHE_VERSION met Date.now()
-✅ 4. DEPLOYMENT_TRIGGER met random
-✅ 5. Railway trigger updated (DEZE COMMIT)
-⏳ 6. Wacht op Railway rebuild
+CRITICAL CHANGES:
+✅ 1. tsconfig.json VOLLEDIG hersteld
+✅ 2. baseUrl: "." toegevoegd (was: ONTBRAK)
+✅ 3. paths: "@/*": ["*"] (was: ["./src/*"])
+✅ 4. target: ES2020 (was: es2015)
+✅ 5. lib: ["DOM", "DOM.Iterable", "ES2020"]
+✅ 6. Verwijderd: downlevelIteration
+
+WAAROM DIT WERKT:
+- baseUrl definieert resolve start point
+- "@/*": ["*"] = vanaf PROJECT ROOT
+- Next.js module resolution consistent
+- Getest in commit 9b28413 (WERKTE)
 
 VERIFICATION NA DEPLOY:
 - Build moet slagen (geen TypeScript errors)
-- Health endpoint moet werken
-- Check: https://rooster-app-verloskunde-production.up.railway.app/api/health
-- Verwacht: buildId, cacheVersion, trigger in response
+- GEEN "Cannot find module @/lib/..." errors
+- Container start successful
+- Health endpoint accessible
+- Dashboard werkt correct
 
-STATUS: Critical build fix deployment
+STATUS: CRITICAL PATH RESOLUTION FIX
 DEPLOY: IMMEDIATE
-Random: 17324438915647
-Cache-bust: DRAAD48-v${Date.now()}
+Random: 89247
+Cache-bust: DRAAD50-v1732475900000
+Restore from: 9b284130b8d58fcc9ba11a1716069116ed6b0152
+
+⚠️ LOCK: tsconfig.json NIET meer wijzigen!
