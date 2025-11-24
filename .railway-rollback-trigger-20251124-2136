@@ -1,0 +1,13 @@
+ROLLBACK TRIGGER - 24 nov 2025 21:36 CET
+
+Terug naar werkende versie:
+- Commit: 9b284130b8d58fcc9ba11a1716069116ed6b0152  
+- Deploy ID: bbbd1517
+- Tijdstip: 24-11-2025 17:07 (15:07 UTC)
+- Status: Werkend
+
+Backup huidige staat:
+- Branch: backup-before-rollback-20251124-2135
+- Commit: 287d5339115a2328d2d51b6c21c359a2369affe1
+
+Random voor cache-bust: 1732481787429
