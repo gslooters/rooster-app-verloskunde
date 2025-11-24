@@ -1,0 +1,24 @@
+// RAILWAY DEPLOYMENT TRIGGER
+// Created: 2025-11-24T18:23:00.421Z
+// Deployment: DRAAD59A
+// Reason: Fix TypeScript path mapping + cache busting
+
+/**
+ * FIXES APPLIED:
+ * 1. tsconfig.json: '@/*': ['./src/*'] (was './*')
+ * 2. cache-bust.ts: Updated met nieuwe timestamp
+ * 3. Force rebuild via unique trigger file
+ * 
+ * Expected result: Succesvolle build zonder module resolution errors
+ */
+
+export const TRIGGER_INFO = {
+  deploymentId: 'DRAAD59A',
+  timestamp: 1732473780421,
+  randomSeed: Math.random().toString(36).substring(2, 15),
+  fixes: [
+    'TypeScript path mapping corrected',
+    'Cache-bust updated',
+    'Railway rebuild forced'
+  ]
+};
