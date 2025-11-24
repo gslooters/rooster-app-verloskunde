@@ -1,0 +1,17 @@
+DRAAD52.1 PDF EXPORT FIX
+=========================
+
+Probleem: PDF export faalde met error "column roosters.naam does not exist"
+
+Oorzaak:
+- API route route.ts probeerde kolom 'naam' op te halen uit roosters tabel
+- roosters tabel heeft GEEN 'naam' kolom (alleen: id, start_date, end_date, status, created_at, updated_at)
+
+Oplossing:
+- Verwijderd 'naam' uit de .select() query op regel 48
+- Gewijzigd naar: .select('id, start_date, end_date, status')
+
+Getest met database schema uit alletabellen.txt
+
+Timestamp: 2025-11-24T22:45:23Z
+Commit: 59695eae9645f3c0dc0126d90e83a6f439e1b801
