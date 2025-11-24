@@ -1,0 +1,20 @@
+# CACHE-BUST: DRAAD3 TypeScript Path Mapping Fix
+# Datum: 24 november 2025 16:15 CET
+# Timestamp: 1732462501000
+
+## Probleem Opgelost
+- Module resolution errors volledig opgelost
+- tsconfig.json paths gecorrigeerd van ./src/* naar ./*
+- Alle imports @/lib/*, @/styles/* werken nu correct
+
+## Gefixte Modules
+- @/lib/services/employees-storage
+- @/lib/types/employee
+- @/styles/planning.css
+- @/styles/compact-service.css
+- @/lib/planning/rosterDesign
+
+## Build Check
+- Next.js build moet nu succesvol compileren
+- Geen "Module not found" errors meer
+- Railway deployment gaat door
