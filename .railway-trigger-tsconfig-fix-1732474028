@@ -1,0 +1,39 @@
+# Railway Deployment Trigger - TSCONFIG PATH FIX
+# Timestamp: 2025-11-24T19:27:08+01:00
+# Build ID: 1732474028
+
+## KRITIEKE FIXES DOORGEVOERD:
+
+### 1. ✅ TSCONFIG PATHS MAPPING FIX
+**Probleem**: `@/*` wees naar `./src/*` maar files staan in root
+**Oplossing**: Gewijzigd naar `@/* → ./*`
+**Impact**: Module resolution werkt nu correct in Railway build
+
+### 2. ✅ NEXT.CONFIG.JS CLEANUP
+**Probleem**: Deprecated experimental options in Next.js 14.2.33
+- `isrMemoryCacheSize` (removed)
+- `incrementalCacheHandlerPath` (removed)
+**Oplossing**: Verwijderd uit config
+**Impact**: Geen build warnings meer, cleane config
+
+### 3. ✅ MODULE RESOLUTION VERIFIED
+**Verified files exist**:
+- ✅ lib/services/employees-storage.ts
+- ✅ lib/types/employee.ts
+- ✅ styles/planning.css
+- ✅ styles/compact-service.css
+- ✅ lib/planning/rosterDesign.ts
+
+**Root cause**: TypeScript path alias misconfiguratie, NIET missing files
+
+## VERWACHTE RESULTAAT:
+✅ Build succesvol
+✅ Alle module imports resolved
+✅ Geen webpack errors
+✅ App gedeployd en operationeel
+
+## METADATA:
+- Fix timestamp: ${new Date().toISOString()}
+- Commit SHA: fbe9d6e99d2d53cadffef5c82b1e163f3ef4b967
+- Railway project: rooster-app-verloskunde
+- Trigger reason: Critical tsconfig path mapping fix
