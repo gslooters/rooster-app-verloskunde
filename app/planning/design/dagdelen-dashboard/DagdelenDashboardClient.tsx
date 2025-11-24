@@ -519,7 +519,7 @@ export default function DagdelenDashboardClient() {
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
                     <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                      Week {weekNum}: {startDt} – {endDt}
+                      Week {weekNum}: {startDt} &ndash; {endDt}
                     </h3>
                     
                     {lastUpd && (
@@ -556,7 +556,7 @@ export default function DagdelenDashboardClient() {
             </svg>
             <div className="text-sm text-blue-700">
               <p className="font-medium mb-1">Klik op een week om de details te bekijken en aan te passen.</p>
-              <p>Weken met een "Aangepast" badge bevatten handmatige wijzigingen.</p>
+              <p>Weken met een &quot;Aangepast&quot; badge bevatten handmatige wijzigingen.</p>
             </div>
           </div>
         </div>

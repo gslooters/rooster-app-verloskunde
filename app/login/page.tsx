@@ -60,7 +60,7 @@ export default function LoginPage() {
         
         <div className="mt-6 p-4 bg-blue-50 rounded-lg">
           <p className="text-sm text-blue-800 text-center">
-            💡 Demo Versie: Gebruik willekeurige gegevens en klik "Inloggen"
+            💡 Demo Versie: Gebruik willekeurige gegevens en klik &quot;Inloggen&quot;
           </p>
         </div>
         
