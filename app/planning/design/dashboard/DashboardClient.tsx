@@ -304,7 +304,7 @@ export default function DashboardClient() {
               Roosterbewerking starten
             </button>
             {!allesVoltooid && (
-              <p className="text-sm text-gray-500 mt-2">(Deze knop wordt actief als alle stappen hierboven op 'Ja' staan)</p>
+              <p className="text-sm text-gray-500 mt-2">(Deze knop wordt actief als alle stappen hierboven op &apos;Ja&apos; staan)</p>
             )}
           </div>
           

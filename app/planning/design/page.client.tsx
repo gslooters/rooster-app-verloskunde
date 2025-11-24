@@ -105,7 +105,7 @@ function EmptyCell() {
   );
 }
 
-const ServiceCell = memo(({ 
+const ServiceCell = memo(({
   assignment, 
   serviceTypesMap 
 }: { 
@@ -125,6 +125,8 @@ const ServiceCell = memo(({
   return prev.assignment?.service_code === next.assignment?.service_code &&
          prev.serviceTypesMap === next.serviceTypesMap;
 });
+
+ServiceCell.displayName = 'ServiceCell';
 
 export default function DesignPageClient() {
   const searchParams = useSearchParams();
