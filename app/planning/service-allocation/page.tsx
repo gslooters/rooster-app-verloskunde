@@ -3,16 +3,13 @@
 import { supabase } from '@/lib/supabase';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState, Suspense } from 'react';
-import { ArrowLeft, Construction, Calendar, AlertCircle } from 'lucide-react';
+import { ArrowLeft, FileDown, Loader2, AlertCircle } from 'lucide-react';
+import { generateServiceAllocationPDF, downloadPDF } from '@/lib/pdf/service-allocation-generator';
 
 // ============================================================================
-// DRAAD41 - NIEUW SCHERM: VASTSTELLING DIENSTEN PER WEEK
+// DRAAD48 - SCHERM: DIENSTEN PER DAGDEEL AANPASSEN
 // URL: /planning/service-allocation?rosterId={id}
-// Status: PLACEHOLDER - In ontwikkeling
-// Functie: Dienst per team per datum per dagdeel vaststellen
-// Database: roster_period_staffing + roster_period_staffing_dagdelen (BEHOUDEN)
-// 
-// VERVANGER VAN: /planning/period-staffing (gearchiveerd)
+// Functie: PDF export van diensten per team per datum per dagdeel
 // ============================================================================
 
 interface RosterInfo {
@@ -63,6 +60,7 @@ function ServiceAllocationContent() {
   const [rosterInfo, setRosterInfo] = useState<RosterInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pdfGenerating, setPdfGenerating] = useState(false);
 
   useEffect(() => {
     async function loadRosterInfo() {
@@ -95,6 +93,56 @@ function ServiceAllocationContent() {
     loadRosterInfo();
   }, [rosterId]);
 
+  // ============================================================================
+  // PDF EXPORT HANDLER
+  // ============================================================================
+  
+  async function handlePDFExport() {
+    if (!rosterId || !rosterInfo) return;
+
+    setPdfGenerating(true);
+    setError(null);
+
+    try {
+      // Fetch data from API
+      const response = await fetch(`/api/planning/service-allocation-pdf?rosterId=${rosterId}`);
+      
+      if (!response.ok) {
+        throw new Error('Fout bij ophalen PDF data');
+      }
+
+      const result = await response.json();
+
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      if (result.isEmpty) {
+        setError(result.message || 'Geen diensten gevonden voor deze roosterperiode');
+        setPdfGenerating(false);
+        return;
+      }
+
+      // Generate PDF
+      const pdf = generateServiceAllocationPDF(result.roster, result.data);
+      
+      // Download PDF
+      const filename = `Diensten-per-dagdeel_Week-${getISOWeekNumber(new Date(rosterInfo.start_date))}-${getISOWeekNumber(new Date(rosterInfo.end_date))}_${new Date().getTime()}.pdf`;
+      downloadPDF(pdf, filename);
+
+      setPdfGenerating(false);
+
+    } catch (err: any) {
+      console.error('[PDF-EXPORT] Error:', err);
+      setError(err.message || 'Fout bij genereren PDF');
+      setPdfGenerating(false);
+    }
+  }
+
+  // ============================================================================
+  // RENDER
+  // ============================================================================
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -113,114 +161,113 @@ function ServiceAllocationContent() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50 p-6">
-      {/* Header met terug knop */}
-      <div className="mb-6">
+      {/* Header met terug knop en PDF export */}
+      <div className="mb-6 flex items-center justify-between">
         <button
           onClick={() => router.push(`/planning/design/dashboard?rosterId=${rosterId}`)}
-          className="mb-4 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-md flex items-center gap-2"
+          className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-md flex items-center gap-2"
         >
           <ArrowLeft className="h-5 w-5" />
-          Terug naar Dashboard Rooster Ontwerp
+          Terug naar Dashboard
+        </button>
+
+        <button
+          onClick={handlePDFExport}
+          disabled={pdfGenerating}
+          className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-md flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {pdfGenerating ? (
+            <>
+              <Loader2 className="h-5 w-5 animate-spin" />
+              PDF wordt gegenereerd...
+            </>
+          ) : (
+            <>
+              <FileDown className="h-5 w-5" />
+              PDF export gehele rooster (5 weken)
+            </>
+          )}
         </button>
       </div>
 
-      {/* Main Content Card */}
+      {/* Main Content */}
       <div className="max-w-4xl mx-auto">
-        <div className="bg-white rounded-2xl shadow-xl p-8 border-2 border-blue-100">
-          {/* Construction Icon */}
-          <div className="flex justify-center mb-6">
-            <div className="bg-yellow-100 rounded-full p-6">
-              <Construction className="h-16 w-16 text-yellow-600" />
-            </div>
-          </div>
+        {/* Title */}
+        <h1 className="text-4xl font-bold text-gray-900 mb-2">
+          Diensten per Dagdeel Aanpassen: Periode Week {startWeek} - Week {endWeek}
+        </h1>
+        
+        {rosterInfo && startDate && endDate && (
+          <p className="text-gray-600 mb-8">
+            rooster: {formatDateLong(startDate)} - {formatDateLong(endDate)}
+          </p>
+        )}
 
-          {/* Title */}
-          <h1 className="text-4xl font-bold text-center text-gray-900 mb-4">
-            Vaststelling Diensten per Week
-          </h1>
-          
-          <div className="text-center mb-8">
-            <span className="inline-block bg-yellow-100 text-yellow-800 px-4 py-2 rounded-full text-sm font-semibold">
-              🚧 In Ontwikkeling
-            </span>
-          </div>
-
-          {/* Rooster Info */}
-          {rosterInfo && startDate && endDate && (
-            <div className="bg-blue-50 rounded-lg p-6 mb-8">
-              <div className="flex items-start gap-3 mb-4">
-                <Calendar className="h-6 w-6 text-blue-600 mt-1" />
-                <div className="flex-1">
-                  <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                    {rosterInfo.naam || 'Rooster'}
-                  </h2>
-                  <div className="space-y-2 text-gray-700">
-                    <p>
-                      <span className="font-semibold">Periode:</span>{' '}
-                      {formatDateLong(startDate)} t/m {formatDateLong(endDate)}
-                    </p>
-                    <p>
-                      <span className="font-semibold">Weeknummers:</span>{' '}
-                      Week {startWeek} - Week {endWeek}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      Rooster ID: {rosterId}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Message */}
-          <div className="bg-gradient-to-r from-blue-100 to-purple-100 rounded-lg p-6 mb-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">
-              📋 Functionaliteit:
-            </h3>
-            <p className="text-gray-700 mb-4 leading-relaxed">
-              Dit scherm wordt opnieuw gebouwd met een <strong>frisse aanpak</strong>. 
-              Hier kun je straks per dienst, per team, per datum en per dagdeel het aantal
-              benodigde medewerkers vaststellen.
-            </p>
-            <div className="bg-white/70 rounded p-4">
-              <p className="text-sm text-gray-600 mb-2">
-                <strong>Doel:</strong> Dienst → Team → Datum → Dagdeel (Ochtend/Middag/Avond)
-              </p>
-              <p className="text-sm text-gray-600">
-                <strong>Database:</strong> roster_period_staffing + roster_period_staffing_dagdelen
-              </p>
-            </div>
-          </div>
-
-          {/* Info Alert */}
-          <div className="bg-amber-50 border-l-4 border-amber-400 rounded-r-lg p-4">
+        {/* Error Alert */}
+        {error && (
+          <div className="bg-red-50 border-l-4 border-red-400 rounded-r-lg p-4 mb-6">
             <div className="flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
+              <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
               <div>
-                <p className="text-sm text-amber-900 font-semibold mb-1">
-                  Status: Placeholder
-                </p>
-                <p className="text-sm text-amber-800">
-                  Het oude scherm (DRAAD41) is gearchiveerd vanwege technische problemen.
-                  Dit nieuwe scherm wordt later volledig uitgewerkt.
-                </p>
+                <p className="text-sm text-red-900 font-semibold">Fout</p>
+                <p className="text-sm text-red-800">{error}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Week List */}
+        <div className="bg-white rounded-2xl shadow-xl p-8 border-2 border-blue-100">
+          <div className="space-y-4">
+            {/* Week 48 */}
+            <div className="bg-blue-50 hover:bg-blue-100 rounded-lg p-4 transition-colors cursor-pointer">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-lg">Week 48: 24/11 - 30/11</span>
+                <span className="text-blue-600">→</span>
+              </div>
+            </div>
+
+            {/* Week 49 */}
+            <div className="bg-blue-50 hover:bg-blue-100 rounded-lg p-4 transition-colors cursor-pointer">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-lg">Week 49: 01/12 - 07/12</span>
+                <span className="text-blue-600">→</span>
+              </div>
+            </div>
+
+            {/* Week 50 */}
+            <div className="bg-blue-50 hover:bg-blue-100 rounded-lg p-4 transition-colors cursor-pointer">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-lg">Week 50: 08/12 - 14/12</span>
+                <span className="text-blue-600">→</span>
+              </div>
+            </div>
+
+            {/* Week 51 */}
+            <div className="bg-blue-50 hover:bg-blue-100 rounded-lg p-4 transition-colors cursor-pointer">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-lg">Week 51: 15/12 - 21/12</span>
+                <span className="text-blue-600">→</span>
+              </div>
+            </div>
+
+            {/* Week 52 */}
+            <div className="bg-blue-50 hover:bg-blue-100 rounded-lg p-4 transition-colors cursor-pointer">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-lg">Week 52: 22/12 - 28/12</span>
+                <span className="text-blue-600">→</span>
               </div>
             </div>
           </div>
 
-          {/* Technical Info */}
           <div className="mt-6 pt-6 border-t border-gray-200">
-            <details className="text-sm text-gray-500">
-              <summary className="cursor-pointer font-semibold hover:text-gray-700">
-                Technische Details
-              </summary>
-              <div className="mt-3 space-y-1 pl-4">
-                <p>• Vervanger van: <code className="bg-gray-100 px-2 py-1 rounded">/planning/period-staffing</code></p>
-                <p>• Nieuwe route: <code className="bg-gray-100 px-2 py-1 rounded">/planning/service-allocation</code></p>
-                <p>• Database structuur: BEHOUDEN (geen wijzigingen)</p>
-                <p>• Implementatie datum: TBD</p>
-              </div>
-            </details>
+            <div className="bg-blue-50 rounded-lg p-4">
+              <p className="text-sm text-blue-900">
+                <strong className="block mb-2">ℹ️ Tip:</strong>
+                Klik op de PDF export knop rechtsboven om een volledig overzicht van alle weken te downloaden.
+                Weken met een "Aangepast" badge bevatten handmatige wijzigingen.
+              </p>
+            </div>
           </div>
         </div>
       </div>
