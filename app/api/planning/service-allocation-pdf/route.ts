@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 // ============================================================================
-// DRAAD52 - API ENDPOINT: SERVICE ALLOCATION PDF DATA (FIXED)
+// DRAAD52.1 - API ENDPOINT: SERVICE ALLOCATION PDF DATA (FIXED)
 // URL: /api/planning/service-allocation-pdf?rosterId={id}
 // Purpose: Fetch all service allocation data for PDF generation
-// Fix: Simplified query approach - fetch data in steps, transform in memory
+// Fix: Verwijderd 'naam' uit roosters.select() - kolom bestaat niet in DB
 // ============================================================================
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -38,11 +38,11 @@ export async function GET(request: NextRequest) {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // ========================================================================
-    // STEP 1: Fetch roster info
+    // STEP 1: Fetch roster info (FIXED: removed 'naam' - doesn't exist)
     // ========================================================================
     const { data: rosterInfo, error: rosterError } = await supabase
       .from('roosters')
-      .select('id, start_date, end_date, naam')
+      .select('id, start_date, end_date, status')
       .eq('id', rosterId)
       .single();
 
