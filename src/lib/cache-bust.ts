@@ -1,6 +1,6 @@
 // CACHE-BUSTING CONFIGURATION
-// Auto-generated at: 2025-11-24T18:03:15.000Z
-// Deployment: DRAAD48
+// Auto-generated at: 2025-11-24T18:22:45.000Z
+// Deployment: DRAAD59A
 
 /**
  * Build-time cache versioning
@@ -24,7 +24,7 @@ export const DEPLOYMENT_INFO = {
   trigger: DEPLOYMENT_TRIGGER,
   environment: process.env.NODE_ENV || 'production',
   railwayDeploymentId: process.env.RAILWAY_DEPLOYMENT_ID || 'unknown',
-  deploymentName: 'DRAAD48'
+  deploymentName: 'DRAAD59A'
 };
 
 /**
