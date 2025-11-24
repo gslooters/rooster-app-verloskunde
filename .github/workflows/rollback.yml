@@ -1,10 +1,9 @@
-# .github/workflows/rollback.yml
-name: Rollback to 9b28413
+name: Rollback naar commit 9b28413
 
 on:
-  workflow_dispatch:        # handmatig starten
+  workflow_dispatch:      # Handmatig starten
   push:
-    branches: [main]        # voorkomt dubbele runs
+    branches: [main]      # Optioneel, voorkomt dubbele runs
 
 jobs:
   rollback:
@@ -14,28 +13,23 @@ jobs:
     - name: Checkout main
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0      # hele geschiedenis nodig
+        fetch-depth: 0    # Hele geschiedenis nodig
 
-    - name: Restore tree from 9b28413
+    - name: Reset naar commit 9b28413
       run: |
         git reset --hard 9b28413
-        # minimale cache-bust
         echo "// cache-bust $(date +%s)" >> src/cache-bust.js
 
-    - name: Push rollback commit
-      uses: ad-m/github-push-action@v0.8.0
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        commit_message: "DRAAD ROLLBACK: restore repo to 9b28413"
-
-    - name: Wait for Railway deploy
-      uses: nick-invision/retry@v2
-      with:
-        timeout_seconds: 600
-        max_attempts: 30
-        command: |
-          curl -s https://railway.app/project/<PROJECT_SLUG>/deployments | grep -q '"ready":true'
-
-    - name: Health-check live URL
+    - name: Commit en push rollback
       run: |
-        curl -f https://<YOUR-LIVE-URL>/ || exit 1
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        git config --global user.name "github-actions[bot]"
+        git add .
+        git commit -m "DRAAD ROLLBACK: restore repo to 9b28413"
+        git push origin main
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Health-check live app
+      run: |
+        curl -f https://rooster-app-verloskunde-production.up.railway.app|| exit 1
