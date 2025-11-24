@@ -26,7 +26,9 @@ import TeamSelector from '@/app/_components/TeamSelector';
  * Client Component voor NB/period-staffing scherm (Ontwerpfase)
  * Periode-specifieke bezettingsregels voor een rooster van 35 dagen (5 weken)
  * 
- * VERSIE: Draad 24R - Layout verbeteringen:
+ * VERSIE: Draad 48 - TypeScript compilatie fix:
+ * - Set spread operator vervangen door expliciete .add() method
+ * - Cache-busting timestamp: 1732467000000
  * - Footer cleanup: Terug naar Dashboard buttons verwijderd uit footer
  * - Terug naar Dashboard button rechtsboven extra opvallend (bg-blue-600)
  * - Compact label formaat in tabel-cellen: "x-onbep" op 1 regel
@@ -111,7 +113,12 @@ export default function PeriodStaffingClient() {
           const newItem = { ...item, [field]: value, updated_at: new Date().toISOString() };
           const cellKey = makeCellKey(dienstId, dagIndex);
           if (newItem.minBezetting > newItem.maxBezetting) {
-            setValidationErrors(prev => new Set([...prev, cellKey]));
+            // FIX: Gebruik expliciete .add() method ipv spread operator
+            setValidationErrors(prev => {
+              const newSet = new Set(prev);
+              newSet.add(cellKey);
+              return newSet;
+            });
           } else {
             setValidationErrors(prev => {
               const newSet = new Set(prev);
