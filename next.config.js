@@ -29,22 +29,13 @@ const nextConfig = {
   // Output config voor Railway deployment met standalone
   output: 'standalone',
   
-  // 🔥 CRITICAL: Experimental settings voor cache control
+  // 🔥 EXPERIMENTAL: Only settings supported in Next.js 14.2.33
   experimental: {
-    // Disable incremental cache (voorkomt reuse van oude builds)
-    isrMemoryCacheSize: 0,
-    
-    // Geen custom cache handler (gebruik geen filesystem cache)
-    incrementalCacheHandlerPath: undefined,
-    
     // Output file tracing (behouden voor standalone)
     outputFileTracingRoot: undefined,
-    
-    // 🔥 NEW: Disable aggressive optimization die className changes skipte
-    optimizePackageImports: undefined,
   },
   
-  // 🔥 NEW: Webpack configuratie voor cache control
+  // 🔥 Webpack configuratie voor cache control
   webpack: (config, { dev, isServer }) => {
     // Disable webpack persistent caching in production
     if (!dev) {
