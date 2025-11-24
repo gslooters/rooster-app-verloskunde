@@ -1,0 +1,44 @@
+DRAAD48: PDF Export Diensten per Dagdeel Aanpassen
+====================================================
+
+Deployment Timestamp: 2025-11-24 14:58 CET
+
+Geïmplementeerde Features:
+✅ API endpoint voor PDF data ophalen
+✅ PDF generator library met jsPDF + autotable
+✅ Service allocation pagina met PDF export button
+✅ Loading state tijdens PDF generatie
+✅ Error handling voor geen data
+✅ A4 Landscape formaat
+✅ Één week per pagina
+✅ Status indicators met emojis (🔴 MOET, 🟢 MAG, 🔵 AANGEPAST)
+✅ Teams: GRO, ORA, TOT
+✅ Dagdelen: Ochtend, Middag, Avond/Nacht
+✅ Print timestamp in footer
+✅ Downloadable PDF
+
+Database Queries:
+- roster_period_staffing_dagdelen
+- roster_period_staffing  
+- service_types
+- roosters
+
+Files Changed:
+1. app/api/planning/service-allocation-pdf/route.ts (NEW)
+2. lib/pdf/service-allocation-generator.ts (NEW)
+3. app/planning/service-allocation/page.tsx (UPDATED)
+
+PDF Layout:
+- Format: A4 Landscape
+- Marges: 2cm aan alle kanten
+- Header: Te plannen diensten per team met periode
+- Content: Per datum een tabel met 3 teams x 3 dagdelen
+- Footer: print datum + tijd
+
+Testing Required:
+- Test PDF export met echte data
+- Verifieer status kleuren (MOET=rood, MAG=groen, AANGEPAST=blauw)
+- Check paginering over meerdere weken
+- Test error handling bij geen data
+
+Deployment trigger voor Railway.app
