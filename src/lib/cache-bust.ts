@@ -1,6 +1,6 @@
 // CACHE-BUSTING CONFIGURATION
-// Auto-generated at: 2025-11-24T18:22:45.000Z
-// Deployment: DRAAD59A
+// Auto-generated at: 2025-11-24T18:34:30.000Z
+// Deployment: DRAAD59C - TSCONFIG PATH MAPPING FIX
 
 /**
  * Build-time cache versioning
@@ -24,7 +24,7 @@ export const DEPLOYMENT_INFO = {
   trigger: DEPLOYMENT_TRIGGER,
   environment: process.env.NODE_ENV || 'production',
   railwayDeploymentId: process.env.RAILWAY_DEPLOYMENT_ID || 'unknown',
-  deploymentName: 'DRAAD59A'
+  deploymentName: 'DRAAD59C'
 };
 
 /**
