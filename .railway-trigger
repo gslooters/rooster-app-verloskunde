@@ -1,34 +1,31 @@
 # Railway Deployment Trigger
-# DRAAD42E - Force redeploy voor serviceid correctie
+# DRAAD48 - Cache-bust module fix + Force redeploy
 
-Last updated: 2025-11-22T02:31:30Z
-Build ID: 98472651
-Reason: Force Railway redeploy - serviceid fix moet live
+Last updated: 2025-11-24T18:03:51Z
+Build ID: 17324438915647
+Reason: Fix missing @/lib/cache-bust module
 
-🔥 DRAAD42E CRITICAL FIX:
-- Code op Github al correct: gebruikt 'serviceid'
-- Railway draait nog oude versie
-- Console toont error: database heeft 'serviceid' kolom
-- Query moet 'serviceid' gebruiken (ZONDER underscore)
+🔥 DRAAD48 CRITICAL FIX:
+- Build faalde: "Cannot find module '@/lib/cache-bust'"
+- Oorzaak: Module bestond niet in src/lib/
+- Oplossing: cache-bust.ts aangemaakt met correcte exports
+- Deployment trigger geforceerd
 
-PROBLEEM:
-- Error: "column roster_period_staffing.serviceid does not exist"
-- Oorzaak: Railway cache met oude code
-- Impact: Week 48 selectie werkt niet
-
-OPLOSSING:
-✅ 1. Code al gefixt in commit 4a3ce72
-✅ 2. Cache-bust bestand toegevoegd
-✅ 3. Railway trigger geforceerd (DEZE COMMIT)
-⏳ 4. Wacht op Railway rebuild
+FIXES:
+✅ 1. src/lib/cache-bust.ts aangemaakt
+✅ 2. BUILD_ID met Date.now()
+✅ 3. CACHE_VERSION met Date.now()
+✅ 4. DEPLOYMENT_TRIGGER met random
+✅ 5. Railway trigger updated (DEZE COMMIT)
+⏳ 6. Wacht op Railway rebuild
 
 VERIFICATION NA DEPLOY:
-- Open app: https://rooster-app-verloskunde-production.up.railway.app
-- Klik op Week 48
-- Verwacht: Geen foutmelding, data wordt geladen
-- Check console: Geen "serviceid does not exist" error
+- Build moet slagen (geen TypeScript errors)
+- Health endpoint moet werken
+- Check: https://rooster-app-verloskunde-production.up.railway.app/api/health
+- Verwacht: buildId, cacheVersion, trigger in response
 
-STATUS: Critical fix deployment
+STATUS: Critical build fix deployment
 DEPLOY: IMMEDIATE
-Random: 98472651
-Cache-bust: DRAAD42E-1732243890000
+Random: 17324438915647
+Cache-bust: DRAAD48-v${Date.now()}
