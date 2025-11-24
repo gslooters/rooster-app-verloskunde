@@ -1,0 +1,16 @@
+DRAAD50 DEPLOYMENT
+Timestamp: 1732475856000
+Date: 2025-11-24T18:57:36Z
+Random: 89247
+
+CRITICAL FIX:
+- tsconfig.json hersteld naar werkende versie (commit 9b28413)
+- baseUrl: "." toegevoegd
+- paths: "@/*": ["*"] (root directory)
+- target: ES2020
+
+VERWACHTE RESULTAAT:
+- Build succesvol
+- Geen TypeScript path resolution errors
+- App start zonder crashes
+- Dashboard werkt correct
