@@ -3,21 +3,17 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 /**
- * 🔒 CRITICAL: Next.js Middleware voor Supabase Authentication
+ * 🔒 Next.js Middleware voor Supabase Authentication
  * 
- * Deze middleware is VERPLICHT voor Supabase Auth Helpers in Next.js 13+ App Router
+ * ⚠️ DEMO MODE: Authenticatie is OPTIONEEL
+ * - Refresh tokens indien sessie bestaat
+ * - GEEN redirects naar login (demo modus)
+ * - Alle routes zijn publiek toegankelijk
  * 
  * Functionaliteit:
- * 1. Refresh expired auth tokens automatisch
+ * 1. Refresh expired auth tokens automatisch (indien session bestaat)
  * 2. Synchroniseer auth state tussen client/server
- * 3. Protect routes die authenticatie vereisen
- * 4. Set correct cookies voor session management
- * 
- * ZONDER deze middleware:
- * - Auth tokens verlopen zonder refresh
- * - Session inconsistenties tussen requests
- * - "Failed to fetch" errors in production
- * - 401/403 errors op protected routes
+ * 3. Set correct cookies voor session management
  */
 
 export async function middleware(req: NextRequest) {
@@ -28,28 +24,16 @@ export async function middleware(req: NextRequest) {
     const supabase = createMiddlewareClient({ req, res })
     
     // Refresh session indien nodig (kritiek voor long-running sessions)
-    const { data: { session } } = await supabase.auth.getSession()
+    // Dit is optioneel - als er geen sessie is, gaat de app gewoon door
+    await supabase.auth.getSession()
     
-    // Public routes die GEEN auth vereisen
-    const publicRoutes = ['/login', '/api/health']
-    const isPublicRoute = publicRoutes.some(route => req.nextUrl.pathname.startsWith(route))
-    
-    // Als geen session EN niet op public route -> redirect naar login
-    if (!session && !isPublicRoute && req.nextUrl.pathname !== '/') {
-      const redirectUrl = new URL('/login', req.url)
-      redirectUrl.searchParams.set('redirect', req.nextUrl.pathname)
-      return NextResponse.redirect(redirectUrl)
-    }
-    
-    // Als WEL session EN op login page -> redirect naar dashboard
-    if (session && req.nextUrl.pathname === '/login') {
-      return NextResponse.redirect(new URL('/dashboard', req.url))
-    }
+    // ✅ In DEMO modus: geen auth redirects
+    // Gebruikers kunnen direct naar dashboard zonder in te loggen
     
     return res
     
   } catch (error) {
-    // Log error maar laat request doorgaan (fail-open voor development)
+    // Log error maar laat request doorgaan (fail-open voor demo)
     console.error('❌ Middleware error:', error)
     return res
   }
