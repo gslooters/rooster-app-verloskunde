@@ -1,0 +1,20 @@
+ATOMIC ROLLBACK UITGEVOERD
+==================
+
+**Timestamp:** 2025-11-24T21:37:00Z
+**Doel commit:** 9b284130b8d58fcc9ba11a1716069116ed6b0152
+**Commit datum:** 2024-11-22T22:37
+**Bericht:** DRAAD48 Hotfix: Dashboard PDF export complete
+
+**Wat gebeurt er:**
+1. Main branch wordt HARD RESET naar 9b28413
+2. Dit is de WERKENDE versie van vrijdag 22 nov
+3. Alle verknalde commits van vandaag VERDWIJNEN
+4. Railway detecteert deze change en deployed de GOEDE versie
+
+**Verificatie:**
+- https://rooster-app-verloskunde-production.up.railway.app/
+- Dashboard moet werken met PDF export
+- Alle navigatie moet functioneren
+
+**Status: DEPLOYED**
