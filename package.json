@@ -4,9 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build --no-lint && node scripts/postbuild.js",
+    "build": "next build && node scripts/postbuild.js",
     "start": "HOSTNAME=0.0.0.0 node .next/standalone/server.js",
-    "lint": "next lint"
+    "lint": "next lint",
+    "postinstall": "echo 'Node version:' && node --version"
   },
   "dependencies": {
     "@supabase/auth-helpers-nextjs": "^0.10.0",
@@ -17,7 +18,7 @@
     "jspdf": "^2.5.1",
     "jspdf-autotable": "^3.8.2",
     "lucide-react": "^0.548.0",
-    "next": "^14.2.33",
+    "next": "14.2.33",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "xlsx": "^0.18.5",
@@ -35,6 +36,7 @@
     "typescript": "^5"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": "20.x",
+    "npm": ">=10.0.0"
   }
 }
