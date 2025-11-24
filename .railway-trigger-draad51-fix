@@ -1,0 +1,22 @@
+Railway Deployment Trigger - DRAAD51
+=====================================
+Timestamp: 2025-11-24 21:55 CET
+Build: DRAAD51-inlogscherm-fix
+
+Probleem Opgelost:
+- Onverwacht inlogscherm na startscherm
+- Middleware forceerde authenticatie op alle routes
+- Demo modus werkte niet meer
+
+Oplossing:
+- Middleware aangepast naar DEMO modus
+- Geen verplichte authenticatie meer
+- Directe toegang tot dashboard hersteld
+- Login pagina blijft bestaan maar is optioneel
+
+Technische Details:
+- middleware.ts: Verwijderd auth redirect logica
+- Demo versie: Geen authenticatie vereist
+- Backward compatible: Supabase auth blijft werken indien geconfigureerd
+
+Deploy om deze fix live te zetten op Railway.
