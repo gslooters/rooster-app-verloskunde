@@ -1,4 +1,5 @@
 import React from "react";
+import Image from "next/image";
 
 export default function HomePage() {
   // Haal actuele datum/tijd op in NL-formaat
@@ -9,7 +10,7 @@ export default function HomePage() {
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #f4f7f6 0%, #e4e9ed 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div className="flex flex-col items-center justify-center gap-6 p-8 rounded-2xl shadow-xl bg-white/70 border-2 border-blue-100 w-full max-w-xl mx-auto">
         <div className="flex items-center gap-2">
-          <img src="/verloskunde_icon.svg" alt="Logo" className="w-14 md:w-20" style={{filter:"drop-shadow(0 1px 6px #c9e5fa)"}}/>
+          <Image src="/verloskunde_icon.svg" alt="Logo" width={80} height={80} className="w-14 md:w-20" style={{filter:"drop-shadow(0 1px 6px #c9e5fa)"}}/>
           <span className="text-2xl md:text-4xl font-semibold text-blue-800 tracking-tight ml-2 drop-shadow">Rooster App Verloskundigen Arnhem</span>
         </div>
         <p className="text-lg mt-2 text-gray-700 italic">in ontwikkeling: build {datum} {tijd}</p>
