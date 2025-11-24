@@ -15,7 +15,7 @@
     "incremental": true,
     "downlevelIteration": true,
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./src/*"]
     },
     "plugins": [
       {
