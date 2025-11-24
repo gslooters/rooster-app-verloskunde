@@ -1,0 +1,12 @@
+DEPLOYMENT: DRAAD48
+TIMESTAMP: 2025-11-24T18:04:17Z
+REASON: Fix missing @/lib/cache-bust module
+BUILD_ID: build-1732467857000
+CACHE_VERSION: v1732467857000
+TRIGGER: 17324438915647
+
+STATUS: ✅ FIXED
+- Module src/lib/cache-bust.ts created
+- All exports available
+- Railway trigger forced
+- Build should succeed now
