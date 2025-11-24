@@ -1,0 +1,27 @@
+DRAAD48 HOTFIX Deployment
+Timestamp: 2025-11-24 15:32 CET
+
+=== KRITIEKE FIX ===
+Vorige deployment had bijna ALLE rendering logica verwijderd!
+
+HERSTELD:
+1. ✅ Alle conditionals (loading, error, data ready)
+2. ✅ Week-knoppen rendering (map over weekData)
+3. ✅ PDF export knop functionaliteit
+4. ✅ Complete UI logica
+
+Probleem was:
+- DagdelenDashboardClient.tsx: 454 regels VERWIJDERD, slechts 72 toegevoegd
+- Alle week-knoppen weg
+- Keuzescherm niet meer zichtbaar
+- PDF knop wel toegevoegd, maar UI werkte niet
+
+Oplossing:
+- Complete file hersteld met alle oorspronkelijke UI logica
+- PDF export functionaliteit behouden en werkend
+- Alle state management intact
+
+Resultaat:
+✅ Dashboard weer volledig functioneel
+✅ Week selectie werkt
+✅ PDF export gekoppeld en werkend
