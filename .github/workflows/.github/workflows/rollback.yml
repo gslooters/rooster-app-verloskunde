@@ -1,0 +1,41 @@
+# .github/workflows/rollback.yml
+name: Rollback to 9b28413
+
+on:
+  workflow_dispatch:        # handmatig starten
+  push:
+    branches: [main]        # voorkomt dubbele runs
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout main
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0      # hele geschiedenis nodig
+
+    - name: Restore tree from 9b28413
+      run: |
+        git reset --hard 9b28413
+        # minimale cache-bust
+        echo "// cache-bust $(date +%s)" >> src/cache-bust.js
+
+    - name: Push rollback commit
+      uses: ad-m/github-push-action@v0.8.0
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        commit_message: "DRAAD ROLLBACK: restore repo to 9b28413"
+
+    - name: Wait for Railway deploy
+      uses: nick-invision/retry@v2
+      with:
+        timeout_seconds: 600
+        max_attempts: 30
+        command: |
+          curl -s https://railway.app/project/<PROJECT_SLUG>/deployments | grep -q '"ready":true'
+
+    - name: Health-check live URL
+      run: |
+        curl -f https://<YOUR-LIVE-URL>/ || exit 1
