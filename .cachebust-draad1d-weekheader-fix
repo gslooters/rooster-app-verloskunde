@@ -1,17 +1,2 @@
-DRAAD1D - WEEKHEADER CORRECTIE
-================================
-Timestamp: 2025-11-22T23:53:00Z
-Deploy ID: 1732319580
-
-Wijzigingen:
-- WeekTableHeader: Gebruik weekDagen[0] en weekDagen[6] voor periode
-- Toegevoegd: Nieuwe periode header row met dd-MM-yyyy formaat
-- Validatie: Check dat weekDagen array exact 7 dagen bevat
-- Console logging voor debugging van periode generatie
-
-Voorkomt:
-- Foutieve datum weergave door lokale variabelen
-- Periode header die niet synchroon loopt met data
-- Onjuiste weeknummering
-
-Status: READY FOR DEPLOYMENT
+// cachebust draad1d-weekheader-fix 
+// waarde: 1700838910123
