@@ -1,4 +1,10 @@
-// PDF API cache-bust DRAAD48-B fix - build trigger
-export default function handler(req, res) {
-  res.status(200).json({ now: Date.now(), trigger: Math.random() });
+// PDF API cache-bust DRAAD48-B fix - Next.js 14 App Router
+import { NextResponse } from 'next/server';
+
+export async function GET() {
+  return NextResponse.json({
+    now: Date.now(),
+    trigger: Math.random(),
+    deployed: new Date().toISOString()
+  });
 }
