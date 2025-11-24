@@ -1,5 +1,5 @@
 /**
- * DRAAD45.1 - getCelData Utility
+ * DRAAD46 - getCelData Utility (FIXED)
  * 
  * Centrale functie voor cel-level database lookup in week dagdelen view
  * 
@@ -21,16 +21,22 @@
  * 1. Find roster_period_staffing WHERE roster_id + service_id + date
  * 2. Find roster_period_staffing_dagdelen WHERE rps.id + dagdeel + team
  * 3. Return {status, aantal} of fallback
+ * 
+ * DRAAD46 FIX:
+ * - DAGDEEL_MAP nu direct 'O'/'M'/'A' (was 'ochtend'/'middag'/'avond')
+ * - Database gebruikt nu ook 'O'/'M'/'A' als waarden
+ * - Verbeterde debug logging met dagdeel/team info
  */
 
 import { getSupabaseServer } from '@/lib/supabase-server';
 import type { DagdeelStatus } from '@/lib/types/week-dagdelen';
 
-// Dagdeel mapping: UI code → Database waarde
+// ✅ DRAAD46 FIX: Database gebruikt nu direct 'O', 'M', 'A'
+// Dagdeel mapping: UI code → Database waarde (nu 1-op-1)
 const DAGDEEL_MAP: Record<'O' | 'M' | 'A', string> = {
-  'O': 'ochtend',
-  'M': 'middag',
-  'A': 'avond'
+  'O': 'O',  // Ochtend
+  'M': 'M',  // Middag
+  'A': 'A'   // Avond
 };
 
 /**
@@ -61,12 +67,13 @@ export async function getCelData(
   
   const dagdeelStr = DAGDEEL_MAP[dagdeel];
   
-  console.log('[DRAAD45] getCelData START:', {
+  // ✅ DRAAD46: Verbeterde logging met alle parameters
+  console.log('[DRAAD46] 🔍 getCelData START:', {
     rosterId: rosterId.substring(0, 8) + '...',
-    dienstId,
+    dienstId: dienstId.substring(0, 8) + '...',
     datum,
-    dagdeel,
-    dagdeelStr,
+    dagdeel_input: dagdeel,
+    dagdeel_mapped: dagdeelStr,
     team
   });
   
@@ -84,20 +91,20 @@ export async function getCelData(
       .maybeSingle(); // maybeSingle instead of single (no error when not found)
     
     if (rpsError) {
-      console.error('[DRAAD45] roster_period_staffing query error:', rpsError);
+      console.error('[DRAAD46] ❌ roster_period_staffing query error:', rpsError);
       return { status: 'MAG_NIET', aantal: 0 };
     }
     
     if (!rpsData) {
-      console.log('[DRAAD45] ⚠️  No roster_period_staffing match:', {
+      console.log('[DRAAD46] ⚠️  No roster_period_staffing match:', {
         rosterId: rosterId.substring(0, 8) + '...',
-        dienstId,
+        dienstId: dienstId.substring(0, 8) + '...',
         datum
       });
       return { status: 'MAG_NIET', aantal: 0 };
     }
     
-    console.log('[DRAAD45] ✅ roster_period_staffing found:', {
+    console.log('[DRAAD46] ✅ roster_period_staffing found:', {
       rpsId: rpsData.id.substring(0, 8) + '...'
     });
     
@@ -112,15 +119,16 @@ export async function getCelData(
       .maybeSingle();
     
     if (dagdeelError) {
-      console.error('[DRAAD45] roster_period_staffing_dagdelen query error:', dagdeelError);
+      console.error('[DRAAD46] ❌ roster_period_staffing_dagdelen query error:', dagdeelError);
       return { status: 'MAG_NIET', aantal: 0 };
     }
     
     if (!dagdeelData) {
-      console.log('[DRAAD45] ℹ️  No dagdelen match (team/dagdeel combination not exists):', {
+      console.log('[DRAAD46] ⚠️  No dagdelen match:', {
         rpsId: rpsData.id.substring(0, 8) + '...',
-        dagdeel: dagdeelStr,
-        team
+        dagdeel_searched: dagdeelStr,
+        team_searched: team,
+        hint: 'Controleer of deze combinatie bestaat in roster_period_staffing_dagdelen'
       });
       return { status: 'MAG_NIET', aantal: 0 };
     }
@@ -131,19 +139,26 @@ export async function getCelData(
       aantal: dagdeelData.aantal
     };
     
-    console.log('[DRAAD45] ✅ SUCCESS - Cel data found:', {
+    console.log('[DRAAD46] ✅ SUCCESS - Cel data found:', {
       datum,
       dagdeel,
       team,
-      result
+      status: result.status,
+      aantal: result.aantal
     });
     
     return result;
     
   } catch (error) {
-    console.error('[DRAAD45] ❌ EXCEPTION in getCelData:', {
+    console.error('[DRAAD46] ❌ EXCEPTION in getCelData:', {
       error: error instanceof Error ? error.message : String(error),
-      input: { rosterId: rosterId.substring(0, 8) + '...', dienstId, datum, dagdeel, team }
+      input: { 
+        rosterId: rosterId.substring(0, 8) + '...', 
+        dienstId: dienstId.substring(0, 8) + '...', 
+        datum, 
+        dagdeel, 
+        team 
+      }
     });
     
     // Fallback bij exception
