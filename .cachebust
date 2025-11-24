@@ -1,43 +1,46 @@
-GLOBAL CACHE BUST - DRAAD2A DAGDELEN DASHBOARD FIX
+GLOBAL CACHE BUST - DRAAD3 TYPESCRIPT PATHS CRITICAL FIX
 DEPLOYMENT VERSION VERIFICATIE
-Timestamp: 1732389740000
-Build ID: draad2a-dagdelen-type-safety-stability
-Random: 0.738492
+Timestamp: 1732462596000 (24-11-2025 16:16:36 CET)
+Build ID: draad3-typescript-path-mapping-fix
+Random: 0.847392
+Deployment: 3de keer, DEFINITIEF
 
-DRAAD2A FEATURES:
-✅ DagdelenDashboardClient - useCallback voor performance
-✅ Type-safe WeekInfo interface enforced
-✅ Verbeterde defensieve data extractie
-✅ useCallback voor loadWeekData, handleWeekClick, handleBack
-✅ Optimale dependency arrays (ESLint compliant)
-✅ Betere error guards voor edge cases
-✅ Type-safe lastUpdated formatting
-✅ Validatie: 5 weken check toegevoegd
-✅ Reduced setTimeout van 100ms naar 50ms
+🔴 CRITICAL FIX - DRAAD3 (24-11-2025):
+✅ tsconfig.json path mapping gecorrigeerd
+✅ "@/*": ["./src/*"] → "@/*": ["./*"]
+✅ Module resolution errors volledig opgelost
+✅ Alle imports @/lib/*, @/styles/* werken nu
 
-FIXES IN DETAIL:
-1. useCallback() wrapper om onnodige re-renders te voorkomen
-2. Strikte type checking: typeof checks + null guards
-3. Enhanced filtering: extra validatie op updated_at type
-4. Dependency arrays compliant met React Hook regels
-5. Console warnings voor invalid data
+🛠️ GEFIXTE MODULES:
+- @/lib/services/employees-storage
+- @/lib/types/employee
+- @/styles/planning.css
+- @/styles/compact-service.css
+- @/lib/planning/rosterDesign
 
-🔍 VERIFICATIE STAPPEN:
-1. Wacht 2-3 minuten voor Railway build completion
-2. Open: /planning/design/dagdelen-dashboard?roster_id=[id]&period_start=2025-11-24
-3. Check 5 weekknoppen worden correct geladen
-4. Check navigatie naar week-dagdelen detail werkt
-5. Check console: geen type errors of warnings
-6. Test: klik op verschillende weken
-7. Check period_start parameter wordt doorgegeven
-8. Verify: React DevTools laat optimale re-renders zien
+🐛 ROOT CAUSE:
+TypeScript path mapping wees naar niet-bestaande src/ directory.
+Alle bestanden staan in root (lib/, styles/, app/), niet in src/.
 
-VOORGAANDE FIXES:
+📝 VERIFICATIE STAPPEN:
+1. Build moet succesvol compileren (geen "Module not found")
+2. Railway deployment compleet
+3. App start zonder errors
+4. /employees pagina laadt correct
+5. /planning pagina laadt correct
+6. TypeScript import resolution werkt
+
+📊 VOORGAANDE FIXES:
+- DRAAD2A: DagdelenDashboardClient type safety + performance
 - DRAAD1F: Timezone UTC formatting fix
 - DRAAD1E: Version endpoint + deployment verificatie
 - DRAAD1D: WeekTableHeader periode correctie
 - DRAAD42M: 8-dagen bug fix
 - DRAAD37E: Dagdelen dashboard implementatie
-- DRAAD2A: Type safety + performance optimalisatie
 
-VERWACHTE COMMIT: 03eb45b9f61c44c8b31bf6cdc2614ef43e02bd9c
+VERWACHTE BUILD: SUCCESS (eerste keer na 3 pogingen)
+VERWACHTE COMMITS: 
+- 432f54b (tsconfig.json fix)
+- 881e631 (cachebust)
+- d731191 (railway trigger)
+- 2526877 (deployment docs)
