@@ -578,7 +578,7 @@ export default function DienstenToewijzingPage() {
             <p className="mt-1">🎯 <strong>Doel:</strong> Groene getallen betekenen dat de medewerker op target is (totaal diensten = dienstenperiode).</p>
             <p className="mt-1">⚙️ <strong>Tip:</strong> Input velden met waarde 0 zijn uitgeschakeld maar blijven zichtbaar voor overzicht en ad-hoc planning.</p>
             <p className="mt-1">📊 <strong>Team-tellers:</strong> Tonen totaal aantal diensten per team (niet aantal medewerkers): <span className="text-green-700 font-semibold">Groen</span> <span className="text-orange-600 font-semibold">Oranje</span> <span className="text-blue-600 font-semibold">Totaal</span></p>
-            <p className="mt-1">📄 <strong>PDF Export:</strong> Klik op 'PDF Export' om een printvriendelijke PDF te genereren met datum/tijd.</p>
+            <p className="mt-1">📄 <strong>PDF Export:</strong> Klik op &apos;PDF Export&apos; om een printvriendelijke PDF te genereren met datum/tijd.</p>
           </div>
         </Card>
       </div>

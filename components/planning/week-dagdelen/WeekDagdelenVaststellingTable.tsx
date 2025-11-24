@@ -63,6 +63,7 @@ export default function WeekDagdelenVaststellingTable({
 
   useEffect(() => {
     fetchStaffingData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rosterId, weekStart, weekEnd]);
 
   async function fetchStaffingData() {

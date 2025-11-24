@@ -265,7 +265,7 @@ function ServiceAllocationContent() {
               <p className="text-sm text-blue-900">
                 <strong className="block mb-2">ℹ️ Tip:</strong>
                 Klik op de PDF export knop rechtsboven om een volledig overzicht van alle weken te downloaden.
-                Weken met een "Aangepast" badge bevatten handmatige wijzigingen.
+                Weken met een &quot;Aangepast&quot; badge bevatten handmatige wijzigingen.
               </p>
             </div>
           </div>
