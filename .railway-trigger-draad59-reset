@@ -1,0 +1,12 @@
+🔥 DRAAD59 EMERGENCY RESET
+
+Datum: 2025-11-24 19:07 CET
+Commit Target: 9b284130b8d58fcc9ba11a1716069116ed6b0152
+Reden: 15+ deployment failures - terug naar laatste werkende versie
+
+Werkende configuratie:
+✅ package.json met --no-lint flag
+✅ tsconfig.json met correcte paths
+✅ next.config.js met cache busting
+
+Force rebuild timestamp: 1732473950
