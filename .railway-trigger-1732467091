@@ -1,0 +1,4 @@
+Railway deployment trigger - Draad 48
+Timestamp: 1732467091000
+Reden: Force nieuwe build na TypeScript compilatie fix
+Wijziging: Set spread operator vervangen door .add() method
