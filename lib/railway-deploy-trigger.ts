@@ -1,2 +1,2 @@
-// RAILWAY-TRIGGER-DRAAD45_8_TYPESCRIPT
-export const RAILWAY_DEPLOY_KEY = "TRIGGER-892541";
+// Railway deploy trigger - DRAAD53: PDF layout improvements
+export const DEPLOY_TRIGGER = Date.now(); // 1732492333000
