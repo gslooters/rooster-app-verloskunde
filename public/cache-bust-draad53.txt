@@ -1,0 +1,32 @@
+DRAAD53 - PDF Layout Verbeteringen
+====================================
+Datum: 25-11-2024 00:31 CET
+Timestamp: 1732492295000
+
+Wijzigingen:
+- PDF formaat: van landscape naar portrait A4
+- Eén week per pagina (7 dagen compact)
+- Dienst kleuren toegevoegd uit image:
+  * DDA: Donkerblauw #2c3e50
+  * DDO: Magenta #e91e8c
+  * DJA: Paars #9b59b6
+  * DJO: Geel #f1c40f
+  * ECH: Lichtpaars #b19cd9
+  * GRB: Oranje #e67e22
+  * MSP/OSP: Blauw #5dade2
+
+- Team kleuren toegevoegd:
+  * Groen: #28a745
+  * Oranje: #ff9800
+  * Praktijk: #2196f3
+
+- Compacte layout met kleinere marges (12mm)
+- Week nummer prominent in header (20pt bold)
+- Datum + periode onder header
+- Compacte tabel met fontSize 9
+- Slimme tekstkleur (wit/zwart) gebaseerd op achtergrondkleur
+- Footer met timestamp en roosterperiode
+
+Geen legenda (zoals gevraagd)
+
+Status: ✅ DEPLOYED
