@@ -1,0 +1,19 @@
+# RAILWAY DEPLOYMENT TRIGGER
+# DRAAD3: TypeScript Path Mapping Fix
+# Trigger ID: 847392
+# Timestamp: 1732462533000 (24-11-2025 16:15:33 CET)
+
+## Critical Fix Deployed
+✅ tsconfig.json paths mapping gecorrigeerd
+✅ Module resolution errors opgelost
+✅ Build moet nu slagen
+
+## Modules Fixed
+- @/lib/services/employees-storage
+- @/lib/types/employee  
+- @/styles/planning.css
+- @/styles/compact-service.css
+- @/lib/planning/rosterDesign
+
+## Expected Result
+Next.js build SUCCESS, geen module resolution errors
