@@ -1,0 +1,41 @@
+DRAAD54 V3 DEPLOYMENT TRIGGER
+=============================
+
+Tijdstempel: 2025-11-25 18:23 CET
+Commit: f5ced6a5638870e69a2e669d182f0591e28039e8
+
+IMPLEMENTATIE COMPLEET:
+✅ V3 PDF Generator met gekleurde badges
+✅ 2-kolom grid layout per dagdeel
+✅ API uitgebreid met service_types kleuren
+✅ Page aangepast voor V3 export
+✅ Deployment documentatie
+
+FEATURES V3:
+- Gekleurde dienst-badges (afgeronde rechthoeken, witte tekst)
+- 2-kolom grid per dagdeel (dienst1-dienst2 | dienst3-dienst4 | etc.)
+- Verticale uitlijning van diensten binnen cellen
+- Dikke lijn (3px) tussen dagen
+- Header consistent lichtgrijs (#E0E0E0)
+- Compacte datum ("Ma 24 nov" op één regel)
+- Week op één A4 pagina (page-break optimalisatie)
+- Weekend zelfde ruimte als doordeweekse dagen
+- Kleuren uit database (service_types.kleur)
+
+BESTANDEN:
+- lib/pdf/service-allocation-generator-v3.ts (NIEUW)
+- app/api/planning/service-allocation-pdf/route.ts (GEWIJZIGD)
+- app/planning/service-allocation/page.tsx (GEWIJZIGD)
+- DEPLOYMENT_DRAAD54_V3_COMPLETE.md (NIEUW)
+
+VOLGENDE STAP:
+Railway zal automatisch deployen naar production.
+Verifieer na deployment via:
+https://rooster-app-verloskunde-production.up.railway.app/planning/service-allocation
+
+TESTING:
+1. Klik op "PDF V3 export (gekleurde badges)" button
+2. Controleer gedownloade PDF voor alle V3 features
+3. Verifieer week-op-één-A4 layout
+
+STATUS: ✅ READY FOR PRODUCTION
