@@ -1,0 +1,11 @@
+Cache-bust timestamp: 1732552763841
+Random trigger: 94827561
+Deployment: TypeScript fix voor shift parameter
+Commit SHA: 5538ae735e8a2f21c53ac4a97df5fea5096e638e
+Datum: 2025-11-25T16:39:23+01:00
+
+FIXED:
+- Parameter 'shift' implicitly has 'any' type (regel 241)
+- Expliciet type toegevoegd: (shift: any) =>
+- Build errors opgelost
+- Railway deployment ready
