@@ -1,0 +1,3 @@
+// DRAAD53.2: Railway cache-busting voor Fase3 PDF-dashboard
+// Laat altijd wijzigingen achter voor cache forcing
+export const cachebusterDraad532Fase3 = Date.now() + '-' + Math.floor(Math.random() * 10000000).toString();
