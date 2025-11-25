@@ -1,0 +1,2 @@
+// Railway trigger voor DRAAD53.2 HOTFIX
+export default 'trigger-'+Date.now()+'-'+Math.floor(Math.random()*1000000000);
