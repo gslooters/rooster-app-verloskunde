@@ -1,0 +1,2 @@
+// Nieuwe cachebuster DRAAD53.2 Fase3 HOTFIX
+export default 'cachebust-'+Date.now();
