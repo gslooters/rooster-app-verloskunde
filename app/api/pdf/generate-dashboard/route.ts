@@ -236,9 +236,9 @@ export async function POST(request: NextRequest) {
               const shiftsForDagdeel = teamData.get(dagdeel) || [];
               html += '<td><div class="dienst-cel">';
               
-              // Stap 3.5: Generate badge for each service
+              // Stap 3.5: Generate badge for each service - TYPESCRIPT FIX: expliciet type voor shift
               if (shiftsForDagdeel.length > 0) {
-                shiftsForDagdeel.forEach(shift => {
+                shiftsForDagdeel.forEach((shift: any) => {
                   if (shift && shift.service_types && shift.service_types.code) {
                     const serviceCode = shift.service_types.code;
                     html += generateDienstBadge(serviceCode, 1);
