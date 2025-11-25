@@ -1,0 +1,11 @@
+DRAAD53.2 FASE 2 - PDF FORMULIER LAYOUT AANPASSING
+Timestamp: 2025-11-25T14:03:00Z
+Deployment: Cache bust trigger voor Railway
+
+Wijzigingen:
+- PDF generator layout aangepast volgens formulier voorbeeld
+- Verbeterde tabel structuur met duidelijkere headers
+- Geoptimaliseerde kleuren voor team en dienst cellen
+- Legenda toegevoegd onderaan pagina
+- Compactere formatting voor betere leesbaarheid
+- Footer met metadata (generatiedatum, paginanummer, rooster periode)
