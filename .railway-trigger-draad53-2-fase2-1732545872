@@ -1,0 +1,17 @@
+DRAAD53.2 FASE 2 - RAILWAY DEPLOYMENT TRIGGER
+Timestamp: 1732545872
+Deployment trigger met random ID voor Railway
+
+✅ WIJZIGINGEN FASE 2:
+1. PDF generator layout aangepast volgens formulier voorbeeld  
+2. Verbeterde tabel structuur met duidelijke headers
+3. Geoptimaliseerde team en dienst kleuren
+4. Legenda toegevoegd onderaan elke pagina
+5. Footer met metadata (generatie tijd, paginanummer, periode)
+6. Compactere formatting voor betere PDF leesbaarheid
+
+📦 FILES GEWIJZIGD:
+- lib/pdf/service-allocation-generator.ts (layout verbeteringen)
+
+🚀 DEPLOYMENT:
+Railway zal automatisch rebuilden door deze trigger file
