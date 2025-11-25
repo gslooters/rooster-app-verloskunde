@@ -1,0 +1,42 @@
+DRAAD54-FIX DEPLOYMENT TRIGGER
+===============================
+
+Tijdstempel: 2025-11-25 18:34 CET
+Commit: 40eb15c8b1cff9f6cadf16184a86be1eacd279cb
+
+PROBLEEM GEVONDEN:
+V3 generator was geimplementeerd maar renderde GEEN gekleurde badges.
+Oorzaak: Generator gebruikte handmatige drawing i.p.v. autoTable met didDrawCell.
+
+FIX TOEGEPAST:
+✅ V3 generator herschreven om autoTable te gebruiken
+✅ Gekleurde badges via didDrawCell hook
+✅ renderBadgesInCell() functie voor 2-kolom grid rendering
+✅ Footer toont nu "(V3)" voor verificatie
+
+WAT WERKT NU:
+- autoTable framework voor stabiele layout
+- didDrawCell hook rendert custom badges in cellen
+- 2-kolom grid: badges naast elkaar (dienst1-dienst2)
+- Afgeronde rechthoeken (roundedRect) met database kleuren
+- Witte tekst (code + aantal)
+- Fallback naar grijs (#808080) bij ontbrekende kleuren
+
+VERIFICATIE NA DEPLOY:
+1. Check footer: moet "Pagina X van Y (V3)" tonen
+2. Dienst-badges moeten gekleurd zijn (niet alleen tekst)
+3. 2-kolom layout per dagdeel
+4. Afgeronde hoeken zichtbaar
+
+TECHNISCHE DETAILS:
+Badge rendering in didDrawCell:
+- Badge hoogte: 4.5mm
+- Badge radius: 1.2mm  
+- 2 kolommen per cel met 1mm spacing
+- Tekst: 7pt bold white
+- Centered alignment
+
+BESTAND GEWIJZIGD:
+- lib/pdf/service-allocation-generator-v3.ts (FIXED)
+
+STATUS: ✅ FIX READY FOR DEPLOYMENT
