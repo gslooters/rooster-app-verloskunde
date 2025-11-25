@@ -1,0 +1,2 @@
+// Railway trigger voor DRAAD53.2 Fase3 PDF cachebust
+export default 'trigger-'+Date.now();
