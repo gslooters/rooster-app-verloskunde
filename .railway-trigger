@@ -1,40 +1,6 @@
-# Railway Deployment Trigger
-# DRAAD50 - CRITICAL TSCONFIG RESTORATION
+# Railway Deployment Trigger File
+# DRAAD53.2 Fase3 - Critical SIGTERM Fix
 
-Last updated: 2025-11-24T18:58:20Z
-Build ID: 1732475900000
-Reason: Herstel werkende tsconfig.json (commit 9b28413)
-
-🔥 DRAAD50 ROOT CAUSE FIX:
-- 20+ deployment failures door tsconfig path resolution
-- Root cause: Ontbrekende baseUrl + verkeerde @/* mapping
-- Oplossing: Volledige restore naar laatste werkende versie
-
-CRITICAL CHANGES:
-✅ 1. tsconfig.json VOLLEDIG hersteld
-✅ 2. baseUrl: "." toegevoegd (was: ONTBRAK)
-✅ 3. paths: "@/*": ["*"] (was: ["./src/*"])
-✅ 4. target: ES2020 (was: es2015)
-✅ 5. lib: ["DOM", "DOM.Iterable", "ES2020"]
-✅ 6. Verwijderd: downlevelIteration
-
-WAAROM DIT WERKT:
-- baseUrl definieert resolve start point
-- "@/*": ["*"] = vanaf PROJECT ROOT
-- Next.js module resolution consistent
-- Getest in commit 9b28413 (WERKTE)
-
-VERIFICATION NA DEPLOY:
-- Build moet slagen (geen TypeScript errors)
-- GEEN "Cannot find module @/lib/..." errors
-- Container start successful
-- Health endpoint accessible
-- Dashboard werkt correct
-
-STATUS: CRITICAL PATH RESOLUTION FIX
-DEPLOY: IMMEDIATE
-Random: 89247
-Cache-bust: DRAAD50-v1732475900000
-Restore from: 9b284130b8d58fcc9ba11a1716069116ed6b0152
-
-⚠️ LOCK: tsconfig.json NIET meer wijzigen!
+Timestamp: 2025-11-25T14:29:00Z
+Build: DRAAD53.2-fase3-sigterm-fix
+Commit: fd597f8223fbbc429082cc6abde74076170ae5c5
