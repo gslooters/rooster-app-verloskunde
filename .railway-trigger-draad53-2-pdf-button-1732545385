@@ -1,0 +1,19 @@
+# RAILWAY DEPLOYMENT TRIGGER - DRAAD53.2
+# Timestamp: 1732545385 (Mon Nov 25 2025 14:56:25 GMT+0100)
+# Random ID: 1732545385
+# Deployment: PDF Export Button voor Dashboard
+
+## Wijzigingen
+- Dashboard page bijgewerkt met nieuwe snelkoppeling
+- Route: /planning/service-allocation
+- Positie: Bovenaan dashboard, voor "Huidig Rooster"
+- Icoon: 📄 (document)
+- Kleurschema: Blue-indigo gradient
+
+## Status
+✅ Dashboard page gewijzigd
+✅ Cache-busting file aangemaakt  
+✅ Railway trigger aangemaakt
+
+## Next Steps
+Railway zal automatisch deployen bij detectie van deze wijziging.
