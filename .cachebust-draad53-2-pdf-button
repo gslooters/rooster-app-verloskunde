@@ -1,0 +1,11 @@
+# DRAAD53.2 - PDF Export Button Deployment
+# Timestamp: 2025-11-25T14:56:10Z
+# Component: Dashboard PDF Export Button
+# Route: /dashboard -> /planning/service-allocation
+# Deployment ID: draad53-2-pdf-export-button
+# Status: Fase 1 Complete - Dashboard button toegevoegd
+
+DIT BESTAND TRIGGERT CACHE-INVALIDATIE
+Versie: DRAAD53.2-001
+Datum: 2025-11-25
+Tijd: 14:56 CET
