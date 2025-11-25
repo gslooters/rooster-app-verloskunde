@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
-// Dynamische import om bundle klein te houden
-const importPDF = () => import('@/lib/pdf/service-allocation-generator');
+// Dynamische import om bundle klein te houden - V3 GENERATOR MET BADGES
+const importPDF = () => import('@/lib/pdf/service-allocation-generator-v3');
 
 interface WeekInfo {
   weekNumber: number; // ISO weeknummer (48-52)
@@ -272,7 +272,7 @@ export default function DagdelenDashboardClient() {
     );
   }, [rosterId, periodStart, router]);
 
-  // ================= PDF EXPORT LOGICA (DRAAD48) ==================
+  // ================= PDF EXPORT LOGICA (DRAAD48 + DRAAD54-FIX) ==================
   const handleExportPDF = async () => {
     if (!rosterId) {
       setPdfError('Geen rooster_id bekend in de URL');
@@ -293,9 +293,9 @@ export default function DagdelenDashboardClient() {
         return;
       }
 
-      // Dynamische import (zodat jsPDF alleen bij export geladen wordt):
+      // ✅ DRAAD54-FIX: V3 generator met serviceTypes parameter
       const pdfModule = await importPDF();
-      const pdf = pdfModule.generateServiceAllocationPDF(result.roster, result.data);
+      const pdf = pdfModule.generateServiceAllocationPDFV3(result.roster, result.data, result.serviceTypes);
       const filename = `Diensten-rooster-dashboard_${Date.now()}.pdf`;
       pdfModule.downloadPDF(pdf, filename);
       setPdfGenerating(false);
@@ -467,7 +467,7 @@ export default function DagdelenDashboardClient() {
                   <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
-                  PDF export gehele rooster (5 weken)
+                  PDF V3 export (gekleurde badges)
                 </>
               )}
             </button>
@@ -563,7 +563,7 @@ export default function DagdelenDashboardClient() {
 
         {process.env.NODE_ENV === 'development' && (
           <div className="mt-6 bg-gray-800 text-gray-100 rounded-lg p-4 text-xs font-mono">
-            <div className="font-bold mb-2">🐛 Debug Info (DRAAD48 HOTFIX):</div>
+            <div className="font-bold mb-2">🐛 Debug Info (DRAAD54-FIX):</div>
             <div>isLoading: {String(isLoading)}</div>
             <div>hasError: {String(hasError)}</div>
             <div>isDataReady: {String(isDataReady)}</div>
@@ -571,8 +571,9 @@ export default function DagdelenDashboardClient() {
             <div>roster_id: {rosterId}</div>
             <div>period_start: {periodStart}</div>
             <div>pdfGenerating: {String(pdfGenerating)}</div>
-            <div className="mt-2 text-green-400">✅ DRAAD48 HOTFIX: Complete rendering logica hersteld</div>
-            <div className="text-green-400">✅ PDF knop gekoppeld aan daadwerkelijke export functie</div>
+            <div className="mt-2 text-green-400">✅ DRAAD54-FIX: V3 PDF generator met gekleurde badges actief</div>
+            <div className="text-green-400">✅ Import: service-allocation-generator-v3</div>
+            <div className="text-green-400">✅ Functie: generateServiceAllocationPDFV3 + serviceTypes</div>
           </div>
         )}
       </div>
