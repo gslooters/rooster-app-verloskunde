@@ -1,2 +1,2 @@
-// CACHEBUSTER: Nieuwe value (Date.now): 1732407001286
-export const CACHE_BUSTER = 1732407001286;
+// Cache buster for deployment
+export const CACHE_VERSION = Date.now(); // 1732547541000
