@@ -1,0 +1,5 @@
+Rollback deployment trigger - 1732551600
+Commit: 50fb7e286635dbe169de5632cbf60d815183f2e4
+Timestamp: 2025-11-25T16:26:40+01:00
+Reden: Herstel naar laatste werkende deployment
+Backup: backup-before-rollback-20251125-1625
