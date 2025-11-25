@@ -1,10 +1,44 @@
 # Railway Rebuild Trigger
-# Last update: 2025-11-20 14:54 EST
-# Reason: DRAAD40 FASE 1 HOTFIX - Force rebuild na Railway incident
+# Last update: 2025-11-25 15:52 CET
+# Reason: DRAAD53.2 CRITICAL FIX - Supabase import fout hersteld
 
 Dit bestand wordt gebruikt om Railway deployments te triggeren.
 
 ## Recente updates:
+
+### 2025-11-25 15:52 - DRAAD53.2 CRITICAL FIX - SUPABASE IMPORT RESOLVED
+🔴 CRITICAL BUILD FIX
+
+**Situatie**:
+- Build faalt met: Module not found: Can't resolve '@/lib/supabase/server'
+- Meerdere deployment pogingen gefaald
+- PDF generator route heeft verkeerde import
+
+**Root Cause**:
+- File: app/api/pdf/generate-dashboard/route.ts
+- Fout import: '@/lib/supabase/server' (directory bestaat NIET)
+- Fout functie: createClient() (functie bestaat NIET)
+
+**Fix Applied**:
+✅ Import gecorrigeerd: '@/lib/supabase-server' (bestand bestaat)
+✅ Functie gecorrigeerd: getSupabaseServer() (correct)
+✅ await verwijderd (functie is niet async)
+
+**Verwachte Build**:
+✅ npm ci - Dependencies installeren
+✅ npm run build - Next.js build (NU ZONDER MODULE ERRORS)
+✅ Webpack compilatie succesvol
+✅ node server.js - Production server start
+
+**Commits**:
+- 38592c48: CRITICAL FIX Supabase import (PDF route)
+- e0c292fe: Cache bust met Date.now()
+- [current]: Railway deployment trigger
+
+**Ready voor deployment** ✅  
+**Timestamp**: 2025-11-25T14:52:00Z  
+**Force rebuild**: ENABLED  
+**Random**: 874521
 
 ### 2025-11-20 14:54 - DRAAD40 FASE 1 HOTFIX - FORCE REBUILD
 🔴 CRITICAL DEPLOYMENT
