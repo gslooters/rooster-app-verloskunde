@@ -1,14 +1,13 @@
 // ============================================================================
-// DRAAD54-FIX - PDF GENERATOR V3: DIENSTEN-ROOSTER-DASHBOARD
-// Purpose: Generate PDF met gekleurde dienst-badges en 2-kolom grid layout
+// DRAAD55 - PDF GENERATOR V3: DIENSTEN-ROOSTER-DASHBOARD - COMPACT LAYOUT
+// Purpose: Generate PDF met gekleurde cellen en compacte tekst (geen badges)
 // Format: A4 Portrait, elke week op één pagina
-// Fix: Gebruik autoTable met didDrawCell voor custom badge rendering
 // Features: 
-// - Gekleurde dienst-badges (afgeronde rechthoeken, witte tekst)
-// - 2-kolom grid per dagdeel (dienst1-dienst2 | dienst3-dienst4)
-// - Dikke lijn tussen dagen
-// - Header lichtgrijs (#E0E0E0)
-// - Compacte datum ("Ma 24 nov")
+// - Celkleuren op basis van dominante dienst
+// - Compacte tekst: "CODE (aantal), CODE (aantal)" in zwart
+// - Prominente datum en weeknummer headers
+// - 1 week per pagina, optimale kolombreedte
+// - Footer met "(V3)" indicator
 // ============================================================================
 
 import jsPDF from 'jspdf';
@@ -116,61 +115,37 @@ function groupByWeek(data: PDFData): { [weekKey: string]: string[] } {
 }
 
 // ============================================================================
-// V3 BADGE RENDERING IN CELL
+// COMPACT TEXT FORMATTING FOR SERVICES
 // ============================================================================
 
-function renderBadgesInCell(
-  doc: jsPDF,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  services: ServiceBlock[],
-  serviceColors: { [code: string]: string }
-): void {
-  if (services.length === 0) return;
+function formatServicesAsText(services: ServiceBlock[]): string {
+  if (services.length === 0) return '-';
   
-  const badgeHeight = 4.5;
-  const badgeRadius = 1.2;
-  const badgeWidth = (width - 3) / 2; // 2 kolommen met spacing
-  const spacing = 1.5;
-  
-  let currentY = y + 2;
-  
-  for (let i = 0; i < services.length; i += 2) {
-    const s1 = services[i];
-    const s2 = services[i + 1];
-    
-    // Badge 1 (links)
-    const color1 = hexToRgb(serviceColors[s1.code] || FALLBACK_COLOR);
-    doc.setFillColor(color1[0], color1[1], color1[2]);
-    doc.roundedRect(x + 1, currentY, badgeWidth, badgeHeight, badgeRadius, badgeRadius, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(7);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`${s1.code} (${s1.aantal})`, x + 1 + badgeWidth / 2, currentY + badgeHeight / 2 + 0.8, { 
-      align: 'center', 
-      baseline: 'middle' 
-    });
-    
-    // Badge 2 (rechts)
-    if (s2) {
-      const color2 = hexToRgb(serviceColors[s2.code] || FALLBACK_COLOR);
-      doc.setFillColor(color2[0], color2[1], color2[2]);
-      doc.roundedRect(x + 1 + badgeWidth + 1, currentY, badgeWidth, badgeHeight, badgeRadius, badgeRadius, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.text(`${s2.code} (${s2.aantal})`, x + 1 + badgeWidth + 1 + badgeWidth / 2, currentY + badgeHeight / 2 + 0.8, { 
-        align: 'center', 
-        baseline: 'middle' 
-      });
-    }
-    
-    currentY += badgeHeight + spacing;
-  }
+  return services
+    .map(s => `${s.code} (${s.aantal})`)
+    .join(', ');
 }
 
 // ============================================================================
-// MAIN PDF GENERATION FUNCTION (FIXED V3)
+// DETERMINE DOMINANT SERVICE COLOR FOR CELL
+// ============================================================================
+
+function getDominantServiceColor(
+  services: ServiceBlock[],
+  serviceColors: { [code: string]: string }
+): string | null {
+  if (services.length === 0) return null;
+  
+  // Gebruik de eerste dienst voor de kleur (of dienst met hoogste aantal)
+  const dominant = services.reduce((prev, current) => 
+    current.aantal > prev.aantal ? current : prev
+  );
+  
+  return serviceColors[dominant.code] || FALLBACK_COLOR;
+}
+
+// ============================================================================
+// MAIN PDF GENERATION FUNCTION (V3 - COMPACT LAYOUT)
 // ============================================================================
 
 export function generateServiceAllocationPDFV3(
@@ -210,21 +185,23 @@ export function generateServiceAllocationPDFV3(
     const lastDate = dates[dates.length - 1];
     const weekNum = getWeekNumber(firstDate);
 
-    // Header
-    doc.setFontSize(18);
+    // ========================================================================
+    // PROMINENTE HEADER: Week nummer en datumbereik
+    // ========================================================================
+    doc.setFontSize(20);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(40, 40, 40);
-    doc.text(`Week ${weekNum}`, margin, margin + 7);
+    doc.setTextColor(30, 30, 30);
+    doc.text(`Week ${weekNum}`, pageWidth / 2, margin + 8, { align: 'center' });
     
-    doc.setFontSize(9);
+    doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    doc.setTextColor(80, 80, 80);
+    doc.setTextColor(70, 70, 70);
     const periodText = `${formatDateLong(firstDate)} - ${formatDateLong(lastDate)}`;
-    doc.text(periodText, margin, margin + 13);
+    doc.text(periodText, pageWidth / 2, margin + 15, { align: 'center' });
 
-    let currentY = margin + 18;
+    let currentY = margin + 24;
     
-    // Bouw tabel data
+    // Bouw tabel data met kleuren en compacte tekst
     const tableData: any[] = [];
     const sortedDates = dates.sort();
 
@@ -246,26 +223,28 @@ export function generateServiceAllocationPDFV3(
         row.team = TEAM_LABELS[team];
         row.teamCode = team;
         
-        // Dagdelen - sla diensten op voor rendering
+        // Dagdelen - sla diensten en kleuren op
         DAGDELEN.forEach(dagdeel => {
           const services = dayData[team]?.[dagdeel] || [];
-          row[dagdeel] = services.length > 0 ? 'BADGES' : '-';
-          row[`${dagdeel}_services`] = services;
+          row[dagdeel] = formatServicesAsText(services);
+          row[`${dagdeel}_color`] = getDominantServiceColor(services, serviceColors);
         });
         
         tableData.push(row);
       });
     });
 
-    // Genereer tabel MET autoTable
+    // ========================================================================
+    // GENEREER TABEL MET COMPACTE TEKST EN CELKLEUREN
+    // ========================================================================
     autoTable(doc, {
       startY: currentY,
       head: [[
-        { content: 'Datum', styles: { halign: 'center', fontStyle: 'bold', fillColor: [224, 224, 224], textColor: [40, 40, 40] } },
-        { content: 'Team', styles: { halign: 'center', fontStyle: 'bold', fillColor: [224, 224, 224], textColor: [40, 40, 40] } },
-        { content: 'Ochtend (O)', styles: { halign: 'center', fontStyle: 'bold', fillColor: [224, 224, 224], textColor: [40, 40, 40] } },
-        { content: 'Middag (M)', styles: { halign: 'center', fontStyle: 'bold', fillColor: [224, 224, 224], textColor: [40, 40, 40] } },
-        { content: 'Avond/Nacht (A)', styles: { halign: 'center', fontStyle: 'bold', fillColor: [224, 224, 224], textColor: [40, 40, 40] } }
+        { content: 'Datum', styles: { halign: 'center', fontStyle: 'bold', fillColor: [200, 200, 200], textColor: [30, 30, 30] } },
+        { content: 'Team', styles: { halign: 'center', fontStyle: 'bold', fillColor: [200, 200, 200], textColor: [30, 30, 30] } },
+        { content: 'Ochtend (O)', styles: { halign: 'center', fontStyle: 'bold', fillColor: [200, 200, 200], textColor: [30, 30, 30] } },
+        { content: 'Middag (M)', styles: { halign: 'center', fontStyle: 'bold', fillColor: [200, 200, 200], textColor: [30, 30, 30] } },
+        { content: 'Avond/Nacht (A)', styles: { halign: 'center', fontStyle: 'bold', fillColor: [200, 200, 200], textColor: [30, 30, 30] } }
       ]],
       body: tableData.map(row => [
         row.date,
@@ -276,63 +255,61 @@ export function generateServiceAllocationPDFV3(
       ]),
       theme: 'grid',
       styles: {
-        fontSize: 8.5,
-        cellPadding: 3,
-        lineColor: [200, 200, 200],
+        fontSize: 8,
+        cellPadding: 2.5,
+        lineColor: [180, 180, 180],
         lineWidth: 0.3,
         halign: 'left',
-        valign: 'top',
-        minCellHeight: 10
+        valign: 'middle',
+        minCellHeight: 8,
+        textColor: [0, 0, 0] // Zwarte tekst
       },
       headStyles: {
-        fillColor: [224, 224, 224],
-        textColor: [40, 40, 40],
+        fillColor: [200, 200, 200],
+        textColor: [30, 30, 30],
         fontStyle: 'bold',
         fontSize: 9,
-        cellPadding: 4
+        cellPadding: 3.5
       },
       columnStyles: {
-        0: { cellWidth: 24, fontStyle: 'bold', halign: 'center', fillColor: [245, 245, 245] },
-        1: { cellWidth: 28, fontStyle: 'bold', halign: 'center' },
-        2: { cellWidth: 44 },
-        3: { cellWidth: 44 },
-        4: { cellWidth: 44 }
+        0: { cellWidth: 22, fontStyle: 'bold', halign: 'center', fillColor: [240, 240, 240] },
+        1: { cellWidth: 26, fontStyle: 'bold', halign: 'center', fillColor: [250, 250, 250] },
+        2: { cellWidth: 42 },
+        3: { cellWidth: 42 },
+        4: { cellWidth: 42 }
       },
       margin: { left: margin, right: margin },
-      didDrawCell: function(data: any) {
+      didParseCell: function(data: any) {
         const rowData = tableData[data.row.index];
         if (!rowData) return;
         
-        // Render badges in dagdeel kolommen (2, 3, 4)
+        // Pas celkleur toe op dagdeel kolommen (2, 3, 4) op basis van dienst
         if (data.column.index >= 2 && data.column.index <= 4) {
           const dagdeel = DAGDELEN[data.column.index - 2];
-          const services = rowData[`${dagdeel}_services`] || [];
+          const color = rowData[`${dagdeel}_color`];
           
-          if (services.length > 0) {
-            renderBadgesInCell(
-              doc,
-              data.cell.x,
-              data.cell.y,
-              data.cell.width,
-              data.cell.height,
-              services,
-              serviceColors
-            );
+          if (color) {
+            const rgb = hexToRgb(color);
+            // Lichtere versie van de kleur voor achtergrond (verhoog helderheid)
+            const lightRgb: [number, number, number] = [
+              Math.min(255, rgb[0] + 80),
+              Math.min(255, rgb[1] + 80),
+              Math.min(255, rgb[2] + 80)
+            ];
+            data.cell.styles.fillColor = lightRgb;
           }
         }
-      },
-      didDrawPage: function(data: any) {
-        // Dikke lijnen tussen dagen (na render)
-        // Dit is complex met autoTable, laat standaard grid lines
       }
     });
 
-    // Footer
+    // ========================================================================
+    // FOOTER
+    // ========================================================================
     const finalY = (doc as any).lastAutoTable?.finalY || currentY + 100;
     
     doc.setFontSize(7);
     doc.setFont('helvetica', 'normal');
-    doc.setTextColor(120, 120, 120);
+    doc.setTextColor(100, 100, 100);
     
     const now = new Date();
     const genTime = `Gegenereerd: ${formatDateLong(now.toISOString().split('T')[0])} ${now.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}`;
