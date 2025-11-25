@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { getSupabaseServer } from '@/lib/supabase-server';
 
 // Functie om tekstkleur te bepalen (wit of zwart) op basis van achtergrondkleur
 function getTextColor(hexColor: string): string {
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = await createClient();
+    const supabase = getSupabaseServer();
 
     // Stap 3.1: Database kleuren ophalen
     const { data: serviceTypes, error: serviceError } = await supabase
