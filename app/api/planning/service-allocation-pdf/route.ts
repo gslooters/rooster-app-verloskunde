@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 // ============================================================================
-// DRAAD52.1 - API ENDPOINT: SERVICE ALLOCATION PDF DATA (FIXED)
+// DRAAD54 - API ENDPOINT: SERVICE ALLOCATION PDF DATA V3
 // URL: /api/planning/service-allocation-pdf?rosterId={id}
-// Purpose: Fetch all service allocation data for PDF generation
-// Fix: Verwijderd 'naam' uit roosters.select() - kolom bestaat niet in DB
+// Purpose: Fetch all service allocation data for PDF generation + kleuren
+// Update: Added service_types.kleur for V3 colored badges
 // ============================================================================
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -23,6 +23,11 @@ interface GroupedData {
   };
 }
 
+interface ServiceType {
+  code: string;
+  kleur: string;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
@@ -38,7 +43,7 @@ export async function GET(request: NextRequest) {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // ========================================================================
-    // STEP 1: Fetch roster info (FIXED: removed 'naam' - doesn't exist)
+    // STEP 1: Fetch roster info
     // ========================================================================
     const { data: rosterInfo, error: rosterError } = await supabase
       .from('roosters')
@@ -82,6 +87,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         roster: rosterInfo,
         data: {},
+        serviceTypes: [],
         isEmpty: true,
         message: 'Geen staffing records gevonden voor deze roosterperiode'
       });
@@ -111,19 +117,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         roster: rosterInfo,
         data: {},
+        serviceTypes: [],
         isEmpty: true,
         message: 'Geen diensten gevonden voor deze roosterperiode'
       });
     }
 
     // ========================================================================
-    // STEP 2C: Fetch service_types (for codes)
+    // STEP 2C: Fetch service_types (for codes + KLEUREN V3)
     // ========================================================================
     const serviceIds = [...new Set(staffingRecords.map(r => r.service_id))];
     
     const { data: serviceTypes, error: serviceError } = await supabase
       .from('service_types')
-      .select('id, code, naam')
+      .select('id, code, naam, kleur')
       .in('id', serviceIds);
 
     if (serviceError) {
@@ -184,11 +191,20 @@ export async function GET(request: NextRequest) {
     });
 
     // ========================================================================
-    // STEP 5: Return structured data
+    // STEP 5: Prepare service types array with kleuren for V3
+    // ========================================================================
+    const serviceTypesArray: ServiceType[] = (serviceTypes || []).map(st => ({
+      code: st.code,
+      kleur: st.kleur || '#808080' // Fallback grijs als kleur ontbreekt
+    }));
+
+    // ========================================================================
+    // STEP 6: Return structured data with serviceTypes
     // ========================================================================
     return NextResponse.json({
       roster: rosterInfo,
       data: grouped,
+      serviceTypes: serviceTypesArray,
       isEmpty: Object.keys(grouped).length === 0,
       stats: {
         totalDates: Object.keys(grouped).length,
