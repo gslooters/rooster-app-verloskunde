@@ -1,0 +1,14 @@
+DRAAD55: Force rebuild om nieuwe V3 PDF generator te deployen
+
+Timestamp: 2025-11-26T00:14:00+01:00
+
+Reden: Build cache bevatte oude V3 generator met badges.
+Nieuwe code (commit e80030ee) heeft compacte tekst zonder badges.
+Deze trigger file forceert volledige rebuild.
+
+Verwachte changes na deployment:
+- GEEN "BADGES" labels meer in PDF
+- Compacte tekst: "GRB (1), OSP (1), ECH (1)"
+- Celkleuren per diensttype
+- Prominente weeknummer headers
+- Geen console warnings meer
