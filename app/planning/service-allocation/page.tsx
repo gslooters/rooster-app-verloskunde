@@ -4,12 +4,12 @@ import { supabase } from '@/lib/supabase';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState, Suspense } from 'react';
 import { ArrowLeft, FileDown, Loader2, AlertCircle } from 'lucide-react';
-import { generateServiceAllocationPDF, downloadPDF } from '@/lib/pdf/service-allocation-generator';
+import { generateServiceAllocationPDFV3, downloadPDF } from '@/lib/pdf/service-allocation-generator-v3';
 
 // ============================================================================
-// DRAAD48 - SCHERM: DIENSTEN PER DAGDEEL AANPASSEN
+// DRAAD54 - SCHERM: DIENSTEN PER DAGDEEL AANPASSEN V3
 // URL: /planning/service-allocation?rosterId={id}
-// Functie: PDF export van diensten per team per datum per dagdeel
+// Functie: PDF export V3 met gekleurde badges en 2-kolom grid layout
 // ============================================================================
 
 interface RosterInfo {
@@ -94,7 +94,7 @@ function ServiceAllocationContent() {
   }, [rosterId]);
 
   // ============================================================================
-  // PDF EXPORT HANDLER
+  // PDF EXPORT HANDLER V3
   // ============================================================================
   
   async function handlePDFExport() {
@@ -104,7 +104,7 @@ function ServiceAllocationContent() {
     setError(null);
 
     try {
-      // Fetch data from API
+      // Fetch data from API (now includes serviceTypes with kleuren)
       const response = await fetch(`/api/planning/service-allocation-pdf?rosterId=${rosterId}`);
       
       if (!response.ok) {
@@ -123,17 +123,17 @@ function ServiceAllocationContent() {
         return;
       }
 
-      // Generate PDF
-      const pdf = generateServiceAllocationPDF(result.roster, result.data);
+      // Generate PDF V3 with colored badges
+      const pdf = generateServiceAllocationPDFV3(result.roster, result.data, result.serviceTypes);
       
       // Download PDF
-      const filename = `Diensten-per-dagdeel_Week-${getISOWeekNumber(new Date(rosterInfo.start_date))}-${getISOWeekNumber(new Date(rosterInfo.end_date))}_${new Date().getTime()}.pdf`;
+      const filename = `Diensten-rooster-V3_Week-${getISOWeekNumber(new Date(rosterInfo.start_date))}-${getISOWeekNumber(new Date(rosterInfo.end_date))}_${new Date().getTime()}.pdf`;
       downloadPDF(pdf, filename);
 
       setPdfGenerating(false);
 
     } catch (err: any) {
-      console.error('[PDF-EXPORT] Error:', err);
+      console.error('[PDF-EXPORT-V3] Error:', err);
       setError(err.message || 'Fout bij genereren PDF');
       setPdfGenerating(false);
     }
@@ -179,12 +179,12 @@ function ServiceAllocationContent() {
           {pdfGenerating ? (
             <>
               <Loader2 className="h-5 w-5 animate-spin" />
-              PDF wordt gegenereerd...
+              PDF V3 wordt gegenereerd...
             </>
           ) : (
             <>
               <FileDown className="h-5 w-5" />
-              PDF export gehele rooster (5 weken)
+              PDF V3 export (gekleurde badges)
             </>
           )}
         </button>
@@ -194,7 +194,7 @@ function ServiceAllocationContent() {
       <div className="max-w-4xl mx-auto">
         {/* Title */}
         <h1 className="text-4xl font-bold text-gray-900 mb-2">
-          Diensten per Dagdeel Aanpassen: Periode Week {startWeek} - Week {endWeek}
+          Diensten Rooster Dashboard V3: Week {startWeek} - Week {endWeek}
         </h1>
         
         {rosterInfo && startDate && endDate && (
@@ -215,6 +215,33 @@ function ServiceAllocationContent() {
             </div>
           </div>
         )}
+
+        {/* V3 Features Info Card */}
+        <div className="bg-gradient-to-r from-green-50 to-teal-50 rounded-2xl shadow-xl p-8 border-2 border-teal-100 mb-6">
+          <h2 className="text-2xl font-bold text-teal-900 mb-4">✨ Nieuw in V3</h2>
+          <ul className="space-y-3 text-gray-700">
+            <li className="flex items-start gap-2">
+              <span className="text-teal-600 font-bold">✓</span>
+              <span><strong>Gekleurde dienst-badges:</strong> Diensten worden weergegeven als gekleurde afgeronde rechthoeken met witte tekst (kleuren uit database)</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-teal-600 font-bold">✓</span>
+              <span><strong>2-kolom grid layout:</strong> Diensten per dagdeel getoond in 2 kolommen (dienst1-dienst2 | dienst3-dienst4)</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-teal-600 font-bold">✓</span>
+              <span><strong>Dikke scheiding:</strong> Duidelijke visuele scheiding tussen dagen (3px lijn)</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-teal-600 font-bold">✓</span>
+              <span><strong>Week-op-één-A4:</strong> Elke week past optimaal op één A4 pagina</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-teal-600 font-bold">✓</span>
+              <span><strong>Compacte datum:</strong> "Ma 24 nov" op één regel voor betere leesbaarheid</span>
+            </li>
+          </ul>
+        </div>
 
         {/* Week List */}
         <div className="bg-white rounded-2xl shadow-xl p-8 border-2 border-blue-100">
@@ -264,8 +291,7 @@ function ServiceAllocationContent() {
             <div className="bg-blue-50 rounded-lg p-4">
               <p className="text-sm text-blue-900">
                 <strong className="block mb-2">ℹ️ Tip:</strong>
-                Klik op de PDF export knop rechtsboven om een volledig overzicht van alle weken te downloaden.
-                Weken met een &quot;Aangepast&quot; badge bevatten handmatige wijzigingen.
+                Klik op de PDF V3 export knop rechtsboven om een volledig overzicht van alle weken te downloaden met gekleurde dienst-badges en verbeterde layout.
               </p>
             </div>
           </div>
