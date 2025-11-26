@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 // URL: /api/planning/service-allocation-pdf?rosterId={id}
 // Purpose: Fetch all service allocation data for PDF generation + kleuren
 // Update: Added service_types.kleur for V3 colored badges
+// DRAAD60A: Added date filtering on rooster.start_date and end_date
 // ============================================================================
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -68,11 +69,14 @@ export async function GET(request: NextRequest) {
 
     // ========================================================================
     // STEP 2A: Fetch roster_period_staffing (base records)
+    // DRAAD60A: Added date filtering to exclude records outside roster period
     // ========================================================================
     const { data: staffingRecords, error: staffingError } = await supabase
       .from('roster_period_staffing')
       .select('id, roster_id, service_id, date')
       .eq('roster_id', rosterId)
+      .gte('date', rosterInfo.start_date)
+      .lte('date', rosterInfo.end_date)
       .order('date', { ascending: true });
 
     if (staffingError) {
