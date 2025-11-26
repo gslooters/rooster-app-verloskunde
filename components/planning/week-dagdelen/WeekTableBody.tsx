@@ -2,6 +2,7 @@
 import React from 'react';
 import { DienstDagdelenWeek, TeamDagdeel, TEAM_ORDER, DagdeelStatus } from '@/lib/types/week-dagdelen';
 import DagdeelCell from './DagdeelCell';
+import { triggerCacheBust61D } from './CacheBuster61D'; // DRAAD61D: import cachebuster
 
 interface WeekTableBodyProps {
   rosterId: string; // 🔥 DRAAD44: NIEUW - Nodig voor cel-level data lookup
@@ -83,27 +84,28 @@ const DAGDEEL_TYPE_MAP: Record<string, 'O' | 'M' | 'A'> = {
   'avond': 'A'
 };
 
+// DRAAD61D: Uitvoeren van cachebust-trigger bij elke render
+triggerCacheBust61D();
+
 export default function WeekTableBody({
   rosterId, // 🔥 DRAAD44: NIEUW
   diensten,
   onDagdeelUpdate,
   disabled = false
 }: WeekTableBodyProps) {
-  
   /**
    * DRAAD40B5: Sorteer diensten op code (alfabetisch)
    */
   const gesorteerdeDiensten = React.useMemo(() => {
     return [...diensten].sort((a, b) => a.dienstCode.localeCompare(b.dienstCode));
   }, [diensten]);
-  
+
   /**
    * Get team badge component
    */
   const TeamBadge = ({ team }: { team: TeamDagdeel }) => {
     const badge = TEAM_BADGE_COLORS[team];
     const label = TEAM_LABELS[team];
-    
     return (
       <div
         className={
@@ -128,7 +130,7 @@ export default function WeekTableBody({
   const getDienstGroupBg = (index: number): string => {
     return index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
   };
-  
+
   /**
    * Get dagdeel label for accessibility
    */
@@ -140,7 +142,7 @@ export default function WeekTableBody({
     };
     return labels[dagdeel];
   };
-  
+
   /**
    * Create update handler for specific dagdeel
    */
@@ -157,30 +159,30 @@ export default function WeekTableBody({
       {gesorteerdeDiensten.map((dienst, dienstIndex) => {
         const groupBg = getDienstGroupBg(dienstIndex);
         const isLastDienst = dienstIndex === gesorteerdeDiensten.length - 1;
-        
+
         // 🔥 FIX DRAAD61C: gebruik TEAM_KEY_MAP voor correcte property lookup
         const zichtbareTeams = TEAM_ORDER.filter(teamCode => {
           const teamKey = TEAM_KEY_MAP[teamCode];
           const teamData = dienst.teams[teamKey];
           return teamData && teamData.dagen && teamData.dagen.length > 0;
         });
-        
+
         if (zichtbareTeams.length === 0) {
           return null;
         }
-        
+
         const dienstRowSpan = zichtbareTeams.length;
-        
+
         return (
           <React.Fragment key={dienst.dienstId}>
             {zichtbareTeams.map((teamCode, visibleTeamIndex) => {
               const isFirstRow = visibleTeamIndex === 0;
               const isLastRow = visibleTeamIndex === zichtbareTeams.length - 1;
-              
+
               // 🔥 FIX DRAAD61C: gebruik TEAM_KEY_MAP voor correcte property lookup
               const teamKey = TEAM_KEY_MAP[teamCode];
               const teamData = dienst.teams[teamKey];
-              
+
               return (
                 <tr
                   key={`${dienst.dienstId}-${teamCode}`}
@@ -286,7 +288,4 @@ export default function WeekTableBody({
   );
 }
 
-// Cache busting + railway dummy trigger DRAAD61C
-if (typeof window !== 'undefined') {
-  window.__DRAAD61C_BUSTRIGGER = Date.now();
-}
+// Geen eigen window properties meer nodig: cachebusting gaat nu via aparte module DRAAD61D
