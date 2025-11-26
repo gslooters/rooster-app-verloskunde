@@ -5,7 +5,7 @@ import { getRosterIdFromParams } from '@/lib/utils/getRosterIdFromParams';
 import { loadRosterDesignData, updateEmployeeMaxShifts, syncRosterDesignWithEmployeeData } from '@/lib/planning/rosterDesign';
 import { fetchNetherlandsHolidays, createHolidaySet, findHolidayByDate } from '@/lib/services/holidays-api';
 import { loadServiceTypes } from '@/lib/services/service-types-loader';
-import { getMondayOfWeek } from '@/lib/utils/date-helpers';
+import { parseUTCDate, toUTCDateString, addUTCDays, getUTCWeekNumber, getUTCMonday, formatUTCDate } from '@/lib/utils/date-utc';
 import type { RosterDesignData, RosterEmployee } from '@/lib/types/roster';
 import type { Holiday } from '@/lib/types/holiday';
 import { TeamType, DienstverbandType } from '@/lib/types/employee';
@@ -53,23 +53,19 @@ const MONTH_NAMES = [
   'januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'
 ];
 function formatDutchDate(dateStr: string): string {
-  const date = new Date(dateStr + 'T00:00:00');
-  return `${date.getDate()} ${MONTH_NAMES[date.getMonth()]} ${date.getFullYear()}`;
-}
-function getWeekNumber(date: Date): number {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  const date = parseUTCDate(dateStr);
+  const day = date.getUTCDate();
+  const month = MONTH_NAMES[date.getUTCMonth()];
+  const year = date.getUTCFullYear();
+  return `${day} ${month} ${year}`;
 }
 function formatDateCell(dateStr: string, holidaySet: Set<string>, holidays: Holiday[]): { day: string, date: string, month: string, isWeekend: boolean, isHoliday: boolean, holidayName?: string } {
-  const date = new Date(dateStr + 'T00:00:00');
+  const date = parseUTCDate(dateStr);
   const dayNames = ['ZO','MA','DI','WO','DO','VR','ZA'];
-  const dayIndex = date.getDay();
+  const dayIndex = date.getUTCDay();
   const day = dayNames[dayIndex];
-  const dd = String(date.getDate()).padStart(2,'0');
-  const mm = String(date.getMonth() + 1).padStart(2,'0');
+  const dd = String(date.getUTCDate()).padStart(2,'0');
+  const mm = String(date.getUTCMonth() + 1).padStart(2,'0');
   const month = mm;
   const isWeekend = dayIndex === 0 || dayIndex === 6;
   const isHoliday = holidaySet.has(dateStr);
@@ -77,8 +73,8 @@ function formatDateCell(dateStr: string, holidaySet: Set<string>, holidays: Holi
   return { day, date: dd, month, isWeekend, isHoliday, holidayName: holiday?.name };
 }
 function columnClasses(dateStr: string, holidaySet: Set<string>): string {
-  const date = new Date(dateStr + 'T00:00:00');
-  const d = date.getDay();
+  const date = parseUTCDate(dateStr);
+  const d = date.getUTCDay();
   const isHoliday = holidaySet.has(dateStr);
   const leftWeekSep = d === 1 ? ' border-l-4 border-yellow-200' : '';
   let rim = '';
@@ -223,11 +219,10 @@ export default function DesignPageClient() {
   async function loadHolidaysForPeriod(startISO: string) {
     setHolidaysLoading(true);
     try {
-      const startDate = new Date(startISO + 'T00:00:00');
-      const endDate = new Date(startDate); 
-      endDate.setDate(startDate.getDate() + (4 * 7) + 6);
-      const startStr = startDate.toISOString().split('T')[0];
-      const endStr = endDate.toISOString().split('T')[0];
+      const startDate = parseUTCDate(startISO);
+      const endDate = addUTCDays(startDate, (4 * 7) + 6); // 5 weken
+      const startStr = toUTCDateString(startDate);
+      const endStr = toUTCDateString(endDate);
       const fetchedHolidays = await fetchNetherlandsHolidays(startStr, endStr);
       setHolidays(fetchedHolidays);
     } catch { /* ignore */ }
@@ -245,7 +240,7 @@ export default function DesignPageClient() {
   const computedValues = useMemo(() => {
     if (!designData) {
       return { 
-        startISO: new Date().toISOString().split('T')[0], 
+        startISO: toUTCDateString(new Date()), 
         startDate: new Date(), 
         endDate: new Date(), 
         weeks: [], 
@@ -256,7 +251,7 @@ export default function DesignPageClient() {
     const startISO = (designData as any).start_date;
     if (!startISO) {
       return { 
-        startISO: new Date().toISOString().split('T')[0], 
+        startISO: toUTCDateString(new Date()), 
         startDate: new Date(), 
         endDate: new Date(), 
         weeks: [], 
@@ -264,31 +259,27 @@ export default function DesignPageClient() {
         dateSubtitle: 'Neem contact op met support' 
       };
     }
-    const startDate = new Date(startISO + 'T00:00:00');
+    const startDate = parseUTCDate(startISO);
     
     // FIX: Zorg dat we beginnen op de maandag van de week waarin startDate valt
-    const mondayOfStartWeek = getMondayOfWeek(startDate);
+    const mondayOfStartWeek = getUTCMonday(startDate);
     
-    const endDate = new Date(mondayOfStartWeek); 
-    endDate.setDate(mondayOfStartWeek.getDate() + (5 * 7) - 1); // 5 weken, eindigend op zondag
+    const endDate = addUTCDays(mondayOfStartWeek, (5 * 7) - 1); // 5 weken, eindigend op zondag
     
     const weeks = Array.from({ length: 5 }, (_, i) => {
-      const weekStart = new Date(mondayOfStartWeek); 
-      weekStart.setDate(mondayOfStartWeek.getDate() + (i * 7));
-      const weekNumber = getWeekNumber(weekStart);
+      const weekStart = addUTCDays(mondayOfStartWeek, i * 7);
+      const { week: weekNumber } = getUTCWeekNumber(weekStart);
       return { 
         number: weekNumber, 
         dates: Array.from({ length: 7 }, (_, d) => { 
-          const date = new Date(weekStart); 
-          date.setDate(weekStart.getDate() + d); 
-          return date.toISOString().split('T')[0]; 
+          return toUTCDateString(addUTCDays(weekStart, d));
         }) 
       };
     });
     const firstWeek = weeks[0];
     const lastWeek = weeks[weeks.length - 1];
-    const periodTitle = `Medewerkers per periode : Week ${firstWeek?.number || ''} - Week ${lastWeek?.number || ''} ${startDate.getFullYear()}`;
-    const dateSubtitle = `Van ${formatDutchDate(mondayOfStartWeek.toISOString().split('T')[0])} tot en met ${formatDutchDate(endDate.toISOString().split('T')[0])}`;
+    const periodTitle = `Medewerkers per periode : Week ${firstWeek?.number || ''} - Week ${lastWeek?.number || ''} ${mondayOfStartWeek.getUTCFullYear()}`;
+    const dateSubtitle = `Van ${formatDutchDate(toUTCDateString(mondayOfStartWeek))} tot en met ${formatDutchDate(toUTCDateString(endDate))}`;
     return { startISO, startDate, endDate, weeks, periodTitle, dateSubtitle };
   }, [designData]);
   if (loading) { 
