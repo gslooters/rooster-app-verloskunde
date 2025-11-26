@@ -30,22 +30,22 @@ interface WeekDagdelenClientProps {
 }
 
 /**
- * 🔥 DRAAD592 FIX: Type compliance - '0' → 'O'
+ * 🔥 DRAAD61A FIX: Verwijder serviceId filter - blokkeerde GRO/ORA data
  * 
  * PROBLEEM OPGELOST:
- * - Type Dagdeel = 'O' | 'M' | 'A' (letter O voor Ochtend)
- * - Code gebruikte '0' (cijfer nul)
+ * - serviceIdFilter check in createTeamDagdelenWeek was te restrictief
+ * - Alle teams (GRO/ORA/TOT) delen dezelfde serviceId van parent record
+ * - Filter op ALLEEN team is voldoende
  * 
- * ALLE INSTANTIES GECORRIGEERD:
- * - dagdeelMap: 'ochtend': 'O'
- * - createEmptyTeamDagdelenWeek: dagdeel: 'O'
- * - id strings: ${day.datum}-O-${team}
+ * RESULTAAT:
+ * - GRO en ORA data wordt nu correct gevonden en getoond
+ * - Database heeft correcte data (840 records per team met O/M/A dagdelen)
  */
 function convertToNewStructure(
   oldData: WeekDagdeelData,
   weekBoundary: WeekBoundary
 ): WeekDagdelenData {
-  console.log('🔥 [DRAAD592] START conversie met correcte Dagdeel types');
+  console.log('🔥 [DRAAD61A] START conversie - serviceId filter verwijderd');
 
   const context: WeekContext = {
     rosterId: oldData.rosterId,
@@ -73,7 +73,7 @@ function convertToNewStructure(
     });
   });
 
-  console.log('📊 [DRAAD592] Service IDs found:', {
+  console.log('📊 [DRAAD61A] Service IDs found:', {
     unique: Array.from(uniqueServiceIds),
     count: uniqueServiceIds.size,
     coverage: `${withServiceId}/${totalChecked}`
@@ -83,16 +83,16 @@ function convertToNewStructure(
   const diensten: DienstDagdelenWeek[] = [];
   
   if (uniqueServiceIds.size === 0) {
-    console.error('❌ [DRAAD592] NO SERVICE_IDs - using fallback');
+    console.error('❌ [DRAAD61A] NO SERVICE_IDs - using fallback');
     diensten.push({
       dienstId: 'FALLBACK',
       dienstCode: 'GEEN_ID',
       dienstNaam: 'Fallback',
       volgorde: 1,
       teams: {
-        groen: createTeamDagdelenWeek('GRO', oldData.days, undefined),
-        oranje: createTeamDagdelenWeek('ORA', oldData.days, undefined),
-        totaal: createTeamDagdelenWeek('TOT', oldData.days, undefined)
+        groen: createTeamDagdelenWeek('GRO', oldData.days),
+        oranje: createTeamDagdelenWeek('ORA', oldData.days),
+        totaal: createTeamDagdelenWeek('TOT', oldData.days)
       }
     });
   } else {
@@ -104,15 +104,15 @@ function convertToNewStructure(
         dienstNaam: getDienstNaam(serviceId),
         volgorde: volgorde++,
         teams: {
-          groen: createTeamDagdelenWeek('GRO', oldData.days, serviceId),
-          oranje: createTeamDagdelenWeek('ORA', oldData.days, serviceId),
-          totaal: createTeamDagdelenWeek('TOT', oldData.days, serviceId)
+          groen: createTeamDagdelenWeek('GRO', oldData.days),
+          oranje: createTeamDagdelenWeek('ORA', oldData.days),
+          totaal: createTeamDagdelenWeek('TOT', oldData.days)
         }
       });
     });
   }
 
-  console.log(`✅ [DRAAD592] ${diensten.length} dienst(en): ${diensten.map(d => d.dienstId).join(', ')}`);
+  console.log(`✅ [DRAAD61A] ${diensten.length} dienst(en): ${diensten.map(d => d.dienstId).join(', ')}`);
 
   return {
     context,
@@ -133,10 +133,13 @@ function getDienstNaam(serviceId: string): string {
   return map[serviceId] || serviceId;
 }
 
+/**
+ * 🔥 DRAAD61A FIX: Verwijderd serviceIdFilter parameter
+ * Alle teams delen dezelfde serviceId - filter alleen op team
+ */
 function createTeamDagdelenWeek(
   team: TeamDagdeel,
-  days: DayDagdeelData[],
-  serviceIdFilter?: string
+  days: DayDagdeelData[]
 ): TeamDagdelenWeek {
   const dagen: DagDagdelen[] = days.map(day => {
     const dagdeelMap: Record<string, Dagdeel> = {
@@ -150,12 +153,8 @@ function createTeamDagdelenWeek(
     ['ochtend', 'middag', 'avond'].forEach(dagdeelType => {
       const assignments = day.dagdelen[dagdeelType as keyof typeof day.dagdelen];
       
-      // 🔥 FILTER op team EN serviceId
-      const assignment = assignments?.find(a => {
-        const teamMatch = a.team === team;
-        const serviceMatch = serviceIdFilter ? a.serviceId === serviceIdFilter : true;
-        return teamMatch && serviceMatch;
-      });
+      // ✅ DRAAD61A FIX: Filter ALLEEN op team (serviceId is hetzelfde voor alle teams)
+      const assignment = assignments?.find(a => a.team === team);
       
       const dagdeel = dagdeelMap[dagdeelType];
       
@@ -163,7 +162,7 @@ function createTeamDagdelenWeek(
         dagdeel,
         status: mapStatusToNew(assignment?.status),
         aantal: assignment?.aantal || 0,
-        id: `${day.datum}-${dagdeel}-${team}-${serviceIdFilter || 'default'}`
+        id: `${day.datum}-${dagdeel}-${team}`
       };
     });
 
@@ -264,7 +263,7 @@ export default function WeekDagdelenClient({
     try {
       return convertToNewStructure(initialWeekData, weekBoundary);
     } catch (error) {
-      console.error('❌ [DRAAD592] Conversion failed:', error);
+      console.error('❌ [DRAAD61A] Conversion failed:', error);
       return {
         context: {
           rosterId,
@@ -343,7 +342,7 @@ export default function WeekDagdelenClient({
         {process.env.NODE_ENV === 'development' && (
           <div className="mt-4 p-4 bg-gray-100 rounded-lg">
             <details className="text-xs text-gray-600">
-              <summary className="cursor-pointer font-semibold">🔥 DRAAD592 Debug</summary>
+              <summary className="cursor-pointer font-semibold">🔥 DRAAD61A Debug</summary>
               <div className="mt-2 space-y-2">
                 <div className="p-2 bg-white rounded">
                   <p className="font-semibold text-green-700">Diensten: {convertedWeekData.diensten.length}</p>
