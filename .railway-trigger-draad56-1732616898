@@ -1,0 +1,43 @@
+# RAILWAY DEPLOYMENT TRIGGER - DRAAD56
+# Generated: 2025-11-26 11:28:18 CET
+# Random ID: 1732616898
+# Purpose: Force fresh Railway build voor build timestamp fix
+
+## DEPLOYMENT INFO
+Draad: DRAAD56
+Feature: Herstel build timestamp op startscherm
+Status: DEPLOYING
+
+## CODE CHANGES
+1. app/page.tsx (1c8843f0)
+   - Fetch build info van /api/version
+   - Parse naar Nederlands formaat
+   - Toon commit SHA
+   - Error handling: "build datum onbekend"
+
+2. app/api/version/route.ts (0ae7f447)
+   - Update EXPECTED_COMMIT naar 1c8843f0
+   - Update documentatie voor DRAAD56
+
+## EXPECTED RESULT
+Startscherm toont: "in ontwikkeling: build 26-11-2025 11:28 (bded25ff)"
+
+## VERIFICATION STEPS
+1. Wacht tot Railway deployment SUCCESS (2-3 min)
+2. Open: https://rooster-app-verloskunde-production.up.railway.app/
+3. Hard refresh (Ctrl+Shift+R)
+4. Check build timestamp verschijnt (niet actuele tijd)
+5. Test /api/version endpoint direct
+
+## CACHE-BUSTING
+- Browser cache: Hard refresh verplicht
+- Server cache: Disabled via headers
+- CDN cache: Railway handelt af
+
+## ROLLBACK PLAN
+Als er problemen zijn:
+1. Revert naar commit 9f8678f9
+2. Railway redeploy from specific commit
+3. Check logs voor errors
+
+Trigger timestamp: 1732616898000
