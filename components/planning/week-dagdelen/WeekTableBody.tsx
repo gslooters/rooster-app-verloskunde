@@ -11,9 +11,14 @@ interface WeekTableBodyProps {
 }
 
 /**
+ * DRAAD61C: TypeScript Fix - Teams object indexing
  * DRAAD44: Frontend Cellogica Fix
  * DRAAD40B5: Verbeterde Layout voor Diensten per Dagdeel
  * DRAAD40C: BoxShadow op frozen columns voor visuele consistency
+ * 
+ * DRAAD61C WIJZIGINGEN:
+ * - Toegevoegd TEAM_KEY_MAP voor correcte mapping van TeamDagdeel naar object property
+ * - TeamDagdeel ('GRO', 'ORA', 'TOT') → property key ('groen', 'oranje', 'totaal')
  * 
  * DRAAD44 WIJZIGINGEN:
  * - Toegevoegd rosterId prop (doorgeven aan DagdeelCell voor DB lookup)
@@ -34,6 +39,13 @@ interface WeekTableBodyProps {
  * - Team kolom: Groen / Oranje / Praktijk badge
  * - 21 dagdeel cellen (7 dagen × 3 dagdelen)
  */
+
+// 🔥 DRAAD61C: Mapping van TeamDagdeel code naar teams object property
+const TEAM_KEY_MAP: Record<TeamDagdeel, 'groen' | 'oranje' | 'totaal'> = {
+  GRO: 'groen',
+  ORA: 'oranje',
+  TOT: 'totaal'
+};
 
 // Team label mapping: database gebruikt TOT, UI toont Praktijk
 const TEAM_LABELS: Record<TeamDagdeel, string> = {
@@ -146,9 +158,10 @@ export default function WeekTableBody({
         const groupBg = getDienstGroupBg(dienstIndex);
         const isLastDienst = dienstIndex === gesorteerdeDiensten.length - 1;
         
-        // 🔥 FIX DRAAD61B: match nu direct op teamcode
+        // 🔥 FIX DRAAD61C: gebruik TEAM_KEY_MAP voor correcte property lookup
         const zichtbareTeams = TEAM_ORDER.filter(teamCode => {
-          const teamData = dienst.teams[teamCode];
+          const teamKey = TEAM_KEY_MAP[teamCode];
+          const teamData = dienst.teams[teamKey];
           return teamData && teamData.dagen && teamData.dagen.length > 0;
         });
         
@@ -163,7 +176,10 @@ export default function WeekTableBody({
             {zichtbareTeams.map((teamCode, visibleTeamIndex) => {
               const isFirstRow = visibleTeamIndex === 0;
               const isLastRow = visibleTeamIndex === zichtbareTeams.length - 1;
-              const teamData = dienst.teams[teamCode];
+              
+              // 🔥 FIX DRAAD61C: gebruik TEAM_KEY_MAP voor correcte property lookup
+              const teamKey = TEAM_KEY_MAP[teamCode];
+              const teamData = dienst.teams[teamKey];
               
               return (
                 <tr
@@ -270,7 +286,7 @@ export default function WeekTableBody({
   );
 }
 
-// Cache busting + railway dummy trigger
+// Cache busting + railway dummy trigger DRAAD61C
 if (typeof window !== 'undefined') {
-  window.__DRAAD61B_BUSTRIGGER = Date.now();
+  window.__DRAAD61C_BUSTRIGGER = Date.now();
 }
