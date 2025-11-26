@@ -1,0 +1,21 @@
+# DRAAD56 - BUILD TIMESTAMP HERSTEL
+# Timestamp: 1732616881000
+# Datum: 26-11-2025 11:28 CET
+# Commits: 1c8843f0 (homepage), 0ae7f447 (version endpoint)
+
+## Wijzigingen:
+1. app/page.tsx - Fetch build tijd van /api/version
+2. app/api/version/route.ts - Update EXPECTED_COMMIT
+
+## Verwachte Output Startscherm:
+"in ontwikkeling: build 26-11-2025 11:28 (0ae7f447)"
+
+## Test URLs:
+- Startscherm: https://rooster-app-verloskunde-production.up.railway.app/
+- Version API: https://rooster-app-verloskunde-production.up.railway.app/api/version
+
+## Verificatie:
+1. Hard refresh startscherm (Ctrl+Shift+R)
+2. Check "laden..." verschijnt eerst
+3. Check build timestamp + commit SHA verschijnt
+4. Bij error: "build datum onbekend"
