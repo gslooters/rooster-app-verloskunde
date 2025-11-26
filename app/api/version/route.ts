@@ -1,28 +1,30 @@
 import { NextResponse } from 'next/server';
 
 /**
- * 🔍 DRAAD1E: DEPLOYMENT VERSION VERIFICATIE ENDPOINT
+ * 🔍 DRAAD1E + DRAAD56: DEPLOYMENT VERSION VERIFICATIE ENDPOINT
  * 
  * DOEL:
  * - Verifieer welke code versie daadwerkelijk draait op Railway
  * - Toon commit SHA, build tijd, en environment info
  * - Detecteer "stuck deployments" (oude code draait nog)
+ * - DRAAD56: Levert build timestamp voor startscherm
  * 
  * GEBRUIK:
  * - URL: https://your-app.railway.app/api/version
  * - Vergelijk 'commit' met laatste GitHub commit SHA
  * - Als niet gelijk → deployment stuck of cache probleem!
+ * - Startscherm haalt buildTime + shortCommit op voor display
  * 
  * RESPONSE FORMAT:
  * {
  *   "commit": "abc123...",      // Railway Git SHA
- *   "shortCommit": "abc123",    // Eerste 7 chars
- *   "buildTime": "2025-11-23T...", // ISO timestamp
+ *   "shortCommit": "abc123",    // Eerste 8 chars
+ *   "buildTime": "2025-11-26T...", // ISO timestamp (DRAAD56)
  *   "environment": "production",
  *   "nodeVersion": "20.x",
  *   "nextVersion": "14.x",
  *   "platform": "railway",
- *   "expectedCommit": "d0a92afb" // Laatste bekende commit
+ *   "expectedCommit": "1c8843f0" // Laatste bekende commit
  * }
  */
 
@@ -32,7 +34,7 @@ export const runtime = 'nodejs';
 
 // Build-time constanten
 const BUILD_TIME = new Date().toISOString();
-const EXPECTED_COMMIT = 'd0a92afb'; // DRAAD1E: Updated naar laatste deployment
+const EXPECTED_COMMIT = '1c8843f0'; // DRAAD56: Build timestamp fix
 
 export async function GET() {
   try {
@@ -73,7 +75,7 @@ export async function GET() {
     };
     
     // Log voor debugging
-    console.log('🔍 DRAAD1E Version Check:', {
+    console.log('🔍 DRAAD56 Version Check:', {
       commit: shortCommit,
       expected: EXPECTED_COMMIT,
       match: versionInfo.isExpectedVersion ? '✅ CORRECT' : '❌ VERKEERD',
@@ -93,7 +95,7 @@ export async function GET() {
     });
     
   } catch (error: any) {
-    console.error('❌ DRAAD1E Version endpoint error:', error.message);
+    console.error('❌ DRAAD56 Version endpoint error:', error.message);
     
     return NextResponse.json(
       {
