@@ -1,7 +1,7 @@
 // lib/types/week-dagdelen.ts
 // ============================================================================
-// DRAAD39.1: Week Dagdelen Scherm - TypeScript Types
-// Datum: 2025-11-19
+// DRAAD592: Type fix - '0' → 'O' voor Dagdeel compliance
+// Datum: 2025-11-26
 // ============================================================================
 // Dit bestand bevat alle type definities voor het "Diensten per week aanpassen" scherm
 // dat lazy-loaded data toont voor 1 specifieke week
@@ -46,7 +46,7 @@ export interface WeekContext {
  * Dagdeel waarde voor een specifiek team op een specifieke dag
  */
 export interface DagdeelWaarde {
-  dagdeel: Dagdeel;        // '0' | 'M' | 'A'
+  dagdeel: Dagdeel;        // 'O' | 'M' | 'A'
   status: DagdeelStatus;   // 'MOET' | 'MAG' | 'MAG_NIET' | 'AANGEPAST'
   aantal: number;          // 0-9
   id: string;             // Database ID voor updates
@@ -271,7 +271,7 @@ export const WEEKDAY_FULL_NAMES: Record<WeekdayIndex, string> = {
 /**
  * Dagdeel volgorde voor rendering
  */
-export const DAGDEEL_ORDER: Dagdeel[] = ['0', 'M', 'A'];
+export const DAGDEEL_ORDER: Dagdeel[] = ['O', 'M', 'A'];
 
 /**
  * Team volgorde voor rendering (vaste volgorde: Groen, Oranje, Totaal)
@@ -310,7 +310,7 @@ export function isValidDagdeelWaarde(value: unknown): value is DagdeelWaarde {
   const dw = value as DagdeelWaarde;
   
   return (
-    (dw.dagdeel === '0' || dw.dagdeel === 'M' || dw.dagdeel === 'A') &&
+    (dw.dagdeel === 'O' || dw.dagdeel === 'M' || dw.dagdeel === 'A') &&
     (dw.status === 'MOET' || dw.status === 'MAG' || dw.status === 'MAG_NIET' || dw.status === 'AANGEPAST') &&
     typeof dw.aantal === 'number' &&
     dw.aantal >= 0 &&
@@ -424,7 +424,7 @@ export function createEmptyDagDagdelen(datum: string): DagDagdelen {
     datum,
     dagNaam,
     dagdeelWaarden: {
-      ochtend: createEmptyDagdeelWaarde('0', `${datum}-0`),
+      ochtend: createEmptyDagdeelWaarde('O', `${datum}-O`),
       middag: createEmptyDagdeelWaarde('M', `${datum}-M`),
       avond: createEmptyDagdeelWaarde('A', `${datum}-A`)
     }
