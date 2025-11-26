@@ -1,0 +1,18 @@
+DRAAD61A DEPLOYMENT TRIGGER
+Timestamp: 2025-11-26T20:26:12Z
+Commit: 7b31ffdf44df681edb39303dfecab53df6a15acb
+
+FIX GEÏMPLEMENTEERD:
+- Verwijderd serviceId filter in createTeamDagdelenWeek()
+- Filter alleen op team (GRO/ORA/TOT)
+- Alle teams delen dezelfde serviceId van parent record
+
+RESULTAAT:
+- GRO en ORA data wordt nu correct getoond
+- Database heeft 840 records per team met correcte O/M/A dagdelen
+- ServiceId logica was te restrictief
+
+VERWACHT GEDRAG:
+✅ Groen team: Bolletjes en cijfers zichtbaar
+✅ Oranje team: Bolletjes en cijfers zichtbaar
+✅ Praktijk team: Blijft werken zoals voorheen
