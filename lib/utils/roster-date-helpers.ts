@@ -2,6 +2,7 @@
 // Datum-utilities voor roosterperiodes van 35 dagen (5 weken)
 
 import { PeriodDateInfo, WeekInfo } from '../types/period-day-staffing';
+import { parseUTCDate, toUTCDateString, addUTCDays, getUTCWeekNumber } from './date-utc';
 
 /**
  * Dag-namen (kort) voor weergave
@@ -19,18 +20,17 @@ export function getDatesForRosterPeriod(
   holidays: string[] = []
 ): PeriodDateInfo[] {
   const dates: PeriodDateInfo[] = [];
-  const start = new Date(startDate + 'T00:00:00'); // Voorkom timezone issues
+  const start = parseUTCDate(startDate);
   
   for (let i = 0; i < 35; i++) {
-    const currentDate = new Date(start);
-    currentDate.setDate(start.getDate() + i);
+    const currentDate = addUTCDays(start, i);
     
-    const dateString = formatDateToYYYYMMDD(currentDate);
-    const dayOfWeek = currentDate.getDay(); // 0=zondag, 1=maandag, ..., 6=zaterdag
+    const dateString = toUTCDateString(currentDate);
+    const dayOfWeek = currentDate.getUTCDay(); // 0=zondag, 1=maandag, ..., 6=zaterdag
     const dagSoort = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Converteer naar 0=ma, 6=zo
     const isFeestdag = holidays.includes(dateString);
     
-    const { weekNumber, year } = getWeekInfo(dateString);
+    const { week: weekNumber, year } = getUTCWeekNumber(currentDate);
     
     dates.push({
       date: dateString,
@@ -39,7 +39,7 @@ export function getDatesForRosterPeriod(
       weekNumber,
       year,
       isFeestdag,
-      dateShort: currentDate.getDate().toString(),
+      dateShort: currentDate.getUTCDate().toString(),
       dayName: DAY_NAMES_SHORT[dagSoort]
     });
   }
@@ -79,20 +79,8 @@ export function groupDatesByWeek(dates: PeriodDateInfo[]): WeekInfo[] {
  * @returns Object met weekNumber en year
  */
 export function getWeekInfo(dateString: string): { weekNumber: number; year: number } {
-  const date = new Date(dateString + 'T00:00:00');
-  
-  // ISO week date berekening
-  const target = new Date(date.valueOf());
-  const dayNr = (date.getDay() + 6) % 7; // Maandag = 0
-  target.setDate(target.getDate() - dayNr + 3);
-  const firstThursday = target.valueOf();
-  target.setMonth(0, 1);
-  if (target.getDay() !== 4) {
-    target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
-  }
-  const weekNumber = 1 + Math.ceil((firstThursday - target.valueOf()) / 604800000);
-  const year = new Date(firstThursday).getFullYear();
-  
+  const date = parseUTCDate(dateString);
+  const { week: weekNumber, year } = getUTCWeekNumber(date);
   return { weekNumber, year };
 }
 
@@ -112,10 +100,7 @@ export function getEffectiveDayType(dateInfo: PeriodDateInfo): number {
  * @returns Datum string in YYYY-MM-DD formaat
  */
 export function formatDateToYYYYMMDD(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return toUTCDateString(date);
 }
 
 /**
@@ -124,8 +109,8 @@ export function formatDateToYYYYMMDD(date: Date): string {
  * @returns Dag-nummer als string ("1", "25", etc.)
  */
 export function formatDateShort(dateString: string): string {
-  const date = new Date(dateString + 'T00:00:00');
-  return date.getDate().toString();
+  const date = parseUTCDate(dateString);
+  return date.getUTCDate().toString();
 }
 
 /**
@@ -139,12 +124,12 @@ export function getDayNameShort(dagSoort: number): string {
 }
 
 /**
- * Parse YYYY-MM-DD string naar Date object (zonder timezone issues)
+ * Parse YYYY-MM-DD string naar Date object (UTC-safe)
  * @param dateString - Datum in YYYY-MM-DD formaat
  * @returns Date object
  */
 export function parseDateString(dateString: string): Date {
-  return new Date(dateString + 'T00:00:00');
+  return parseUTCDate(dateString);
 }
 
 /**
@@ -156,8 +141,12 @@ export function isValidDate(dateString: string): boolean {
   const regex = /^\d{4}-\d{2}-\d{2}$/;
   if (!regex.test(dateString)) return false;
   
-  const date = parseDateString(dateString);
-  return !isNaN(date.getTime());
+  try {
+    const date = parseUTCDate(dateString);
+    return !isNaN(date.getTime());
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -167,8 +156,8 @@ export function isValidDate(dateString: string): boolean {
  * @returns Aantal dagen verschil (absoluut)
  */
 export function daysBetween(date1: string, date2: string): number {
-  const d1 = parseDateString(date1);
-  const d2 = parseDateString(date2);
+  const d1 = parseUTCDate(date1);
+  const d2 = parseUTCDate(date2);
   const diffTime = Math.abs(d2.getTime() - d1.getTime());
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 }
