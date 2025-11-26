@@ -1,6 +1,6 @@
 # Railway Deployment Trigger File
-# DRAAD53.2 Fase3 - Critical SIGTERM Fix
+# DRAAD592 - Type fix: '0' → 'O' voor Dagdeel compliance
 
-Timestamp: 2025-11-25T14:29:00Z
-Build: DRAAD53.2-fase3-sigterm-fix
-Commit: fd597f8223fbbc429082cc6abde74076170ae5c5
+Timestamp: 2025-11-26T17:06:30Z
+Build: DRAAD592-dagdeel-type-fix-8746
+Commit: 60a5af2d58a00cd8260303f16f32eb14f07b9179
