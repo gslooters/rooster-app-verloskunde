@@ -19,7 +19,7 @@ CREATE TABLE roster_period_staffing_dagdelen (
     REFERENCES roster_period_staffing(id) ON DELETE CASCADE,
   
   -- Dagdeel identificatie
-  dagdeel TEXT NOT NULL CHECK (dagdeel IN ('0', 'M', 'A')),
+  dagdeel TEXT NOT NULL CHECK (dagdeel IN ('O', 'M', 'A')),
   
   -- Team identificatie
   team TEXT NOT NULL CHECK (team IN ('TOT', 'GRO', 'ORA')),
@@ -121,7 +121,7 @@ COMMENT ON COLUMN roster_period_staffing_dagdelen.roster_period_staffing_id IS
   'Verwijzing naar parent record in roster_period_staffing';
 
 COMMENT ON COLUMN roster_period_staffing_dagdelen.dagdeel IS 
-  'Dagdeel code: 0=Ochtend, M=Middag, A=Avond';
+  'Dagdeel code: O=Ochtend, M=Middag, A=Avond';
 
 COMMENT ON COLUMN roster_period_staffing_dagdelen.team IS 
   'Team code: TOT=Totaal, GRO=Groen, ORA=Oranje';
