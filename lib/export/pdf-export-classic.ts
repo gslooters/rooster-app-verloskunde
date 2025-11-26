@@ -2,6 +2,7 @@
 import { Dienst } from '@/lib/types/dienst';
 import { ServiceDayStaffing } from '@/lib/services/diensten-storage';
 import { DAY_NAMES } from '@/lib/utils/bezetting-tags';
+import { formatUTCDate } from '@/lib/utils/date-utc';
 
 function getTeamLabel(row: ServiceDayStaffing): string {
   if (row.tot_enabled) return 'Totale praktijk';
@@ -13,7 +14,15 @@ function getTeamLabel(row: ServiceDayStaffing): string {
 
 export function printToPDFClassic(allStaffing: ServiceDayStaffing[], services: Dienst[]) {
   const now = new Date();
-  const dateStr = now.toLocaleString('nl-NL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const dateStr = formatUTCDate(now, 'nl-NL', { 
+    weekday: 'long', 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric', 
+    hour: '2-digit', 
+    minute: '2-digit',
+    timeZone: 'UTC'
+  });
   let html = `<!DOCTYPE html><html lang='nl'><head><meta charset='utf-8'><title>Diensten per Dagsoort - Bezettingsregels</title><style>
     @page { size: A4 landscape; margin: 10mm; }
     body{font-family:Arial,sans-serif;font-size:9pt;margin:0;}

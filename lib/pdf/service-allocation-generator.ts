@@ -7,6 +7,7 @@
 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { parseUTCDate, getUTCWeekNumber, formatUTCDate } from '@/lib/utils/date-utc';
 
 interface ServiceBlock {
   code: string;
@@ -86,33 +87,26 @@ const MONTHS = [
 // ============================================================================
 
 function formatDateShort(dateStr: string): string {
-  const date = new Date(dateStr + 'T00:00:00');
-  const weekday = WEEKDAYS[date.getDay()];
-  const day = date.getDate();
-  const month = MONTHS[date.getMonth()];
+  const date = parseUTCDate(dateStr);
+  const weekday = WEEKDAYS[date.getUTCDay()];
+  const day = date.getUTCDate();
+  const month = MONTHS[date.getUTCMonth()];
   return `${weekday} ${day} ${month}`;
 }
 
 function formatDateLong(dateStr: string): string {
-  const date = new Date(dateStr + 'T00:00:00');
-  const weekday = WEEKDAYS_FULL[date.getDay()];
-  const day = date.getDate();
-  const month = date.getMonth() + 1;
-  const year = date.getFullYear();
+  const date = parseUTCDate(dateStr);
+  const weekday = WEEKDAYS_FULL[date.getUTCDay()];
+  const day = date.getUTCDate();
+  const month = date.getUTCMonth() + 1;
+  const year = date.getUTCFullYear();
   return `${weekday} ${day}/${month}/${year}`;
 }
 
 function getWeekNumber(dateStr: string): number {
-  const date = new Date(dateStr + 'T00:00:00');
-  const target = new Date(date.valueOf());
-  const dayNr = (target.getDay() + 6) % 7;
-  target.setDate(target.getDate() - dayNr + 3);
-  const firstThursday = target.valueOf();
-  target.setMonth(0, 1);
-  if (target.getDay() !== 4) {
-    target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
-  }
-  return 1 + Math.ceil((firstThursday - target.valueOf()) / 604800000);
+  const date = parseUTCDate(dateStr);
+  const { week } = getUTCWeekNumber(date);
+  return week;
 }
 
 function groupByWeek(data: PDFData): { [weekKey: string]: string[] } {
@@ -120,8 +114,8 @@ function groupByWeek(data: PDFData): { [weekKey: string]: string[] } {
   
   Object.keys(data).sort().forEach(dateStr => {
     const weekNum = getWeekNumber(dateStr);
-    const date = new Date(dateStr + 'T00:00:00');
-    const year = date.getFullYear();
+    const date = parseUTCDate(dateStr);
+    const year = date.getUTCFullYear();
     const weekKey = `${year}-W${String(weekNum).padStart(2, '0')}`;
     
     if (!weeks[weekKey]) weeks[weekKey] = [];
@@ -353,8 +347,15 @@ export function generateServiceAllocationPDF(
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(120, 120, 120);
     const now = new Date();
-    const printTime = `Gegenereerd: ${now.toLocaleDateString('nl-NL')} om ${now.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}`;
-    doc.text(printTime, margin, pageHeight - 6);
+    const printTime = formatUTCDate(now, 'nl-NL', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'UTC'
+    });
+    doc.text(`Gegenereerd: ${printTime}`, margin, pageHeight - 6);
     
     const pageText = `Pagina ${weekIndex + 1} van ${weekKeys.length}`;
     doc.text(pageText, pageWidth / 2, pageHeight - 6, { align: 'center' });

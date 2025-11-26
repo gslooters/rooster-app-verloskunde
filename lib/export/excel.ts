@@ -2,6 +2,7 @@
 
 import * as XLSX from 'xlsx';
 import { ExportRoster, ServiceConfig } from './types';
+import { parseUTCDate, getUTCWeekNumber } from '@/lib/utils/date-utc';
 
 const SERVICES: ServiceConfig[] = [
   { code: 's', label: 'Shift (24u)', color: '#8B5CF6' },
@@ -13,23 +14,18 @@ const SERVICES: ServiceConfig[] = [
 ];
 
 function formatDate(iso: string): string {
-  const date = new Date(iso + 'T00:00:00');
+  const date = parseUTCDate(iso);
   const dayNames = ['ZO', 'MA', 'DI', 'WO', 'DO', 'VR', 'ZA'];
-  const dayShort = dayNames[date.getDay()];
-  const dd = String(date.getDate()).padStart(2, '0');
-  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dayShort = dayNames[date.getUTCDay()];
+  const dd = String(date.getUTCDate()).padStart(2, '0');
+  const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
   return `${dayShort}\n${dd}-${mm}`;
 }
 
 function getWeekNumber(iso: string): number {
-  const date = new Date(iso + 'T00:00:00');
-  const target = new Date(date.valueOf());
-  const dayNr = (date.getDay() + 6) % 7;
-  target.setDate(target.getDate() - dayNr + 3);
-  const firstThursday = new Date(target.getFullYear(), 0, 4);
-  const ftDay = (firstThursday.getDay() + 6) % 7;
-  firstThursday.setDate(firstThursday.getDate() - ftDay + 3);
-  return 1 + Math.round((target.getTime() - firstThursday.getTime()) / (7 * 24 * 3600 * 1000));
+  const date = parseUTCDate(iso);
+  const { week } = getUTCWeekNumber(date);
+  return week;
 }
 
 export function exportToExcel(roster: ExportRoster): void {
@@ -137,7 +133,7 @@ export function exportToCSV(roster: ExportRoster): void {
   
   // Convert to CSV
   const csvContent = data.map(row => 
-    row.map(cell => `"${cell.toString().replace(/"/g, '""')}"`).join(',')
+    row.map(cell => `"${cell.toString().replace(/"/g, '""')}`).join(',')
   ).join('\n');
   
   // Download

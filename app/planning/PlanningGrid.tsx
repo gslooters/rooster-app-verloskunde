@@ -13,23 +13,33 @@ import { prepareRosterForExport, exportToExcel, exportToCSV, exportRosterToPDF, 
 import { getAllServices } from '@/lib/services/diensten-storage';
 import { getServicesForEmployee } from '@/lib/services/medewerker-diensten-storage';
 import { Dienst } from '@/lib/types/dienst';
+import { parseUTCDate, toUTCDateString, addUTCDays, getUTCWeekNumber } from '@/lib/utils/date-utc';
 
-function toDate(iso: string) { return new Date(iso + 'T00:00:00'); }
+function toDate(iso: string) { return parseUTCDate(iso); }
 function addDaysISO(iso: string, n: number) {
-  const d = toDate(iso); d.setDate(d.getDate() + n);
-  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0');
-  return `${y}-${m}-${day}`;
+  const d = parseUTCDate(iso);
+  const result = addUTCDays(d, n);
+  return toUTCDateString(result);
 }
 function formatPeriodDDMM(isoStart: string, daysCount=35){
-  const d0 = toDate(isoStart), de = toDate(addDaysISO(isoStart, daysCount-1));
-  const f = (d: Date) => `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${d.getFullYear()}`;
+  const d0 = parseUTCDate(isoStart);
+  const de = parseUTCDate(addDaysISO(isoStart, daysCount-1));
+  const f = (d: Date) => `${String(d.getUTCDate()).padStart(2,'0')}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${d.getUTCFullYear()}`;
   return `${f(d0)} t/m ${f(de)}`;
 }
-function formatDDMM(iso:string){ const d=toDate(iso); return `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}`; }
-function isoWeekNumber(iso:string){ const d=toDate(iso); const target=new Date(d.valueOf()); const dayNr=(d.getDay()+6)%7; target.setDate(target.getDate()-dayNr+3);
-  const firstThursday=new Date(target.getFullYear(),0,4); const ftDay=(firstThursday.getDay()+6)%7; firstThursday.setDate(firstThursday.getDate()-ftDay+3);
-  return 1+Math.round((target.getTime()-firstThursday.getTime())/(7*24*3600*1000)); }
-function dayShort(iso:string){ const map=['ZO','MA','DI','WO','DO','VR','ZA'] as const; return map[toDate(iso).getDay()]; }
+function formatDDMM(iso:string){ 
+  const d = parseUTCDate(iso); 
+  return `${String(d.getUTCDate()).padStart(2,'0')}-${String(d.getUTCMonth()+1).padStart(2,'0')}`; 
+}
+function isoWeekNumber(iso:string){ 
+  const d = parseUTCDate(iso); 
+  const { week } = getUTCWeekNumber(d);
+  return week;
+}
+function dayShort(iso:string){ 
+  const map=['ZO','MA','DI','WO','DO','VR','ZA'] as const; 
+  return map[parseUTCDate(iso).getUTCDay()]; 
+}
 function isWeekend(iso:string){ const s=dayShort(iso); return s==='ZA'||s==='ZO'; }
 function getFirstName(fullName: string): string { return fullName.split(' ')[0]; }
 type Roster = { id: string; start_date: string; end_date: string; status: 'draft'|'in_progress'|'final'; created_at: string; };
