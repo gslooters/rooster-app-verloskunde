@@ -30,28 +30,22 @@ interface WeekDagdelenClientProps {
 }
 
 /**
- * 🔥 DRAAD45.6 COMPLETE FIX: Conversie functie met ECHTE diensten
+ * 🔥 DRAAD592 FIX: Type compliance - '0' → 'O'
  * 
  * PROBLEEM OPGELOST:
- * - VOOR: Fake dienst met dienstId: 'default-dienst'
- * - NA:   Echte diensten gebaseerd op service_id uit data
+ * - Type Dagdeel = 'O' | 'M' | 'A' (letter O voor Ochtend)
+ * - Code gebruikte '0' (cijfer nul)
  * 
- * DATA PIPELINE:
- * oldData.days[].dagdelen.ochtend[] → heeft NU serviceId!
- * ↓
- * Groepeer per serviceId
- * ↓
- * diensten: [{ dienstId: 'CONS', teams: {...} }, { dienstId: 'POL', teams: {...} }]
- * ↓
- * DagdeelCell krijgt ECHTE dienstId
- * ↓
- * Database matching werkt!
+ * ALLE INSTANTIES GECORRIGEERD:
+ * - dagdeelMap: 'ochtend': 'O'
+ * - createEmptyTeamDagdelenWeek: dagdeel: 'O'
+ * - id strings: ${day.datum}-O-${team}
  */
 function convertToNewStructure(
   oldData: WeekDagdeelData,
   weekBoundary: WeekBoundary
 ): WeekDagdelenData {
-  console.log('🔥 [DRAAD45.6] START conversie met service_id extraction');
+  console.log('🔥 [DRAAD592] START conversie met correcte Dagdeel types');
 
   const context: WeekContext = {
     rosterId: oldData.rosterId,
@@ -79,7 +73,7 @@ function convertToNewStructure(
     });
   });
 
-  console.log('📊 [DRAAD45.6] Service IDs found:', {
+  console.log('📊 [DRAAD592] Service IDs found:', {
     unique: Array.from(uniqueServiceIds),
     count: uniqueServiceIds.size,
     coverage: `${withServiceId}/${totalChecked}`
@@ -89,7 +83,7 @@ function convertToNewStructure(
   const diensten: DienstDagdelenWeek[] = [];
   
   if (uniqueServiceIds.size === 0) {
-    console.error('❌ [DRAAD45.6] NO SERVICE_IDs - using fallback');
+    console.error('❌ [DRAAD592] NO SERVICE_IDs - using fallback');
     diensten.push({
       dienstId: 'FALLBACK',
       dienstCode: 'GEEN_ID',
@@ -118,7 +112,7 @@ function convertToNewStructure(
     });
   }
 
-  console.log(`✅ [DRAAD45.6] ${diensten.length} dienst(en): ${diensten.map(d => d.dienstId).join(', ')}`);
+  console.log(`✅ [DRAAD592] ${diensten.length} dienst(en): ${diensten.map(d => d.dienstId).join(', ')}`);
 
   return {
     context,
@@ -146,7 +140,7 @@ function createTeamDagdelenWeek(
 ): TeamDagdelenWeek {
   const dagen: DagDagdelen[] = days.map(day => {
     const dagdeelMap: Record<string, Dagdeel> = {
-      'ochtend': '0',
+      'ochtend': 'O',
       'middag': 'M',
       'avond': 'A'
     };
@@ -210,7 +204,7 @@ function extractShortDagNaam(fullName: string): string {
 }
 
 /**
- * 🔥 DRAAD45.6 FIX: Helper om leeg TeamDagdelenWeek te maken
+ * 🔥 DRAAD592 FIX: Helper om leeg TeamDagdelenWeek te maken met correcte types
  */
 function createEmptyTeamDagdelenWeek(
   team: TeamDagdeel,
@@ -219,10 +213,10 @@ function createEmptyTeamDagdelenWeek(
   const dagen: DagDagdelen[] = days.map(day => {
     const dagdeelWaarden: { ochtend: DagdeelWaarde; middag: DagdeelWaarde; avond: DagdeelWaarde } = {
       ochtend: {
-        dagdeel: '0',
+        dagdeel: 'O',
         status: 'MAG_NIET',
         aantal: 0,
-        id: `${day.datum}-0-${team}-empty`
+        id: `${day.datum}-O-${team}-empty`
       },
       middag: {
         dagdeel: 'M',
@@ -270,7 +264,7 @@ export default function WeekDagdelenClient({
     try {
       return convertToNewStructure(initialWeekData, weekBoundary);
     } catch (error) {
-      console.error('❌ [DRAAD45.6] Conversion failed:', error);
+      console.error('❌ [DRAAD592] Conversion failed:', error);
       return {
         context: {
           rosterId,
@@ -349,7 +343,7 @@ export default function WeekDagdelenClient({
         {process.env.NODE_ENV === 'development' && (
           <div className="mt-4 p-4 bg-gray-100 rounded-lg">
             <details className="text-xs text-gray-600">
-              <summary className="cursor-pointer font-semibold">🔥 DRAAD45.6 Debug</summary>
+              <summary className="cursor-pointer font-semibold">🔥 DRAAD592 Debug</summary>
               <div className="mt-2 space-y-2">
                 <div className="p-2 bg-white rounded">
                   <p className="font-semibold text-green-700">Diensten: {convertedWeekData.diensten.length}</p>
