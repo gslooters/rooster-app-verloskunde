@@ -146,22 +146,16 @@ export default function WeekTableBody({
         const groupBg = getDienstGroupBg(dienstIndex);
         const isLastDienst = dienstIndex === gesorteerdeDiensten.length - 1;
         
-        // DRAAD40B5: Bepaal welke teams zichtbaar zijn (hebben dagen data)
+        // 🔥 FIX DRAAD61B: match nu direct op teamcode
         const zichtbareTeams = TEAM_ORDER.filter(teamCode => {
-          const teamData = dienst.teams[
-            teamCode === 'GRO' ? 'groen' : 
-            teamCode === 'ORA' ? 'oranje' : 
-            'totaal'
-          ];
-          return teamData.dagen.length > 0;
+          const teamData = dienst.teams[teamCode];
+          return teamData && teamData.dagen && teamData.dagen.length > 0;
         });
         
-        // Als geen enkel team zichtbaar is, skip deze dienst
         if (zichtbareTeams.length === 0) {
           return null;
         }
         
-        // Bereken rowspan voor dienst kolom (aantal zichtbare teams)
         const dienstRowSpan = zichtbareTeams.length;
         
         return (
@@ -169,11 +163,7 @@ export default function WeekTableBody({
             {zichtbareTeams.map((teamCode, visibleTeamIndex) => {
               const isFirstRow = visibleTeamIndex === 0;
               const isLastRow = visibleTeamIndex === zichtbareTeams.length - 1;
-              const teamData = dienst.teams[
-                teamCode === 'GRO' ? 'groen' : 
-                teamCode === 'ORA' ? 'oranje' : 
-                'totaal'
-              ];
+              const teamData = dienst.teams[teamCode];
               
               return (
                 <tr
@@ -185,12 +175,6 @@ export default function WeekTableBody({
                     ${isLastDienst && isLastRow ? 'border-b-2 border-gray-400' : ''}`
                   }
                 >
-                  {/* DRAAD40B5/40C: Kolom 1 - Dienst (CODE + NAAM)
-                      - Frozen left
-                      - Rowspan = aantal zichtbare teams
-                      - Code + Naam op aparte regels
-                      - BoxShadow voor visuele scheiding
-                   */}
                   {isFirstRow && (
                     <td
                       rowSpan={dienstRowSpan}
@@ -217,11 +201,6 @@ export default function WeekTableBody({
                     </td>
                   )}
 
-                  {/* DRAAD40B5/40C: Kolom 2 - Team badge (frozen left) 
-                      - Compacter, kleinere badge
-                      - Elke rij heeft eigen team
-                      - BoxShadow voor visuele scheiding
-                   */}
                   <td
                     className="
                       sticky left-[140px] z-10
@@ -238,10 +217,8 @@ export default function WeekTableBody({
                     <TeamBadge team={teamCode} />
                   </td>
 
-                  {/* Kolom 3-23: Dagdeel cellen (21 cellen: 7 dagen x 3 dagdelen) */}
                   {teamData.dagen.map((dag) => (
                     <React.Fragment key={`${dienst.dienstId}-${teamCode}-${dag.datum}`}>
-                      {/* 🔥 DRAAD44: Ochtend - Toegevoegd rosterId, dienstId, dagdeelType */}
                       <DagdeelCell
                         rosterId={rosterId}
                         dienstId={dienst.dienstId}
@@ -255,7 +232,6 @@ export default function WeekTableBody({
                         onUpdate={createUpdateHandler(dag.dagdeelWaarden.ochtend.id)}
                         disabled={disabled}
                       />
-                      {/* 🔥 DRAAD44: Middag - Toegevoegd rosterId, dienstId, dagdeelType */}
                       <DagdeelCell
                         rosterId={rosterId}
                         dienstId={dienst.dienstId}
@@ -269,7 +245,6 @@ export default function WeekTableBody({
                         onUpdate={createUpdateHandler(dag.dagdeelWaarden.middag.id)}
                         disabled={disabled}
                       />
-                      {/* 🔥 DRAAD44: Avond - Toegevoegd rosterId, dienstId, dagdeelType */}
                       <DagdeelCell
                         rosterId={rosterId}
                         dienstId={dienst.dienstId}
@@ -293,4 +268,9 @@ export default function WeekTableBody({
       })}
     </tbody>
   );
+}
+
+// Cache busting + railway dummy trigger
+if (typeof window !== 'undefined') {
+  window.__DRAAD61B_BUSTRIGGER = Date.now();
 }

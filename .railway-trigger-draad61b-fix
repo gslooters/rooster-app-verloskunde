@@ -1,0 +1,2 @@
+// Railway cache-busting trigger voor DRAAD61B fix
+export const cacheBuster = Date.now() + '-' + Math.random();
