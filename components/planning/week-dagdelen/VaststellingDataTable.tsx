@@ -46,21 +46,22 @@ const DAGDEEL_ICONS = {
 };
 
 /**
- * 🔥 DRAAD45.8: TYPESCRIPT TYPE FIX
+ * 🔥 DRAAD59.1: DAGDEEL MAPPING FIX
  * 
  * ROOT CAUSE:
- * - TypeScript type check faalt: team === 'Tot' (mixed case)
- * - Type definitie: Team = 'Groen' | 'Oranje' | 'TOT' (uppercase TOT)
- * - Result: "types have no overlap" compile error
+ * - Database gebruikt nu 'O' (hoofdletter) voor Ochtend
+ * - Oude mapping: 'O' (UI) → '0' (cijfer, database)
+ * - Nieuwe situatie: Geen mapping nodig, 'O' blijft 'O'
  * 
  * FIX:
- * - Verwijder onnodige team mapping (team is al correct type)
- * - Mapping dagdeel blijft: 'O' (letter) → '0' (cijfer)
- * - Gebruik service_id voor lookup (was service_type_id)
+ * - Verwijder mapping: dagdeel === 'O' ? '0' : dagdeel
+ * - Gebruik dagdeel direct zonder conversie
+ * - Database en UI gebruiken nu beide 'O' (hoofdletter)
  * 
  * VERIFICATIE:
  * - TypeScript compile succesvol
  * - Correcte data matching in UI
+ * - Database queries vinden 'O' records
  */
 export default function VaststellingDataTable({
   serviceTypes,
@@ -78,7 +79,7 @@ export default function VaststellingDataTable({
 
   // Debug: Log initial data structure
   useMemo(() => {
-    console.log('🔍 [DRAAD45.8] Initial staffing data sample:', {
+    console.log('🔍 [DRAAD59.1] Initial staffing data sample:', {
       totalRecords: initialStaffingData.length,
       sample: initialStaffingData[0],
       hasDateProperty: initialStaffingData[0]?.hasOwnProperty('date'),
@@ -187,25 +188,24 @@ export default function VaststellingDataTable({
     });
   }, [weekStart, weekEnd]);
 
-  // 🔥 DRAAD45.8 FIX: Correcte dagdeel mapping zonder TypeScript errors
+  // 🔥 DRAAD59.1 FIX: Gebruik dagdeel direct zonder '0' mapping
   function findDagdeelData(
     serviceTypeId: string,
     datum: string,
     team: Team,
     dagdeel: Dagdeel
   ): StaffingDagdeel | undefined {
-    // Mapping dagdeel: verander 'O' (letter) → '0' (cijfer) voor ochtend
-    const dagdeelMatch = dagdeel === 'O' ? '0' : dagdeel;
-    
-    // Team mapping niet nodig: type is al correct (Team = 'Groen' | 'Oranje' | 'TOT')
-    // Database verwacht ook exact deze waarden
+    // DRAAD59.1: Geen mapping meer nodig!
+    // Database gebruikt nu 'O' (hoofdletter) direct
+    // Oude situatie: 'O' → '0' (cijfer)
+    // Nieuwe situatie: 'O' → 'O' (geen conversie)
     
     return data.find(
       item =>
         item.service_id === serviceTypeId &&
         item.date === datum &&
         item.team === team &&
-        item.dagdeel === dagdeelMatch
+        item.dagdeel === dagdeel
     );
   }
 
