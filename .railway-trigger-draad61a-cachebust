@@ -1,0 +1,6 @@
+// DRAAD61A Railway Trigger for Cache-Busting
+// Trigger automatisch via unieke bestand update (Date.now())
+
+module.exports = {
+  trigger: 'draad61a-fix-' + Date.now(),
+};
