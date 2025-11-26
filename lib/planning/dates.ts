@@ -1,15 +1,22 @@
-import { addDays, format, isMonday, parseISO } from 'date-fns';
+import { parseUTCDate, toUTCDateString, addUTCDays, formatUTCDate } from '@/lib/utils/date-utc';
 
 export function ensureMondayYYYYMMDD(input: string) {
-  const d = parseISO(input);
-  if (!isMonday(d)) throw new Error('Startdatum moet een maandag zijn.');
+  const d = parseUTCDate(input);
+  if (d.getUTCDay() !== 1) throw new Error('Startdatum moet een maandag zijn.');
   return input;
 }
 
 export function addDaysYYYYMMDD(input: string, days: number) {
-  return format(addDays(parseISO(input), days), 'yyyy-MM-dd');
+  const date = parseUTCDate(input);
+  const result = addUTCDays(date, days);
+  return toUTCDateString(result);
 }
 
 export function displayDate(input: string) {
-  return format(parseISO(input), 'dd-MM-yyyy');
+  const date = parseUTCDate(input);
+  return formatUTCDate(date, 'nl-NL', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  }).replace(/\s/g, '-'); // Format: dd-MM-yyyy
 }
