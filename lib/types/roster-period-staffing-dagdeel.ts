@@ -6,11 +6,11 @@
 
 /**
  * Dagdeel codes
- * 0 = Ochtend
+ * O = Ochtend
  * M = Middag  
  * A = Avond
  */
-export type Dagdeel = '0' | 'M' | 'A';
+export type Dagdeel = 'O' | 'M' | 'A';
 
 /**
  * Team codes
@@ -63,7 +63,7 @@ export interface UpdateDagdeelRegel {
  * Mapping van DagblokCode (uit service.ts) naar Dagdeel
  */
 export const DAGBLOK_NAAR_DAGDEEL: Record<'O' | 'M' | 'A', Dagdeel> = {
-  O: '0',
+  O: 'O',
   M: 'M',
   A: 'A'
 };
@@ -72,7 +72,7 @@ export const DAGBLOK_NAAR_DAGDEEL: Record<'O' | 'M' | 'A', Dagdeel> = {
  * Mapping van Dagdeel naar DagblokCode
  */
 export const DAGDEEL_NAAR_DAGBLOK: Record<Dagdeel, 'O' | 'M' | 'A'> = {
-  '0': 'O',
+  'O': 'O',
   'M': 'M',
   'A': 'A'
 };
@@ -108,7 +108,7 @@ export const DAGBLOK_STATUS_NAAR_DAGDEEL_STATUS: Record<string, DagdeelStatus> =
  * Labels voor UI
  */
 export const DAGDEEL_LABELS: Record<Dagdeel, string> = {
-  '0': 'Ochtend',
+  'O': 'Ochtend',
   'M': 'Middag',
   'A': 'Avond'
 };
@@ -159,7 +159,7 @@ export const DEFAULT_AANTAL_PER_STATUS: Record<Exclude<DagdeelStatus, 'AANGEPAST
  * Validatie functies
  */
 export function isValidDagdeel(value: unknown): value is Dagdeel {
-  return value === '0' || value === 'M' || value === 'A';
+  return value === 'O' || value === 'M' || value === 'A';
 }
 
 export function isValidTeamDagdeel(value: unknown): value is TeamDagdeel {
