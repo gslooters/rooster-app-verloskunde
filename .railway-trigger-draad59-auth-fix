@@ -1,0 +1,13 @@
+DRAAD59 - Deployment trigger timestamp: 2025-11-26T20:05:45+01:00
+
+FIX: 401 Unauthorized voor dagdelen updates
+- Auth check verwijderd uit PUT endpoint
+- Page-level auth is voldoende
+- Groen/Oranje cellen nu bewerkbaar
+
+TEST NA DEPLOY:
+1. Navigate naar week-dagdelen view
+2. Klik op Groen cel → wijzig aantal → save
+3. Klik op Oranje cel → wijzig aantal → save
+4. Console: geen 401 errors meer
+5. Database: updates worden opgeslagen
