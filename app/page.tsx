@@ -4,22 +4,34 @@ import React, { useState, useEffect } from "react";
 import Image from "next/image";
 
 export default function HomePage() {
-  // 🔥 FIX: Client-only date rendering (prevent hydration mismatch)
+  // 🔧 DRAAD56: Herstel build timestamp - haal op van /api/version
   const [buildInfo, setBuildInfo] = useState('laden...');
   
   useEffect(() => {
-    // Safe: Dit draait alleen client-side
-    const now = new Date();
-    const datum = now.toLocaleDateString('nl-NL', { 
-      day: '2-digit', 
-      month: '2-digit', 
-      year: 'numeric' 
-    });
-    const tijd = now.toLocaleTimeString('nl-NL', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
-    setBuildInfo(`build ${datum} ${tijd}`);
+    // Fetch build info van version endpoint
+    fetch('/api/version', { cache: 'no-store' })
+      .then(res => res.json())
+      .then(data => {
+        // Parse ISO timestamp naar Nederlands formaat
+        const buildDate = new Date(data.buildTime);
+        const datum = buildDate.toLocaleDateString('nl-NL', { 
+          day: '2-digit', 
+          month: '2-digit', 
+          year: 'numeric' 
+        });
+        const tijd = buildDate.toLocaleTimeString('nl-NL', { 
+          hour: '2-digit', 
+          minute: '2-digit' 
+        });
+        
+        // Toon: build 26-11-2025 11:09 (3f35c31)
+        const shortCommit = data.shortCommit || 'unknown';
+        setBuildInfo(`build ${datum} ${tijd} (${shortCommit})`);
+      })
+      .catch(error => {
+        console.error('⚠️ DRAAD56: Kon build info niet ophalen:', error);
+        setBuildInfo('build datum onbekend');
+      });
   }, []);
   
   return (
