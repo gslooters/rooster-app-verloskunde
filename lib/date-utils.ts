@@ -1,14 +1,19 @@
 import { format } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { nl } from 'date-fns/locale';
+import { 
+  parseUTCDate as parseUTCDateCore,
+  formatUTCDate 
+} from '@/lib/utils/date-utc';
 
 /**
- * 🌍 DRAAD1F: TIMEZONE-VEILIGE DATUM UTILITIES
+ * 🌍 DRAAD1F + DRAAD57: TIMEZONE-VEILIGE DATUM UTILITIES
  * 
  * Deze functies forceren UTC timezone voor alle datum formatting,
  * waardoor browser locale timezone genegeerd wordt.
  * 
- * Gebruik ALTIJD deze functies i.p.v. directe format() calls!
+ * DRAAD57: Migratie naar centrale date-utc.ts utilities
+ * Core functies zijn nu gedelegeerd naar @/lib/utils/date-utc
  */
 
 const UTC_TIMEZONE = 'UTC';
@@ -16,13 +21,11 @@ const UTC_TIMEZONE = 'UTC';
 /**
  * Parse datum string naar UTC Date object
  * Voorkomt locale timezone conversie
+ * 
+ * @deprecated Use parseUTCDate from @/lib/utils/date-utc instead
  */
 export function parseUTCDate(dateStr: string): Date {
-  // Verwijder tijd component als aanwezig
-  const dateOnly = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
-  
-  // Forceer UTC midnight
-  return new Date(dateOnly + 'T00:00:00.000Z');
+  return parseUTCDateCore(dateStr);
 }
 
 /**

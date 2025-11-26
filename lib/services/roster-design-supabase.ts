@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import type { RosterDesignData, RosterEmployee, RosterStatus } from '@/lib/types/roster';
+import { parseUTCDate, toUTCDateString } from '@/lib/utils/date-utc';
 
 // Database row structure (EXACT match met Supabase tabel)
 export interface RosterDesignRow {
@@ -21,6 +22,8 @@ export interface RosterDesignWithPeriod extends RosterDesignRow {
 }
 
 // Convert database row naar app data model
+// DRAAD57: Dates uit database worden als strings opgeslagen (YYYY-MM-DD)
+// Als je Date objects nodig hebt in de app, gebruik parseUTCDate()
 function rowToDesignData(row: RosterDesignWithPeriod): RosterDesignData {
   const designData: RosterDesignData & { start_date?: string; end_date?: string } = {
     rosterId: row.roster_id,
@@ -32,6 +35,8 @@ function rowToDesignData(row: RosterDesignWithPeriod): RosterDesignData {
   };
   
   // Voeg start_date en end_date toe uit roosters tabel
+  // Deze zijn al in YYYY-MM-DD formaat (database constraint)
+  // Als conversie naar Date nodig is: parseUTCDate(row.roosters.start_date)
   if (row.roosters) {
     designData.start_date = row.roosters.start_date;
     designData.end_date = row.roosters.end_date;
@@ -41,6 +46,7 @@ function rowToDesignData(row: RosterDesignWithPeriod): RosterDesignData {
 }
 
 // Convert app data model naar database row
+// DRAAD57: Als input Date objects zijn, converteer naar YYYY-MM-DD met toUTCDateString()
 function designDataToRow(data: RosterDesignData): Partial<RosterDesignRow> {
   return {
     roster_id: data.rosterId,

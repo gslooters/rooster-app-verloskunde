@@ -4,6 +4,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { ExportRoster, ExportEmployee } from './types';
 import { isAvailable } from '@/app/planning/libAliases';
+import { parseUTCDate, getUTCWeekNumber } from '@/lib/utils/date-utc';
 
 const COLORS = {
   text: [33, 37, 41] as [number, number, number],
@@ -13,22 +14,17 @@ const COLORS = {
 };
 
 function dayParts(iso: string) {
-  const d = new Date(iso + 'T00:00:00');
+  const d = parseUTCDate(iso);
   const map = ['zo','ma','di','wo','do','vr','za'] as const;
-  const dd = String(d.getDate()).padStart(2,'0');
-  const mm = String(d.getMonth()+1).padStart(2,'0');
-  return { dow: map[d.getDay()], dd, mm };
+  const dd = String(d.getUTCDate()).padStart(2,'0');
+  const mm = String(d.getUTCMonth()+1).padStart(2,'0');
+  return { dow: map[d.getUTCDay()], dd, mm };
 }
 
 function getWeekNumber(iso: string): number {
-  const date = new Date(iso + 'T00:00:00');
-  const target = new Date(date.valueOf());
-  const dayNr = (date.getDay() + 6) % 7;
-  target.setDate(target.getDate() - dayNr + 3);
-  const firstThursday = new Date(target.getFullYear(), 0, 4);
-  const ftDay = (firstThursday.getDay() + 6) % 7;
-  firstThursday.setDate(firstThursday.getDate() - ftDay + 3);
-  return 1 + Math.round((target.getTime() - firstThursday.getTime()) / (7 * 24 * 3600 * 1000));
+  const date = parseUTCDate(iso);
+  const { week } = getUTCWeekNumber(date);
+  return week;
 }
 
 function drawNBCell(doc: jsPDF, x: number, y: number, w: number, h: number) {

@@ -6,6 +6,7 @@ import {
   getRosterByDateRange,
   deleteRooster,
 } from '@/lib/services/roosters-supabase';
+import { parseUTCDate, toUTCDateString, addUTCDays, getUTCWeekNumber } from '@/lib/utils/date-utc';
 
 export type Roster = {
   id: string;
@@ -136,62 +137,38 @@ export function generateFiveWeekPeriods(
   limit = 20
 ): { start: string; end: string }[] {
   const res: { start: string; end: string }[] = [];
-  let cursor = new Date(`${BASE_START}T00:00:00`); // Maandag 24-11-2025
+  let cursor = parseUTCDate(BASE_START); // UTC: Maandag 24-11-2025
 
   for (let i = 0; i < limit; i++) {
     const start = new Date(cursor);
-    const end = new Date(start);
-    end.setDate(start.getDate() + 34); // eindigt op zondag
+    const end = addUTCDays(start, 34); // eindigt op zondag
 
     res.push({
-      start: start.toISOString().split('T')[0],
-      end: end.toISOString().split('T')[0],
+      start: toUTCDateString(start),
+      end: toUTCDateString(end),
     });
 
-    cursor.setDate(cursor.getDate() + 35); // volgende maandag
+    cursor = addUTCDays(cursor, 35); // volgende maandag
   }
 
   return res;
 }
 
 /**
- * ISO 8601 weeknummer berekening (Nederland standaard)
- * Week 1 = week met eerste donderdag van het jaar (bevat 4 januari)
- * Weken lopen maandag t/m zondag
- */
-function getISOWeek(date: Date): number {
-  // Maak kopie om originele datum niet te wijzigen
-  const dt = new Date(
-    Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())
-  );
-
-  // Zoek dichtstbijzijnde donderdag: huidige datum + 4 - huidige dagnummer
-  // (zondag=0, maandag=1, ..., zaterdag=6)
-  const dayNum = dt.getUTCDay() || 7; // zondag=7 voor berekening
-  dt.setUTCDate(dt.getUTCDate() + 4 - dayNum);
-
-  // Eerste dag van het jaar waarin deze donderdag valt
-  const yearStart = new Date(Date.UTC(dt.getUTCFullYear(), 0, 1));
-
-  // Bereken aantal volledige weken tot de donderdag + week 1
-  return Math.ceil((((dt.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
-}
-
-/**
  * Format een datum range als week range (bijv. "Week 48-52, 2025")
  */
 export function formatWeekRange(startDate: string, endDate: string): string {
-  const s = new Date(`${startDate}T00:00:00`);
-  const e = new Date(`${endDate}T00:00:00`);
-  const sw = getISOWeek(s);
-  const ew = getISOWeek(e);
+  const s = parseUTCDate(startDate);
+  const e = parseUTCDate(endDate);
+  const { week: sw, year: sy } = getUTCWeekNumber(s);
+  const { week: ew, year: ey } = getUTCWeekNumber(e);
 
   // Bij jaarovergangen, gebruik het jaar van het begin van de periode
-  const year = s.getFullYear();
+  const year = sy;
 
   // Speciale behandeling bij jaar overgang (bijv. Week 1 van 2026 die in dec 2025 begint)
-  if (sw === 1 && s.getFullYear() < e.getFullYear()) {
-    return `Week ${sw}-${ew}, ${e.getFullYear()}`; // Gebruik het nieuwe jaar
+  if (sw === 1 && sy < ey) {
+    return `Week ${sw}-${ew}, ${ey}`; // Gebruik het nieuwe jaar
   }
 
   return `Week ${sw}-${ew}, ${year}`;
@@ -201,13 +178,18 @@ export function formatWeekRange(startDate: string, endDate: string): string {
  * Format een datum range in Nederlands formaat (bijv. "24 nov - 28 dec 2025")
  */
 export function formatDateRangeNl(startDate: string, endDate: string): string {
-  const s = new Date(`${startDate}T00:00:00`);
-  const e = new Date(`${endDate}T00:00:00`);
-  const fmt = new Intl.DateTimeFormat('nl-NL', { day: '2-digit', month: 'short' });
+  const s = parseUTCDate(startDate);
+  const e = parseUTCDate(endDate);
+  const fmt = new Intl.DateTimeFormat('nl-NL', { 
+    day: '2-digit', 
+    month: 'short',
+    timeZone: 'UTC'
+  });
   const fmtY = new Intl.DateTimeFormat('nl-NL', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
+    timeZone: 'UTC'
   });
   return `${fmt.format(s)} - ${fmtY.format(e)}`;
 }
@@ -216,8 +198,8 @@ export function formatDateRangeNl(startDate: string, endDate: string): string {
  * Valideer of een datum een maandag is
  */
 export function validateStartMonday(dateStr: string): boolean {
-  const date = new Date(`${dateStr}T00:00:00`);
-  return date.getDay() === 1;
+  const date = parseUTCDate(dateStr);
+  return date.getUTCDay() === 1;
 }
 
 /**
@@ -242,8 +224,7 @@ export async function computeDefaultStart(): Promise<string> {
  * Bereken eind datum op basis van start datum (5 weken = 35 dagen, eindigt op zondag)
  */
 export function computeEnd(startDate: string): string {
-  const start = new Date(`${startDate}T00:00:00`);
-  const end = new Date(start);
-  end.setDate(start.getDate() + 34);
-  return end.toISOString().split('T')[0];
+  const start = parseUTCDate(startDate);
+  const end = addUTCDays(start, 34);
+  return toUTCDateString(end);
 }
