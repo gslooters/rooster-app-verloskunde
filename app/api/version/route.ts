@@ -24,7 +24,7 @@ import { NextResponse } from 'next/server';
  *   "nodeVersion": "20.x",
  *   "nextVersion": "14.x",
  *   "platform": "railway",
- *   "expectedCommit": "1c8843f0" // Laatste bekende commit
+ *   "expectedCommit": "44044047" // Laatste bekende commit
  * }
  */
 
@@ -34,7 +34,7 @@ export const runtime = 'nodejs';
 
 // Build-time constanten
 const BUILD_TIME = new Date().toISOString();
-const EXPECTED_COMMIT = '1c8843f0'; // DRAAD56: Build timestamp fix
+const EXPECTED_COMMIT = '44044047'; // DRAAD56: Final deployment met rapport
 
 export async function GET() {
   try {
