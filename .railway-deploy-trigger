@@ -1,53 +1,54 @@
-# Railway Deployment Trigger
-# Timestamp: 2025-11-24T17:14:51.847Z
-# Deployment: DRAAD49
-# Random: k9j4m2p8n7
+# Railway Deploy Trigger - DRAAD63B
 
-## CRITICAL FIXES APPLIED:
+Timestamp: 2025-11-27T16:29:00Z
+DRAAD: 63B - CACHE BUG FIX
+Reason: Force clean rebuild door cached TypeScript error
+Random trigger: 7819
 
-### 1. 🔒 middleware.ts TOEGEVOEGD (KRITIEK!)
-- Supabase auth vereist middleware.ts voor token refresh
-- Protected routes werken nu correct
-- Session management gefixed
+## PROBLEEM:
 
-### 2. 📦 package.json GEOPTIMALISEERD
-- Build script: removed --no-lint (kan build blokkeren)
-- Node version: exact "20.x" voor Railway
-- postinstall debug toegevoegd
+Railway build gebruikt OUDE cache met foutieve code:
+```
+Property 'dienstCode' does not exist on type 'DagdeelAssignment'
+```
 
-### 3. 🔧 scripts/postbuild.js VERSTERKT
-- Comprehensive error handling
-- Detailed logging voor debugging
-- Verification steps voor standalone build
-- Railway-compatible exit codes
+MAAR: Deze code bestaat NIET MEER in de huidige versie!
 
-### 4. ⚡ DEPLOYMENT STRATEGY
-- Cache-busting via timestamp + random
-- next.config.js al geoptimaliseerd met:
-  * generateBuildId met millisecond precision
-  * Webpack cache disabled in production
-  * ISR memory cache size = 0
+## OPLOSSING:
 
-## VERWACHTE RESULTATEN:
+1. WeekDagdelenClient.tsx is AL CORRECT:
+   - Regel 128-130: Gebruikt alleen serviceId
+   - Geen assignment.dienstCode meer
+   - Geen assignment.dienstNaam meer
+   - Alleen: serviceId + getDienstNaam() mapping
 
-✅ Build succesvol completeert
-✅ Middleware handelt auth correct af
-✅ Static assets worden gekopieerd
-✅ Server start op 0.0.0.0 (Railway requirement)
-✅ Health check bereikbaar op /api/health
+2. Force CLEAN rebuild zonder cache
 
-## RAILWAY ENVIRONMENT VARIABELEN CHECK:
+3. DagdeelAssignment type heeft:
+   - team: string ✅
+   - aantal: number ✅
+   - status: string ✅
+   - serviceId?: string ✅
+   - GEEN dienstCode ❌
+   - GEEN dienstNaam ❌
 
-🔑 VERPLICHT ingesteld in Railway dashboard:
-- NEXT_PUBLIC_SUPABASE_URL
-- NEXT_PUBLIC_SUPABASE_ANON_KEY
+## COMMITS AL GEDAAN:
 
-Zonder deze variabelen faalt de app bij runtime!
+- 74b0eda: TypeScript fix applied
+- f1136c8: Cache bust attempt 1
+- b8c3a1d: Cache bust attempt 2
+- ef22a62: Cache bust attempt 3
 
-## VOLGENDE DEPLOYMENT:
+## DEZE TRIGGER:
 
-Railway detecteert deze commit automatisch en start nieuwe build.
-Monitor logs voor:
-1. "Node version: v20.x.x"
-2. "[POSTBUILD] Post-build operations completed successfully!"
-3. "Server listening on 0.0.0.0:3000"
+Dummy file update om Railway te forceren:
+- Nieuwe SHA
+- Nieuwe timestamp
+- MOET clean rebuild doen
+- GEEN cached node_modules/TypeScript cache gebruiken
+
+## VERWACHT RESULTAAT:
+
+✅ Build succeeds without TypeScript errors
+✅ Code compileert correct (want code is al correct)
+✅ Deployment slaagt
