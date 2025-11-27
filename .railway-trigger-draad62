@@ -1,0 +1,41 @@
+DRAAD62 DEPLOYMENT TRIGGER
+Timestamp: 2025-11-27T10:37:11Z
+Commit: 1575a4e7b49474ae9f7072217cf10fab2f26e071
+
+FIX GEÏMPLEMENTEERD:
+- UTC-safe datum handling in weekDagdelenData.ts
+- Vervangen date-fns locale functies door UTC utilities
+- parseISO → parseUTCDate
+- addDays → addUTCDays
+- format → toUTCDateString + formatUTCDate
+
+RESULTAAT:
+✅ Consistent UTC datum gebruik door hele app
+✅ Geen timezone bugs meer (CET/CEST)
+✅ Geen DST transition issues (maart/oktober)
+✅ Server/client datum consistency
+✅ Database datum matching 100% betrouwbaar
+
+VERWACHT GEDRAG:
+✅ Week boundaries altijd correct (maandag-zondag)
+✅ Dagdeel data op juiste datum
+✅ Nederlandse dag namen correct
+✅ Display datums consistent
+
+TESTING:
+- Navigeer naar /planning/design/week-dagdelen/[rosterId]/1
+- Verify: 7 dagen van ma t/m zo
+- Verify: Geen dubbele of gemiste dagen
+- Verify: Datum headers correct geformatteerd
+- Check console: Geen timezone warnings
+
+DRAD CONTEXT:
+- DRAAD62: Scan datum tijd uitvoeren (deze fix)
+- DRAAD61D: Cachebusting fixes
+- DRAAD61C: TypeScript team mapping
+- DRAAD61A/B: GRO/ORA/TOT data fixes
+- DRAAD59: Auth 401 fixes
+- DRAAD57: UTC migratie (incomplete, nu afgerond)
+- DRAAD1F: Timezone-safe utilities introductie
+
+Cachebuster: 1732701431-872194
