@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import type { RosterDesignData, RosterEmployee, RosterStatus } from '@/lib/types/roster';
 import { parseUTCDate, toUTCDateString } from '@/lib/utils/date-utc';
+import { copyEmployeeServicesToRoster } from './roster-employee-services';
 
 // Database row structure (EXACT match met Supabase tabel)
 export interface RosterDesignRow {
@@ -117,6 +118,38 @@ export async function createRosterDesign(data: Omit<RosterDesignData, 'created_a
     }
     
     console.log('✅ Roster design succesvol aangemaakt:', result);
+    
+    // DRAAD66A: Kopieer employee_services naar roster_employee_services
+    // Dit maakt een snapshot van welke diensten medewerkers kunnen uitvoeren
+    try {
+      console.log('🔄 [createRosterDesign] Start kopiëren employee services...');
+      
+      // Extract employee IDs uit de employee_snapshot
+      const employeeIds = data.employees
+        .filter(emp => emp.isSnapshotActive) // Alleen actieve medewerkers
+        .map(emp => emp.originalEmployeeId); // Gebruik originele employee ID
+      
+      if (employeeIds.length === 0) {
+        console.warn('⚠️ [createRosterDesign] Geen actieve medewerkers in snapshot');
+      } else {
+        const copiedCount = await copyEmployeeServicesToRoster(
+          data.rosterId,
+          employeeIds
+        );
+        
+        console.log(`✅ [createRosterDesign] ${copiedCount} employee services gekopieerd naar roster`);
+      }
+    } catch (serviceError) {
+      // Log de fout maar laat createRosterDesign niet falen
+      // De roster_design is al succesvol aangemaakt
+      console.error('❌ [createRosterDesign] Fout bij kopiëren employee services:', serviceError);
+      console.error('⚠️ [createRosterDesign] Roster design is aangemaakt, maar employee services snapshot is NIET gelukt');
+      console.error('⚠️ [createRosterDesign] Dit kan problemen veroorzaken bij planning. Controleer roster_employee_services tabel.');
+      
+      // TODO: In toekomstige versie kunnen we overwegen om de roster_design te verwijderen
+      // en de hele transactie te rollbacken. Voor nu loggen we alleen de fout.
+    }
+    
     return rowToDesignData(result as RosterDesignWithPeriod);
   } catch (error) {
     console.error('❌ createRosterDesign failed:', error);
