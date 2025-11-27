@@ -1,0 +1,209 @@
+import { createClient } from '@supabase/supabase-js';
+import { NextRequest, NextResponse } from 'next/server';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+/**
+ * GET /api/diensten-aanpassen?rosterId=xxx
+ * 
+ * Haalt alle data op voor het diensten-toewijzing scherm:
+ * - Roster info (periode, weken)
+ * - Alle actieve dienst-types met kleuren
+ * - Alle actieve medewerkers met hun dienst-toewijzingen
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const rosterId = searchParams.get('rosterId');
+
+    if (!rosterId) {
+      return NextResponse.json(
+        { error: 'rosterId parameter is verplicht' },
+        { status: 400 }
+      );
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // 1. Haal roster info op
+    const { data: roster, error: rosterError } = await supabase
+      .from('roosters')
+      .select('id, start_datum, eind_datum, start_weeknummer, eind_weeknummer')
+      .eq('id', rosterId)
+      .single();
+
+    if (rosterError || !roster) {
+      return NextResponse.json(
+        { error: 'Rooster niet gevonden' },
+        { status: 404 }
+      );
+    }
+
+    // 2. Haal alle actieve dienst-types op (gesorteerd op code)
+    const { data: serviceTypes, error: serviceTypesError } = await supabase
+      .from('service_types')
+      .select('id, code, naam, kleur')
+      .eq('actief', true)
+      .order('code');
+
+    if (serviceTypesError) {
+      return NextResponse.json(
+        { error: 'Fout bij ophalen dienst-types' },
+        { status: 500 }
+      );
+    }
+
+    // 3. Haal alle actieve medewerkers op
+    const { data: employees, error: employeesError } = await supabase
+      .from('employees')
+      .select('id, voornaam, achternaam, team')
+      .eq('actief', true)
+      .order('team')
+      .order('achternaam')
+      .order('voornaam');
+
+    if (employeesError) {
+      return NextResponse.json(
+        { error: 'Fout bij ophalen medewerkers' },
+        { status: 500 }
+      );
+    }
+
+    // 4. Haal bestaande dienst-toewijzingen op voor dit rooster
+    const { data: existingServices, error: existingServicesError } = await supabase
+      .from('roster_employee_services')
+      .select('employee_id, service_id, aantal, actief')
+      .eq('roster_id', rosterId)
+      .eq('actief', true);
+
+    if (existingServicesError) {
+      return NextResponse.json(
+        { error: 'Fout bij ophalen dienst-toewijzingen' },
+        { status: 500 }
+      );
+    }
+
+    // 5. Maak lookup map voor snelle toegang
+    const servicesMap = new Map<string, { aantal: number; actief: boolean }>();
+    existingServices?.forEach(service => {
+      const key = `${service.employee_id}_${service.service_id}`;
+      servicesMap.set(key, {
+        aantal: service.aantal,
+        actief: service.actief
+      });
+    });
+
+    // 6. Bouw response met alle diensten per medewerker
+    const employeesWithServices = employees?.map(employee => {
+      const services = serviceTypes?.map(serviceType => {
+        const key = `${employee.id}_${serviceType.id}`;
+        const existing = servicesMap.get(key);
+
+        return {
+          serviceId: serviceType.id,
+          code: serviceType.code,
+          aantal: existing?.aantal || 0,
+          actief: existing?.actief || false
+        };
+      }) || [];
+
+      return {
+        id: employee.id,
+        voornaam: employee.voornaam,
+        achternaam: employee.achternaam,
+        team: employee.team,
+        services
+      };
+    }) || [];
+
+    // 7. Retourneer complete dataset
+    return NextResponse.json({
+      roster: {
+        id: roster.id,
+        startDate: roster.start_datum,
+        endDate: roster.eind_datum,
+        startWeek: roster.start_weeknummer,
+        endWeek: roster.eind_weeknummer
+      },
+      serviceTypes: serviceTypes?.map(st => ({
+        id: st.id,
+        code: st.code,
+        naam: st.naam,
+        kleur: st.kleur
+      })) || [],
+      employees: employeesWithServices
+    });
+
+  } catch (error) {
+    console.error('Error in GET /api/diensten-aanpassen:', error);
+    return NextResponse.json(
+      { error: 'Interne serverfout' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * PUT /api/diensten-aanpassen
+ * 
+ * Update een enkele dienst-toewijzing voor een medewerker.
+ * Gebruikt upsert pattern: insert or update.
+ */
+export async function PUT(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { rosterId, employeeId, serviceId, aantal, actief } = body;
+
+    // Valideer verplichte velden
+    if (!rosterId || !employeeId || !serviceId || typeof aantal !== 'number' || typeof actief !== 'boolean') {
+      return NextResponse.json(
+        { error: 'Ongeldige request body. Verplicht: rosterId, employeeId, serviceId, aantal (number), actief (boolean)' },
+        { status: 400 }
+      );
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Upsert de dienst-toewijzing
+    const { data, error } = await supabase
+      .from('roster_employee_services')
+      .upsert({
+        roster_id: rosterId,
+        employee_id: employeeId,
+        service_id: serviceId,
+        aantal,
+        actief,
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'roster_id,employee_id,service_id',
+        ignoreDuplicates: false
+      })
+      .select('aantal, actief, updated_at')
+      .single();
+
+    if (error) {
+      console.error('Supabase upsert error:', error);
+      return NextResponse.json(
+        { error: 'Fout bij opslaan dienst-toewijzing' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        aantal: data.aantal,
+        actief: data.actief,
+        updated_at: data.updated_at
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in PUT /api/diensten-aanpassen:', error);
+    return NextResponse.json(
+      { error: 'Interne serverfout' },
+      { status: 500 }
+    );
+  }
+}
