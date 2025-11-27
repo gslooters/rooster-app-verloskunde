@@ -1,9 +1,11 @@
 // DRAAD001 FIX - lib/planning/rosterDesign.ts
+// SCAN2 - UTC-safe migratie autofillUnavailability (DRAAD62 pattern)
 import { RosterEmployee, RosterStatus, RosterDesignData, validateMaxShifts, createDefaultRosterEmployee, createDefaultRosterStatus } from '@/lib/types/roster';
 import { getAllEmployees } from '@/lib/services/employees-storage';
 import { TeamType, DienstverbandType, getFullName } from '@/lib/types/employee';
 import { getRosterDesignByRosterId, createRosterDesign, updateRosterDesign, bulkUpdateUnavailability } from '@/lib/services/roster-design-supabase';
 import { getWeekdayCode } from '@/lib/utils/date-helpers';
+import { parseUTCDate, addUTCDays, toUTCDateString } from '@/lib/utils/date-utc';
 import { getAssignmentByDate, deleteAssignmentByDate } from '@/lib/services/roster-assignments-supabase';
 import { supabase } from '@/lib/supabase';
 
@@ -154,14 +156,20 @@ export async function initializeRosterDesign(rosterId: string, start_date: strin
 }
 
 /**
- * ✅ DRAAD001 FIX - Volledig geïmplementeerde autofillUnavailability
+ * 🔥 SCAN2 FIX - UTC-safe autofillUnavailability (DRAAD62 pattern)
  * 
  * Vult automatisch NB (Niet Beschikbaar) assignments in voor medewerkers
  * op basis van hun roostervrijDagen configuratie.
  * 
+ * BELANGRIJKE WIJZIGING (SCAN2):
+ * - Migratie van locale timezone (new Date()) naar UTC-safe utilities
+ * - Gebruikt parseUTCDate, addUTCDays, toUTCDateString uit lib/utils/date-utc
+ * - Consistent met DRAAD62 weekDagdelenData.ts fix
+ * - Voorkomt timezone bugs, vooral bij DST transitions
+ * 
  * Logica:
  * - Voor elke actieve medewerker met roostervrijDagen configuratie
- * - Genereer alle datums in de rooster periode
+ * - Genereer alle datums in de rooster periode (UTC-safe)
  * - Filter op datums die overeenkomen met roostervrijDagen
  * - Creëer NB assignment voor elke match
  * 
@@ -172,7 +180,7 @@ export async function initializeRosterDesign(rosterId: string, start_date: strin
 export async function autofillUnavailability(rosterId: string, start_date: string): Promise<boolean> {
   try {
     console.log('\n' + '='.repeat(80));
-    console.log('[autofillUnavailability] 🚀 START');
+    console.log('[autofillUnavailability] 🚀 START (UTC-SAFE)');
     console.log('[autofillUnavailability] RosterId:', rosterId);
     console.log('[autofillUnavailability] Start date:', start_date);
     console.log('='.repeat(80) + '\n');
@@ -192,14 +200,24 @@ export async function autofillUnavailability(rosterId: string, start_date: strin
     const { start_date: startDate, end_date: endDate } = rosterData;
     console.log(`[autofillUnavailability] Periode: ${startDate} tot ${endDate}`);
     
-    // STAP 2: Genereer alle datums in de periode
+    // 🔥 SCAN2 FIX: UTC-safe datum generatie (DRAAD62 pattern)
+    // OUDE CODE:
+    //   const current = new Date(startDate);  // ⚠️ Locale timezone!
+    //   const end = new Date(endDate);
+    //   while (current <= end) {
+    //     dates.push(current.toISOString().split('T')[0]);  // ⚠️ Kan afwijken!
+    //     current.setDate(current.getDate() + 1);  // ⚠️ Locale arithmetic!
+    //   }
+    //
+    // NIEUWE CODE (UTC-safe):
     const dates: string[] = [];
-    const current = new Date(startDate);
-    const end = new Date(endDate);
+    const currentDate = parseUTCDate(startDate);  // ✅ UTC midnight!
+    const endDateObj = parseUTCDate(endDate);     // ✅ UTC midnight!
     
-    while (current <= end) {
-      dates.push(current.toISOString().split('T')[0]);
-      current.setDate(current.getDate() + 1);
+    let iterDate = currentDate;
+    while (iterDate <= endDateObj) {
+      dates.push(toUTCDateString(iterDate));  // ✅ YYYY-MM-DD in UTC!
+      iterDate = addUTCDays(iterDate, 1);     // ✅ UTC arithmetic!
     }
     
     console.log(`[autofillUnavailability] Totaal dagen in periode: ${dates.length}`);
@@ -235,15 +253,17 @@ export async function autofillUnavailability(rosterId: string, start_date: strin
       let nbCount = 0;
       
       for (const date of dates) {
-        const dateObj = new Date(date);
-        const dayCode = getWeekdayCode(dateObj).toLowerCase(); // 'ma', 'di', etc.
+        // 🔥 SCAN2: dateObj is nu altijd UTC (van parseUTCDate/toUTCDateString)
+        // getWeekdayCode was al UTC-safe (gebruikt date.getUTCDay())
+        const dateObj = parseUTCDate(date);  // ✅ UTC parsing!
+        const dayCode = getWeekdayCode(dateObj).toLowerCase();  // ✅ UTC-based dag code!
         
         if (roostervrijSet.has(dayCode)) {
           assignments.push({
             roster_id: rosterId,
             employee_id: emp.id, // Gebruik originele employee ID
             service_code: 'NB',
-            date: date
+            date: date  // ✅ UTC YYYY-MM-DD string!
           });
           nbCount++;
         }
@@ -272,7 +292,7 @@ export async function autofillUnavailability(rosterId: string, start_date: strin
     }
     
     console.log('\n' + '='.repeat(80));
-    console.log('[autofillUnavailability] ✅ VOLTOOID');
+    console.log('[autofillUnavailability] ✅ VOLTOOID (UTC-SAFE)');
     console.log('='.repeat(80) + '\n');
     
     return true;
