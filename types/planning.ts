@@ -1,9 +1,10 @@
 /**
- * DRAAD45.8 FIX - Planning Types
+ * DRAAD64 FIX - Planning Types
  * 
  * TypeScript interfaces voor week dagdelen vaststelling
  * 
- * FIX: service_id toegevoegd als enriched field
+ * FIX: Team codes aangepast naar database codes (GRO/ORA/TOT)
+ *      Was: 'Groen'/'Oranje' → Nu: 'GRO'/'ORA'
  */
 
 export interface ServiceType {
@@ -40,7 +41,7 @@ export interface StaffingDagdeel {
   id: string;
   roster_period_staffing_id: string;
   dagdeel: 'O' | 'M' | 'A';
-  team: 'Groen' | 'Oranje' | 'TOT';
+  team: 'GRO' | 'ORA' | 'TOT';  // 🔥 DRAAD64: Was 'Groen' | 'Oranje' | 'TOT'
   status: 'MOET' | 'MAG' | 'MAG-NIET';
   aantal: number;
   created_at?: string;
@@ -58,6 +59,6 @@ export interface WeekDay {
   fullDate: string;
 }
 
-export type Team = 'Groen' | 'Oranje' | 'TOT';
+export type Team = 'GRO' | 'ORA' | 'TOT';  // 🔥 DRAAD64: Was 'Groen' | 'Oranje' | 'TOT'
 export type Dagdeel = 'O' | 'M' | 'A';
 export type Status = 'MOET' | 'MAG' | 'MAG-NIET';
