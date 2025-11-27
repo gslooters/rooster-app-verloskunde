@@ -3,24 +3,17 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 
 /**
- * DRAAD59 - API Route voor Dagdeel Updates (AUTH FIX)
+ * DRAAD65A - API Route voor Dagdeel Updates met STATUS AANGEPAST
  * 
  * PUT /api/planning/dagdelen/[id]
  * Body: { aantal: number }
  * 
- * PROBLEEM OPGELOST:
- * - 401 Unauthorized bij alle PUT requests
- * - Auth check via session cookie faalde inconsistent
- * - Groen/Oranje cellen konden niet worden gewijzigd
+ * NIEUW IN DRAAD65A:
+ * - Bij elke wijziging van 'aantal' wordt status automatisch 'AANGEPAST'
+ * - Status blijft 'AANGEPAST' ook na meerdere wijzigingen (keep it simple)
  * 
- * OPLOSSING:
- * - Auth check verwijderd uit PUT endpoint
- * - Page-level auth is voldoende (user moet ingelogd zijn om pagina te zien)
- * - Validatie behouden (aantal 0-9)
- * - GET endpoint ook zonder auth voor consistency
- * 
- * Functionaliteit:
- * - Update aantal voor specifiek dagdeel
+ * Eerdere functionaliteit (DRAAD59):
+ * - Auth check verwijderd (page-level auth voldoende)
  * - Validatie: aantal moet 0-9 zijn
  * - Direct database update zonder extra auth check
  */
@@ -54,33 +47,35 @@ export async function PUT(
       );
     }
 
-    console.log('🔥 [DRAAD59] PUT dagdeel:', { id, aantal });
+    console.log('🔥 [DRAAD65A] PUT dagdeel:', { id, aantal });
 
-    // 🔥 DRAAD59: Direct database update ZONDER auth check
-    // Auth is al gedaan op page-level
+    // 🔥 DRAAD65A: Update aantal EN status naar 'AANGEPAST'
     const { data, error } = await supabase
       .from('roster_period_staffing_dagdelen')
-      .update({ aantal })
+      .update({ 
+        aantal,
+        status: 'AANGEPAST'  // ⭐ NIEUW: Status automatisch aanpassen
+      })
       .eq('id', id)
       .select()
       .single();
 
     if (error) {
-      console.error('❌ [DRAAD59] Database update error:', error);
+      console.error('❌ [DRAAD65A] Database update error:', error);
       return NextResponse.json(
         { error: 'Fout bij opslaan in database', details: error.message },
         { status: 500 }
       );
     }
 
-    console.log('✅ [DRAAD59] Update successful');
+    console.log('✅ [DRAAD65A] Update successful - status set to AANGEPAST');
 
     return NextResponse.json({
       success: true,
       data,
     });
   } catch (error) {
-    console.error('❌ [DRAAD59] API error:', error);
+    console.error('❌ [DRAAD65A] API error:', error);
     return NextResponse.json(
       { error: 'Interne server fout' },
       { status: 500 }
