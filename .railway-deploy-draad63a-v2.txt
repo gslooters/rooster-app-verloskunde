@@ -1,0 +1,22 @@
+DRAAD63A v2 DEPLOYMENT
+======================
+
+Timestamp: 2025-11-27T15:26:00Z
+Commit Chain:
+  1. 4f449926 - Initial fix (had TypeScript error)
+  2. 74b0eda7 - TypeScript fix (dienstCode/dienstNaam removed)
+  3. f1136c82 - Cache bust added
+  4. b8c3a1db - Railway trigger updated
+  5. THIS COMMIT - Final trigger
+
+Changes:
+- Fixed: assignment.dienstCode non-existent property
+- Fixed: assignment.dienstNaam non-existent property
+- Solution: Use only serviceId + getDienstNaam() mapping
+
+Expected Result:
+- TypeScript compilation: SUCCESS
+- Railway build: SUCCESS
+- Frontend display: Groen/Oranje show 1 (not 0)
+
+Random Deploy ID: 63A-V2-6391
