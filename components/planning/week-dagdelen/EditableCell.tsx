@@ -4,22 +4,29 @@ import { useState, useRef, useEffect } from 'react';
 
 interface EditableCellProps {
   dagdeelId?: string;
-  status: 'MOET' | 'MAG' | 'MAG-NIET';
+  status: 'MOET' | 'MAG' | 'MAG-NIET' | 'AANGEPAST';  // ⭐ DRAAD65A: AANGEPAST toegevoegd
   aantal: number;
   onUpdate: (dagdeelId: string, newAantal: number) => Promise<void>;
 }
 
+// ⭐ DRAAD65A: AANGEPAST status met blauw bolletje toegevoegd
 const STATUS_COLORS = {
   MOET: '#ef4444',       // Rood
   MAG: '#22c55e',        // Groen
   'MAG-NIET': '#9ca3af', // Grijs
+  AANGEPAST: '#3b82f6',  // ⭐ Blauw (door planner gewijzigd)
 };
 
 /**
- * DRAAD42 - Bewerkbare Cel Component
+ * DRAAD65A - Bewerkbare Cel Component met Aangepast Status
  * 
- * Functionaliteit:
- * - Status cirkel (rood/groen/grijs)
+ * NIEUW IN DRAAD65A:
+ * - Blauw bolletje voor status 'AANGEPAST'
+ * - Cijfer 0 wordt getoond als "-" (intern blijft 0)
+ * - Gebruiker kan nog steeds 0 invoeren
+ * 
+ * Bestaande functionaliteit (DRAAD42):
+ * - Status cirkel (rood/groen/grijs/blauw)
  * - Inline bewerkbaar getal (0-9)
  * - Auto-save bij blur
  * - Visual feedback tijdens update
@@ -108,7 +115,7 @@ export default function EditableCell({
           title={status}
         />
 
-        {/* Bewerkbaar getal */}
+        {/* Bewerkbaar getal - ⭐ DRAAD65A: 0 tonen als "-" */}
         {isEditing ? (
           <input
             ref={inputRef}
@@ -132,7 +139,7 @@ export default function EditableCell({
             }`}
             title={dagdeelId ? 'Klik om te bewerken' : 'Geen data beschikbaar'}
           >
-            {aantal}
+            {aantal === 0 ? '-' : aantal}
           </span>
         )}
 
