@@ -13,7 +13,7 @@ export interface RosterEmployeeServiceRow {
   roster_id: string;
   employee_id: string;
   service_id: string;
-  can_perform_service: boolean;
+  actief: boolean; // Database column naam
   aantal: number;
   created_at: string;
 }
@@ -84,7 +84,7 @@ export async function copyEmployeeServicesToRoster(
       roster_id: rosterId,
       employee_id: es.employee_id,
       service_id: es.service_id,
-      can_perform_service: es.actief, // Altijd true door filter hierboven
+      actief: es.actief, // Database column naam
       aantal: es.aantal
     }));
 
@@ -141,7 +141,7 @@ export async function getRosterEmployeeServices(
         )
       `)
       .eq('roster_id', rosterId)
-      .eq('can_perform_service', true)
+      .eq('actief', true) // Database column naam
       .order('employee_id', { ascending: true });
 
     if (error) {
@@ -188,7 +188,7 @@ export async function getRosterEmployeeServicesByEmployee(
       `)
       .eq('roster_id', rosterId)
       .eq('employee_id', employeeId)
-      .eq('can_perform_service', true)
+      .eq('actief', true) // Database column naam
       .order('service_id', { ascending: true });
 
     if (error) {
@@ -229,7 +229,7 @@ export async function canEmployeePerformService(
       `)
       .eq('roster_id', rosterId)
       .eq('employee_id', employeeId)
-      .eq('can_perform_service', true)
+      .eq('actief', true) // Database column naam
       .eq('service_types.code', serviceCode)
       .maybeSingle();
 
