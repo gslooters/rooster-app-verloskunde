@@ -1,0 +1,38 @@
+DRAAD63 Railway Deployment Trigger
+===================================
+
+Tijdstempel: 2025-11-27T14:08:47Z
+Commit: a27746bf98905059048da03818f4785f3db85bc3
+
+CRITICAL FIX: Timezone bug in roster_period_staffing date generation
+
+PROBLEEM:
+- Eerste datum was 2025-11-23 ipv 2025-11-24 (één dag te vroeg)
+- Laatste datum 2025-12-28 ontbrak (loop stopte te vroeg)
+- Oorzaak: toISOString() converteerde CET → UTC (23:00 → vorige dag)
+
+ROOT CAUSE:
+for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+  days.push(d.toISOString().split('T')[0]);  // ❌ TIMEZONE BUG
+}
+
+OPLOSSING:
+const totalDays = getUTCDaysDiff(start, end) + 1;
+for (let i = 0; i < totalDays; i++) {
+  const currentDate = addUTCDays(start, i);
+  days.push(toUTCDateString(currentDate));  // ✅ UTC-SAFE
+}
+
+VERIFICATIE:
+✅ Input: 2025-11-24 tot 2025-12-28
+✅ Output: 35 dagen (24 nov t/m 28 dec INCLUSIEF)
+✅ Eerste datum: 2025-11-24 (CORRECT)
+✅ Laatste datum: 2025-12-28 (CORRECT)
+✅ Database insert nu met correcte datums
+
+IMPACT:
+- Alle nieuwe roosters krijgen nu correcte datums
+- Bestaande roosters moeten opnieuw aangemaakt worden
+- Fix voorkomt toekomstige timezone bugs
+
+RELATED: DRAAD57, DRAAD58, DRAAD62 (UTC conversion initiative)
