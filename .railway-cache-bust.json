@@ -1,0 +1,13 @@
+{
+  "cacheBust": true,
+  "timestamp": "2025-11-27T16:32:45Z",
+  "draad": "63B",
+  "reason": "TypeScript cached error - code is correct",
+  "fixes": [
+    "WeekDagdelenClient.tsx: No dienstCode/dienstNaam",
+    "tsconfig.json: incremental=false",
+    ".railway-deploy-trigger: Updated",
+    "This file: Final cache invalidation"
+  ],
+  "expectedResult": "BUILD SUCCESS - TypeScript compiles correctly"
+}
