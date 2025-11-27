@@ -383,7 +383,7 @@ export default function VaststellingDataTable({
             </tbody>
           </table>
         </div>
-        {/* Legenda */}
+        {/* ⭐ DRAAD65A: Legenda uitgebreid met AANGEPAST status */}
         <div className="mt-4 p-4 bg-gray-50 rounded-lg">
           <h3 className="font-semibold text-gray-800 mb-2">Legenda:</h3>
           <div className="flex flex-wrap gap-4 text-sm">
@@ -398,6 +398,10 @@ export default function VaststellingDataTable({
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-[#9ca3af]"></div>
               <span>⚪ MAG-NIET (niet toegestaan)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-[#3b82f6]"></div>
+              <span>🔵 AANGEPAST (door planner gewijzigd)</span>
             </div>
           </div>
         </div>
