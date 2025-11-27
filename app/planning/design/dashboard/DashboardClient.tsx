@@ -251,7 +251,7 @@ export default function DashboardClient() {
                 </div>
                 <div className="flex items-center gap-3 sm:flex-row flex-col">
                   <StatusBadgeToggle completed={completionStatus.diensten_per_medewerker} onToggle={()=>toggleStep('diensten_per_medewerker')} label="Diensten per medewerker"/>
-                  <button onClick={()=>router.push(`/planning/design?rosterId=${rosterId}`)} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium whitespace-nowrap">Openen →</button>
+                  <button onClick={()=>router.push(`/planning/design/diensten-aanpassen?rosterId=${rosterId}`)} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium whitespace-nowrap">Openen →</button>
                 </div>
               </div>
             </div>
