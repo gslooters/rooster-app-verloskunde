@@ -1,6 +1,7 @@
 // lib/planning/roster-period-staffing-storage.ts
 // Opslaglaag: TypeScript functies voor Supabase interactie (Diensten per Dag)
 // DRAAD36A: Uitgebreid met dagdelen generatie
+// DRAAD63: UTC-safe datum generatie (fix timezone bug)
 
 import { supabase } from '@/lib/supabase';
 import { getAllServices } from '@/lib/services/diensten-storage';
@@ -14,6 +15,7 @@ import {
   DEFAULT_AANTAL_PER_STATUS
 } from '@/lib/types/roster-period-staffing-dagdeel';
 import { DagCode, DagblokCode, DagblokStatus, TeamRegels } from '@/lib/types/service';
+import { parseUTCDate, toUTCDateString, addUTCDays, getUTCDaysDiff } from '@/lib/utils/date-utc';
 
 export interface RosterPeriodStaffing {
   id: string;
@@ -66,7 +68,7 @@ function isValidISODate(dateStr: string): boolean {
  * Helper functie: Convert JavaScript day (0=Sun) naar DagCode (ma/di/wo/do/vr/za/zo)
  */
 function getDagCodeFromDate(date: Date): DagCode {
-  const day = date.getDay();
+  const day = date.getUTCDay();  // DRAAD63: Use UTC day
   const dagCodes: DagCode[] = ['zo', 'ma', 'di', 'wo', 'do', 'vr', 'za'];
   return dagCodes[day];
 }
@@ -310,6 +312,7 @@ async function generateDagdeelRegelsForRecord(
 
 /**
  * DRAAD36A: Hoofdfunctie - genereer roster_period_staffing EN dagdelen
+ * DRAAD63: UTC-safe datum generatie
  */
 export async function generateRosterPeriodStaffing(
   rosterId: string,
@@ -318,7 +321,7 @@ export async function generateRosterPeriodStaffing(
 ): Promise<void> {
   try {
     console.log('\n' + '='.repeat(80));
-    console.log('[generateRosterPeriodStaffing] 🚀 START GENERATIE (DRAAD36A)');
+    console.log('[generateRosterPeriodStaffing] 🚀 START GENERATIE (DRAAD36A + DRAAD63 UTC-SAFE)');
     console.log('[generateRosterPeriodStaffing] RosterId:', rosterId);
     console.log('[generateRosterPeriodStaffing] Periode:', startDate, 'tot', endDate);
     console.log('='.repeat(80) + '\n');
@@ -331,11 +334,17 @@ export async function generateRosterPeriodStaffing(
       throw new Error('Ongeldige datums');
     }
     
-    const start = new Date(startDate + 'T00:00:00');
-    const end = new Date(endDate + 'T00:00:00');
+    // DRAAD63: Parse dates UTC-safe
+    const start = parseUTCDate(startDate);
+    const end = parseUTCDate(endDate);
+    
     if (start > end) {
       throw new Error('startDate moet voor endDate liggen');
     }
+    
+    console.log('[generateRosterPeriodStaffing] ✓ UTC-safe datum parsing (DRAAD63)');
+    console.log('[generateRosterPeriodStaffing]   Start:', toUTCDateString(start));
+    console.log('[generateRosterPeriodStaffing]   End:', toUTCDateString(end));
     
     // Check of data al bestaat
     const alreadyExists = await hasRosterPeriodStaffing(rosterId);
@@ -358,13 +367,26 @@ export async function generateRosterPeriodStaffing(
     const holidays = await getFallbackHolidays(startDate, endDate);
     console.log('[generateRosterPeriodStaffing] ✓ Feestdagen:', holidays.length);
     
-    // STAP 3: Genereer datums
-    console.log('[generateRosterPeriodStaffing] STAP 3: Genereer datums...');
+    // STAP 3: Genereer datums (DRAAD63: UTC-safe)
+    console.log('[generateRosterPeriodStaffing] STAP 3: Genereer datums (UTC-SAFE)...');
     const days: string[] = [];
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      days.push(d.toISOString().split('T')[0]);
+    
+    // DRAAD63 FIX: Use UTC-safe date iteration
+    // Old buggy code:
+    // for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    //   days.push(d.toISOString().split('T')[0]);  // ❌ TIMEZONE BUG
+    // }
+    
+    // New UTC-safe code:
+    const totalDays = getUTCDaysDiff(start, end) + 1;  // +1 to include end date
+    for (let i = 0; i < totalDays; i++) {
+      const currentDate = addUTCDays(start, i);
+      days.push(toUTCDateString(currentDate));
     }
+    
     console.log('[generateRosterPeriodStaffing] ✓ Dagen:', days.length);
+    console.log('[generateRosterPeriodStaffing] ✓ Eerste datum:', days[0]);
+    console.log('[generateRosterPeriodStaffing] ✓ Laatste datum:', days[days.length - 1]);
     
     // STAP 4: Genereer roster_period_staffing records
     console.log('[generateRosterPeriodStaffing] STAP 4: Genereer RPS records...');
@@ -401,8 +423,8 @@ export async function generateRosterPeriodStaffing(
       const service = services.find(s => s.id === rpsRecord.service_id);
       if (!service) continue;
       
-      // Bepaal dagcode (ma/di/wo/do/vr/za/zo)
-      const dateObj = new Date(rpsRecord.date + 'T00:00:00');
+      // DRAAD63: Parse date UTC-safe
+      const dateObj = parseUTCDate(rpsRecord.date);
       let dagCode = getDagCodeFromDate(dateObj);
       
       // Feestdag = zondag behandelen
@@ -438,7 +460,7 @@ export async function generateRosterPeriodStaffing(
     }
     
     console.log('\n' + '='.repeat(80));
-    console.log('[generateRosterPeriodStaffing] ✅ GENERATIE VOLTOOID!');
+    console.log('[generateRosterPeriodStaffing] ✅ GENERATIE VOLTOOID (DRAAD63 UTC-SAFE)!');
     console.log('[generateRosterPeriodStaffing] RPS records:', createdRpsRecords.length);
     console.log('[generateRosterPeriodStaffing] Dagdeel regels:', allDagdeelRegels.length);
     console.log('='.repeat(80) + '\n');
