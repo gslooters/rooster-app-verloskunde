@@ -1,0 +1,15 @@
+DRAAD64 Deployment Trigger
+Generated: 2025-11-27T23:50:00Z
+Timestamp: 1732752600000
+Feature: Diensten per medewerker aanpassen scherm
+
+Implemented:
+- API endpoint: GET + PUT /api/diensten-aanpassen
+- TypeScript types in types/diensten-aanpassen.ts
+- Client component met volledige UI
+- Server page wrapper met Suspense
+- Team totalen in footer
+- Optimistic updates + auto-save
+- Sticky headers voor naam + team
+
+URL: /planning/design/diensten-aanpassen?rosterId=XXX
