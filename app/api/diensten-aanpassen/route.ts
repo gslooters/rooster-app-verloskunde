@@ -1,8 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+// Valideer environment variabelen
+if (!supabaseUrl || !supabaseKey) {
+  console.error('❌ Missing Supabase environment variables');
+  console.error('  NEXT_PUBLIC_SUPABASE_URL:', supabaseUrl ? '✓' : '✗');
+  console.error('  NEXT_PUBLIC_SUPABASE_ANON_KEY:', supabaseKey ? '✓' : '✗');
+}
 
 /**
  * GET /api/diensten-aanpassen?rosterId=xxx
@@ -14,6 +21,15 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
  */
 export async function GET(request: NextRequest) {
   try {
+    // Controleer environment variabelen
+    if (!supabaseUrl || !supabaseKey) {
+      console.error('❌ Missing Supabase environment variables');
+      return NextResponse.json(
+        { error: 'Server configuration error' },
+        { status: 500 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const rosterId = searchParams.get('rosterId');
 
@@ -24,7 +40,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     // 1. Haal roster info op
     const { data: roster, error: rosterError } = await supabase
@@ -152,6 +168,15 @@ export async function GET(request: NextRequest) {
  */
 export async function PUT(request: NextRequest) {
   try {
+    // Controleer environment variabelen
+    if (!supabaseUrl || !supabaseKey) {
+      console.error('❌ Missing Supabase environment variables');
+      return NextResponse.json(
+        { error: 'Server configuration error' },
+        { status: 500 }
+      );
+    }
+
     const body = await request.json();
     const { rosterId, employeeId, serviceId, aantal, actief } = body;
 
@@ -163,7 +188,7 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Upsert de dienst-toewijzing
     const { data, error } = await supabase
