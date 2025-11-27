@@ -30,7 +30,7 @@ interface WeekDagdelenClientProps {
 }
 
 /**
- * 🔥 DRAAD63A FIX: Hertel serviceId filter - assignments per dienst
+ * 🔥 DRAAD63A FIX: Herstel serviceId filter - assignments per dienst
  * 
  * PROBLEEM OPGELOST:
  * - DRAAD61A verwijderde serviceId filter te rigoureus
@@ -63,7 +63,6 @@ function convertToNewStructure(
 
   // 🔥 STAP 1: EXTRAHEER ALLE UNIEKE SERVICE_IDs
   const uniqueServiceIds = new Set<string>();
-  const serviceIdDetails = new Map<string, { code: string; naam: string }>();
   let totalChecked = 0;
   let withServiceId = 0;
   
@@ -75,14 +74,6 @@ function convertToNewStructure(
         if (assignment.serviceId) {
           uniqueServiceIds.add(assignment.serviceId);
           withServiceId++;
-          
-          // Bewaar dienst details voor later gebruik
-          if (!serviceIdDetails.has(assignment.serviceId)) {
-            serviceIdDetails.set(assignment.serviceId, {
-              code: assignment.dienstCode || assignment.serviceId,
-              naam: assignment.dienstNaam || getDienstNaam(assignment.serviceId)
-            });
-          }
         }
       });
     });
@@ -115,16 +106,16 @@ function convertToNewStructure(
     const sortedServiceIds = Array.from(uniqueServiceIds).sort();
     
     sortedServiceIds.forEach((serviceId, index) => {
-      const details = serviceIdDetails.get(serviceId) || {
-        code: serviceId,
-        naam: getDienstNaam(serviceId)
-      };
+      // ✅ DRAAD63A v2: Gebruik alleen serviceId + getDienstNaam()
+      // DagdeelAssignment heeft GEEN dienstCode of dienstNaam properties
+      const dienstCode = serviceId;
+      const dienstNaam = getDienstNaam(serviceId);
       
       // ✅ DRAAD63A FIX: Geef serviceId door aan createTeamDagdelenWeek
       diensten.push({
         dienstId: serviceId,
-        dienstCode: details.code,
-        dienstNaam: details.naam,
+        dienstCode: dienstCode,
+        dienstNaam: dienstNaam,
         volgorde: index + 1,
         teams: {
           groen: createTeamDagdelenWeek('GRO', oldData.days, serviceId),
@@ -133,7 +124,7 @@ function convertToNewStructure(
         }
       });
       
-      console.log(`  ✓ Dienst ${index + 1}/${sortedServiceIds.length}: ${serviceId} (${details.code})`);
+      console.log(`  ✓ Dienst ${index + 1}/${sortedServiceIds.length}: ${serviceId} (${dienstCode})`);
     });
   }
 
