@@ -1,10 +1,14 @@
 /**
- * DRAAD64 FIX - Planning Types
+ * DRAAD65A - Planning Types met AANGEPAST status
  * 
  * TypeScript interfaces voor week dagdelen vaststelling
  * 
- * FIX: Team codes aangepast naar database codes (GRO/ORA/TOT)
- *      Was: 'Groen'/'Oranje' → Nu: 'GRO'/'ORA'
+ * NIEUW IN DRAAD65A:
+ * - Status type uitgebreid met 'AANGEPAST'
+ * - Blauw bolletje indicator voor door planner gewijzigde cellen
+ * 
+ * DRAAD64 FIX:
+ * - Team codes aangepast naar database codes (GRO/ORA/TOT)
  */
 
 export interface ServiceType {
@@ -42,7 +46,7 @@ export interface StaffingDagdeel {
   roster_period_staffing_id: string;
   dagdeel: 'O' | 'M' | 'A';
   team: 'GRO' | 'ORA' | 'TOT';  // 🔥 DRAAD64: Was 'Groen' | 'Oranje' | 'TOT'
-  status: 'MOET' | 'MAG' | 'MAG-NIET';
+  status: 'MOET' | 'MAG' | 'MAG-NIET' | 'AANGEPAST';  // ⭐ DRAAD65A: AANGEPAST toegevoegd
   aantal: number;
   created_at?: string;
   updated_at?: string;
@@ -61,4 +65,4 @@ export interface WeekDay {
 
 export type Team = 'GRO' | 'ORA' | 'TOT';  // 🔥 DRAAD64: Was 'Groen' | 'Oranje' | 'TOT'
 export type Dagdeel = 'O' | 'M' | 'A';
-export type Status = 'MOET' | 'MAG' | 'MAG-NIET';
+export type Status = 'MOET' | 'MAG' | 'MAG-NIET' | 'AANGEPAST';  // ⭐ DRAAD65A: AANGEPAST toegevoegd
