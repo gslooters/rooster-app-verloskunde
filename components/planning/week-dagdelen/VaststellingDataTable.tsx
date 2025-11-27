@@ -21,21 +21,23 @@ interface VaststellingDataTableProps {
   weekEnd: string;
 }
 
-type Team = 'Groen' | 'Oranje' | 'TOT';
+type Team = 'GRO' | 'ORA' | 'TOT';  // 🔥 DRAAD64: Was 'Groen' | 'Oranje' | 'TOT'
 type Dagdeel = 'O' | 'M' | 'A';
 
-const TEAMS: Team[] = ['Groen', 'Oranje', 'TOT'];
+const TEAMS: Team[] = ['GRO', 'ORA', 'TOT'];  // 🔥 DRAAD64: Was ['Groen', 'Oranje', 'TOT']
 const DAGDELEN: Dagdeel[] = ['O', 'M', 'A'];
 
+// 🔥 DRAAD64: Keys aangepast naar database codes, waarden blijven display labels
 const TEAM_COLORS = {
-  Groen: '#22c55e',
-  Oranje: '#f97316',
-  TOT: '#3b82f6',
+  GRO: '#22c55e',    // Was: Groen
+  ORA: '#f97316',    // Was: Oranje
+  TOT: '#3b82f6',    // Blijft TOT
 };
 
+// TEAM_LABELS blijft ongewijzigd - gebruikt voor UI display
 const TEAM_LABELS = {
-  Groen: 'Groen',
-  Oranje: 'Oranje',
+  GRO: 'Groen',
+  ORA: 'Oranje',
   TOT: 'Praktijk',
 };
 
@@ -188,17 +190,15 @@ export default function VaststellingDataTable({
     });
   }, [weekStart, weekEnd]);
 
-  // 🔥 DRAAD59.1 FIX: Gebruik dagdeel direct zonder '0' mapping
+  // 🔥 DRAAD59.1 FIX + DRAAD64: Gebruik dagdeel en team direct (database codes)
   function findDagdeelData(
     serviceTypeId: string,
     datum: string,
     team: Team,
     dagdeel: Dagdeel
   ): StaffingDagdeel | undefined {
-    // DRAAD59.1: Geen mapping meer nodig!
-    // Database gebruikt nu 'O' (hoofdletter) direct
-    // Oude situatie: 'O' → '0' (cijfer)
-    // Nieuwe situatie: 'O' → 'O' (geen conversie)
+    // DRAAD59.1: Geen dagdeel mapping meer nodig - database gebruikt 'O'
+    // DRAAD64: Team codes matchen nu met database (GRO/ORA/TOT)
     
     return data.find(
       item =>
