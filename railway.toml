@@ -3,9 +3,9 @@
 command = "npm install && npm run build"
 
 [deploy]
-# 🔥 CRITICAL FIX: Use custom server.js with explicit 0.0.0.0 binding
-# Dit lost Railway networking issues op
-startCommand = "node server.js"
+# 🔥 CRITICAL FIX: Correct standalone server path
+# Gebruik HOSTNAME=0.0.0.0 voor Railway networking
+startCommand = "HOSTNAME=0.0.0.0 PORT=$PORT node .next/standalone/server.js"
 
 # Health check
 healthcheckPath = "/api/health"

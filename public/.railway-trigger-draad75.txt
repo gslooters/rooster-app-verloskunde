@@ -1,0 +1,7 @@
+Deployment trigger: draad75 - Standalone server fix
+Timestamp: 2025-11-28T21:19:00Z
+Fixes:
+- Remove custom server.js (incompatible with standalone)
+- Use HOSTNAME=0.0.0.0 in railway.toml
+- Middleware Node.js runtime (already fixed)
+- Correct standalone server path
