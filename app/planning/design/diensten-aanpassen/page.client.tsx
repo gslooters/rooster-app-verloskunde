@@ -13,11 +13,7 @@ import type {
 
 /**
  * Client component voor "Diensten per medewerker aanpassen" scherm
- * DRAAD66G - UI verbeteringen:
- * - Header: "Diensten Toewijzing AANPASSEN : PERIODE Week XX t/m Week XX"
- * - Naam kolom: alleen voornaam
- * - Telling kolom: gewogen berekening (aantal × dienstwaarde)
- * - Footer: tekst kader onderaan
+ * DRAAD66G - UI verbeteringen incl. Terug-knop navigatie-fix
  */
 export default function DienstenAanpassenClient() {
   const searchParams = useSearchParams();
@@ -181,19 +177,17 @@ export default function DienstenAanpassenClient() {
     }
   }, [data, saveService]);
 
-  // DRAAD66G: Bereken gewogen totaal per medewerker (aantal × dienstwaarde)
+  // Gewogen totaal per medewerker (aantal × dienstwaarde)
   const getEmployeeTotal = useCallback((employee: Employee): number => {
     return employee.services
       .filter(s => s.actief)
       .reduce((sum, s) => sum + (s.aantal * s.dienstwaarde), 0);
   }, []);
 
-  // Bereken team totalen voor footer (AANTAL ALLEEN, NIET gewogen)
+  // Team totalen (ongewogen)
   const teamTotals = useMemo((): TeamTotals => {
     if (!data) return {};
-
     const totals: TeamTotals = {};
-
     data.serviceTypes.forEach(serviceType => {
       totals[serviceType.id] = {
         groen: 0,
@@ -202,11 +196,9 @@ export default function DienstenAanpassenClient() {
         totaal: 0
       };
     });
-
     data.employees.forEach(employee => {
       employee.services.forEach(service => {
         if (!service.actief) return;
-
         const teamKey = employee.team.toLowerCase() as 'groen' | 'oranje' | 'overig';
         if (totals[service.serviceId]) {
           totals[service.serviceId][teamKey] += service.aantal;
@@ -214,7 +206,6 @@ export default function DienstenAanpassenClient() {
         }
       });
     });
-
     return totals;
   }, [data]);
 
@@ -235,7 +226,6 @@ export default function DienstenAanpassenClient() {
     }
   };
 
-  // Render loading state
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -244,7 +234,6 @@ export default function DienstenAanpassenClient() {
     );
   }
 
-  // Render error state
   if (error || !data) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -255,11 +244,11 @@ export default function DienstenAanpassenClient() {
 
   return (
     <div className="container mx-auto px-4 py-6">
-      {/* Header - DRAAD66G: Aangepaste tekst */}
+      {/* Header - nu juiste dashboard navigatie */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
           <button
-            onClick={() => router.push(`/planning/design?rosterId=${rosterId}`)}
+            onClick={() => router.push(`/planning/dashboard?rosterId=${rosterId}`)}
             className="text-blue-600 hover:text-blue-800 flex items-center gap-2"
           >
             <span>←</span>
@@ -276,16 +265,13 @@ export default function DienstenAanpassenClient() {
           Diensten Toewijzing AANPASSEN : PERIODE Week {data.roster.startWeek} t/m Week {data.roster.endWeek}
         </h1>
       </div>
-
-      {/* Tabel */}
+      {/* rest van UI exact zoals voorheen */}
       <div className="overflow-x-auto">
         <table className="w-full border-collapse border border-gray-300">
           <thead>
             <tr className="bg-gray-100">
               <th className="border border-gray-300 px-4 py-2 sticky left-0 bg-gray-100 z-10">Team</th>
-              {/* DRAAD66G: Kolom smaller gemaakt en label Naam */}
               <th className="border border-gray-300 px-3 py-2 sticky left-[80px] bg-gray-100 z-10 w-32">Naam</th>
-              {/* DRAAD66G: Totaal -> Telling */}
               <th className="border border-gray-300 px-4 py-2 sticky left-[192px] bg-gray-100 z-10">Telling</th>
               {data.serviceTypes.map(serviceType => (
                 <th key={serviceType.id} className="border border-gray-300 px-2 py-2 min-w-[100px]">
@@ -308,19 +294,15 @@ export default function DienstenAanpassenClient() {
               
               return (
                 <tr key={employee.id} className="hover:bg-gray-50">
-                  {/* Team */}
                   <td className={`border border-gray-300 px-4 py-2 sticky left-0 z-10 ${getTeamColor(employee.team)}`}>
                     {employee.team}
                   </td>
-                  {/* DRAAD66G: Alleen voornaam, smaller kolom */}
                   <td className="border border-gray-300 px-3 py-2 sticky left-[80px] bg-white z-10 w-32">
                     {employee.voornaam}
                   </td>
-                  {/* DRAAD66G: Telling met gewogen berekening */}
                   <td className="border border-gray-300 px-4 py-2 sticky left-[192px] bg-white z-10 font-semibold">
                     {total}
                   </td>
-                  {/* Diensten */}
                   {employee.services.map(service => {
                     const saveKey = `${employee.id}_${service.serviceId}`;
                     const isSaving = savingStates.has(saveKey);
@@ -354,8 +336,6 @@ export default function DienstenAanpassenClient() {
                 </tr>
               );
             })}
-            
-            {/* Team Totalen Footer (NIET gewogen, alleen aantal) */}
             <tr className="bg-gray-100 font-semibold">
               <td colSpan={3} className="border border-gray-300 px-4 py-2 text-right">
                 Totalen per team:
@@ -363,7 +343,6 @@ export default function DienstenAanpassenClient() {
               {data.serviceTypes.map(serviceType => {
                 const totals = teamTotals[serviceType.id];
                 if (!totals) return <td key={serviceType.id} />;
-
                 return (
                   <td key={serviceType.id} className="border border-gray-300 px-2 py-2 text-center">
                     <div className="text-xs space-y-1">
@@ -378,8 +357,6 @@ export default function DienstenAanpassenClient() {
           </tbody>
         </table>
       </div>
-
-      {/* DRAAD66G: Footer kader met uitleg tekst */}
       <div className="mt-4 p-3 border border-gray-400 rounded bg-gray-50 text-sm text-gray-700">
         Telling betreft het aantal diensten + de gewogen dienstwaarde per dienst
       </div>
