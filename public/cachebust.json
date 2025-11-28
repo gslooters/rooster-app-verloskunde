@@ -1,12 +1,12 @@
 {
-  "timestamp": 1732804670000,
-  "version": "DRAAD68",
-  "deploy": "roster-assignments-refactor",
+  "timestamp": 1732806000000,
+  "version": "DRAAD69",
+  "deploy": "wizard-assignments-fix",
   "changes": [
-    "service_code -> service_id (UUID)",
-    "Added dagdeel (O/M/A)",
-    "Added status (0-3)",
-    "Added notes column",
-    "New functions for assignments"
+    "Added initialize_roster_assignments call to wizard",
+    "Fixed 0 assignments bug",
+    "Enhanced verification logging",
+    "Added assignments phase to UI",
+    "Assignments now created: 11 × 35 × 3 = 1155 records"
   ]
 }
