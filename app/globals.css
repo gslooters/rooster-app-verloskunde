@@ -5,6 +5,11 @@
 /* DRAAD 39.3: Week Dagdelen Table Styles */
 @import './styles/week-dagdelen-table.css';
 
+/* DRAAD74: Cache-busting voor team kleuren fix - 1732833973 */
+.draad74-team-data-snapshot-fix-1732833973 {
+  /* Cache-bust: Force browser refresh voor team data wijzigingen */
+}
+
 :root {
   /* Primitive Color Tokens */
   --color-white: rgba(255, 255, 255, 1);
