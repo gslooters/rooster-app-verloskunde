@@ -13,7 +13,7 @@ import type {
 
 /**
  * Client component voor "Diensten per medewerker aanpassen" scherm
- * DRAAD66G - UI verbeteringen incl. Terug-knop navigatie-fix
+ * DRAAD66J - FIX: Terug-knop navigatie naar correct dashboard
  */
 export default function DienstenAanpassenClient() {
   const searchParams = useSearchParams();
@@ -244,11 +244,11 @@ export default function DienstenAanpassenClient() {
 
   return (
     <div className="container mx-auto px-4 py-6">
-      {/* Header - nu juiste dashboard navigatie */}
+      {/* Header - DRAAD66J: GEFIXTE navigatie naar Dashboard Rooster Ontwerp */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
           <button
-            onClick={() => router.push(`/planning/design?rosterId=${rosterId}`)}
+            onClick={() => router.push(`/planning/design/dashboard?rosterId=${rosterId}`)}
             className="text-blue-600 hover:text-blue-800 flex items-center gap-2"
           >
             <span>←</span>
