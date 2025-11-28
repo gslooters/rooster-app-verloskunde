@@ -1,0 +1,19 @@
+DRAAD68: Code aanpassingen roster_assignments - 1732804630
+Datum: 2025-11-28 15:57:10 CET
+
+Wijzigingen:
+- Updated roster-assignments-supabase.ts met nieuwe database structuur
+- Nieuwe types: AssignmentStatus enum, Dagdeel type
+- service_code vervangen door service_id (UUID FK)
+- Nieuwe kolommen: dagdeel, status, notes
+- Alle functies aangepast voor dagdeel parameter
+- NB detectie: service_code='NB' -> status=3
+- Nieuwe functies toegevoegd:
+  * createRosterWithAssignments (via stored procedure)
+  * updateAssignmentStatus
+  * updateAssignmentService
+  * getAssignmentsByStatus
+  * bulkUpdateAssignments
+- getAllAssignmentsByRosterId: nieuwe return type met dagdeel nesting
+
+Random trigger: 847293561
