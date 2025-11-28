@@ -2,8 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 
+// 🔥 CRITICAL: Force dynamic rendering - deze route gebruikt cookies()
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 /**
  * DRAAD65A - API Route voor Dagdeel Updates met STATUS AANGEPAST
+ * DRAAD73D - Force dynamic rendering (geen static generation)
  * 
  * PUT /api/planning/dagdelen/[id]
  * Body: { aantal: number }
