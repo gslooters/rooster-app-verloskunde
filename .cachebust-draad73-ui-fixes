@@ -1,0 +1,28 @@
+GLOBAL CACHE BUST - DRAAD73 UI FIXES NB SCHERM
+DEPLOYMENT VERSION VERIFICATIE
+Timestamp: 1764363047424 (28-11-2025 20:10:47 CET)
+Build ID: draad73-ui-fixes-cachebust
+Random: 0.4931
+Deployment: DRAAD73 - UI fixes voor NB scherm
+
+🔴 CRITICAL FIX - DRAAD73 (28-11-2025):
+✅ Visuele issues scherm gecorrigeerd
+✅ Weeknummer weergave toegevoegd
+✅ Kleuren teamindicatoren gefixt
+✅ Spacing, legenda, layout verbeterd
+✅ DRAAD73 railway trigger actief
+
+📝 VERIFICATIE STAPPEN:
+1. Build moet succesvol compileren
+2. Railway deployment moet gestart zijn
+3. UI toont productieklare scherm verbeteringen
+4. NB tool werkt op alle dagen/per medew.
+
+📊 VOORGAANDE FIXES:
+- DRAAD72: Timezone-fix NB scherm
+
+VERWACHTE BUILD: SUCCESS
+VERWACHTE COMMITS: 
+- DRAAD73-feature-UI,
+- cachebust-draad73,
+- railway-trigger-draad73
