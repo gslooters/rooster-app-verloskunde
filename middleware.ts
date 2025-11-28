@@ -14,7 +14,13 @@ import type { NextRequest } from 'next/server'
  * 1. Refresh expired auth tokens automatisch (indien session bestaat)
  * 2. Synchroniseer auth state tussen client/server
  * 3. Set correct cookies voor session management
+ * 
+ * 🔥 RUNTIME: Node.js (required voor Supabase compatibility)
  */
+
+// 🔥 CRITICAL: Force Node.js runtime (niet Edge Runtime)
+// Supabase gebruikt process.version/versions wat NIET beschikbaar is in Edge Runtime
+export const runtime = 'nodejs'
 
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next()
