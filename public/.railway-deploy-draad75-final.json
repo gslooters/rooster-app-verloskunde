@@ -1,0 +1,17 @@
+{
+  "deployment": "draad75-final",
+  "timestamp": "2025-11-28T21:21:30Z",
+  "fixes": [
+    "Middleware: Force Node.js runtime (fix Supabase Edge Runtime error)",
+    "Railway: HOSTNAME=0.0.0.0 binding in railway.toml",
+    "Server: Use standalone server.js correctly",
+    "Health check: Enhanced diagnostics and logging",
+    "Version: 0.1.0-draad75.1"
+  ],
+  "critical_changes": {
+    "middleware_runtime": "nodejs",
+    "hostname_binding": "0.0.0.0",
+    "start_command": "HOSTNAME=0.0.0.0 PORT=$PORT node .next/standalone/server.js"
+  },
+  "expected_result": "Server starts successfully and healthcheck passes"
+}
