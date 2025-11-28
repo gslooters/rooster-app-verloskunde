@@ -6,6 +6,9 @@ import { loadRosterDesignData, toggleNBAssignment } from '@/lib/planning/rosterD
 import { isDagdeelUnavailable, DagdeelAvailability } from '@/lib/types/roster';
 import { supabase } from '@/lib/supabase';
 
+// DRAAD73B: VERSION MARKER - Force client bundle regeneration
+const COMPONENT_VERSION = 'v2.0-draad73';
+
 // DRAAD73: ISO 8601 weeknummer (maandag = start week)
 function getWeekNumber(date: Date): number {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -61,8 +64,6 @@ export default function UnavailabilityClient() {
     }
     (async function loadData() {
       try {
-        // DRAAD73: DEBUG info verwijderen, alleen logs voor echte errors bewaart
-        // Laden NB data
         const data = await loadRosterDesignData(rosterId);
         if (!data) throw new Error('Geen rooster design data gevonden');
         setDesignData(data);
@@ -160,8 +161,6 @@ export default function UnavailabilityClient() {
           </button>
         </div>
 
-        {/* Instructie-balk verwijderen (dubbel), instructie nu in header alleen */}
-
         {/* NB Roostertabel */}
         <div className="bg-white rounded-xl shadow-lg p-6 overflow-x-auto" style={{ maxWidth: '100vw' }}>
           <table className="w-full border-collapse" style={{ minWidth: '600px' }}>
@@ -178,7 +177,6 @@ export default function UnavailabilityClient() {
                       <div className="flex justify-around mt-1 text-[10px] text-gray-500">
                         <span>O</span><span>M</span><span>A</span>
                       </div>
-                      {/* DRAAD73: Weeknummer per dag tonen (optioneel, hoofdreeks in header) */}
                     </th>
                   );
                 })}
