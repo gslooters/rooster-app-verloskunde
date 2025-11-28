@@ -1,6 +1,29 @@
 # Railway Deployment Trigger File
-# DRAAD592 - Type fix: '0' → 'O' voor Dagdeel compliance
+# DRAAD73 FIX - Force rebuild voor correcte commit deployment
 
-Timestamp: 2025-11-26T17:06:30Z
-Build: DRAAD592-dagdeel-type-fix-8746
-Commit: 60a5af2d58a00cd8260303f16f32eb14f07b9179
+Timestamp: 2025-11-28T19:30:15Z
+Build: DRAAD73-force-rebuild-7389
+Commit: 2c1811cd27300ad94134cf1535d67a000968f240
+Random: 7389
+
+## DEPLOYMENT FIX
+
+Probleem: Vorige deployment draaide op verkeerde commit
+Oplossing: Force rebuild via nieuwe trigger + cachebust
+Verwacht: Build op commit 2c1811cd (DRAAD73 merge)
+
+## UI WIJZIGINGEN IN DEZE BUILD
+- Weeknummer weergave in header
+- Compacte medewerkernamen (voornaam)
+- Teamkleur indicators (groen/oranje/blauw)
+- Legenda in footer
+- Geen dubbele instructies
+- Opgeschoonde console logs
+
+## VERIFICATIE
+Check na deployment:
+1. Weeknummers zichtbaar in periode-regel
+2. Namen zijn compact (geen achternaam)
+3. Gekleurde team-bolletjes bij elke naam
+4. Legenda onderaan scherm
+5. Geen tweede instructie-balk
