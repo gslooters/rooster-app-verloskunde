@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { getRosterIdFromParams } from '@/lib/utils/getRosterIdFromParams';
 import { loadRosterDesignData, toggleNBAssignment } from '@/lib/planning/rosterDesign';
-import { getAllAssignmentsByRosterId } from '@/lib/services/roster-assignments-supabase';
+import { isDagdeelUnavailable, DagdeelAvailability } from '@/lib/types/roster';
 
 /**
  * ✅ FIX DRAAD26R: Genereer 35 dagen beginnend op MAANDAG
@@ -108,7 +108,6 @@ export default function UnavailabilityClient() {
   const router = useRouter();
   const rosterId = getRosterIdFromParams(searchParams);
   const [designData, setDesignData] = useState<any>(null);
-  const [allAssignments, setAllAssignments] = useState<Map<string, Map<string, string>>>(new Map());
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -121,14 +120,9 @@ export default function UnavailabilityClient() {
         const data = await loadRosterDesignData(rosterId);
         setDesignData(data);
         
-        // ✅ FIX DRAAD 26O: Laad ALLE assignments uit database (niet alleen NB)
-        const assignmentMap = await getAllAssignmentsByRosterId(rosterId);
-        setAllAssignments(assignmentMap);
-        
-        console.log('✅ Loaded unavailability data:', {
+        console.log('✅ Loaded unavailability data (DRAAD68 - dagdeel ondersteuning):', {
           rosterId,
           employeeCount: data?.employees?.length || 0,
-          totalAssignments: Array.from(assignmentMap.values()).reduce((sum, map) => sum + map.size, 0),
           startDate: data?.start_date
         });
       } catch (error) {
@@ -139,51 +133,32 @@ export default function UnavailabilityClient() {
     })();
   }, [rosterId, router]);
 
-  async function handleToggleUnavailable(emp: any, date: string) {
+  /**
+   * DRAAD68: Toggle NB per dagdeel
+   */
+  async function handleToggleUnavailable(emp: any, date: string, dagdeel: 'O' | 'M' | 'A') {
     if (!rosterId) return;
     
-    // ✅ FIX DRAAD 26O: Gebruik originalEmployeeId (emp1) ipv snapshot ID (re_emp1)
     const employeeId = emp.originalEmployeeId || emp.id;
     
-    console.log('🔍 Toggle NB click:', { 
-      rosterId, 
-      employeeId, 
+    console.log('🔍 Toggle NB click:', {
+      rosterId,
+      employeeId,
       date,
+      dagdeel,
       empName: emp.voornaam || emp.name
     });
     
-    // Check huidige status
-    const currentServiceCode = allAssignments.get(employeeId)?.get(date);
+    // TODO LATER: check roster_assignments per dagdeel
+    // Voor nu: simpele toggle zonder check
     
-    console.log('📊 Current service code:', currentServiceCode || 'null (leeg)');
-    
-    // ✅ DRAAD 26O: Logica volgens specificatie
-    if (currentServiceCode && currentServiceCode !== 'NB') {
-      // Er staat een andere dienst dan NB -> NIET TOEGESTAAN
-      alert(
-        `Wijziging is niet mogelijk in dit scherm\n\n` +
-        `Op ${date} staat voor ${emp.voornaam || emp.name} de dienst "${currentServiceCode}" ingepland.\n\n` +
-        `Verwijder eerst deze dienst in het hoofdrooster voordat je NB kunt instellen.`
-      );
-      console.log('⚠️  Toggle geblokkeerd - andere dienst aanwezig:', currentServiceCode);
-      return;
-    }
-    
-    // Als currentServiceCode === null of === 'NB' -> toggle mag
-    const success = await toggleNBAssignment(rosterId, employeeId, date);
+    const success = await toggleNBAssignment(rosterId, employeeId, date, dagdeel);
     
     if (success) {
       console.log('✅ Toggle succeeded, reloading data');
-      
-      // Herlaad ALLE assignments uit database
-      const assignmentMap = await getAllAssignmentsByRosterId(rosterId);
-      setAllAssignments(assignmentMap);
-      
-      // Ook designData herladen voor synchronisatie
       const updated = await loadRosterDesignData(rosterId);
       setDesignData(updated);
-      
-      console.log('✅ UI updated with new assignment status');
+      console.log('✅ UI updated with new NB status');
     } else {
       console.error('❌ Toggle failed');
       alert('Fout bij opslaan niet-beschikbaarheid. Check console voor details.');
@@ -220,19 +195,13 @@ export default function UnavailabilityClient() {
   
   const dates = getDaysInRangeStartingMonday(referenceDate);
 
-  // Tel totaal aantal NB markeringen
-  const totalNBCount = Array.from(allAssignments.values()).reduce(
-    (sum, dateMap) => sum + Array.from(dateMap.values()).filter(code => code === 'NB').length,
-    0
-  );
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
         <div className="bg-white rounded-xl shadow-lg p-6 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Niet Beschikbaar aanpassen</h1>
-            <p className="text-gray-600 text-sm">Klik op een cel om een medewerker niet-beschikbaar te markeren (rood = NB)</p>
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Niet Beschikbaar aanpassen (per dagdeel)</h1>
+            <p className="text-gray-600 text-sm">Klik op een cel om een medewerker niet-beschikbaar te markeren voor specifiek dagdeel (O/M/A)</p>
           </div>
           <button 
             onClick={()=>router.push(`/planning/design/dashboard?rosterId=${rosterId}`)} 
@@ -245,9 +214,9 @@ export default function UnavailabilityClient() {
         
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
           <p className="text-blue-800 text-sm">
-            <strong>Instructie:</strong> Klik op een <strong>lege cel</strong> om een medewerker niet-beschikbaar (NB) te maken. 
+            <strong>Instructie:</strong> Klik op een <strong>lege cel</strong> om een medewerker niet-beschikbaar (NB) te maken voor dat dagdeel. 
             Klik op een <strong>rode cel (NB)</strong> om deze beschikbaar te maken. 
-            <strong>Cellen met andere diensten</strong> (zwart op wit) kunnen hier niet worden gewijzigd.
+            Elke dag heeft 3 kolommen: <strong>O</strong> (Ochtend 09:00-13:00), <strong>M</strong> (Middag 13:00-18:00), <strong>A</strong> (Avond/Nacht 18:00-09:00).
           </p>
         </div>
         
@@ -256,19 +225,32 @@ export default function UnavailabilityClient() {
           <table className="w-full border-collapse" style={{ minWidth: '600px' }}>
             <thead>
               <tr>
-                <th className="border border-gray-300 p-3 bg-gray-100 sticky left-0 z-10 font-semibold text-gray-900">Medewerker</th>
+                <th className="border border-gray-300 p-3 bg-gray-100 sticky left-0 z-10 font-semibold text-gray-900">
+                  Medewerker
+                </th>
                 {dates.map((date, idx) => {
                   const dayOfWeek = date.getDay();
                   const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
                   return (
                     <th 
-                      key={idx} 
+                      key={idx}
+                      colSpan={3} // DRAAD68: 3 kolommen per dag
                       className={`border border-gray-300 p-2 text-xs font-medium ${
                         isWeekend ? 'bg-yellow-100' : 'bg-gray-100'
                       }`}
                     >
-                      <div className="font-semibold">{['Zo','Ma','Di','Wo','Do','Vr','Za'][dayOfWeek]}</div>
-                      <div className="text-gray-600">{date.getDate()}/{date.getMonth()+1}</div>
+                      <div className="font-semibold">
+                        {['Zo','Ma','Di','Wo','Do','Vr','Za'][dayOfWeek]}
+                      </div>
+                      <div className="text-gray-600">
+                        {date.getDate()}/{date.getMonth()+1}
+                      </div>
+                      {/* DRAAD68: Dagdeel labels */}
+                      <div className="flex justify-around mt-1 text-[10px] text-gray-500">
+                        <span>O</span>
+                        <span>M</span>
+                        <span>A</span>
+                      </div>
                     </th>
                   );
                 })}
@@ -277,15 +259,9 @@ export default function UnavailabilityClient() {
             <tbody>
               {/* ✨ Gesorteerde medewerkers met team-indicator en naam-truncatie */}
               {sortEmployees(designData.employees || []).map((emp: any) => {
-                // ✅ FIX DRAAD 26O: Gebruik originalEmployeeId voor lookup
                 const employeeId = emp.originalEmployeeId || emp.id;
-                const employeeAssignments = allAssignments.get(employeeId) || new Map();
-                
-                // ✨ Naam truncatie bij >10 tekens
                 const fullName = emp.voornaam || emp.name || 'Onbekend';
                 const shortName = fullName.length > 10 ? fullName.slice(0, 10) + '...' : fullName;
-                
-                // ✨ Team kleur voor indicator
                 const teamColor = getTeamColor(emp.team || 'Overig');
                 
                 return (
@@ -296,58 +272,53 @@ export default function UnavailabilityClient() {
                       title={`${fullName} - Team ${emp.team || 'Overig'} - ${emp.dienstverband || 'Onbekend'}`}
                     >
                       <div className="flex items-center gap-2">
-                        {/* ✨ Team indicator cirkel */}
                         <span 
                           className={`inline-block w-3 h-3 rounded-full flex-shrink-0 ${teamColor}`} 
                           title={`Team ${emp.team || 'Overig'}`}
                         ></span>
-                        {/* ✨ Truncated naam met tooltip */}
                         <span>{shortName}</span>
                       </div>
                     </td>
-                    {dates.map((date, idx) => {
+                    {dates.map((date, dateIdx) => {
                       const dateStr = date.toISOString().split('T')[0];
-                      const serviceCode = employeeAssignments.get(dateStr);
                       
-                      // ✅ DRAAD 26O: 3 states bepalen
-                      const isNB = serviceCode === 'NB';
-                      const hasOtherService = serviceCode && serviceCode !== 'NB';
-                      const isEmpty = !serviceCode;
+                      // Haal unavailability data op voor deze medewerker en datum
+                      const unavailData = designData.unavailabilityData?.[employeeId]?.[dateStr];
                       
-                      // Styling op basis van state
-                      let cellClass = 'border border-gray-300 p-2 text-center transition-colors ';
-                      let cursorClass = '';
-                      let title = '';
-                      
-                      if (isNB) {
-                        cellClass += 'bg-red-200 ';
-                        cursorClass = 'cursor-pointer hover:bg-red-300';
-                        title = 'Klik om beschikbaar te maken';
-                      } else if (hasOtherService) {
-                        cellClass += 'bg-white ';
-                        cursorClass = 'cursor-not-allowed';
-                        title = `Dienst "${serviceCode}" - wijziging niet mogelijk in dit scherm`;
-                      } else {
-                        cellClass += 'bg-white ';
-                        cursorClass = 'cursor-pointer hover:bg-gray-100';
-                        title = 'Klik om niet-beschikbaar te markeren';
-                      }
-                      
-                      return (
-                        <td 
-                          key={idx} 
-                          className={cellClass + cursorClass}
-                          onClick={() => handleToggleUnavailable(emp, dateStr)}
-                          title={title}
-                        >
-                          {isNB && (
-                            <span className="text-lg font-bold text-red-800">✕</span>
-                          )}
-                          {hasOtherService && (
-                            <span className="text-sm font-medium text-gray-900">{serviceCode}</span>
-                          )}
-                        </td>
-                      );
+                      // DRAAD68: Render 3 cellen per dag (O, M, A)
+                      return ['O', 'M', 'A'].map((dagdeel) => {
+                        // Check of dit dagdeel NB is
+                        const isNB = isDagdeelUnavailable(unavailData, dagdeel as 'O' | 'M' | 'A');
+                        
+                        // TODO LATER: check roster_assignments per dagdeel voor ingeplande diensten
+                        
+                        let cellClass = 'border border-gray-300 p-2 text-center transition-colors ';
+                        let cursorClass = '';
+                        let title = '';
+                        
+                        if (isNB) {
+                          cellClass += 'bg-red-200 ';
+                          cursorClass = 'cursor-pointer hover:bg-red-300';
+                          title = `${dagdeel} - Klik om beschikbaar te maken`;
+                        } else {
+                          cellClass += 'bg-white ';
+                          cursorClass = 'cursor-pointer hover:bg-gray-100';
+                          title = `${dagdeel} - Klik om niet-beschikbaar te markeren`;
+                        }
+                        
+                        return (
+                          <td 
+                            key={`${dateIdx}-${dagdeel}`}
+                            className={cellClass + cursorClass}
+                            onClick={() => handleToggleUnavailable(emp, dateStr, dagdeel as 'O' | 'M' | 'A')}
+                            title={title}
+                          >
+                            {isNB && (
+                              <span className="text-lg font-bold text-red-800">✕</span>
+                            )}
+                          </td>
+                        );
+                      });
                     })}
                   </tr>
                 );
@@ -367,13 +338,14 @@ export default function UnavailabilityClient() {
               <div className="w-8 h-8 bg-red-200 border border-gray-300 rounded flex items-center justify-center text-lg font-bold text-red-800">✕</div>
               <span className="text-gray-700">Niet Beschikbaar (NB)</span>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-white border border-gray-300 rounded flex items-center justify-center text-xs font-medium text-gray-900">DD</div>
-              <span className="text-gray-700">Andere dienst (zwart op wit - niet wijzigbaar)</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-yellow-100 border border-gray-300 rounded"></div>
-              <span className="text-gray-700">Weekend (header)</span>
+            {/* DRAAD68: Dagdeel labels */}
+            <div className="border-l pl-4 ml-2">
+              <span className="text-gray-600 font-medium">Dagdelen:</span>
+              <div className="flex gap-3 mt-1">
+                <span className="text-gray-700">O = Ochtend (09:00-13:00)</span>
+                <span className="text-gray-700">M = Middag (13:00-18:00)</span>
+                <span className="text-gray-700">A = Avond/Nacht (18:00-09:00)</span>
+              </div>
             </div>
             {/* ✨ Team kleuren legenda */}
             <div className="flex items-center gap-2">
@@ -392,12 +364,7 @@ export default function UnavailabilityClient() {
         </div>
         
         <div className="mt-4 text-center text-sm text-gray-600">
-          Wijzigingen worden automatisch opgeslagen • 
-          {totalNBCount > 0 && (
-            <span className="text-blue-600 font-medium">
-              {' '}{totalNBCount} NB markering(en) geladen
-            </span>
-          )}
+          Wijzigingen worden automatisch opgeslagen
         </div>
       </div>
     </div>
