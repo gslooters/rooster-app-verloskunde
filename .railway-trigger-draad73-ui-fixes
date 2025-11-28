@@ -1,0 +1,6 @@
+# Railway Deployment Trigger File
+# DRAAD73 - UI fixes trigger NB scherm
+
+Timestamp: 2025-11-28T19:10:44Z
+Build: DRAAD73-ui-fixes-8942
+Commit: auto-trigger-draad73-8942
