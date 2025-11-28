@@ -6,9 +6,18 @@ Een Next.js applicatie voor roosterplanning in de verloskunde praktijk.
 
 ## 📦 DEPLOYMENT STATUS
 
-**Laatste deployment:** DRAAD73 FIX - Force rebuild voor NB scherm UI fixes (28 nov 2025, 20:30 CET)  
-**Status:** ✅ FORCE REBUILD ACTIEF  
-**Build verwachting:** ✅ SUCCESS op commit 2c1811cd
+**Laatste deployment:** DRAAD74 - Team Kleuren Fix via Employee Snapshot (28 nov 2025, 23:09 CET)  
+**Status:** ✅ FORCE REBUILD ACTIEF - Trigger: 8477  
+**Build verwachting:** ✅ SUCCESS op commit 18290988
+
+### DRAAD74 - Team Kleuren Fix via Employee Snapshot
+- ✅ RosterEmployee interface uitgebreid met team/voornaam/achternaam/dienstverband
+- ✅ initializeRosterDesign vult team data in snapshot
+- ✅ Team kleuren werken nu correct in UnavailabilityClient
+- ✅ Groen/Oranje/Blauw bolletjes per team
+- ✅ Debug logging voor team data verificatie
+- ✅ Geen database migratie nodig (tabellen leeggemaakt)
+- ✅ Cache-busting: draad74-team-data-snapshot-fix-1732833973
 
 ### DRAAD73 FIX - NB Scherm UI Verbeteringen
 - ✅ Weeknummer weergave in header (Week X - Y)
@@ -251,6 +260,13 @@ This project uses:
 - **Critical Analysis**: [DRAAD36L_CRITICAL_ANALYSIS.md](./DRAAD36L_CRITICAL_ANALYSIS.md) - Lessons learned van route problemen
 
 ## Recent Updates
+
+### v2.5 - DRAAD74 Team Kleuren Fix (28 nov 2025)
+- ✅ RosterEmployee uitgebreid met team/voornaam/achternaam/dienstverband
+- ✅ Employee snapshot bevat nu team data
+- ✅ Team kleuren werken correct in NB scherm
+- ✅ Groen/Oranje/Blauw bolletjes per team
+- ✅ Debug logging voor verificatie
 
 ### v2.4 - DRAAD73 FIX NB Scherm UI (28 nov 2025)
 - ✅ Force deployment fix: correcte commit live
