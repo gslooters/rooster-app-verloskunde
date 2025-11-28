@@ -1,46 +1,51 @@
-GLOBAL CACHE BUST - DRAAD3 TYPESCRIPT PATHS CRITICAL FIX
-DEPLOYMENT VERSION VERIFICATIE
-Timestamp: 1732462596000 (24-11-2025 16:16:36 CET)
-Build ID: draad3-typescript-path-mapping-fix
-Random: 0.847392
-Deployment: 3de keer, DEFINITIEF
+GLOBAL CACHE BUST - DRAAD73 UI FIXES FORCE DEPLOYMENT
+DEPLOYMENT VERSION VERIFICATIE - CRITICAL FIX
+Timestamp: 1732825793000 (28-11-2025 20:29:53 CET)
+Build ID: draad73-force-deployment-fix
+Random: 0.926471
+Deployment: FORCE REBUILD - Correcte commit moet live
 
-🔴 CRITICAL FIX - DRAAD3 (24-11-2025):
-✅ tsconfig.json path mapping gecorrigeerd
-✅ "@/*": ["./src/*"] → "@/*": ["./*"]
-✅ Module resolution errors volledig opgelost
-✅ Alle imports @/lib/*, @/styles/* werken nu
+🔴 CRITICAL FIX - DRAAD73 FORCE DEPLOY (28-11-2025):
+✅ Weeknummer weergave in header toegevoegd
+✅ Medewerkernaam compact (alleen voornaam)
+✅ Teamkleur indicators verbeterd (fallback logic)
+✅ Legenda verplaatst naar footer (compact)
+✅ Dubbele instructie verwijderd
+✅ Layout spacing verbeterd
+✅ Debug/console logs opgeschoond
 
-🛠️ GEFIXTE MODULES:
-- @/lib/services/employees-storage
-- @/lib/types/employee
-- @/styles/planning.css
-- @/styles/compact-service.css
-- @/lib/planning/rosterDesign
+🎯 TARGET COMMIT:
+- 2c1811cd27300ad94134cf1535d67a000968f240
+- Merge DRAAD73: Verbeterd NB scherm
+- Datum: 2025-11-28T19:13:08Z
 
-🐛 ROOT CAUSE:
-TypeScript path mapping wees naar niet-bestaande src/ directory.
-Alle bestanden staan in root (lib/, styles/, app/), niet in src/.
+⚠️ DEPLOYMENT PROBLEEM OPGELOST:
+Vorige deployment draaide op verkeerde commit (oude code).
+Dit cachebust bestand forceert rebuild op correcte commit.
+
+🛠️ GEFIXTE UI ELEMENTEN:
+- Weeknummer range in periode-indicator
+- Team Groen/Oranje/Overig kleuren correct
+- Compacte namen (voornaam only)
+- Footer legenda layout
+- Geen dubbele instructies meer
+- Clean console (geen debug spam)
 
 📝 VERIFICATIE STAPPEN:
-1. Build moet succesvol compileren (geen "Module not found")
-2. Railway deployment compleet
-3. App start zonder errors
-4. /employees pagina laadt correct
-5. /planning pagina laadt correct
-6. TypeScript import resolution werkt
+1. Railway build start automatisch
+2. Build moet op commit 2c1811cd draaien
+3. UI toont weeknummers in header
+4. Medewerkernamen zijn compact
+5. Teamkleuren zijn zichtbaar
+6. Legenda onderaan scherm
+7. Geen dubbele instructie-balk
 
 📊 VOORGAANDE FIXES:
-- DRAAD2A: DagdelenDashboardClient type safety + performance
-- DRAAD1F: Timezone UTC formatting fix
-- DRAAD1E: Version endpoint + deployment verificatie
-- DRAAD1D: WeekTableHeader periode correctie
-- DRAAD42M: 8-dagen bug fix
-- DRAAD37E: Dagdelen dashboard implementatie
+- DRAAD72: Timezone locale formatting fix
+- DRAAD71: Railway trigger deployment
+- DRAAD40B5: TypeScript errors fix
+- DRAAD3: Path mapping fix
 
-VERWACHTE BUILD: SUCCESS (eerste keer na 3 pogingen)
-VERWACHTE COMMITS: 
-- 432f54b (tsconfig.json fix)
-- 881e631 (cachebust)
-- d731191 (railway trigger)
-- 2526877 (deployment docs)
+VERWACHTE BUILD: SUCCESS - FORCE REBUILD
+VERWACHTE COMMIT LIVE: 2c1811cd (DRAAD73 merge)
+VERWACHTE UI: Weeknummers + compact namen + teamkleuren
