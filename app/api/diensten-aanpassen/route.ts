@@ -1,6 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
+// 🔥 CRITICAL: Force dynamic rendering - deze route MOET server-side runnen
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -20,6 +24,7 @@ if (!supabaseUrl || !supabaseKey) {
  * - Alle actieve medewerkers met hun dienst-toewijzingen
  * 
  * DRAAD66G: Inclusief dienstwaarde voor gewogen telling
+ * DRAAD73D: Force dynamic rendering (geen static generation)
  */
 export async function GET(request: NextRequest) {
   try {
@@ -203,6 +208,8 @@ export async function GET(request: NextRequest) {
  * 
  * Update een enkele dienst-toewijzing voor een medewerker.
  * Gebruikt upsert pattern: insert or update.
+ * 
+ * DRAAD73D: Force dynamic rendering (geen static generation)
  */
 export async function PUT(request: NextRequest) {
   try {
