@@ -42,19 +42,44 @@ export async function GET(request: NextRequest) {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // 1. Haal roster info op
+    // 1. Haal roster info op (CORRECTE VELDNAMEN: start_date, end_date)
     const { data: roster, error: rosterError } = await supabase
       .from('roosters')
-      .select('id, start_datum, eind_datum, start_weeknummer, eind_weeknummer')
+      .select('id, start_date, end_date, status')
       .eq('id', rosterId)
       .single();
 
-    if (rosterError || !roster) {
+    if (rosterError) {
+      console.error('❌ Supabase error bij ophalen rooster:', rosterError);
+      return NextResponse.json(
+        { error: 'Fout bij ophalen rooster', details: rosterError.message },
+        { status: 500 }
+      );
+    }
+
+    if (!roster) {
       return NextResponse.json(
         { error: 'Rooster niet gevonden' },
         { status: 404 }
       );
     }
+
+    // Bereken weeknummers uit datums (ISO week berekening)
+    const startDate = new Date(roster.start_date);
+    const endDate = new Date(roster.end_date);
+    
+    // Helper functie voor ISO week nummer
+    function getISOWeek(date: Date): number {
+      const target = new Date(date.valueOf());
+      const dayNr = (date.getDay() + 6) % 7;
+      target.setDate(target.getDate() - dayNr + 3);
+      const firstThursday = new Date(target.getFullYear(), 0, 4);
+      const diff = target.getTime() - firstThursday.getTime();
+      return 1 + Math.round(diff / 604800000);
+    }
+    
+    const startWeek = getISOWeek(startDate);
+    const endWeek = getISOWeek(endDate);
 
     // 2. Haal alle actieve dienst-types op (gesorteerd op code)
     const { data: serviceTypes, error: serviceTypesError } = await supabase
@@ -64,6 +89,7 @@ export async function GET(request: NextRequest) {
       .order('code');
 
     if (serviceTypesError) {
+      console.error('❌ Supabase error bij ophalen dienst-types:', serviceTypesError);
       return NextResponse.json(
         { error: 'Fout bij ophalen dienst-types' },
         { status: 500 }
@@ -80,6 +106,7 @@ export async function GET(request: NextRequest) {
       .order('voornaam');
 
     if (employeesError) {
+      console.error('❌ Supabase error bij ophalen medewerkers:', employeesError);
       return NextResponse.json(
         { error: 'Fout bij ophalen medewerkers' },
         { status: 500 }
@@ -94,6 +121,7 @@ export async function GET(request: NextRequest) {
       .eq('actief', true);
 
     if (existingServicesError) {
+      console.error('❌ Supabase error bij ophalen dienst-toewijzingen:', existingServicesError);
       return NextResponse.json(
         { error: 'Fout bij ophalen dienst-toewijzingen' },
         { status: 500 }
@@ -137,10 +165,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       roster: {
         id: roster.id,
-        startDate: roster.start_datum,
-        endDate: roster.eind_datum,
-        startWeek: roster.start_weeknummer,
-        endWeek: roster.eind_weeknummer
+        startDate: roster.start_date,
+        endDate: roster.end_date,
+        startWeek: startWeek,
+        endWeek: endWeek,
+        status: roster.status
       },
       serviceTypes: serviceTypes?.map(st => ({
         id: st.id,
