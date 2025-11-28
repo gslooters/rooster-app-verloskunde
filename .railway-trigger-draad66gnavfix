@@ -1,0 +1,11 @@
+# DRAAD66G NAVIGATIEFIX - Cache-busting
+Timestamp: 1732765261952
+Random: draad66g-nav-fix
+
+Navigatie van Terug naar Dashboard is gefixt. Deployment trigger voor Railway.
+
+Bestanden gewijzigd:
+- app/planning/design/diensten-aanpassen/page.client.tsx
+
+# Deployment commit 99848a3c18a9f17d5faa72cff1dd49b0e4f6af0d
+# Test opnieuw: Terug knop leidt nu naar Dashboard Rooster Ontwerp
