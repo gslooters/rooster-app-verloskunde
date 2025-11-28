@@ -3,6 +3,7 @@
 // DRAAD68 - Dagdeel-ondersteuning (O/M/A) in unavailability data
 // DRAAD68.2 - TypeScript fix: verwijder onnodige type assertions
 // DRAAD68.3 - TypeScript fix: includes check met expliciete array typing
+// DRAAD74 - Team data in employee snapshot voor team kleuren
 import { RosterEmployee, RosterStatus, RosterDesignData, validateMaxShifts, createDefaultRosterEmployee, createDefaultRosterStatus, DagdeelAvailability, convertLegacyUnavailability } from '@/lib/types/roster';
 import { getAllEmployees } from '@/lib/services/employees-storage';
 import { TeamType, DienstverbandType, getFullName, DagblokType } from '@/lib/types/employee';
@@ -60,7 +61,7 @@ export async function createEmployeeSnapshot(rosterId: string): Promise<RosterEm
 }
 
 /**
- * ✅ DRAAD001 FIX + DRAAD68 - Volledig geïmplementeerde initializeRosterDesign met dagdeel ondersteuning
+ * ✅ DRAAD001 FIX + DRAAD68 + DRAAD74 - Volledig geïmplementeerde initializeRosterDesign met dagdeel + team data ondersteuning
  * 
  * Deze functie:
  * 1. Creëert employee snapshot van alle actieve medewerkers
@@ -76,6 +77,11 @@ export async function createEmployeeSnapshot(rosterId: string): Promise<RosterEm
  * - Expliciete type casting voor nbDagdelen array
  * - TypeScript includes() check fix
  * 
+ * DRAAD74 WIJZIGING:
+ * - Employee snapshot bevat nu voornaam/achternaam/team/dienstverband
+ * - Team kleuren werken correct in UnavailabilityClient
+ * - Debug logging toegevoegd voor verificatie
+ * 
  * @param rosterId - UUID van het aangemaakte rooster
  * @param start_date - Start datum van rooster periode (YYYY-MM-DD)
  * @returns RosterDesignData object of null bij fout
@@ -83,7 +89,7 @@ export async function createEmployeeSnapshot(rosterId: string): Promise<RosterEm
 export async function initializeRosterDesign(rosterId: string, start_date: string): Promise<RosterDesignData|null> {
   try {
     console.log('\n' + '='.repeat(80));
-    console.log('[initializeRosterDesign] 🚀 START (DRAAD68.3 - TypeScript fix)');
+    console.log('[initializeRosterDesign] 🚀 START (DRAAD74 - Team data in snapshot)');
     console.log('[initializeRosterDesign] RosterId:', rosterId);
     console.log('[initializeRosterDesign] Start date:', start_date);
     console.log('='.repeat(80) + '\n');
@@ -107,11 +113,15 @@ export async function initializeRosterDesign(rosterId: string, start_date: strin
       return null;
     }
     
-    // STAP 3: Creëer employee snapshot
+    // STAP 3: Creëer employee snapshot met team data (DRAAD74)
     const now = new Date().toISOString();
     const employeeSnapshot: RosterEmployee[] = activeEmployees.map(emp => ({
       id: `re_${emp.id}`, // Prefix voor roster employee
       name: getFullName(emp),
+      voornaam: emp.voornaam || '', // DRAAD74: Voornaam voor UI
+      achternaam: emp.achternaam || '', // DRAAD74: Achternaam voor volledigheid
+      team: emp.team || 'Overig', // DRAAD74: Team voor kleuren (Groen/Oranje/Overig)
+      dienstverband: emp.dienstverband || 'Loondienst', // DRAAD74: Dienstverband voor sortering
       maxShifts: emp.aantalWerkdagen || 0, // Gebruik aantalWerkdagen als default
       availableServices: [], // Wordt later ingevuld in UI
       isSnapshotActive: true,
@@ -119,9 +129,10 @@ export async function initializeRosterDesign(rosterId: string, start_date: strin
       snapshotDate: now
     }));
     
-    console.log('[initializeRosterDesign] Employee snapshot gecreëerd:');
+    // DRAAD74: Debug logging voor team data verificatie
+    console.log('[DRAAD74] Employee snapshot gecreëerd met team data:');
     employeeSnapshot.forEach(emp => {
-      console.log(`  • ${emp.name} (${emp.originalEmployeeId}) - max ${emp.maxShifts} diensten`);
+      console.log(`  - ${emp.voornaam} ${emp.achternaam} - Team: ${emp.team} (${emp.dienstverband}) - max ${emp.maxShifts} diensten`);
     });
     console.log('');
     
