@@ -1,6 +1,7 @@
 // lib/types/roster.ts
 // Sprint 1.2: Uitgebreide data modellen voor rooster ontwerp functionaliteit
 // DRAAD68: Dagdeel-ondersteuning (O/M/A) toegevoegd
+// DRAAD74: Team/voornaam/achternaam/dienstverband toegevoegd aan RosterEmployee
 
 // DRAAD68: Dagdeel beschikbaarheid structuur
 export type DagdeelAvailability = {
@@ -12,6 +13,10 @@ export type DagdeelAvailability = {
 export interface RosterEmployee {
   id: string;
   name: string;
+  voornaam: string; // DRAAD74: Toegevoegd voor UI display
+  achternaam: string; // DRAAD74: Toegevoegd voor completeness
+  team: string; // DRAAD74: Toegevoegd voor team kleuren
+  dienstverband: string; // DRAAD74: Toegevoegd voor sortering
   maxShifts: number; // 0-35 range voor aantal diensten in rooster periode
   availableServices: string[]; // Services die deze medewerker kan doen
   isSnapshotActive: boolean; // Was actief op moment van rooster creatie
@@ -125,6 +130,10 @@ export function createDefaultRosterEmployee(originalEmployee: any): RosterEmploy
   return {
     id: `re_${originalEmployee.id}`,
     name: originalEmployee.name || `${originalEmployee.voornaam} ${originalEmployee.achternaam}`,
+    voornaam: originalEmployee.voornaam || '', // DRAAD74
+    achternaam: originalEmployee.achternaam || '', // DRAAD74
+    team: originalEmployee.team || 'Overig', // DRAAD74
+    dienstverband: originalEmployee.dienstverband || 'Loondienst', // DRAAD74
     maxShifts: 0, // Default waarde, gebruiker moet invullen
     availableServices: [], // Wordt later ingevuld
     isSnapshotActive: originalEmployee.actief || originalEmployee.active,
