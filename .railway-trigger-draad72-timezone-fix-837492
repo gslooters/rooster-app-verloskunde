@@ -1,0 +1,4 @@
+DRAAD72: Railway deployment trigger
+Random: 837492
+Fix: Locale date formatting prevents UTC timezone shift
+Target: Unavailability screen date display
