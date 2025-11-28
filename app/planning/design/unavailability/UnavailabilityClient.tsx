@@ -4,7 +4,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { getRosterIdFromParams } from '@/lib/utils/getRosterIdFromParams';
 import { loadRosterDesignData, toggleNBAssignment } from '@/lib/planning/rosterDesign';
 import { isDagdeelUnavailable, DagdeelAvailability } from '@/lib/types/roster';
-import { getUniqueDatesFromAssignments } from '@/lib/services/roster-assignments-supabase';
+import { supabase } from '@/lib/supabase';
 
 /**
  * ✨ Helper: Team kleur bepalen voor indicator cirkel
@@ -62,34 +62,50 @@ export default function UnavailabilityClient() {
     }
     (async function loadData() {
       try {
-        // DRAAD70: Eerst datums ophalen uit roster_assignments
-        console.log('📅 DRAAD70: Ophalen datums uit roster_assignments...');
-        const uniqueDates = await getUniqueDatesFromAssignments(rosterId);
+        console.log('🔄 DRAAD71: Laden NB scherm data...');
         
-        if (uniqueDates.length === 0) {
-          console.warn('⚠️  DRAAD70: Geen datums gevonden in roster_assignments!');
-          throw new Error('Geen datums gevonden voor dit rooster. Check of roster_assignments records heeft.');
-        }
-        
-        setDates(uniqueDates);
-        console.log('✅ DRAAD70: Datums ingeladen:', {
-          aantal: uniqueDates.length,
-          eerste: uniqueDates[0]?.toISOString().split('T')[0],
-          laatste: uniqueDates[uniqueDates.length - 1]?.toISOString().split('T')[0]
-        });
-        
-        // Dan rest van design data
+        // STAP 1: Haal roster design data op (bevat start_date)
         const data = await loadRosterDesignData(rosterId);
+        if (!data) {
+          throw new Error('Geen rooster design data gevonden');
+        }
         setDesignData(data);
         
-        console.log('✅ DRAAD70: Loaded unavailability data (roster_assignments basis):', {
-          rosterId,
-          employeeCount: data?.employees?.length || 0,
-          dateCount: uniqueDates.length
+        // STAP 2: Haal start_date uit roosters tabel
+        const { data: roster, error: rosterError } = await supabase
+          .from('roosters')
+          .select('start_date')
+          .eq('id', rosterId)
+          .single();
+        
+        if (rosterError || !roster) {
+          throw new Error('Kon start_date niet ophalen uit roosters tabel');
+        }
+        
+        console.log('📅 DRAAD71: Start date uit database:', roster.start_date);
+        
+        // STAP 3: Genereer ALTIJD 35 dagen vanaf start_date
+        const generatedDates: Date[] = [];
+        const startDate = new Date(roster.start_date + 'T00:00:00'); // Parse als lokale tijd
+        
+        for (let i = 0; i < 35; i++) {
+          const date = new Date(startDate);
+          date.setDate(startDate.getDate() + i);
+          generatedDates.push(date);
+        }
+        
+        console.log('✅ DRAAD71: Gegenereerd 35 dagen:', {
+          eerste: generatedDates[0].toISOString().split('T')[0],
+          laatste: generatedDates[34].toISOString().split('T')[0],
+          aantal: generatedDates.length
         });
+        
+        setDates(generatedDates);
+        
+        console.log('✅ DRAAD71: Data geladen');
       } catch (error: any) {
-        console.error('❌ Error loading unavailability data:', error);
-        alert(error.message || 'Fout bij laden van data. Check console voor details.');
+        console.error('❌ DRAAD71: Fout bij laden:', error);
+        alert(error.message || 'Fout bij laden van data.');
       } finally {
         setLoading(false);
       }
@@ -153,7 +169,7 @@ export default function UnavailabilityClient() {
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6 max-w-md text-center">
           <h2 className="text-lg font-semibold text-yellow-800 mb-2">Geen datums</h2>
-          <p className="text-yellow-700 mb-4">Dit rooster heeft geen roster_assignments records. Initialiseer het rooster eerst.</p>
+          <p className="text-yellow-700 mb-4">Dit rooster heeft geen datums. Initialiseer het rooster eerst.</p>
           <button onClick={()=>router.push('/planning')} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Terug naar overzicht</button>
         </div>
       </div>
@@ -167,7 +183,7 @@ export default function UnavailabilityClient() {
           <div>
             <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Niet Beschikbaar aanpassen (per dagdeel)</h1>
             <p className="text-gray-600 text-sm">Klik op een cel om een medewerker niet-beschikbaar te markeren voor specifiek dagdeel (O/M/A)</p>
-            <p className="text-xs text-green-600 mt-1">✅ DRAAD70: Datums uit roster_assignments - Periode: {dates[0]?.toISOString().split('T')[0]} tot {dates[dates.length - 1]?.toISOString().split('T')[0]} ({dates.length} dagen)</p>
+            <p className="text-xs text-green-600 mt-1">✅ DRAAD71: 35 dagen vanaf roosters.start_date - Periode: {dates[0]?.toISOString().split('T')[0]} tot {dates[dates.length - 1]?.toISOString().split('T')[0]} ({dates.length} dagen)</p>
           </div>
           <button 
             onClick={()=>router.push(`/planning/design/dashboard?rosterId=${rosterId}`)} 
