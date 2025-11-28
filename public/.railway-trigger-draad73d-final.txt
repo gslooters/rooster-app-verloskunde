@@ -1,0 +1,39 @@
+DRAAD73D FINAL DEPLOYMENT TRIGGER
+
+Timestamp: 1732827755000
+Random: draad73d-all-routes-fixed
+
+API ROUTES FIXED (4x):
+✅ 1. /api/diensten-aanpassen
+   - export const dynamic = 'force-dynamic'
+   - export const runtime = 'nodejs'
+   - Fix: request.url static generation error
+
+✅ 2. /api/planning/service-allocation-pdf  
+   - export const dynamic = 'force-dynamic'
+   - export const runtime = 'nodejs'
+   - Fix: nextUrl.searchParams static generation error
+
+✅ 3. /api/planning/dagdelen/[id]
+   - export const dynamic = 'force-dynamic'
+   - export const runtime = 'nodejs'
+   - Preventief: gebruikt cookies() (dynamic data)
+
+✅ 4. /api/health (reeds correct)
+   - export const dynamic = 'force-dynamic'
+   - export const runtime = 'nodejs'
+   - Healthcheck endpoint OK
+
+DOCUMENTATIE:
+- docs/DRAAD73D-DEPLOYMENT-FIX.md
+- Volledige diagnose + fixes
+- Test procedures
+
+VERWACHTING:
+- Build time: ~3 minuten
+- Healthcheck: Slaagt binnen 20 seconden
+- Status: HEALTHY op Railway dashboard
+
+---
+Deployment should succeed now.
+All dynamic routes properly configured.
