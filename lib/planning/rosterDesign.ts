@@ -2,9 +2,10 @@
 // SCAN2 - UTC-safe migratie autofillUnavailability (DRAAD62 pattern)
 // DRAAD68 - Dagdeel-ondersteuning (O/M/A) in unavailability data
 // DRAAD68.2 - TypeScript fix: verwijder onnodige type assertions
+// DRAAD68.3 - TypeScript fix: includes check met expliciete array typing
 import { RosterEmployee, RosterStatus, RosterDesignData, validateMaxShifts, createDefaultRosterEmployee, createDefaultRosterStatus, DagdeelAvailability, convertLegacyUnavailability } from '@/lib/types/roster';
 import { getAllEmployees } from '@/lib/services/employees-storage';
-import { TeamType, DienstverbandType, getFullName } from '@/lib/types/employee';
+import { TeamType, DienstverbandType, getFullName, DagblokType } from '@/lib/types/employee';
 import { getRosterDesignByRosterId, createRosterDesign, updateRosterDesign, bulkUpdateUnavailability } from '@/lib/services/roster-design-supabase';
 import { getWeekdayCode } from '@/lib/utils/date-helpers';
 import { parseUTCDate, addUTCDays, toUTCDateString } from '@/lib/utils/date-utc';
@@ -71,6 +72,10 @@ export async function createEmployeeSnapshot(rosterId: string): Promise<RosterEm
  * - unavailabilityData krijgt DagdeelAvailability structuur { O?, M?, A? }
  * - Geen data loss meer - dagdeel informatie blijft behouden
  * 
+ * DRAAD68.3 FIX:
+ * - Expliciete type casting voor nbDagdelen array
+ * - TypeScript includes() check fix
+ * 
  * @param rosterId - UUID van het aangemaakte rooster
  * @param start_date - Start datum van rooster periode (YYYY-MM-DD)
  * @returns RosterDesignData object of null bij fout
@@ -78,7 +83,7 @@ export async function createEmployeeSnapshot(rosterId: string): Promise<RosterEm
 export async function initializeRosterDesign(rosterId: string, start_date: string): Promise<RosterDesignData|null> {
   try {
     console.log('\n' + '='.repeat(80));
-    console.log('[initializeRosterDesign] 🚀 START (DRAAD68 - Dagdeel ondersteuning)');
+    console.log('[initializeRosterDesign] 🚀 START (DRAAD68.3 - TypeScript fix)');
     console.log('[initializeRosterDesign] RosterId:', rosterId);
     console.log('[initializeRosterDesign] Start date:', start_date);
     console.log('='.repeat(80) + '\n');
@@ -154,16 +159,16 @@ export async function initializeRosterDesign(rosterId: string, start_date: strin
         const dayCode = getWeekdayCode(dateObj).toLowerCase(); // 'ma', 'di', etc.
         
         // Check of deze dag structurele NB heeft
-        const nbDagdelen = emp.structureel_nbh[dayCode];
+        const nbDagdelen = emp.structureel_nbh[dayCode] as DagblokType[];
         
         if (nbDagdelen && nbDagdelen.length > 0) {
           // Converteer array van dagdelen naar DagdeelAvailability object
           const dagdeelData: DagdeelAvailability = {};
           
-          // DRAAD68.2 FIX: Gebruik directe string literals zonder type assertion
-          if (nbDagdelen.includes('O')) dagdeelData.O = true;
-          if (nbDagdelen.includes('M')) dagdeelData.M = true;
-          if (nbDagdelen.includes('A')) dagdeelData.A = true;
+          // DRAAD68.3 FIX: Gebruik type-safe includes checks
+          if (nbDagdelen.includes(DagblokType.OCHTEND)) dagdeelData.O = true;
+          if (nbDagdelen.includes(DagblokType.MIDDAG)) dagdeelData.M = true;
+          if (nbDagdelen.includes(DagblokType.AVOND_NACHT)) dagdeelData.A = true;
           
           unavailabilityData[emp.id][dateStr] = dagdeelData;
           
