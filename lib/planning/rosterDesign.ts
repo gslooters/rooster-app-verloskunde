@@ -1,6 +1,7 @@
 // DRAAD001 FIX - lib/planning/rosterDesign.ts
 // SCAN2 - UTC-safe migratie autofillUnavailability (DRAAD62 pattern)
 // DRAAD68 - Dagdeel-ondersteuning (O/M/A) in unavailability data
+// DRAAD68.1 - TypeScript fix voor dagdeel type casting
 import { RosterEmployee, RosterStatus, RosterDesignData, validateMaxShifts, createDefaultRosterEmployee, createDefaultRosterStatus, DagdeelAvailability, convertLegacyUnavailability } from '@/lib/types/roster';
 import { getAllEmployees } from '@/lib/services/employees-storage';
 import { TeamType, DienstverbandType, getFullName } from '@/lib/types/employee';
@@ -159,9 +160,10 @@ export async function initializeRosterDesign(rosterId: string, start_date: strin
           // Converteer array van dagdelen naar DagdeelAvailability object
           const dagdeelData: DagdeelAvailability = {};
           
-          if (nbDagdelen.includes('O')) dagdeelData.O = true;
-          if (nbDagdelen.includes('M')) dagdeelData.M = true;
-          if (nbDagdelen.includes('A')) dagdeelData.A = true;
+          // DRAAD68.1 FIX: Type assertion voor dagdeel literals
+          if (nbDagdelen.includes('O' as 'O')) dagdeelData.O = true;
+          if (nbDagdelen.includes('M' as 'M')) dagdeelData.M = true;
+          if (nbDagdelen.includes('A' as 'A')) dagdeelData.A = true;
           
           unavailabilityData[emp.id][dateStr] = dagdeelData;
           
