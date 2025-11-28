@@ -4,63 +4,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { getRosterIdFromParams } from '@/lib/utils/getRosterIdFromParams';
 import { loadRosterDesignData, toggleNBAssignment } from '@/lib/planning/rosterDesign';
 import { isDagdeelUnavailable, DagdeelAvailability } from '@/lib/types/roster';
-
-/**
- * ✅ FIX DRAAD26R: Genereer 35 dagen beginnend op MAANDAG
- * 
- * Probleem: Het rooster begint altijd op maandag (bijv. 24-11-2025),
- * maar de oude code gebruikte simpelweg start_date uit database (vaak zondag 23-11).
- * 
- * Oplossing: Forceer altijd de eerste maandag als startdatum
- * 
- * @param referenceDate - Referentie datum (meestal uit database)
- * @returns Array van 35 Date objecten, beginnend op de eerste maandag
- */
-function getDaysInRangeStartingMonday(referenceDate: Date): Date[] {
-  // Clone de datum om mutatie te voorkomen
-  const refDate = new Date(referenceDate);
-  
-  // Vind de eerste maandag (dag 1 in JS Date, zondag = 0)
-  const dayOfWeek = refDate.getDay(); // 0 = zo, 1 = ma, 2 = di, etc.
-  
-  let daysToAdd = 0;
-  if (dayOfWeek === 0) {
-    // Als het zondag is, ga 1 dag vooruit naar maandag
-    daysToAdd = 1;
-  } else if (dayOfWeek > 1) {
-    // Als het dinsdag of later is, ga terug naar vorige maandag
-    daysToAdd = 1 - dayOfWeek; // negatief getal
-  }
-  // Als dayOfWeek === 1 (maandag), blijft daysToAdd 0
-  
-  const firstMonday = new Date(refDate);
-  firstMonday.setDate(refDate.getDate() + daysToAdd);
-  firstMonday.setHours(0, 0, 0, 0); // Reset tijd naar middernacht
-  
-  console.log('📅 getDaysInRangeStartingMonday:', {
-    inputDate: referenceDate.toISOString().split('T')[0],
-    inputDayOfWeek: ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag'][dayOfWeek],
-    daysToAdd,
-    firstMonday: firstMonday.toISOString().split('T')[0],
-    firstMondayDayOfWeek: firstMonday.getDay() === 1 ? 'maandag ✅' : `FOUT: ${firstMonday.getDay()}`
-  });
-  
-  // Genereer 35 dagen vanaf deze eerste maandag
-  const dates: Date[] = [];
-  for (let i = 0; i < 35; i++) {
-    const date = new Date(firstMonday);
-    date.setDate(firstMonday.getDate() + i);
-    dates.push(date);
-  }
-  
-  console.log('📊 Gegenereerde periode:', {
-    start: dates[0].toISOString().split('T')[0],
-    eind: dates[34].toISOString().split('T')[0],
-    totaalDagen: dates.length
-  });
-  
-  return dates;
-}
+import { getUniqueDatesFromAssignments } from '@/lib/services/roster-assignments-supabase';
 
 /**
  * ✨ Helper: Team kleur bepalen voor indicator cirkel
@@ -108,6 +52,7 @@ export default function UnavailabilityClient() {
   const router = useRouter();
   const rosterId = getRosterIdFromParams(searchParams);
   const [designData, setDesignData] = useState<any>(null);
+  const [dates, setDates] = useState<Date[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -117,16 +62,34 @@ export default function UnavailabilityClient() {
     }
     (async function loadData() {
       try {
+        // DRAAD70: Eerst datums ophalen uit roster_assignments
+        console.log('📅 DRAAD70: Ophalen datums uit roster_assignments...');
+        const uniqueDates = await getUniqueDatesFromAssignments(rosterId);
+        
+        if (uniqueDates.length === 0) {
+          console.warn('⚠️  DRAAD70: Geen datums gevonden in roster_assignments!');
+          throw new Error('Geen datums gevonden voor dit rooster. Check of roster_assignments records heeft.');
+        }
+        
+        setDates(uniqueDates);
+        console.log('✅ DRAAD70: Datums ingeladen:', {
+          aantal: uniqueDates.length,
+          eerste: uniqueDates[0]?.toISOString().split('T')[0],
+          laatste: uniqueDates[uniqueDates.length - 1]?.toISOString().split('T')[0]
+        });
+        
+        // Dan rest van design data
         const data = await loadRosterDesignData(rosterId);
         setDesignData(data);
         
-        console.log('✅ Loaded unavailability data (DRAAD68 - dagdeel ondersteuning):', {
+        console.log('✅ DRAAD70: Loaded unavailability data (roster_assignments basis):', {
           rosterId,
           employeeCount: data?.employees?.length || 0,
-          startDate: data?.start_date
+          dateCount: uniqueDates.length
         });
-      } catch (error) {
+      } catch (error: any) {
         console.error('❌ Error loading unavailability data:', error);
+        alert(error.message || 'Fout bij laden van data. Check console voor details.');
       } finally {
         setLoading(false);
       }
@@ -148,9 +111,6 @@ export default function UnavailabilityClient() {
       dagdeel,
       empName: emp.voornaam || emp.name
     });
-    
-    // TODO LATER: check roster_assignments per dagdeel
-    // Voor nu: simpele toggle zonder check
     
     const success = await toggleNBAssignment(rosterId, employeeId, date, dagdeel);
     
@@ -188,12 +148,17 @@ export default function UnavailabilityClient() {
     );
   }
   
-  // ✅ FIX DRAAD26R: Gebruik getDaysInRangeStartingMonday() voor correcte startdatum
-  const referenceDate = designData.start_date 
-    ? new Date(designData.start_date + 'T00:00:00')
-    : new Date();
-  
-  const dates = getDaysInRangeStartingMonday(referenceDate);
+  if (dates.length === 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6 max-w-md text-center">
+          <h2 className="text-lg font-semibold text-yellow-800 mb-2">Geen datums</h2>
+          <p className="text-yellow-700 mb-4">Dit rooster heeft geen roster_assignments records. Initialiseer het rooster eerst.</p>
+          <button onClick={()=>router.push('/planning')} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Terug naar overzicht</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-4 md:p-8">
@@ -202,6 +167,7 @@ export default function UnavailabilityClient() {
           <div>
             <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Niet Beschikbaar aanpassen (per dagdeel)</h1>
             <p className="text-gray-600 text-sm">Klik op een cel om een medewerker niet-beschikbaar te markeren voor specifiek dagdeel (O/M/A)</p>
+            <p className="text-xs text-green-600 mt-1">✅ DRAAD70: Datums uit roster_assignments - Periode: {dates[0]?.toISOString().split('T')[0]} tot {dates[dates.length - 1]?.toISOString().split('T')[0]} ({dates.length} dagen)</p>
           </div>
           <button 
             onClick={()=>router.push(`/planning/design/dashboard?rosterId=${rosterId}`)} 
@@ -289,8 +255,6 @@ export default function UnavailabilityClient() {
                       return ['O', 'M', 'A'].map((dagdeel) => {
                         // Check of dit dagdeel NB is
                         const isNB = isDagdeelUnavailable(unavailData, dagdeel as 'O' | 'M' | 'A');
-                        
-                        // TODO LATER: check roster_assignments per dagdeel voor ingeplande diensten
                         
                         let cellClass = 'border border-gray-300 p-2 text-center transition-colors ';
                         let cursorClass = '';
