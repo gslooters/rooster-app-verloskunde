@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+// 🔥 CRITICAL: Force dynamic rendering - deze route MOET server-side runnen
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 // ============================================================================
 // DRAAD54 - API ENDPOINT: SERVICE ALLOCATION PDF DATA V3
 // URL: /api/planning/service-allocation-pdf?rosterId={id}
 // Purpose: Fetch all service allocation data for PDF generation + kleuren
 // Update: Added service_types.kleur for V3 colored badges
 // DRAAD60A: Added date filtering on rooster.start_date and end_date
+// DRAAD73D: Force dynamic rendering (geen static generation)
 // ============================================================================
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
