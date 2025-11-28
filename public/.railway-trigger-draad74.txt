@@ -1,0 +1,6 @@
+Deployment trigger: draad74 - Custom server fix
+Timestamp: 2025-11-28T21:17:00Z
+Fixes:
+- Custom server.js with 0.0.0.0 binding
+- Middleware Node.js runtime
+- Railway.toml updated

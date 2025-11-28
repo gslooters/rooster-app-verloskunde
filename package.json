@@ -1,11 +1,11 @@
 {
   "name": "rooster-app-final",
-  "version": "0.1.0-draad68.2",
+  "version": "0.1.0-draad74.1",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build --no-lint && node scripts/postbuild.js",
-    "start": "HOSTNAME=0.0.0.0 node .next/standalone/server.js",
+    "start": "node server.js",
     "lint": "next lint"
   },
   "dependencies": {

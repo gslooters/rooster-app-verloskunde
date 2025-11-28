@@ -3,9 +3,9 @@
 command = "npm install && npm run build"
 
 [deploy]
-# 🔥 CRITICAL FIX: Correct path naar standalone server
-# server.js bevindt zich in .next/standalone/ directory
-startCommand = "node .next/standalone/server.js"
+# 🔥 CRITICAL FIX: Use custom server.js with explicit 0.0.0.0 binding
+# Dit lost Railway networking issues op
+startCommand = "node server.js"
 
 # Health check
 healthcheckPath = "/api/health"

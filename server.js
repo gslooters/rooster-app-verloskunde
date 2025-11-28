@@ -1,115 +1,61 @@
-#!/usr/bin/env node
 /**
- * 🚀 RAILWAY DEPLOYMENT SERVER WRAPPER
- * DRAAD53.2 Fase3 - Critical Fix voor SIGTERM crashes
+ * 🚀 CUSTOM SERVER BOOTSTRAP VOOR RAILWAY
  * 
  * PROBLEEM:
- * - npm >= 9.6.7 geeft SIGTERM niet door aan child processes
- * - Railway killed container na 8 seconden
- * - Health check slaagt maar app niet beschikbaar
+ * - Next.js standalone server bindt standaard aan localhost
+ * - Railway vereist binding aan 0.0.0.0 voor external traffic
+ * - HOSTNAME env var wordt niet altijd correct toegepast
  * 
  * OPLOSSING:
- * - Start standalone server direct via Node.js (geen npm)
- * - Zet HOSTNAME=0.0.0.0 (Railway vereiste)
- * - Gebruik Railway's $PORT dynamisch
- * - Graceful shutdown op SIGTERM
+ * - Expliciet binden aan 0.0.0.0
+ * - Railway PORT env var gebruiken
+ * - Fallback naar 3000
+ * - Logging voor debugging
  */
 
-const { spawn } = require('child_process');
-const path = require('path');
+const { createServer } = require('http')
+const { parse } = require('url')
+const next = require('next')
 
-// 🔥 CRITICAL: Railway environment setup
-const PORT = process.env.PORT || 8080;
-const HOSTNAME = '0.0.0.0'; // Railway vereiste
+// 🔥 CRITICAL: Force production mode
+const dev = false
+const hostname = '0.0.0.0'  // Railway requirement
+const port = parseInt(process.env.PORT || '3000', 10)
 
-console.log('🚀 [WRAPPER] Starting Railway deployment server...');
-console.log(`📋 [WRAPPER] PORT: ${PORT}`);
-console.log(`📋 [WRAPPER] HOSTNAME: ${HOSTNAME}`);
-console.log(`📋 [WRAPPER] NODE_ENV: ${process.env.NODE_ENV || 'production'}`);
+// ✅ Logging voor Railway dashboard
+console.log('🚀 Starting Rooster App server...')
+console.log(`   🌐 Hostname: ${hostname}`)
+console.log(`   🔌 Port: ${port}`)
+console.log(`   📦 Mode: ${dev ? 'development' : 'production'}`)
+console.log(`   📂 Working directory: ${process.cwd()}`)
 
-// Path naar standalone server
-const serverPath = path.join(__dirname, '.next', 'standalone', 'server.js');
+// Initialize Next.js app
+const app = next({ 
+  dev, 
+  hostname, 
+  port,
+  // 🔥 Use standalone output
+  dir: process.cwd()
+})
 
-console.log(`📂 [WRAPPER] Server path: ${serverPath}`);
+const handle = app.getRequestHandler()
 
-// Start standalone server als child process
-const serverProcess = spawn(
-  'node',
-  [serverPath],
-  {
-    env: {
-      ...process.env,
-      PORT: PORT,
-      HOSTNAME: HOSTNAME,
-      NODE_ENV: process.env.NODE_ENV || 'production'
-    },
-    stdio: 'inherit', // Pipe all output naar parent
-    shell: false
-  }
-);
-
-// Handle server process events
-serverProcess.on('error', (error) => {
-  console.error('❌ [WRAPPER] Failed to start server:', error);
-  process.exit(1);
-});
-
-serverProcess.on('exit', (code, signal) => {
-  if (signal) {
-    console.log(`⚠️  [WRAPPER] Server killed by signal: ${signal}`);
-  } else {
-    console.log(`⚠️  [WRAPPER] Server exited with code: ${code}`);
-  }
-  
-  // Exit wrapper met zelfde code
-  process.exit(code || 0);
-});
-
-// 🔥 GRACEFUL SHUTDOWN HANDLERS
-// Railway stuurt SIGTERM bij deployment/restart
-
-function gracefulShutdown(signal) {
-  console.log(`\n⚠️  [WRAPPER] Received ${signal}, shutting down gracefully...`);
-  
-  if (serverProcess && !serverProcess.killed) {
-    console.log('🛑 [WRAPPER] Stopping server process...');
-    
-    // Stuur SIGTERM naar server
-    serverProcess.kill('SIGTERM');
-    
-    // Force kill na 10 seconden
-    const killTimeout = setTimeout(() => {
-      console.log('⚠️  [WRAPPER] Force killing server (timeout)...');
-      serverProcess.kill('SIGKILL');
-    }, 10000);
-    
-    // Clear timeout als server netjes stopt
-    serverProcess.on('exit', () => {
-      clearTimeout(killTimeout);
-      console.log('✅ [WRAPPER] Server stopped gracefully');
-      process.exit(0);
-    });
-  } else {
-    console.log('✅ [WRAPPER] No server to stop');
-    process.exit(0);
-  }
-}
-
-// Register shutdown handlers
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-
-// Handle uncaught errors
-process.on('uncaughtException', (error) => {
-  console.error('❌ [WRAPPER] Uncaught exception:', error);
-  gracefulShutdown('UNCAUGHT_EXCEPTION');
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('❌ [WRAPPER] Unhandled rejection at:', promise, 'reason:', reason);
-  gracefulShutdown('UNHANDLED_REJECTION');
-});
-
-console.log('✅ [WRAPPER] Server wrapper started successfully');
-console.log(`🌐 [WRAPPER] Server should be listening on http://${HOSTNAME}:${PORT}`);
-console.log('');
+app.prepare().then(() => {
+  createServer(async (req, res) => {
+    try {
+      const parsedUrl = parse(req.url, true)
+      await handle(req, res, parsedUrl)
+    } catch (err) {
+      console.error('❌ Error handling request:', err)
+      res.statusCode = 500
+      res.end('Internal Server Error')
+    }
+  }).listen(port, hostname, (err) => {
+    if (err) {
+      console.error('❌ Server failed to start:', err)
+      throw err
+    }
+    console.log(`✅ Server ready on http://${hostname}:${port}`)
+    console.log(`🎉 Rooster App is live!`)
+  })
+})
