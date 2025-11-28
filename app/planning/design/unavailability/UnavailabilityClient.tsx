@@ -7,7 +7,7 @@ import { isDagdeelUnavailable, DagdeelAvailability } from '@/lib/types/roster';
 import { supabase } from '@/lib/supabase';
 
 // DRAAD73B: VERSION MARKER - Force client bundle regeneration
-const COMPONENT_VERSION = 'v2.0-draad73';
+const COMPONENT_VERSION = 'v2.1-draad73b-team-colors-fix';
 
 // DRAAD73: ISO 8601 weeknummer (maandag = start week)
 function getWeekNumber(date: Date): number {
@@ -25,12 +25,22 @@ function formatDateLocal(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-// DRAAD73: Verbeterde teamkleur (normalisatie + fallback)
+// DRAAD73B: Verbeterde teamkleur met debug logging
 function getTeamColor(team: string): string {
   const normalized = (team || '').toLowerCase().trim();
-  if (normalized === 'groen') return 'bg-green-500';
-  if (normalized === 'oranje') return 'bg-orange-500';
-  return 'bg-blue-600'; // Overig / leeg
+  
+  let color = 'bg-blue-600'; // Default: Overig
+  if (normalized === 'groen') color = 'bg-green-500';
+  if (normalized === 'oranje') color = 'bg-orange-500';
+  
+  // DRAAD73B: Debug logging
+  console.log('🎨 DRAAD73B getTeamColor:', {
+    original: team,
+    normalized: normalized,
+    color: color
+  });
+  
+  return color;
 }
 
 function sortEmployees(empArray: any[]): any[] {
@@ -64,9 +74,18 @@ export default function UnavailabilityClient() {
     }
     (async function loadData() {
       try {
+        console.log('🔄 DRAAD73B: Laden NB scherm data...');
         const data = await loadRosterDesignData(rosterId);
         if (!data) throw new Error('Geen rooster design data gevonden');
         setDesignData(data);
+        
+        console.log('👥 DRAAD73B: Employees data:', data.employees?.map((e: any) => ({
+          id: e.id,
+          voornaam: e.voornaam,
+          team: e.team,
+          teamType: typeof e.team
+        })));
+        
         const { data: roster, error: rosterError } = await supabase
           .from('roosters')
           .select('start_date')
@@ -81,8 +100,9 @@ export default function UnavailabilityClient() {
           generatedDates.push(date);
         }
         setDates(generatedDates);
+        console.log('✅ DRAAD73B: Data geladen met team kleur debug');
       } catch (error: any) {
-        console.error('❌ DRAAD73: Fout bij laden:', error);
+        console.error('❌ DRAAD73B: Fout bij laden:', error);
         alert(error.message || 'Fout bij laden van data.');
       } finally {
         setLoading(false);
@@ -186,9 +206,17 @@ export default function UnavailabilityClient() {
               {sortEmployees(designData.employees || []).map((emp: any) => {
                 const employeeId = emp.originalEmployeeId || emp.id;
                 const fullName = emp.voornaam || emp.name || 'Onbekend';
-                // DRAAD73: Medewerkernaam afgekapt tot alleen voornaam
                 const firstNameOnly = fullName.split(' ')[0];
                 const teamColor = getTeamColor(emp.team || 'Overig');
+                
+                // DRAAD73B: Per-employee debug
+                console.log('👤 DRAAD73B Employee render:', {
+                  id: emp.id,
+                  voornaam: emp.voornaam,
+                  team: emp.team,
+                  computedColor: teamColor
+                });
+                
                 return (
                   <tr key={emp.id}>
                     <td 
@@ -197,7 +225,10 @@ export default function UnavailabilityClient() {
                       title={`${fullName} - Team ${emp.team || 'Overig'} - ${emp.dienstverband || 'Onbekend'}`}
                     >
                       <div className="flex items-center gap-2">
-                        <span className={`inline-block w-3 h-3 rounded-full flex-shrink-0 ${teamColor}`} title={`Team ${emp.team || 'Overig'}`}></span>
+                        <span 
+                          className={`inline-block w-4 h-4 rounded-full flex-shrink-0 ${teamColor}`} 
+                          title={`Team ${emp.team || 'Overig'}`}
+                        ></span>
                         <span>{firstNameOnly}</span>
                       </div>
                     </td>
@@ -232,38 +263,60 @@ export default function UnavailabilityClient() {
           </table>
         </div>
 
-        {/* Legenda geïntegreerd in compacte footer-balk */}
-        <div className="mt-6 bg-white rounded-lg shadow p-4 flex flex-wrap gap-4 text-sm justify-start items-center">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-white border border-gray-300 rounded"></div>
-            <span className="text-gray-700">Beschikbaar (leeg)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-red-200 border border-gray-300 rounded flex items-center justify-center text-lg font-bold text-red-800">✕</div>
-            <span className="text-gray-700">Niet Beschikbaar (NB)</span>
-          </div>
-          <div className="border-l pl-4 ml-2">
-            <span className="text-gray-600 font-medium">Dagdelen:</span>
-            <div className="flex gap-3 mt-1">
-              <span className="text-gray-700">O = Ochtend (09:00-13:00)</span>
-              <span className="text-gray-700">M = Middag (13:00-18:00)</span>
-              <span className="text-gray-700">A = Avond/Nacht (18:00-09:00)</span>
+        {/* DRAAD73B: Geherstructureerde legenda in 3 secties */}
+        <div className="mt-6 bg-white rounded-lg shadow p-6">
+          <h3 className="font-semibold mb-4 text-gray-900">Legenda</h3>
+          
+          {/* Sectie 1: Beschikbaarheid */}
+          <div className="mb-4 pb-4 border-b border-gray-200">
+            <div className="flex flex-wrap gap-6">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-white border-2 border-gray-300 rounded"></div>
+                <span className="text-gray-700">Beschikbaar (leeg)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-red-200 border-2 border-gray-300 rounded flex items-center justify-center">
+                  <span className="text-lg font-bold text-red-800">✕</span>
+                </div>
+                <span className="text-gray-700">Niet Beschikbaar (NB)</span>
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="inline-block w-3 h-3 rounded-full bg-green-500"></span>
-            <span className="text-gray-700">Team Groen</span>
+          
+          {/* Sectie 2: Dagdelen */}
+          <div className="mb-4 pb-4 border-b border-gray-200">
+            <div className="font-medium text-gray-700 mb-2">Dagdelen:</div>
+            <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-gray-600">
+              <span><strong>O</strong> = Ochtend (09:00-13:00)</span>
+              <span><strong>M</strong> = Middag (13:00-18:00)</span>
+              <span><strong>A</strong> = Avond/Nacht (18:00-09:00)</span>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="inline-block w-3 h-3 rounded-full bg-orange-500"></span>
-            <span className="text-gray-700">Team Oranje</span>
+          
+          {/* Sectie 3: Team kleuren */}
+          <div className="mb-4">
+            <div className="font-medium text-gray-700 mb-2">Team kleuren:</div>
+            <div className="flex flex-wrap gap-6">
+              <div className="flex items-center gap-2">
+                <span className="inline-block w-4 h-4 rounded-full bg-green-500"></span>
+                <span className="text-gray-700">Team Groen</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-block w-4 h-4 rounded-full bg-orange-500"></span>
+                <span className="text-gray-700">Team Oranje</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-block w-4 h-4 rounded-full bg-blue-600"></span>
+                <span className="text-gray-700">Team Overig</span>
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="inline-block w-3 h-3 rounded-full bg-blue-600"></span>
-            <span className="text-gray-700">Team Overig</span>
+          
+          {/* Footer bericht geïntegreerd */}
+          <div className="pt-4 border-t border-gray-200 text-center">
+            <p className="text-sm text-gray-600">💾 Wijzigingen worden automatisch opgeslagen</p>
           </div>
         </div>
-        <div className="mt-4 text-center text-sm text-gray-600">Wijzigingen worden automatisch opgeslagen</div>
       </div>
     </div>
   );
