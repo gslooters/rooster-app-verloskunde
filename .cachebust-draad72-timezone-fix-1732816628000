@@ -1,0 +1,3 @@
+DRAAD72: UTC timezone bug fix
+Timestamp: 1732816628000
+Fix: formatDateLocal() functie voorkomt UTC shift in datumweergave NB scherm
