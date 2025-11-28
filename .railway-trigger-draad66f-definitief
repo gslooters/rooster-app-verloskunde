@@ -1,0 +1,19 @@
+DRAAD66F - DEFINITIEVE FIX: Veldnaam mismatch roosters tabel
+Timestamp: 2025-11-28T01:09:15+01:00
+Commit: e7f0e187a88df047696b11829358c82d8755974c
+
+GEFIXED:
+- start_datum → start_date (CORRECT)
+- eind_datum → end_date (CORRECT)  
+- start_weeknummer: VERWIJDERD (bestaat niet in DB, nu runtime berekend)
+- eind_weeknummer: VERWIJDERD (bestaat niet in DB, nu runtime berekend)
+
+WEEKNUMMER BEREKENING:
+- Toegevoegd: getISOWeek() functie voor correcte ISO week berekening
+- startWeek en endWeek worden nu runtime berekend uit start_date/end_date
+
+VERBETERDE ERROR HANDLING:
+- Betere Supabase error logging per query
+- Details in error responses voor debugging
+
+Random: 9f2a7c5e-1d8b-4f3a-b2e9-7a6c3d9e4f1b
