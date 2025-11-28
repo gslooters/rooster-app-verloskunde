@@ -1,0 +1,9 @@
+DRAAD73D DEPLOYMENT TRIGGER
+Timestamp: 1732827600000
+Random: draad73d-fix-dynamic-routes
+API Routes Fixed:
+- /api/diensten-aanpassen
+- /api/planning/service-allocation-pdf
+
+Both routes now force dynamic rendering.
+No more static generation errors.
