@@ -1,0 +1,33 @@
+# DRAAD66G DEPLOYMENT TRIGGER
+# Laatste aanpassingen Diensten Toewijzing scherm
+#
+# Wijzigingen:
+# 1. Layout verbeteringen:
+#    - Header: "Diensten Toewijzing AANPASSEN : PERIODE Week XX t/m Week XX"
+#    - Verwijderd: oude "Periode" tekst onder header
+#    - Kolom naam gewijzigd: "Totaal" -> "Telling"
+#    - Footer toegevoegd: kader met uitleg tekst
+#
+# 2. Naam kolom:
+#    - Alleen voornaam tonen (achternaam verwijderd)
+#    - Kolom smaller gemaakt voor betere weergave
+#    - Sortering: Team - Voornaam (al in API)
+#
+# 3. Telling berekening aangepast:
+#    - Oud: som van aantal diensten
+#    - Nieuw: (aantal × dienstwaarde) per dienst
+#    - Dienstwaarde opgehaald uit service_types.dienstwaarde
+#    - Team totalen blijven ongewogen (alleen aantal)
+#
+# Cache-busting timestamp
+TIMESTAMP=1732759525000
+RANDOM=draad66g-gewogen-telling
+
+# Bestanden gewijzigd:
+# - types/diensten-aanpassen.ts (dienstwaarde toegevoegd)
+# - app/api/diensten-aanpassen/route.ts (dienstwaarde ophalen)
+# - app/planning/design/diensten-aanpassen/page.client.tsx (UI updates)
+
+# Railway cache-busting
+DEPLOY_ID=draad66g-$(date +%s)
+VERSION=draad66g-v1.0.0
