@@ -1,0 +1,45 @@
+DRAAD68: Roster Assignments Code Refactor
+Timestamp: 1732804687
+Date: 2025-11-28 15:58:07 CET
+
+=== BREAKING CHANGES ===
+service_code (TEXT) → service_id (UUID FK)
+NB detection: service_code='NB' → status=3
+Dagdeel parameter now REQUIRED for all assignment queries
+
+=== NIEUWE STRUCTUUR ===
+✅ dagdeel (TEXT): 'O' | 'M' | 'A'
+✅ status (INTEGER): 0=Available, 1=Assigned, 2=Blocked, 3=NB
+✅ service_id (UUID FK): Nullable, replaces service_code
+✅ notes (TEXT): Nullable
+
+=== TYPES & ENUMS ===
+- AssignmentStatus enum (0-3)
+- Dagdeel type ('O'|'M'|'A')
+- DAGDEEL_LABELS: Record<Dagdeel, string>
+- Updated RosterAssignment interface
+- Updated CreateRosterAssignmentInput interface
+
+=== UPDATED FUNCTIONS ===
+getAssignmentsByRosterId(rosterId, dagdeel?)
+getAssignmentByDate(rosterId, employeeId, date, dagdeel) ← dagdeel REQUIRED
+isEmployeeUnavailableOnDate(rosterId, employeeId, date, dagdeel) ← status=3
+deleteAssignmentByDate(rosterId, employeeId, date, dagdeel)
+getAllAssignmentsByRosterId(rosterId) → Map<emp, Map<date, Map<dagdeel, assignment>>>
+getNBAssignmentsByRosterId(rosterId) → status=3 filter
+
+=== NIEUWE FUNCTIES ===
+createRosterWithAssignments(startDate, employeeIds) → stored procedure
+updateAssignmentStatus(assignmentId, status, serviceId?)
+updateAssignmentService(assignmentId, serviceId)
+getAssignmentsByStatus(rosterId, status)
+bulkUpdateAssignments(updates[])
+createAssignment(input) → legacy support
+
+=== STORED PROCEDURE ===
+initialize_roster_assignments(roster_id, start_date, employee_ids[])
+- Creates 1260 records per roster (12 emp × 35 days × 3 dagdelen)
+- Auto-applies structureel_nbh from employees table
+- Sets status=3 for NB dagen
+
+Random: 3894756210
