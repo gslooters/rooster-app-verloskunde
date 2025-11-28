@@ -248,7 +248,7 @@ export default function DienstenAanpassenClient() {
       <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
           <button
-            onClick={() => router.push(`/planning/dashboard?rosterId=${rosterId}`)}
+            onClick={() => router.push(`/planning/design?rosterId=${rosterId}`)}
             className="text-blue-600 hover:text-blue-800 flex items-center gap-2"
           >
             <span>←</span>
