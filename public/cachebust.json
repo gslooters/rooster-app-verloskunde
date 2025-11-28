@@ -1,5 +1,12 @@
 {
-  "timestamp": 1732639669000,
-  "version": "DRAAD592",
-  "deploy": "type-fix-O-dagdeel"
+  "timestamp": 1732804670000,
+  "version": "DRAAD68",
+  "deploy": "roster-assignments-refactor",
+  "changes": [
+    "service_code -> service_id (UUID)",
+    "Added dagdeel (O/M/A)",
+    "Added status (0-3)",
+    "Added notes column",
+    "New functions for assignments"
+  ]
 }
