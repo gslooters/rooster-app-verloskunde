@@ -44,15 +44,18 @@ function isWeekend(iso:string){ const s=dayShort(iso); return s==='ZA'||s==='ZO'
 function getFirstName(fullName: string): string { return fullName.split(' ')[0]; }
 type Roster = { id: string; start_date: string; end_date: string; status: 'draft'|'in_progress'|'final'; created_at: string; };
 type Cell = { service: string | null; locked: boolean; unavailable?: boolean };
+
+// DRAAD75.2: FALLBACK_EMPLOYEES nu volledig type-compliant met RosterEmployee
+// Bevat alle verplichte velden: voornaam, achternaam, team, dienstverband
 const FALLBACK_EMPLOYEES = [
-  { id: 'emp1', name: 'Anna' },
-  { id: 'emp2', name: 'Bram' },
-  { id: 'emp3', name: 'Carla' },
-  { id: 'emp4', name: 'Daan' },
-  { id: 'emp5', name: 'Eva' },
-  { id: 'emp6', name: 'Frank' },
-  { id: 'emp7', name: 'Greta' },
-  { id: 'emp8', name: 'Hans' },
+  { id: 'emp1', name: 'Anna Bakker', voornaam: 'Anna', achternaam: 'Bakker', team: 'Vroedvrouw', dienstverband: 'Loondienst' },
+  { id: 'emp2', name: 'Bram de Vries', voornaam: 'Bram', achternaam: 'de Vries', team: 'Vroedvrouw', dienstverband: 'Loondienst' },
+  { id: 'emp3', name: 'Carla Janssen', voornaam: 'Carla', achternaam: 'Janssen', team: 'Kraamzorg', dienstverband: 'Freelance' },
+  { id: 'emp4', name: 'Daan Peters', voornaam: 'Daan', achternaam: 'Peters', team: 'Vroedvrouw', dienstverband: 'Loondienst' },
+  { id: 'emp5', name: 'Eva Smit', voornaam: 'Eva', achternaam: 'Smit', team: 'Kraamzorg', dienstverband: 'Loondienst' },
+  { id: 'emp6', name: 'Frank de Jong', voornaam: 'Frank', achternaam: 'de Jong', team: 'Vroedvrouw', dienstverband: 'Freelance' },
+  { id: 'emp7', name: 'Greta Mulder', voornaam: 'Greta', achternaam: 'Mulder', team: 'Kraamzorg', dienstverband: 'Loondienst' },
+  { id: 'emp8', name: 'Hans Visser', voornaam: 'Hans', achternaam: 'Visser', team: 'Vroedvrouw', dienstverband: 'Freelance' },
 ];
 
 export default function PlanningGrid({ rosterId }: { rosterId: string }) {
@@ -100,6 +103,10 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
           setEmployees(FALLBACK_EMPLOYEES.map(emp => ({
             id: `re_${emp.id}`,
             name: emp.name,
+            voornaam: emp.voornaam,
+            achternaam: emp.achternaam,
+            team: emp.team,
+            dienstverband: emp.dienstverband,
             maxShifts: 0,
             availableServices: [],
             isSnapshotActive: true,
@@ -111,6 +118,10 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
         setEmployees(FALLBACK_EMPLOYEES.map(emp => ({
           id: `re_${emp.id}`,
           name: emp.name,
+          voornaam: emp.voornaam,
+          achternaam: emp.achternaam,
+          team: emp.team,
+          dienstverband: emp.dienstverband,
           maxShifts: 0,
           availableServices: [],
           isSnapshotActive: true,
@@ -129,6 +140,10 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
       let curEmployees = employees.length ? employees : FALLBACK_EMPLOYEES.map(emp => ({
         id: `re_${emp.id}`,
         name: emp.name,
+        voornaam: emp.voornaam,
+        achternaam: emp.achternaam,
+        team: emp.team,
+        dienstverband: emp.dienstverband,
         maxShifts: 0,
         availableServices: [],
         isSnapshotActive: true,
