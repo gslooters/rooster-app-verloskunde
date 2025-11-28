@@ -1,5 +1,13 @@
 // lib/types/roster.ts
 // Sprint 1.2: Uitgebreide data modellen voor rooster ontwerp functionaliteit
+// DRAAD68: Dagdeel-ondersteuning (O/M/A) toegevoegd
+
+// DRAAD68: Dagdeel beschikbaarheid structuur
+export type DagdeelAvailability = {
+  O?: boolean; // Ochtend (09:00-13:00) - true = Niet Beschikbaar
+  M?: boolean; // Middag (13:00-18:00) - true = Niet Beschikbaar
+  A?: boolean; // Avond/Nacht (18:00-09:00) - true = Niet Beschikbaar
+};
 
 export interface RosterEmployee {
   id: string;
@@ -23,7 +31,12 @@ export interface RosterDesignData {
   rosterId: string;
   employees: RosterEmployee[];
   status: RosterStatus;
-  unavailabilityData: { [employeeId: string]: { [date: string]: boolean } };
+  // DRAAD68: unavailabilityData now supports dagdeel granularity
+  unavailabilityData: {
+    [employeeId: string]: {
+      [date: string]: DagdeelAvailability | boolean; // boolean voor backward compat
+    }
+  };
   assignments?: any[]; // DRAAD27C: Loaded assignments from rooster_assignments table
   shiftCounts?: { [employeeId: string]: { [shiftType: string]: number } }; // Nieuw veld toegevoegd
   dailyServiceRequirements?: DailyServiceRequirement[];
@@ -55,6 +68,53 @@ export interface PlanningRule {
   description: string;
   active: boolean;
   parameters: { [key: string]: any };
+}
+
+// DRAAD68: Helper functions voor dagdeel checks
+
+/**
+ * Check of hele dag NB is (alle dagdelen O, M, A zijn true)
+ */
+export function isFullDayUnavailable(dagdeelData: DagdeelAvailability | boolean): boolean {
+  if (typeof dagdeelData === 'boolean') return dagdeelData;
+  return dagdeelData.O === true && dagdeelData.M === true && dagdeelData.A === true;
+}
+
+/**
+ * Check of specifiek dagdeel NB is
+ */
+export function isDagdeelUnavailable(
+  dagdeelData: DagdeelAvailability | boolean | undefined,
+  dagdeel: 'O' | 'M' | 'A'
+): boolean {
+  if (!dagdeelData) return false;
+  if (typeof dagdeelData === 'boolean') return dagdeelData; // Legacy: hele dag
+  return dagdeelData[dagdeel] === true;
+}
+
+/**
+ * Converteer boolean naar DagdeelAvailability (voor legacy data)
+ */
+export function convertLegacyUnavailability(isUnavailable: boolean): DagdeelAvailability {
+  if (!isUnavailable) return {};
+  return { O: true, M: true, A: true };
+}
+
+/**
+ * Converteer structureel_nbh naar unavailability format
+ * structureelNBH bevat array van dagdelen waar medewerker NB is
+ * Bijvoorbeeld: ["O", "M"] betekent NB in ochtend en middag
+ */
+export function convertStructureelNBHToUnavailability(
+  structureelNBH: { [dagCode: string]: string[] }
+): DagdeelAvailability {
+  const result: DagdeelAvailability = {};
+  // structureelNBH bevat per dagcode (ma, di, wo, etc.) een array van dagdelen
+  const dagdelen = Object.values(structureelNBH).flat();
+  if (dagdelen.includes('O')) result.O = true;
+  if (dagdelen.includes('M')) result.M = true;
+  if (dagdelen.includes('A')) result.A = true;
+  return result;
 }
 
 export function validateMaxShifts(shifts: number): boolean {
