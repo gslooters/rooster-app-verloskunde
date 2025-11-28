@@ -7,6 +7,17 @@ import { isDagdeelUnavailable, DagdeelAvailability } from '@/lib/types/roster';
 import { supabase } from '@/lib/supabase';
 
 /**
+ * DRAAD72: Format Date als locale YYYY-MM-DD string (GEEN timezone conversie)
+ * Voorkomt UTC shift bug waarbij 2025-11-24 wordt 2025-11-23
+ */
+function formatDateLocal(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * ✨ Helper: Team kleur bepalen voor indicator cirkel
  */
 function getTeamColor(team: string): string {
@@ -62,7 +73,7 @@ export default function UnavailabilityClient() {
     }
     (async function loadData() {
       try {
-        console.log('🔄 DRAAD71: Laden NB scherm data...');
+        console.log('🔄 DRAAD72: Laden NB scherm data...');
         
         // STAP 1: Haal roster design data op (bevat start_date)
         const data = await loadRosterDesignData(rosterId);
@@ -82,7 +93,7 @@ export default function UnavailabilityClient() {
           throw new Error('Kon start_date niet ophalen uit roosters tabel');
         }
         
-        console.log('📅 DRAAD71: Start date uit database:', roster.start_date);
+        console.log('📅 DRAAD72: Start date uit database:', roster.start_date);
         
         // STAP 3: Genereer ALTIJD 35 dagen vanaf start_date
         const generatedDates: Date[] = [];
@@ -94,17 +105,19 @@ export default function UnavailabilityClient() {
           generatedDates.push(date);
         }
         
-        console.log('✅ DRAAD71: Gegenereerd 35 dagen:', {
-          eerste: generatedDates[0].toISOString().split('T')[0],
-          laatste: generatedDates[34].toISOString().split('T')[0],
-          aantal: generatedDates.length
+        console.log('✅ DRAAD72: Gegenereerd 35 dagen (locale formatting):', {
+          eerste: formatDateLocal(generatedDates[0]),
+          laatste: formatDateLocal(generatedDates[34]),
+          aantal: generatedDates.length,
+          eersteUTC: generatedDates[0].toISOString().split('T')[0],
+          verschil: formatDateLocal(generatedDates[0]) !== generatedDates[0].toISOString().split('T')[0] ? '⚠️ UTC SHIFT DETECTED' : '✅ No shift'
         });
         
         setDates(generatedDates);
         
-        console.log('✅ DRAAD71: Data geladen');
+        console.log('✅ DRAAD72: Data geladen');
       } catch (error: any) {
-        console.error('❌ DRAAD71: Fout bij laden:', error);
+        console.error('❌ DRAAD72: Fout bij laden:', error);
         alert(error.message || 'Fout bij laden van data.');
       } finally {
         setLoading(false);
@@ -183,7 +196,7 @@ export default function UnavailabilityClient() {
           <div>
             <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Niet Beschikbaar aanpassen (per dagdeel)</h1>
             <p className="text-gray-600 text-sm">Klik op een cel om een medewerker niet-beschikbaar te markeren voor specifiek dagdeel (O/M/A)</p>
-            <p className="text-xs text-green-600 mt-1">✅ DRAAD71: 35 dagen vanaf roosters.start_date - Periode: {dates[0]?.toISOString().split('T')[0]} tot {dates[dates.length - 1]?.toISOString().split('T')[0]} ({dates.length} dagen)</p>
+            <p className="text-xs text-green-600 mt-1">✅ DRAAD72: Locale date formatting fix - Periode: {dates[0] && formatDateLocal(dates[0])} tot {dates[dates.length - 1] && formatDateLocal(dates[dates.length - 1])} ({dates.length} dagen)</p>
           </div>
           <button 
             onClick={()=>router.push(`/planning/design/dashboard?rosterId=${rosterId}`)} 
@@ -262,7 +275,7 @@ export default function UnavailabilityClient() {
                       </div>
                     </td>
                     {dates.map((date, dateIdx) => {
-                      const dateStr = date.toISOString().split('T')[0];
+                      const dateStr = formatDateLocal(date); // DRAAD72: Locale formatting ipv UTC
                       
                       // Haal unavailability data op voor deze medewerker en datum
                       const unavailData = designData.unavailabilityData?.[employeeId]?.[dateStr];
