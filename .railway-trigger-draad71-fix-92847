@@ -1,0 +1,12 @@
+Railway deployment trigger for DRAAD71
+Random: 92847
+Timestamp: 2025-11-28T17:38:25Z
+
+DRAAD71 implementation complete:
+✅ Removed getUniqueDatesFromAssignments function
+✅ Added date generation from roosters.start_date (fixed 35 days)
+✅ UI now shows correct period: 2025-11-24 to 2025-12-28
+✅ First day (24-11) now displays NB data from database correctly
+✅ All 35 days are visible and clickable
+
+Ready for production validation.
