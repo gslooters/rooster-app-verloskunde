@@ -7,7 +7,7 @@ import { copyEmployeeServicesToRoster } from './roster-employee-services';
 export interface RosterDesignRow {
   roster_id: string;
   employee_snapshot: RosterEmployee[];
-  unavailability_data: Record<string, Record<string, boolean>>;
+  unavailability_data: Record<string, Record<string, any>>; // DRAAD68: any voor dagdeel support
   status: RosterStatus;
   created_at: string;
   updated_at?: string;
@@ -42,6 +42,12 @@ function rowToDesignData(row: RosterDesignWithPeriod): RosterDesignData {
     designData.start_date = row.roosters.start_date;
     designData.end_date = row.roosters.end_date;
   }
+  
+  // DRAAD68: Debug logging voor unavailability_data format
+  console.log('🔍 [rowToDesignData] unavailability_data format:', {
+    sampleEmployeeId: Object.keys(row.unavailability_data)[0],
+    sampleData: row.unavailability_data[Object.keys(row.unavailability_data)[0]]
+  });
   
   return designData;
 }
