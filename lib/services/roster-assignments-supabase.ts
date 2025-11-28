@@ -66,6 +66,78 @@ export interface CreateRosterAssignmentInput {
 }
 
 // ============================================================================
+// DRAAD70: NIEUWE DATUM-FUNCTIES
+// ============================================================================
+
+/**
+ * DRAAD70: Haal alle unieke datums op uit roster_assignments voor gegeven roster
+ * 
+ * Dit is de ENIGE bron van waarheid voor datums in het Niet Beschikbaar scherm.
+ * Geen lokale berekeningen meer - alleen datums die daadwerkelijk in de database staan.
+ * 
+ * @param rosterId - UUID van het rooster
+ * @returns Array van Date objecten, oplopend gesorteerd
+ */
+export async function getUniqueDatesFromAssignments(rosterId: string): Promise<Date[]> {
+  try {
+    console.log('📅 DRAAD70: Ophalen unieke datums uit roster_assignments voor roster:', rosterId);
+    
+    // Haal DISTINCT datums op uit roster_assignments
+    const { data, error } = await supabase
+      .from('roster_assignments')
+      .select('date')
+      .eq('roster_id', rosterId)
+      .order('date', { ascending: true });
+    
+    if (error) {
+      console.error('❌ Fout bij ophalen datums uit roster_assignments:', error);
+      throw error;
+    }
+    
+    if (!data || data.length === 0) {
+      console.warn('⚠️  Geen assignments gevonden voor roster:', rosterId);
+      return [];
+    }
+    
+    // Unieke datums extraheren en naar Date objecten converteren
+    const uniqueDateStrings = Array.from(new Set(data.map(row => row.date)));
+    const dates = uniqueDateStrings.map(dateStr => {
+      // Parse als lokale datum (geen timezone conversie)
+      const [year, month, day] = dateStr.split('-').map(Number);
+      return new Date(year, month - 1, day);
+    });
+    
+    console.log('✅ DRAAD70: Unieke datums gevonden:', {
+      aantalRecords: data.length,
+      aantalUniekeDatums: dates.length,
+      eersteDatum: dates[0]?.toISOString().split('T')[0],
+      laatsteDatum: dates[dates.length - 1]?.toISOString().split('T')[0]
+    });
+    
+    // Validatie: check of eerste datum een maandag is
+    if (dates.length > 0) {
+      const firstDate = dates[0];
+      const dayOfWeek = firstDate.getDay();
+      const dayName = ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag'][dayOfWeek];
+      
+      if (dayOfWeek !== 1) {
+        console.warn(`⚠️  DRAAD70 WAARSCHUWING: Eerste datum is GEEN maandag maar ${dayName}!`, {
+          datum: firstDate.toISOString().split('T')[0],
+          dagVanWeek: dayOfWeek
+        });
+      } else {
+        console.log('✅ DRAAD70: Validatie OK - eerste datum is maandag');
+      }
+    }
+    
+    return dates;
+  } catch (error) {
+    console.error('❌ DRAAD70: Exception bij ophalen datums:', error);
+    throw error;
+  }
+}
+
+// ============================================================================
 // CRUD OPERATIONS
 // ============================================================================
 
