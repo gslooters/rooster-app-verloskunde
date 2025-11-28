@@ -1,29 +1,25 @@
 # Railway Deployment Trigger File
-# DRAAD73 FIX - Force rebuild voor correcte commit deployment
+# DRAAD73B FIX - Rollback naar commit 2807aee954c4d2316d415e3f0a21a37939d02567
 
-Timestamp: 2025-11-28T19:30:15Z
-Build: DRAAD73-force-rebuild-7389
-Commit: 2c1811cd27300ad94134cf1535d67a000968f240
-Random: 7389
+Timestamp: 2025-11-28T22:07:26Z
+Build: ROLLBACK-2807aee-forced
+Commit: 2807aee954c4d2316d415e3f0a21a37939d02567
+Random: ROLLBACK-DATE-NOW
 
 ## DEPLOYMENT FIX
 
-Probleem: Vorige deployment draaide op verkeerde commit
-Oplossing: Force rebuild via nieuwe trigger + cachebust
-Verwacht: Build op commit 2c1811cd (DRAAD73 merge)
+Probleem: Mislukte deploys na DRAAD73
+Oplossing: Rollback naar laatst bekende goede commit (2807aee954c..)
+Verwacht: Build en release wordt weer succesvol op deze versie
 
-## UI WIJZIGINGEN IN DEZE BUILD
-- Weeknummer weergave in header
-- Compacte medewerkernamen (voornaam)
-- Teamkleur indicators (groen/oranje/blauw)
-- Legenda in footer
-- Geen dubbele instructies
-- Opgeschoonde console logs
+## ACTIONS
+- Alle bestanden en configuraties zijn identiek aan 2807aee954c
+- Branch main overschreven (rollback direct uitgevoerd)
+- Railway rebuild trigger via nieuwe marker - forced cachebust
 
-## VERIFICATIE
-Check na deployment:
-1. Weeknummers zichtbaar in periode-regel
-2. Namen zijn compact (geen achternaam)
-3. Gekleurde team-bolletjes bij elke naam
-4. Legenda onderaan scherm
-5. Geen tweede instructie-balk
+## Commit details
+Rollback na meerdere mislukte builds op client, versie onbruikbaar.
+
+## Team-notificatie
+Rollback direct doorgevoerd. Volgende builds moeten weer slagen.
+
