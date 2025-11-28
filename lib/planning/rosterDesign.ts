@@ -1,6 +1,7 @@
 // DRAAD001 FIX - lib/planning/rosterDesign.ts
 // SCAN2 - UTC-safe migratie autofillUnavailability (DRAAD62 pattern)
-import { RosterEmployee, RosterStatus, RosterDesignData, validateMaxShifts, createDefaultRosterEmployee, createDefaultRosterStatus } from '@/lib/types/roster';
+// DRAAD68 - Dagdeel-ondersteuning (O/M/A) in unavailability data
+import { RosterEmployee, RosterStatus, RosterDesignData, validateMaxShifts, createDefaultRosterEmployee, createDefaultRosterStatus, DagdeelAvailability, convertLegacyUnavailability } from '@/lib/types/roster';
 import { getAllEmployees } from '@/lib/services/employees-storage';
 import { TeamType, DienstverbandType, getFullName } from '@/lib/types/employee';
 import { getRosterDesignByRosterId, createRosterDesign, updateRosterDesign, bulkUpdateUnavailability } from '@/lib/services/roster-design-supabase';
@@ -57,12 +58,17 @@ export async function createEmployeeSnapshot(rosterId: string): Promise<RosterEm
 }
 
 /**
- * ✅ DRAAD001 FIX - Volledig geïmplementeerde initializeRosterDesign
+ * ✅ DRAAD001 FIX + DRAAD68 - Volledig geïmplementeerde initializeRosterDesign met dagdeel ondersteuning
  * 
  * Deze functie:
  * 1. Creëert employee snapshot van alle actieve medewerkers
- * 2. Maakt roster_design record aan in database
- * 3. Roept autofillUnavailability aan voor roostervrijDagen
+ * 2. Initialiseert unavailabilityData met structurele NB per dagdeel (O/M/A)
+ * 3. Maakt roster_design record aan in database
+ * 
+ * DRAAD68 WIJZIGING:
+ * - structureel_nbh uit employees wordt per dagdeel overgenomen
+ * - unavailabilityData krijgt DagdeelAvailability structuur { O?, M?, A? }
+ * - Geen data loss meer - dagdeel informatie blijft behouden
  * 
  * @param rosterId - UUID van het aangemaakte rooster
  * @param start_date - Start datum van rooster periode (YYYY-MM-DD)
@@ -71,7 +77,7 @@ export async function createEmployeeSnapshot(rosterId: string): Promise<RosterEm
 export async function initializeRosterDesign(rosterId: string, start_date: string): Promise<RosterDesignData|null> {
   try {
     console.log('\n' + '='.repeat(80));
-    console.log('[initializeRosterDesign] 🚀 START');
+    console.log('[initializeRosterDesign] 🚀 START (DRAAD68 - Dagdeel ondersteuning)');
     console.log('[initializeRosterDesign] RosterId:', rosterId);
     console.log('[initializeRosterDesign] Start date:', start_date);
     console.log('='.repeat(80) + '\n');
@@ -116,13 +122,64 @@ export async function initializeRosterDesign(rosterId: string, start_date: strin
     // STAP 4: Creëer default roster status
     const status = createDefaultRosterStatus();
     
+    // STAP 4a: Initialiseer unavailability_data met structurele NB per dagdeel (DRAAD68)
+    console.log('[initializeRosterDesign] 🔄 Initialiseer structurele NB per dagdeel...');
+    const unavailabilityData: {
+      [employeeId: string]: {
+        [date: string]: DagdeelAvailability;
+      }
+    } = {};
+    
+    // Genereer alle datums in rooster periode (35 dagen)
+    const dates: string[] = [];
+    const currentDate = parseUTCDate(start_date);
+    for (let i = 0; i < 35; i++) {
+      const date = addUTCDays(currentDate, i);
+      dates.push(toUTCDateString(date));
+    }
+    
+    // Voor elke actieve medewerker met structureel_nbh
+    for (const emp of activeEmployees) {
+      if (!emp.structureel_nbh || Object.keys(emp.structureel_nbh).length === 0) {
+        continue; // Skip medewerkers zonder structurele NB
+      }
+      
+      console.log(`  - ${getFullName(emp)}: structureel NB gevonden`);
+      unavailabilityData[emp.id] = {};
+      
+      // Voor elke datum in rooster periode
+      for (const dateStr of dates) {
+        const dateObj = parseUTCDate(dateStr);
+        const dayCode = getWeekdayCode(dateObj).toLowerCase(); // 'ma', 'di', etc.
+        
+        // Check of deze dag structurele NB heeft
+        const nbDagdelen = emp.structureel_nbh[dayCode];
+        
+        if (nbDagdelen && nbDagdelen.length > 0) {
+          // Converteer array van dagdelen naar DagdeelAvailability object
+          const dagdeelData: DagdeelAvailability = {};
+          
+          if (nbDagdelen.includes('O')) dagdeelData.O = true;
+          if (nbDagdelen.includes('M')) dagdeelData.M = true;
+          if (nbDagdelen.includes('A')) dagdeelData.A = true;
+          
+          unavailabilityData[emp.id][dateStr] = dagdeelData;
+          
+          console.log(`    ${dateStr} (${dayCode}): ${nbDagdelen.join(', ')}`);
+        }
+      }
+    }
+    
+    console.log('[initializeRosterDesign] ✅ Structurele NB per dagdeel geïnitialiseerd');
+    console.log('');
+    
     // STAP 5: Creëer roster_design record in database
     console.log('[initializeRosterDesign] 🔄 Aanmaken roster_design record...');
     const designData: RosterDesignData = {
       rosterId,
       employees: employeeSnapshot,
       status,
-      unavailabilityData: {}, // Leeg object, wordt ingevuld door autofillUnavailability
+      unavailabilityData: unavailabilityData, // Nu met dagdeel ondersteuning
       created_at: now,
       updated_at: now
     };
@@ -130,16 +187,6 @@ export async function initializeRosterDesign(rosterId: string, start_date: strin
     const created = await createRosterDesign(designData);
     console.log('[initializeRosterDesign] ✅ Roster design record aangemaakt');
     console.log('');
-    
-    // STAP 6: Vul automatisch roostervrijDagen in (NB assignments)
-    console.log('[initializeRosterDesign] 🔄 Start autofillUnavailability...');
-    const autofillSuccess = await autofillUnavailability(rosterId, start_date);
-    
-    if (autofillSuccess) {
-      console.log('[initializeRosterDesign] ✅ Roostervrijdagen succesvol ingevuld');
-    } else {
-      console.warn('[initializeRosterDesign] ⚠️  Roostervrijdagen invullen gefaald (niet kritiek)');
-    }
     
     console.log('\n' + '='.repeat(80));
     console.log('[initializeRosterDesign] ✅ VOLTOOID');
@@ -156,219 +203,74 @@ export async function initializeRosterDesign(rosterId: string, start_date: strin
 }
 
 /**
- * 🔥 SCAN2 FIX - UTC-safe autofillUnavailability (DRAAD62 pattern)
+ * 🔥 DRAAD68 - Toggle NB (Niet Beschikbaar) assignment per dagdeel
  * 
- * Vult automatisch NB (Niet Beschikbaar) assignments in voor medewerkers
- * op basis van hun roostervrijDagen configuratie.
+ * BREAKING CHANGE: Functie accepteert nu dagdeel parameter
  * 
- * BELANGRIJKE WIJZIGING (SCAN2):
- * - Migratie van locale timezone (new Date()) naar UTC-safe utilities
- * - Gebruikt parseUTCDate, addUTCDays, toUTCDateString uit lib/utils/date-utc
- * - Consistent met DRAAD62 weekDagdelenData.ts fix
- * - Voorkomt timezone bugs, vooral bij DST transitions
- * 
- * Logica:
- * - Voor elke actieve medewerker met roostervrijDagen configuratie
- * - Genereer alle datums in de rooster periode (UTC-safe)
- * - Filter op datums die overeenkomen met roostervrijDagen
- * - Creëer NB assignment voor elke match
- * 
- * @param rosterId - UUID van het rooster
- * @param start_date - Start datum van rooster periode (YYYY-MM-DD)
- * @returns true als succesvol, false bij fout
- */
-export async function autofillUnavailability(rosterId: string, start_date: string): Promise<boolean> {
-  try {
-    console.log('\n' + '='.repeat(80));
-    console.log('[autofillUnavailability] 🚀 START (UTC-SAFE)');
-    console.log('[autofillUnavailability] RosterId:', rosterId);
-    console.log('[autofillUnavailability] Start date:', start_date);
-    console.log('='.repeat(80) + '\n');
-    
-    // STAP 1: Haal roster info op om end_date te krijgen
-    const { data: rosterData, error: rosterError } = await supabase
-      .from('roosters')
-      .select('start_date, end_date')
-      .eq('id', rosterId)
-      .single();
-    
-    if (rosterError || !rosterData) {
-      console.error('[autofillUnavailability] ❌ Kon roster data niet ophalen:', rosterError);
-      return false;
-    }
-    
-    const { start_date: startDate, end_date: endDate } = rosterData;
-    console.log(`[autofillUnavailability] Periode: ${startDate} tot ${endDate}`);
-    
-    // 🔥 SCAN2 FIX: UTC-safe datum generatie (DRAAD62 pattern)
-    // OUDE CODE:
-    //   const current = new Date(startDate);  // ⚠️ Locale timezone!
-    //   const end = new Date(endDate);
-    //   while (current <= end) {
-    //     dates.push(current.toISOString().split('T')[0]);  // ⚠️ Kan afwijken!
-    //     current.setDate(current.getDate() + 1);  // ⚠️ Locale arithmetic!
-    //   }
-    //
-    // NIEUWE CODE (UTC-safe):
-    const dates: string[] = [];
-    const currentDate = parseUTCDate(startDate);  // ✅ UTC midnight!
-    const endDateObj = parseUTCDate(endDate);     // ✅ UTC midnight!
-    
-    let iterDate = currentDate;
-    while (iterDate <= endDateObj) {
-      dates.push(toUTCDateString(iterDate));  // ✅ YYYY-MM-DD in UTC!
-      iterDate = addUTCDays(iterDate, 1);     // ✅ UTC arithmetic!
-    }
-    
-    console.log(`[autofillUnavailability] Totaal dagen in periode: ${dates.length}`);
-    console.log('');
-    
-    // STAP 3: Haal actieve medewerkers op met roostervrijDagen
-    const allEmployees = getAllEmployees();
-    const activeEmployees = allEmployees.filter(emp => 
-      emp.actief && emp.roostervrijDagen && emp.roostervrijDagen.length > 0
-    );
-    
-    console.log(`[autofillUnavailability] Medewerkers met roostervrijDagen: ${activeEmployees.length}`);
-    
-    if (activeEmployees.length === 0) {
-      console.warn('[autofillUnavailability] ⚠️  Geen medewerkers met roostervrijDagen configuratie');
-      console.warn('[autofillUnavailability] Geen NB assignments aangemaakt');
-      return true; // Niet een fout, gewoon geen data
-    }
-    
-    // STAP 4: Creëer NB assignments
-    const assignments: Array<{
-      roster_id: string;
-      employee_id: string;
-      service_code: string;
-      date: string;
-    }> = [];
-    
-    for (const emp of activeEmployees) {
-      console.log(`[autofillUnavailability] Verwerk ${emp.voornaam} ${emp.achternaam}:`);
-      console.log(`  Roostervrij: [${emp.roostervrijDagen.join(', ')}]`);
-      
-      const roostervrijSet = new Set(emp.roostervrijDagen.map(d => d.toLowerCase()));
-      let nbCount = 0;
-      
-      for (const date of dates) {
-        // 🔥 SCAN2: dateObj is nu altijd UTC (van parseUTCDate/toUTCDateString)
-        // getWeekdayCode was al UTC-safe (gebruikt date.getUTCDay())
-        const dateObj = parseUTCDate(date);  // ✅ UTC parsing!
-        const dayCode = getWeekdayCode(dateObj).toLowerCase();  // ✅ UTC-based dag code!
-        
-        if (roostervrijSet.has(dayCode)) {
-          assignments.push({
-            roster_id: rosterId,
-            employee_id: emp.id, // Gebruik originele employee ID
-            service_code: 'NB',
-            date: date  // ✅ UTC YYYY-MM-DD string!
-          });
-          nbCount++;
-        }
-      }
-      
-      console.log(`  → ${nbCount} NB assignments voor ${emp.voornaam}`);
-    }
-    
-    console.log('');
-    console.log(`[autofillUnavailability] Totaal NB assignments: ${assignments.length}`);
-    
-    // STAP 5: Bulk insert NB assignments
-    if (assignments.length > 0) {
-      console.log('[autofillUnavailability] 🔄 Bulk insert NB assignments...');
-      
-      const { error: insertError } = await supabase
-        .from('roster_assignments')
-        .insert(assignments);
-      
-      if (insertError) {
-        console.error('[autofillUnavailability] ❌ Fout bij bulk insert:', insertError);
-        return false;
-      }
-      
-      console.log('[autofillUnavailability] ✅ Bulk insert succesvol');
-    }
-    
-    console.log('\n' + '='.repeat(80));
-    console.log('[autofillUnavailability] ✅ VOLTOOID (UTC-SAFE)');
-    console.log('='.repeat(80) + '\n');
-    
-    return true;
-  } catch (error) {
-    console.error('\n' + '='.repeat(80));
-    console.error('[autofillUnavailability] ❌ FOUT');
-    console.error('[autofillUnavailability] Error:', error);
-    console.error('='.repeat(80) + '\n');
-    return false;
-  }
-}
-
-/**
- * ✅ DRAAD 27E - Toggle NB (Niet Beschikbaar) assignment
- * 
- * Toggle NB (Niet Beschikbaar) assignment voor een medewerker op een specifieke datum
- * 
- * Logica:
- * - Als er GEEN assignment is → Voeg NB toe
- * - Als er WEL een NB assignment is → Verwijder deze
- * - Als er een ANDERE dienst is → Doe NIETS (wordt afgehandeld in UI)
+ * Toggle NB voor een medewerker op specifieke datum en dagdeel:
+ * - Als dagdeel niet NB is → Zet op NB (true)
+ * - Als dagdeel wel NB is → Verwijder NB (delete property)
  * 
  * @param rosterId - UUID van het rooster
  * @param employeeId - TEXT ID van de medewerker (gebruik originalEmployeeId uit snapshot)
  * @param date - Datum in ISO formaat (YYYY-MM-DD)
+ * @param dagdeel - Dagdeel om te togglen: 'O' (ochtend), 'M' (middag), of 'A' (avond/nacht)
  * @returns true als succesvol, false bij fout
  */
 export async function toggleNBAssignment(
   rosterId: string,
   employeeId: string,
-  date: string
+  date: string,
+  dagdeel: 'O' | 'M' | 'A'
 ): Promise<boolean> {
   try {
-    console.log('🔄 Toggle NB assignment:', { rosterId, employeeId, date });
+    console.log('🔄 Toggle NB assignment:', { rosterId, employeeId, date, dagdeel });
     
-    // Check of er al een assignment bestaat voor deze datum
-    const existingAssignment = await getAssignmentByDate(rosterId, employeeId, date);
-    
-    if (!existingAssignment) {
-      // Geen assignment → Voeg NB toe
-      console.log('➕ Geen assignment gevonden, voeg NB toe');
-      
-      const { error } = await supabase
-        .from('roster_assignments')
-        .insert({
-          roster_id: rosterId,
-          employee_id: employeeId,
-          service_code: 'NB',
-          date: date
-        });
-      
-      if (error) {
-        console.error('❌ Fout bij toevoegen NB:', error);
-        return false;
-      }
-      
-      console.log('✅ NB succesvol toegevoegd');
-      return true;
-    } else if (existingAssignment.service_code === 'NB') {
-      // NB assignment bestaat → Verwijder deze
-      console.log('➖ NB assignment gevonden, verwijder deze');
-      
-      const success = await deleteAssignmentByDate(rosterId, employeeId, date);
-      
-      if (success) {
-        console.log('✅ NB succesvol verwijderd');
-        return true;
-      } else {
-        console.error('❌ Fout bij verwijderen NB');
-        return false;
-      }
-    } else {
-      // Andere dienst → Niet toegestaan (wordt in UI afgehandeld)
-      console.warn('⚠️  Andere dienst aanwezig, toggle niet toegestaan:', existingAssignment.service_code);
+    // Haal huidige unavailability data op
+    const designData = await getRosterDesignByRosterId(rosterId);
+    if (!designData) {
+      console.error('❌ Roster design niet gevonden');
       return false;
     }
+    
+    // Initialiseer nested objects indien nodig
+    if (!designData.unavailabilityData[employeeId]) {
+      designData.unavailabilityData[employeeId] = {};
+    }
+    
+    if (!designData.unavailabilityData[employeeId][date]) {
+      designData.unavailabilityData[employeeId][date] = {};
+    }
+    
+    const currentData = designData.unavailabilityData[employeeId][date];
+    
+    // Converteer legacy boolean naar DagdeelAvailability indien nodig
+    let dagdeelData: DagdeelAvailability;
+    if (typeof currentData === 'boolean') {
+      dagdeelData = convertLegacyUnavailability(currentData);
+    } else {
+      dagdeelData = currentData as DagdeelAvailability;
+    }
+    
+    // Toggle het specifieke dagdeel
+    if (dagdeelData[dagdeel]) {
+      // NB is gezet → verwijder
+      delete dagdeelData[dagdeel];
+      console.log(`➖ NB verwijderd voor ${dagdeel}`);
+    } else {
+      // NB is niet gezet → voeg toe
+      dagdeelData[dagdeel] = true;
+      console.log(`➕ NB toegevoegd voor ${dagdeel}`);
+    }
+    
+    // Update unavailability data
+    designData.unavailabilityData[employeeId][date] = dagdeelData;
+    
+    // Sla op in database
+    await updateRosterDesign(rosterId, designData);
+    
+    console.log('✅ Toggle NB succesvol');
+    return true;
   } catch (error) {
     console.error('❌ Exception in toggleNBAssignment:', error);
     return false;
