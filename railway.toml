@@ -3,10 +3,9 @@
 command = "npm install && npm run build"
 
 [deploy]
-# 🔥 CRITICAL: Start direct met Node.js (geen npm wrapper)
-# npm >= 9.6.7 heeft bug met SIGTERM signal forwarding
-# Custom server.js handelt dit correct af
-startCommand = "node server.js"
+# 🔥 CRITICAL FIX: Correct path naar standalone server
+# server.js bevindt zich in .next/standalone/ directory
+startCommand = "node .next/standalone/server.js"
 
 # Health check
 healthcheckPath = "/api/health"
