@@ -1,0 +1,28 @@
+DRAAD73C CRITICAL DEPLOYMENT FIX
+=================================
+Timestamp: 2025-11-28T21:30:00+01:00
+Commit: a67494ff7ee7a9327378d6874c11833b75445650
+
+KRITIEKE FIXES:
+1. ✅ railway.toml startCommand gecorrigeerd
+   Van: node server.js
+   Naar: node .next/standalone/server.js
+
+2. ✅ Railway cache-busting trigger
+   Force clean build zonder cached layers
+
+3. ✅ Next.js build ID regeneratie
+   generateBuildId met millisecond precision
+
+REASON FOR FAILURE:
+- Verkeerde server.js path in railway.toml
+- Railway probeerde 'node server.js' uit te voeren
+- Maar server.js bevindt zich in .next/standalone/
+
+EXPECTED RESULT:
+- ✅ Build succesvol
+- ✅ Server start met correct pad
+- ✅ Health check /api/health reageert
+- ✅ App draait op Railway URL
+
+Build trigger: $(date +%s%N)
