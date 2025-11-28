@@ -1,6 +1,6 @@
 /**
  * Type definitions voor het "Diensten per medewerker aanpassen" scherm
- * DRAAD64
+ * DRAAD66G - Updated met dienstwaarde voor gewogen telling
  */
 
 /**
@@ -15,13 +15,14 @@ export interface RosterInfo {
 }
 
 /**
- * Dienst-type definitie met kleur
+ * Dienst-type definitie met kleur en dienstwaarde
  */
 export interface ServiceType {
   id: string;
   code: string;      // DDA, DDO, DIA, etc.
   naam: string;
   kleur: string;     // Hex kleur voor badge
+  dienstwaarde: number; // Gewicht voor telling berekening (DRAAD66G)
 }
 
 /**
@@ -32,6 +33,7 @@ export interface EmployeeService {
   code: string;      // Voor snelle lookup
   aantal: number;
   actief: boolean;   // Checkbox staat
+  dienstwaarde: number; // Gewicht van deze dienst (DRAAD66G)
 }
 
 /**
