@@ -1,0 +1,9 @@
+DRAAD71 - Correcte fix datumweergave
+Timestamp: 2025-11-28T17:38:09.547Z
+
+Fixes:
+- Verwijderd: getUniqueDatesFromAssignments functie
+- Toegevoegd: Datumgeneratie uit roosters.start_date (35 dagen vast)
+- UI toont nu altijd correcte periode: 2025-11-24 tot 2025-12-28
+- Eerste dag (24-11) toont nu correct NB data uit database
+- Alle 35 dagen zijn nu zichtbaar en klikbaar
