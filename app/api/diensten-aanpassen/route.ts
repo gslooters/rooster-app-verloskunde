@@ -16,8 +16,10 @@ if (!supabaseUrl || !supabaseKey) {
  * 
  * Haalt alle data op voor het diensten-toewijzing scherm:
  * - Roster info (periode, weken)
- * - Alle actieve dienst-types met kleuren
+ * - Alle actieve dienst-types met kleuren en dienstwaarde
  * - Alle actieve medewerkers met hun dienst-toewijzingen
+ * 
+ * DRAAD66G: Inclusief dienstwaarde voor gewogen telling
  */
 export async function GET(request: NextRequest) {
   try {
@@ -42,7 +44,7 @@ export async function GET(request: NextRequest) {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // 1. Haal roster info op (CORRECTE VELDNAMEN: start_date, end_date)
+    // 1. Haal roster info op
     const { data: roster, error: rosterError } = await supabase
       .from('roosters')
       .select('id, start_date, end_date, status')
@@ -81,10 +83,10 @@ export async function GET(request: NextRequest) {
     const startWeek = getISOWeek(startDate);
     const endWeek = getISOWeek(endDate);
 
-    // 2. Haal alle actieve dienst-types op (gesorteerd op code)
+    // 2. Haal alle actieve dienst-types op met dienstwaarde (DRAAD66G)
     const { data: serviceTypes, error: serviceTypesError } = await supabase
       .from('service_types')
-      .select('id, code, naam, kleur')
+      .select('id, code, naam, kleur, dienstwaarde')
       .eq('actief', true)
       .order('code');
 
@@ -96,13 +98,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 3. Haal alle actieve medewerkers op
+    // 3. Haal alle actieve medewerkers op (DRAAD66G: gesorteerd op team, voornaam)
     const { data: employees, error: employeesError } = await supabase
       .from('employees')
       .select('id, voornaam, achternaam, team')
       .eq('actief', true)
       .order('team')
-      .order('achternaam')
       .order('voornaam');
 
     if (employeesError) {
@@ -138,7 +139,13 @@ export async function GET(request: NextRequest) {
       });
     });
 
-    // 6. Bouw response met alle diensten per medewerker
+    // 6. Maak dienstwaarde lookup map (DRAAD66G)
+    const dienstwaardeMap = new Map<string, number>();
+    serviceTypes?.forEach(st => {
+      dienstwaardeMap.set(st.id, st.dienstwaarde || 1);
+    });
+
+    // 7. Bouw response met alle diensten per medewerker (DRAAD66G: inclusief dienstwaarde)
     const employeesWithServices = employees?.map(employee => {
       const services = serviceTypes?.map(serviceType => {
         const key = `${employee.id}_${serviceType.id}`;
@@ -148,7 +155,8 @@ export async function GET(request: NextRequest) {
           serviceId: serviceType.id,
           code: serviceType.code,
           aantal: existing?.aantal || 0,
-          actief: existing?.actief || false
+          actief: existing?.actief || false,
+          dienstwaarde: serviceType.dienstwaarde || 1 // DRAAD66G: dienstwaarde toevoegen
         };
       }) || [];
 
@@ -161,7 +169,7 @@ export async function GET(request: NextRequest) {
       };
     }) || [];
 
-    // 7. Retourneer complete dataset
+    // 8. Retourneer complete dataset (DRAAD66G: inclusief dienstwaarde)
     return NextResponse.json({
       roster: {
         id: roster.id,
@@ -175,7 +183,8 @@ export async function GET(request: NextRequest) {
         id: st.id,
         code: st.code,
         naam: st.naam,
-        kleur: st.kleur
+        kleur: st.kleur,
+        dienstwaarde: st.dienstwaarde || 1 // DRAAD66G: dienstwaarde toevoegen
       })) || [],
       employees: employeesWithServices
     });
