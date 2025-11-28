@@ -1,0 +1,12 @@
+DRAAD69: Wizard fix roster_assignments integration - 1732806120
+Timestamp: 2025-11-28T15:28:40Z
+Random: 847291
+
+Changes:
+- Added initialize_roster_assignments() call in wizard flow
+- Fixed 0 assignments bug that prevented roster from working
+- Enhanced verification logging
+- Added assignments phase (70-85%) to wizard UI
+- Now correctly creates 1155 records (11 employees × 35 days × 3 dagdelen)
+
+Deploy this ASAP to fix critical rooster creation bug!
