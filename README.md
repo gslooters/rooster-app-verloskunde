@@ -6,9 +6,19 @@ Een Next.js applicatie voor roosterplanning in de verloskunde praktijk.
 
 ## 📦 DEPLOYMENT STATUS
 
-**Laatste deployment:** DRAAD40B5 - TypeScript errors gefixed (20 nov 2025, 22:11 UTC)  
-**Status:** ✅ READY FOR PRODUCTION  
-**Build verwachting:** ✅ SUCCESS
+**Laatste deployment:** DRAAD73 FIX - Force rebuild voor NB scherm UI fixes (28 nov 2025, 20:30 CET)  
+**Status:** ✅ FORCE REBUILD ACTIEF  
+**Build verwachting:** ✅ SUCCESS op commit 2c1811cd
+
+### DRAAD73 FIX - NB Scherm UI Verbeteringen
+- ✅ Weeknummer weergave in header (Week X - Y)
+- ✅ Compacte medewerkernamen (alleen voornaam)
+- ✅ Teamkleur indicators verbeterd (groen/oranje/blauw)
+- ✅ Legenda verplaatst naar footer (compact)
+- ✅ Dubbele instructie-balk verwijderd
+- ✅ Layout spacing verbeterd
+- ✅ Console logs opgeschoond
+- ✅ Force deployment fix: correcte commit nu live
 
 ### DRAAD40B5 Fixes
 - ✅ Duplicate `TeamDagdeel` import verwijderd uit `WeekDagdelenClient.tsx`
@@ -77,6 +87,13 @@ Een Next.js applicatie voor roosterplanning in de verloskunde praktijk.
 2. Code is correct - Railway builder was overbelast
 3. Oplossing: dummy commit om rebuild te triggeren
 4. Gebeurt soms bij drukke builders - niet code gerelateerd
+
+**Als verkeerde commit live staat:**
+1. Overschrijf `.cachebust` met nieuwe timestamp + commit
+2. Overschrijf `.railway-trigger` met nieuw random nummer
+3. Voeg kleine wijziging toe aan README.md
+4. Force rebuild via deze drie file changes
+5. Verifieer build draait op correcte commit
 
 **Route Confusion Preventie:**
 - ⚠️ Vertrouw NOOIT op scherm naam alleen
@@ -234,6 +251,16 @@ This project uses:
 - **Critical Analysis**: [DRAAD36L_CRITICAL_ANALYSIS.md](./DRAAD36L_CRITICAL_ANALYSIS.md) - Lessons learned van route problemen
 
 ## Recent Updates
+
+### v2.4 - DRAAD73 FIX NB Scherm UI (28 nov 2025)
+- ✅ Force deployment fix: correcte commit live
+- ✅ Weeknummer weergave in header toegevoegd
+- ✅ Compacte medewerkernamen (alleen voornaam)
+- ✅ Teamkleur indicators verbeterd
+- ✅ Legenda verplaatst naar footer
+- ✅ Dubbele instructie verwijderd
+- ✅ Layout en spacing verbeterd
+- ✅ Console logs opgeschoond
 
 ### v2.3 - DRAAD40B5 TypeScript Fixes (20 nov 2025)
 - ✅ Fixed duplicate `TeamDagdeel` type import
