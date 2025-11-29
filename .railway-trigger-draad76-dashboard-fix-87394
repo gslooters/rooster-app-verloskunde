@@ -1,0 +1,15 @@
+Railway Deployment Trigger - DRAAD76
+=====================================
+
+Random ID: 87394
+Timestamp: 1732909285000
+Datum: 29 november 2025, 20:21 CET
+
+Dashboard Correcties:
+✅ Verwijderd: "Diensten per Dagdeel Aanpassen" button
+✅ Verwijderd: "Huidig Rooster" button  
+✅ Behouden: Alle 6 correcte navigatie-buttons
+✅ Behouden: Instellingen button
+
+Status: Klaar voor production deployment
+Prioriteit: HOOG (gebruikers ervaren fouten)
