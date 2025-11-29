@@ -1,0 +1,16 @@
+Cache bust: 1732923204000
+Datum: 2025-11-29T23:13:24Z
+DRAAD: 79 - DienstSelectieModal Component
+Beschrijving: Modal voor dienst selectie met 4 statussen (0/1/2/3)
+
+Wijzigingen:
+- ServiceTypeWithTimes type toegevoegd aan preplanning.ts
+- getServicesForEmployee updated om ServiceTypeWithTimes te returnen
+- DienstSelectieModal component aangemaakt met:
+  * Ondersteuning voor alle 4 statussen
+  * Status 0: Leeg
+  * Status 1: Dienst (met service_id)
+  * Status 2: Geblokkeerd door vorige dienst (NIEUW)
+  * Status 3: Niet Beschikbaar (NB)
+- Modal geïntegreerd in client.tsx
+- Console.log save handler (database save volgt in DRAAD 80)
