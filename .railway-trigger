@@ -1,21 +1,19 @@
 # Railway Deployment Trigger
-# DRAAD 79: DienstSelectieModal Component
+# DRAAD 80: Database Save + Grid Refresh
 
-Timestamp: 1732923204000
-Random: 8429
-Datum: 2025-11-29T23:14:03Z
+Timestamp: 1732923147006
+Random: 8236
+Datum: 2025-11-29T23:32:27.006Z
 
 Deze wijziging triggert automatische deployment op Railway.
 
 Wijzigingen in deze deployment:
-- ServiceTypeWithTimes type toegevoegd
-- getServicesForEmployee updated
-- DienstSelectieModal component met 4 statussen:
-  * Status 0: Leeg (geen dienst)
-  * Status 1: Dienst (met service_id)
-  * Status 2: Geblokkeerd door vorige dienst
-  * Status 3: Niet Beschikbaar (NB)
-- Modal integratie in client.tsx
-- Console.log save handler (database in DRAAD 80)
+- handleModalSave database integratie (alle 4 statussen)
+- Status 0: DELETE assignment
+- Status 1/2/3: UPSERT assignment
+- Grid refresh na save
+- isSaving loading state
+- Modal disabled tijdens save
+- Error handling
 
-Cache: 1732923204000
+Cache: 1732923147006
