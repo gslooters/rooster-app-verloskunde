@@ -15,34 +15,6 @@ export default function DashboardPage() {
               Rooster Dashboard Verloskundigen Arnhem
             </h1>
           </div>
-          
-          {/* Snelkoppeling Bovenaan - PDF Export voor Diensten per Dagdeel */}
-          <div className="bg-gradient-to-r from-blue-100 to-indigo-100 rounded-lg p-4 mb-6 border border-blue-200">
-            <Link href="/planning/service-allocation" className="flex items-center justify-between hover:bg-blue-50 rounded-lg p-2 transition-colors">
-              <div className="flex items-center">
-                <span className="text-2xl mr-3">📄</span>
-                <div>
-                  <h3 className="font-bold text-blue-900 text-lg">Diensten per Dagdeel Aanpassen</h3>
-                  <p className="text-blue-700 text-sm">PDF exporteren van het volledige rooster (5 weken)</p>
-                </div>
-              </div>
-              <span className="text-blue-600 text-xl">→</span>
-            </Link>
-          </div>
-          
-          {/* Snelkoppeling Huidig Rooster */}
-          <div className="bg-gradient-to-r from-red-100 to-orange-100 rounded-lg p-4 mb-6 border border-red-200">
-            <Link href="/current-roster" className="flex items-center justify-between hover:bg-red-50 rounded-lg p-2 transition-colors">
-              <div className="flex items-center">
-                <span className="text-2xl mr-3">🔥</span>
-                <div>
-                  <h3 className="font-bold text-red-900 text-lg">Huidig Rooster</h3>
-                  <p className="text-red-700 text-sm">Ga direct naar het actuele rooster</p>
-                </div>
-              </div>
-              <span className="text-red-600 text-xl">→</span>
-            </Link>
-          </div>
 
           {/* Main Navigation Grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
