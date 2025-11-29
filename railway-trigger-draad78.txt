@@ -1,0 +1,5 @@
+Railway trigger voor DRAAD 78
+Random: 9184726351
+Timestamp: 1732918135000
+Doel: Force nieuwe deployment met Grid Component dagdelen
+Feature: 3 kolommen per datum (Ochtend/Middag/Avond)
