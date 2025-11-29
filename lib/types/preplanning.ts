@@ -4,6 +4,7 @@
  * Data wordt opgeslagen in Supabase roster_assignments tabel
  * 
  * DRAAD 77: Uitgebreid met dagdeel ondersteuning en cel status structuur
+ * DRAAD 79: ServiceTypeWithTimes toegevoegd voor modal component
  */
 
 /**
@@ -66,6 +67,19 @@ export interface PrePlanningData {
   assignments: PrePlanningAssignment[];
   startDate: string;
   endDate: string;
+}
+
+/**
+ * DRAAD 79: Service type met tijden voor modal component
+ * Simplified versie van ServiceType met alleen benodigde velden
+ */
+export interface ServiceTypeWithTimes {
+  id: string;
+  code: string;
+  naam: string;
+  kleur: string;
+  start_tijd: string; // HH:MM format (begintijd)
+  eind_tijd: string;  // HH:MM format (eindtijd)
 }
 
 /**
