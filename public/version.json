@@ -1,9 +1,9 @@
 {
-  "version": "DRAAD79-dienst-selectie-modal",
-  "timestamp": 1732923204000,
-  "build": "79000001",
-  "deployed": "2025-11-29T23:13:24Z",
-  "feature": "DienstSelectieModal - Modal voor dienst toewijzing met 4 statussen (0=Leeg, 1=Dienst, 2=Geblokkeerd, 3=NB)",
+  "version": "DRAAD80-database-save-grid-refresh",
+  "timestamp": 1732923147006,
+  "build": "80000001",
+  "deployed": "2025-11-29T23:32:27.006Z",
+  "feature": "Database Save + Grid Refresh - Modal wijzigingen opgeslagen in database, grid update automatisch",
   "status": "deploying",
-  "cacheBust": "DRAAD79-1732923204000"
+  "cacheBust": "DRAAD80-1732923147006"
 }
