@@ -1,25 +1,21 @@
-# Railway Deployment Trigger File
-# DRAAD73B FIX - Rollback naar commit 2807aee954c4d2316d415e3f0a21a37939d02567
+# Railway Deployment Trigger
+# DRAAD 79: DienstSelectieModal Component
 
-Timestamp: 2025-11-28T22:07:26Z
-Build: ROLLBACK-2807aee-forced
-Commit: 2807aee954c4d2316d415e3f0a21a37939d02567
-Random: ROLLBACK-DATE-NOW
+Timestamp: 1732923204000
+Random: 8429
+Datum: 2025-11-29T23:14:03Z
 
-## DEPLOYMENT FIX
+Deze wijziging triggert automatische deployment op Railway.
 
-Probleem: Mislukte deploys na DRAAD73
-Oplossing: Rollback naar laatst bekende goede commit (2807aee954c..)
-Verwacht: Build en release wordt weer succesvol op deze versie
+Wijzigingen in deze deployment:
+- ServiceTypeWithTimes type toegevoegd
+- getServicesForEmployee updated
+- DienstSelectieModal component met 4 statussen:
+  * Status 0: Leeg (geen dienst)
+  * Status 1: Dienst (met service_id)
+  * Status 2: Geblokkeerd door vorige dienst
+  * Status 3: Niet Beschikbaar (NB)
+- Modal integratie in client.tsx
+- Console.log save handler (database in DRAAD 80)
 
-## ACTIONS
-- Alle bestanden en configuraties zijn identiek aan 2807aee954c
-- Branch main overschreven (rollback direct uitgevoerd)
-- Railway rebuild trigger via nieuwe marker - forced cachebust
-
-## Commit details
-Rollback na meerdere mislukte builds op client, versie onbruikbaar.
-
-## Team-notificatie
-Rollback direct doorgevoerd. Volgende builds moeten weer slagen.
-
+Cache: 1732923204000
