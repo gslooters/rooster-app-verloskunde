@@ -1,0 +1,13 @@
+DRAAD76 Dashboard Fix - Cache Busting
+=====================================
+
+Timestamp: 1732909285000
+Datum: 29 november 2025, 20:21 CET
+
+Wijzigingen:
+- Verwijderd: "Diensten per Dagdeel Aanpassen" button
+- Verwijderd: "Huidig Rooster" button
+- Behouden: 6 correcte navigatie-buttons
+- Status: Dashboard clean en functioneel
+
+Cache-busting actief voor Railway deployment.
