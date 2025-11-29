@@ -1,9 +1,9 @@
 {
-  "version": "DRAAD53-pdf-layout-improved",
-  "timestamp": 1732492316000,
-  "build": "53000001",
-  "deployed": "2025-11-24T23:31:56Z",
-  "feature": "PDF verbeterde layout - 1 week per A4 portrait, dienst+team kleuren",
+  "version": "DRAAD77-cel-status-structuur",
+  "timestamp": 1732913436000,
+  "build": "77000001",
+  "deployed": "2025-11-29T21:10:36Z",
+  "feature": "Cel Status Structuur - dagdeel + status + service_id in data layer",
   "status": "deploying",
-  "cacheBust": "DRAAD53-1732492316000"
+  "cacheBust": "DRAAD77-1732913436000"
 }
