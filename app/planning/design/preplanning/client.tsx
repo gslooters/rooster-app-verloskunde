@@ -10,12 +10,13 @@ import {
   deletePrePlanningAssignment,
   getEmployeesWithServices
 } from '@/lib/services/preplanning-storage';
-import { EmployeeWithServices, PrePlanningAssignment, Dagdeel } from '@/lib/types/preplanning';
+import { EmployeeWithServices, PrePlanningAssignment, Dagdeel, CellStatus } from '@/lib/types/preplanning';
 import { getDatesForRosterPeriod, groupDatesByWeek } from '@/lib/utils/roster-date-helpers';
 import { loadRosterDesignData } from '@/lib/planning/rosterDesign';
 import { getRosterById } from '@/lib/services/roosters-supabase';
 import StatusBadge from '@/app/planning/_components/StatusBadge';
 import PlanningGridDagdelen from './components/PlanningGridDagdelen';
+import DienstSelectieModal from './components/DienstSelectieModal';
 
 /**
  * Client Component voor PrePlanning scherm (Ontwerpfase)
@@ -23,7 +24,11 @@ import PlanningGridDagdelen from './components/PlanningGridDagdelen';
  * DRAAD 78: Nieuwe grid met dagdelen (O/M/A kolommen)
  * - Gebruikt PlanningGridDagdelen component
  * - Haalt service kleuren op uit database
- * - Cell click handler voor toekomstige modal (DRAAD 79)
+ * 
+ * DRAAD 79: DienstSelectieModal integratie
+ * - Modal opent bij cel klik
+ * - Ondersteunt 4 statussen: 0=leeg, 1=dienst, 2=geblokkeerd, 3=NB
+ * - Save handler met console.log (database save komt in DRAAD 80)
  * 
  * Dit scherm toont:
  * - Grid met 35 dagen (5 weken) als kolommen x 3 dagdelen (O/M/A)
@@ -31,8 +36,7 @@ import PlanningGridDagdelen from './components/PlanningGridDagdelen';
  * - Cellen op basis van status (0=leeg, 1=dienst, 2=geblokkeerd, 3=NB)
  * - Data wordt opgeslagen in Supabase roster_assignments
  * 
- * FIX: Deployment error - incorrect Supabase import gecorrigeerd
- * Cache: 1732918289000
+ * Cache: 1732923139000
  */
 export default function PrePlanningClient() {
   const router = useRouter();
@@ -48,6 +52,16 @@ export default function PrePlanningClient() {
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [rosterStatus, setRosterStatus] = useState<'draft' | 'in_progress' | 'final'>('draft');
+
+  // DRAAD 79: Modal state
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedCell, setSelectedCell] = useState<{
+    employeeId: string;
+    employeeName: string;
+    date: string;
+    dagdeel: Dagdeel;
+    currentAssignment?: PrePlanningAssignment;
+  } | null>(null);
 
   // Load data
   useEffect(() => {
@@ -150,11 +164,59 @@ export default function PrePlanningClient() {
     return groupDatesByWeek(dateInfo);
   }, [dateInfo]);
 
-  // DRAAD 78: Handler voor cel klik (dummy voor nu - modal komt in DRAAD 79)
+  // DRAAD 79: Open modal bij cel klik
   const handleCellClick = useCallback((employeeId: string, date: string, dagdeel: Dagdeel) => {
-    console.log('[PrePlanning] Cell clicked:', { employeeId, date, dagdeel });
-    // TODO DRAAD 79: Open DienstSelectieModal
-  }, []);
+    // Vind medewerker voor naam
+    const employee = employees.find(e => e.id === employeeId);
+    if (!employee) return;
+    
+    // Vind huidige assignment indien aanwezig
+    const currentAssignment = assignments.find(
+      a => a.employee_id === employeeId && a.date === date && a.dagdeel === dagdeel
+    );
+    
+    // Open modal met cel data
+    setSelectedCell({
+      employeeId,
+      employeeName: `${employee.voornaam} ${employee.achternaam}`,
+      date,
+      dagdeel,
+      currentAssignment
+    });
+    setModalOpen(true);
+  }, [employees, assignments]);
+
+  // DRAAD 79: Modal save handler (met alle 4 statussen)
+  const handleModalSave = useCallback(async (serviceId: string | null, status: CellStatus) => {
+    if (!selectedCell || !rosterId) return;
+    
+    try {
+      // TODO DRAAD 80: Implementeer database save
+      // Voor nu: console.log voor testing
+      console.log('[PrePlanning] Modal save:', {
+        rosterId,
+        employeeId: selectedCell.employeeId,
+        date: selectedCell.date,
+        dagdeel: selectedCell.dagdeel,
+        serviceId,
+        status,
+        statusLabel: status === 0 ? 'Leeg' : 
+                     status === 1 ? 'Dienst' : 
+                     status === 2 ? 'Geblokkeerd' : 
+                     status === 3 ? 'NB' : 'Onbekend'
+      });
+      
+      // Sluit modal
+      setModalOpen(false);
+      setSelectedCell(null);
+      
+      // TODO DRAAD 80: Herlaad grid data
+      
+    } catch (error) {
+      console.error('[PrePlanning] Error saving assignment:', error);
+      alert('Fout bij opslaan dienst. Probeer opnieuw.');
+    }
+  }, [selectedCell, rosterId]);
 
   const handleBackToDashboard = useCallback(() => {
     router.push(`/planning/design/dashboard?rosterId=${rosterId}`);
@@ -263,6 +325,18 @@ export default function PrePlanningClient() {
           </div>
         </div>
       </div>
+
+      {/* DRAAD 79: Dienst Selectie Modal */}
+      <DienstSelectieModal
+        isOpen={modalOpen}
+        cellData={selectedCell}
+        onClose={() => {
+          setModalOpen(false);
+          setSelectedCell(null);
+        }}
+        onSave={handleModalSave}
+        readOnly={rosterStatus === 'final'}
+      />
     </div>
   );
 }
