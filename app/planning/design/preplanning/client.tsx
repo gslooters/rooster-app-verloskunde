@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Home } from 'lucide-react';
-import { createClient } from '@/lib/supabase-client';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { 
   getPrePlanningData,
   savePrePlanningAssignment,
@@ -30,12 +30,15 @@ import PlanningGridDagdelen from './components/PlanningGridDagdelen';
  * - Medewerkers als rijen
  * - Cellen op basis van status (0=leeg, 1=dienst, 2=geblokkeerd, 3=NB)
  * - Data wordt opgeslagen in Supabase roster_assignments
+ * 
+ * FIX: Deployment error - incorrect Supabase import gecorrigeerd
+ * Cache: 1732918289000
  */
 export default function PrePlanningClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const rosterId = searchParams.get('id');
-  const supabase = createClient();
+  const supabase = createClientComponentClient();
 
   const [employees, setEmployees] = useState<EmployeeWithServices[]>([]);
   const [assignments, setAssignments] = useState<PrePlanningAssignment[]>([]);
