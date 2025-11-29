@@ -1,0 +1,3 @@
+DRAAD 78 - Grid Component met Dagdelen
+Timestamp: 1732918135000
+Build: Grid transformatie naar 3 dagdelen per datum (O/M/A)
