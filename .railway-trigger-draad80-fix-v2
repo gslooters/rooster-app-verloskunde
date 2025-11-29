@@ -1,0 +1,6 @@
+Railway deployment trigger
+Timestamp: 2025-11-29T23:44:40Z
+Build: 1732924280000
+Fix: DienstSelectieModal syntax error - verwijder ... placeholders
+Status: READY FOR DEPLOYMENT
+Expected: SUCCESS - syntax errors opgelost
