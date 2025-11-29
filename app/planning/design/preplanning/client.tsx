@@ -25,10 +25,11 @@ import StatusBadge from '@/app/planning/_components/StatusBadge';
  * - Alleen diensten die medewerker kan uitvoeren
  * - Data wordt opgeslagen in Supabase roster_assignments
  * 
- * VERSIE: DRAAD 76 - Status badge implementatie
- * - Status badge in header
- * - Status-afhankelijke header prefix (Pre-planning/Planrooster)
- * - Status-afhankelijke info banner tekst
+ * VERSIE: DRAAD 77 - Type fix voor dagdeel/status/service_id
+ * - Fix TypeScript error door complete PrePlanningAssignment te creëren
+ * - Dagdeel default 'O' voor backwards compatibility
+ * - Status 1 (dienst) bij service assignment
+ * - service_id null voor legacy mode (wordt later uitgebreid)
  */
 export default function PrePlanningClient() {
   const router = useRouter();
@@ -146,18 +147,23 @@ export default function PrePlanningClient() {
         // Sla assignment op
         const success = await savePrePlanningAssignment(rosterId, employeeId, date, serviceCode);
         if (success) {
-          // Update local state
+          // Update local state - FIXED: Complete PrePlanningAssignment object
           setAssignments(prev => {
             const filtered = prev.filter(a => !(a.employee_id === employeeId && a.date === date));
-            return [...filtered, {
+            const newAssignment: PrePlanningAssignment = {
               id: crypto.randomUUID(),
               roster_id: rosterId,
               employee_id: employeeId,
               service_code: serviceCode,
               date: date,
+              // DRAAD 77: Nieuwe vereiste velden
+              dagdeel: 'O', // Default ochtend voor backwards compatibility
+              status: 1, // Status 1 = dienst
+              service_id: null, // Legacy mode - wordt later uitgebreid met service lookup
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString()
-            }];
+            };
+            return [...filtered, newAssignment];
           });
         } else {
           alert('Fout bij opslaan dienst. Probeer opnieuw.');
