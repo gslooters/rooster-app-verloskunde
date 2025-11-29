@@ -4,10 +4,11 @@
  * Alle data wordt opgeslagen in Supabase roster_assignments tabel
  * 
  * DRAAD 77: Uitgebreid met dagdeel ondersteuning en status structuur
+ * DRAAD 79: getServicesForEmployee updated om ServiceTypeWithTimes te returnen
  */
 
 import { supabase } from '@/lib/supabase';
-import { PrePlanningAssignment, EmployeeWithServices, CellStatus, Dagdeel } from '@/lib/types/preplanning';
+import { PrePlanningAssignment, EmployeeWithServices, CellStatus, Dagdeel, ServiceTypeWithTimes } from '@/lib/types/preplanning';
 import { ServiceType } from '@/lib/types/service';
 import { getAllEmployees } from '@/lib/services/employees-storage';
 
@@ -197,18 +198,19 @@ export async function updateAssignmentStatus(
 }
 
 /**
- * DRAAD 77: Nieuwe functie - Haal beschikbare diensten voor medewerker
- * Via employee_services koppeltabel en JOIN met service_types
+ * DRAAD 79: Haal diensten op die een specifieke medewerker kan uitvoeren
+ * Via employee_services koppeltabel
  * @param employeeId - TEXT ID van de medewerker
- * @returns Array van ServiceType objecten met code, naam, kleur
+ * @returns Array van ServiceTypeWithTimes objecten met simplified structure
  */
-export async function getServicesForEmployee(employeeId: string): Promise<ServiceType[]> {
+export async function getServicesForEmployee(employeeId: string): Promise<ServiceTypeWithTimes[]> {
   try {
     console.log('🔍 Getting services for employee:', employeeId);
     
     const { data, error } = await supabase
       .from('employee_services')
       .select(`
+        service_id,
         service_types (
           id,
           code,
@@ -216,16 +218,7 @@ export async function getServicesForEmployee(employeeId: string): Promise<Servic
           kleur,
           begintijd,
           eindtijd,
-          duur,
-          dienstwaarde,
-          blokkeert_volgdag,
-          actief,
-          planregels,
-          team_groen_regels,
-          team_oranje_regels,
-          team_totaal_regels,
-          created_at,
-          updated_at
+          actief
         )
       `)
       .eq('employee_id', employeeId);
@@ -235,10 +228,17 @@ export async function getServicesForEmployee(employeeId: string): Promise<Servic
       return [];
     }
 
-    // Extract service_types van nested structure en filter actieve diensten
-    const services: ServiceType[] = (data || [])
-      .map((row: any) => row.service_types)
-      .filter((service: any) => service && service.actief);
+    // Transform nested data naar platte structuur
+    const services: ServiceTypeWithTimes[] = (data || [])
+      .filter((item: any) => item.service_types && item.service_types.actief)
+      .map((item: any) => ({
+        id: item.service_types.id,
+        code: item.service_types.code,
+        naam: item.service_types.naam,
+        kleur: item.service_types.kleur || '#3B82F6',
+        start_tijd: item.service_types.begintijd || '09:00',
+        eind_tijd: item.service_types.eindtijd || '17:00'
+      }));
 
     console.log(`✅ Found ${services.length} active services for employee ${employeeId}`);
     return services;
