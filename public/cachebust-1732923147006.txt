@@ -1,0 +1,15 @@
+Cache bust: 1732923147006
+Datum: 2025-11-29T23:32:27.006Z
+DRAAD: 80 - Database Save + Grid Refresh
+Beschrijving: Modal save gekoppeld aan database, grid refresh na wijziging
+
+Wijzigingen:
+- handleModalSave implementeert database save
+- Status 0: DELETE via deletePrePlanningAssignment
+- Status 1/2/3: UPSERT via updateAssignmentStatus
+- Grid refresh na succesvolle save via getPrePlanningData
+- isSaving state voor loading feedback
+- Modal inputs disabled tijdens save
+- Import updateAssignmentStatus toegevoegd
+- DienstSelectieModal accepteert isSaving prop
+- Error handling met alerts
