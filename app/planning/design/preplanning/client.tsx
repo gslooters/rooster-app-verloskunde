@@ -12,6 +12,8 @@ import {
 import { EmployeeWithServices, PrePlanningAssignment } from '@/lib/types/preplanning';
 import { getDatesForRosterPeriod, groupDatesByWeek } from '@/lib/utils/roster-date-helpers';
 import { loadRosterDesignData } from '@/lib/planning/rosterDesign';
+import { getRosterById } from '@/lib/services/roosters-supabase';
+import StatusBadge from '@/app/planning/_components/StatusBadge';
 
 /**
  * Client Component voor PrePlanning scherm (Ontwerpfase)
@@ -23,8 +25,10 @@ import { loadRosterDesignData } from '@/lib/planning/rosterDesign';
  * - Alleen diensten die medewerker kan uitvoeren
  * - Data wordt opgeslagen in Supabase roster_assignments
  * 
- * VERSIE: DRAAD 29 - PrePlanning implementatie
- * Layout 100% identiek aan "Medewerkers per periode" scherm
+ * VERSIE: DRAAD 76 - Status badge implementatie
+ * - Status badge in header
+ * - Status-afhankelijke header prefix (Pre-planning/Planrooster)
+ * - Status-afhankelijke info banner tekst
  */
 export default function PrePlanningClient() {
   const router = useRouter();
@@ -37,6 +41,7 @@ export default function PrePlanningClient() {
   const [isSaving, setIsSaving] = useState(false);
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
+  const [rosterStatus, setRosterStatus] = useState<'draft' | 'in_progress' | 'final'>('draft');
 
   // Load data
   useEffect(() => {
@@ -50,16 +55,19 @@ export default function PrePlanningClient() {
       try {
         setIsLoading(true);
         
-        // Haal roster design data op voor periode info
-        const designData = await loadRosterDesignData(rosterId!);
-        if (!designData) {
-          alert('Geen rooster design data gevonden');
+        // Haal roster op voor status en periode info
+        const roster = await getRosterById(rosterId!);
+        if (!roster) {
+          alert('Rooster niet gevonden');
           router.push('/planning/design');
           return;
         }
 
-        // FIXED: Gebruik alleen start_date (correct property naam)
-        const start = designData.start_date;
+        // Sla rooster status op
+        setRosterStatus(roster.status);
+
+        // Gebruik start_date uit roster
+        const start = roster.start_date;
         if (!start) {
           alert('Geen startdatum gevonden voor rooster');
           return;
@@ -167,6 +175,29 @@ export default function PrePlanningClient() {
     router.push(`/planning/design/dashboard?rosterId=${rosterId}`);
   }, [rosterId, router]);
 
+  // Status-afhankelijke content
+  const headerPrefix = useMemo(() => {
+    switch(rosterStatus) {
+      case 'draft':
+        return 'Pre-planning:';
+      case 'in_progress':
+        return 'Planrooster:';
+      case 'final':
+        return 'Planrooster (Afgesloten):';
+    }
+  }, [rosterStatus]);
+
+  const infoBannerText = useMemo(() => {
+    switch(rosterStatus) {
+      case 'draft':
+        return 'Pre-planning: Wijs specifieke diensten toe aan medewerkers voor deze periode. Alleen diensten die een medewerker kan uitvoeren zijn beschikbaar in een pop-up na klikken de cel in het rooster (medewerker/datum/dagdeel)';
+      case 'in_progress':
+        return 'Planrooster: Bewerk het rooster door op cellen te klikken. Wijzigingen worden automatisch opgeslagen.';
+      case 'final':
+        return 'Planrooster (Afgesloten): Dit rooster is afgesloten en kan alleen worden geraadpleegd. Exporteer naar PDF indien nodig.';
+    }
+  }, [rosterStatus]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 flex items-center justify-center">
@@ -179,20 +210,23 @@ export default function PrePlanningClient() {
   }
 
   const title = weekGroups.length > 0 
-    ? `PrePlanning Periode Week ${weekGroups[0].weekNumber} - Week ${weekGroups[weekGroups.length - 1].weekNumber} ${weekGroups[0].year}`
-    : 'PrePlanning Periode';
+    ? `${headerPrefix} Periode Week ${weekGroups[0].weekNumber} - Week ${weekGroups[weekGroups.length - 1].weekNumber} ${weekGroups[0].year}`
+    : `${headerPrefix} Periode`;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-4">
       <div className="max-w-full mx-auto">
         <div className="bg-white rounded-xl shadow-lg">
-          {/* Header met Terug naar Dashboard button rechtsboven */}
+          {/* Header met Status Badge en Terug naar Dashboard button */}
           <div className="p-6 border-b border-gray-200">
             <div className="flex items-center justify-between mb-4">
-              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 flex items-center">
-                <span className="text-2xl mr-3">📅</span>
-                {title}
-              </h1>
+              <div className="flex items-center gap-4">
+                <h1 className="text-2xl md:text-3xl font-bold text-gray-900 flex items-center">
+                  <span className="text-2xl mr-3">📅</span>
+                  {title}
+                </h1>
+                <StatusBadge status={rosterStatus} />
+              </div>
               <button
                 onClick={handleBackToDashboard}
                 className="flex items-center gap-2 px-8 py-3 text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-md hover:shadow-lg font-semibold text-lg"
@@ -211,11 +245,10 @@ export default function PrePlanningClient() {
             )}
           </div>
 
-          {/* Info tekst */}
+          {/* Info tekst - status afhankelijk */}
           <div className="px-6 py-3 bg-blue-50 border-b border-blue-200">
             <p className="text-blue-800 text-sm">
-              <strong>Pre-planning:</strong> Wijs specifieke diensten toe aan medewerkers voor deze periode. 
-              Alleen diensten die een medewerker kan uitvoeren zijn beschikbaar in het dropdown menu.
+              <strong>{infoBannerText}</strong>
             </p>
           </div>
 
@@ -256,7 +289,6 @@ export default function PrePlanningClient() {
                           </div>
                         </td>
                         {dateInfo.map((d, idx) => {
-                          // FIXED: Gebruik d.date i.p.v. d.dateISO!
                           const assignmentKey = `${employee.id}_${d.date}`;
                           const currentService = assignmentMap.get(assignmentKey) || '';
                           
