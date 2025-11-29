@@ -1,0 +1,35 @@
+DRAAD 77 - CEL STATUS STRUCTUUR IMPLEMENTATIE
+==============================================
+
+Datum: 29 november 2025 21:10 CET
+Timestamp: 1732913436000
+
+WIJZIGINGEN:
+
+1. Types Uitgebreid:
+   - lib/types/preplanning.ts: dagdeel, status, service_id
+   - Nieuwe CellStatus type (0/1/2/3)
+   - Nieuwe Dagdeel type (O/M/A)
+   - CellStatusInfo interface toegevoegd
+   - Backwards compatibility: service_code blijft bestaan
+
+2. Storage Layer Verbeterd:
+   - lib/services/preplanning-storage.ts:
+     * getPrePlanningData() met JOIN op service_types voor kleur
+     * savePrePlanningAssignment() met dagdeel parameter
+     * NIEUW: updateAssignmentStatus() voor status wijzigingen
+     * NIEUW: getServicesForEmployee() via employee_services
+     * Alle functies met dagdeel ondersteuning
+     * Fallbacks voor legacy data zonder dagdeel/status
+
+3. Legacy Data Support:
+   - LEGACY_DATA_CHECK.md aangemaakt
+   - Controle queries voor missing dagdeel/status/kleur
+   - Migratie scripts klaar (niet automatisch uitgevoerd)
+   - Code werkt met én zonder legacy data cleanup
+
+VOLGENDE STAP:
+- DRAAD 78: Grid Component transformatie naar 3 kolommen per datum
+- UI wijzigingen voor dagdeel ondersteuning
+
+Cache-busting ID: DRAAD77-CEL-STATUS-1732913436000
