@@ -1,9 +1,9 @@
 {
-  "version": "DRAAD77-cel-status-structuur",
-  "timestamp": 1732913436000,
-  "build": "77000001",
-  "deployed": "2025-11-29T21:10:36Z",
-  "feature": "Cel Status Structuur - dagdeel + status + service_id in data layer",
+  "version": "DRAAD78-grid-component-dagdelen",
+  "timestamp": 1732918135000,
+  "build": "78000001",
+  "deployed": "2025-11-29T22:28:55Z",
+  "feature": "Grid Component met Dagdelen - 3 kolommen per datum (O/M/A) met status-based cel rendering",
   "status": "deploying",
-  "cacheBust": "DRAAD77-1732913436000"
+  "cacheBust": "DRAAD78-1732918135000"
 }
