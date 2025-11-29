@@ -1,9 +1,9 @@
 {
-  "version": "DRAAD78-grid-component-dagdelen",
-  "timestamp": 1732918135000,
-  "build": "78000001",
-  "deployed": "2025-11-29T22:28:55Z",
-  "feature": "Grid Component met Dagdelen - 3 kolommen per datum (O/M/A) met status-based cel rendering",
+  "version": "DRAAD79-dienst-selectie-modal",
+  "timestamp": 1732923204000,
+  "build": "79000001",
+  "deployed": "2025-11-29T23:13:24Z",
+  "feature": "DienstSelectieModal - Modal voor dienst toewijzing met 4 statussen (0=Leeg, 1=Dienst, 2=Geblokkeerd, 3=NB)",
   "status": "deploying",
-  "cacheBust": "DRAAD78-1732918135000"
+  "cacheBust": "DRAAD79-1732923204000"
 }
