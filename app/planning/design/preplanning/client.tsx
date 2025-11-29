@@ -3,41 +3,43 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Home } from 'lucide-react';
+import { createClient } from '@/lib/supabase-client';
 import { 
   getPrePlanningData,
   savePrePlanningAssignment,
   deletePrePlanningAssignment,
   getEmployeesWithServices
 } from '@/lib/services/preplanning-storage';
-import { EmployeeWithServices, PrePlanningAssignment } from '@/lib/types/preplanning';
+import { EmployeeWithServices, PrePlanningAssignment, Dagdeel } from '@/lib/types/preplanning';
 import { getDatesForRosterPeriod, groupDatesByWeek } from '@/lib/utils/roster-date-helpers';
 import { loadRosterDesignData } from '@/lib/planning/rosterDesign';
 import { getRosterById } from '@/lib/services/roosters-supabase';
 import StatusBadge from '@/app/planning/_components/StatusBadge';
+import PlanningGridDagdelen from './components/PlanningGridDagdelen';
 
 /**
  * Client Component voor PrePlanning scherm (Ontwerpfase)
  * 
- * Dit scherm toont:
- * - Grid met 35 dagen (5 weken) als kolommen
- * - Medewerkers als rijen
- * - Dropdown per cel voor dienst-selectie
- * - Alleen diensten die medewerker kan uitvoeren
- * - Data wordt opgeslagen in Supabase roster_assignments
+ * DRAAD 78: Nieuwe grid met dagdelen (O/M/A kolommen)
+ * - Gebruikt PlanningGridDagdelen component
+ * - Haalt service kleuren op uit database
+ * - Cell click handler voor toekomstige modal (DRAAD 79)
  * 
- * VERSIE: DRAAD 77 - Type fix voor dagdeel/status/service_id
- * - Fix TypeScript error door complete PrePlanningAssignment te creëren
- * - Dagdeel default 'O' voor backwards compatibility
- * - Status 1 (dienst) bij service assignment
- * - service_id null voor legacy mode (wordt later uitgebreid)
+ * Dit scherm toont:
+ * - Grid met 35 dagen (5 weken) als kolommen x 3 dagdelen (O/M/A)
+ * - Medewerkers als rijen
+ * - Cellen op basis van status (0=leeg, 1=dienst, 2=geblokkeerd, 3=NB)
+ * - Data wordt opgeslagen in Supabase roster_assignments
  */
 export default function PrePlanningClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const rosterId = searchParams.get('id');
+  const supabase = createClient();
 
   const [employees, setEmployees] = useState<EmployeeWithServices[]>([]);
   const [assignments, setAssignments] = useState<PrePlanningAssignment[]>([]);
+  const [serviceColors, setServiceColors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [startDate, setStartDate] = useState<string>('');
@@ -99,83 +101,57 @@ export default function PrePlanningClient() {
       }
     }
     loadData();
-  }, [rosterId, router]);
+  }, [rosterId, router, supabase]);
+
+  // DRAAD 78: Haal service kleuren op
+  useEffect(() => {
+    async function loadServiceColors() {
+      try {
+        const { data, error } = await supabase
+          .from('service_types')
+          .select('id, kleur')
+          .eq('actief', true);
+        
+        if (error) {
+          console.error('[PrePlanning] Error loading service colors:', error);
+          return;
+        }
+
+        if (data) {
+          const colorMap: Record<string, string> = {};
+          data.forEach(service => {
+            colorMap[service.id] = service.kleur || '#3B82F6'; // Fallback blauw
+          });
+          setServiceColors(colorMap);
+        }
+      } catch (error) {
+        console.error('[PrePlanning] Error loading service colors:', error);
+      }
+    }
+
+    loadServiceColors();
+  }, [supabase]);
 
   // Genereer datum-info voor headers
   const dateInfo = useMemo(() => {
     if (!startDate) return [];
-    return getDatesForRosterPeriod(startDate, []);
+    const dates = getDatesForRosterPeriod(startDate, []);
+    // Voeg dayLabel toe voor de grid headers
+    return dates.map(d => ({
+      ...d,
+      dayLabel: `${d.dayName} ${d.date.split('-')[2]}-${d.date.split('-')[1]}`
+    }));
   }, [startDate]);
 
   const weekGroups = useMemo(() => {
     return groupDatesByWeek(dateInfo);
   }, [dateInfo]);
 
-  // Maak lookup map voor snelle assignment lookups
-  const assignmentMap = useMemo(() => {
-    const map = new Map<string, string>(); // key: employeeId_date, value: serviceCode
-    assignments.forEach(assignment => {
-      const key = `${assignment.employee_id}_${assignment.date}`;
-      map.set(key, assignment.service_code);
-    });
-    return map;
-  }, [assignments]);
-
-  // Handler voor dropdown change
-  const handleServiceChange = useCallback(async (
-    employeeId: string,
-    date: string,
-    serviceCode: string
-  ) => {
-    if (!rosterId) return;
-
-    setIsSaving(true);
-    
-    try {
-      if (serviceCode === '') {
-        // Leeg = verwijder assignment
-        const success = await deletePrePlanningAssignment(rosterId, employeeId, date);
-        if (success) {
-          // Update local state
-          setAssignments(prev => 
-            prev.filter(a => !(a.employee_id === employeeId && a.date === date))
-          );
-        } else {
-          alert('Fout bij verwijderen dienst. Probeer opnieuw.');
-        }
-      } else {
-        // Sla assignment op
-        const success = await savePrePlanningAssignment(rosterId, employeeId, date, serviceCode);
-        if (success) {
-          // Update local state - FIXED: Complete PrePlanningAssignment object
-          setAssignments(prev => {
-            const filtered = prev.filter(a => !(a.employee_id === employeeId && a.date === date));
-            const newAssignment: PrePlanningAssignment = {
-              id: crypto.randomUUID(),
-              roster_id: rosterId,
-              employee_id: employeeId,
-              service_code: serviceCode,
-              date: date,
-              // DRAAD 77: Nieuwe vereiste velden
-              dagdeel: 'O', // Default ochtend voor backwards compatibility
-              status: 1, // Status 1 = dienst
-              service_id: null, // Legacy mode - wordt later uitgebreid met service lookup
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            };
-            return [...filtered, newAssignment];
-          });
-        } else {
-          alert('Fout bij opslaan dienst. Probeer opnieuw.');
-        }
-      }
-    } catch (error) {
-      console.error('[PrePlanning] Error handling service change:', error);
-      alert('Fout bij wijzigen dienst.');
-    } finally {
-      setIsSaving(false);
-    }
-  }, [rosterId]);
+  // DRAAD 78: Handler voor cel klik (dummy voor nu - modal komt in DRAAD 79)
+  const handleCellClick = useCallback((employeeId: string, date: string, dagdeel: Dagdeel) => {
+    console.log('[PrePlanning] Cell clicked:', { employeeId, date, dagdeel });
+    // TODO DRAAD 79: Open DienstSelectieModal
+  }, []);
 
   const handleBackToDashboard = useCallback(() => {
     router.push(`/planning/design/dashboard?rosterId=${rosterId}`);
@@ -258,71 +234,16 @@ export default function PrePlanningClient() {
             </p>
           </div>
 
-          {/* Tabel */}
+          {/* DRAAD 78: Nieuwe Grid met Dagdelen */}
           <div className="p-6">
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse">
-                <thead>
-                  <tr className="bg-gray-50">
-                    <th className="border border-gray-300 px-3 py-2 text-left font-semibold text-gray-700 sticky left-0 bg-gray-50 z-10">
-                      Medewerker
-                    </th>
-                    {dateInfo.map((d, idx) => (
-                      <th key={idx} className="border border-gray-300 px-2 py-2 text-center text-sm font-medium text-gray-700 min-w-[100px]">
-                        <div className="flex flex-col">
-                          <span className="text-xs text-gray-500">{d.dayName}</span>
-                          <span className="font-semibold">{d.date}</span>
-                        </div>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {employees.map(employee => {
-                    return (
-                      <tr key={employee.id} className="hover:bg-gray-50">
-                        <td className="border border-gray-300 px-3 py-2 sticky left-0 bg-white z-10">
-                          <div className="flex flex-col gap-1">
-                            <span className="font-medium text-gray-900">
-                              {employee.voornaam} {employee.achternaam}
-                            </span>
-                            <div className="flex items-center gap-2">
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                                {employee.team}
-                              </span>
-                              <span className="text-xs text-gray-600">{employee.dienstverband}</span>
-                            </div>
-                          </div>
-                        </td>
-                        {dateInfo.map((d, idx) => {
-                          const assignmentKey = `${employee.id}_${d.date}`;
-                          const currentService = assignmentMap.get(assignmentKey) || '';
-                          
-                          return (
-                            <td 
-                              key={idx} 
-                              className="border border-gray-300 px-2 py-2 text-center"
-                            >
-                              <select
-                                value={currentService}
-                                onChange={(e) => handleServiceChange(employee.id, d.date, e.target.value)}
-                                disabled={isSaving}
-                                className="w-full px-2 py-1 text-center border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                              >
-                                <option value="">-</option>
-                                {employee.serviceCodes.map(code => (
-                                  <option key={code} value={code}>{code}</option>
-                                ))}
-                              </select>
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <PlanningGridDagdelen
+              employees={employees}
+              dateInfo={dateInfo}
+              assignments={assignments}
+              serviceColors={serviceColors}
+              onCellClick={handleCellClick}
+              readOnly={rosterStatus === 'final'}
+            />
           </div>
 
           {/* Footer status */}
