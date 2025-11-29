@@ -1,9 +1,9 @@
 {
-  "version": "DRAAD80-database-save-grid-refresh",
-  "timestamp": 1732923147006,
-  "build": "80000001",
-  "deployed": "2025-11-29T23:32:27.006Z",
-  "feature": "Database Save + Grid Refresh - Modal wijzigingen opgeslagen in database, grid update automatisch",
+  "version": "DRAAD80-FIX-syntax-error",
+  "timestamp": 1732921008000,
+  "build": "81",
+  "deployed": "2025-11-29T23:36:48.000Z",
+  "feature": "FIX: Syntax error verholpen - ... verwijderd uit client.tsx, volledige database save werkend",
   "status": "deploying",
-  "cacheBust": "DRAAD80-1732923147006"
+  "cacheBust": "DRAAD80-FIX-1732921008000"
 }
