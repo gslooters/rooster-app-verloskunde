@@ -1,0 +1,22 @@
+RAILWAY DEPLOYMENT TRIGGER - DRAAD 77
+=====================================
+
+Deploy Time: 2025-11-29 21:10 CET
+Random ID: 68429
+Draad: 77 - Cel Status Structuur
+
+DEPLOYMENT INFO:
+- Types: dagdeel + status + service_id toegevoegd
+- Storage: getServicesForEmployee() + updateAssignmentStatus()
+- Legacy: LEGACY_DATA_CHECK.md met migratie queries
+- Backwards compatible: service_code blijft bestaan
+
+VERIFICATIE:
+✅ TypeScript types bijgewerkt
+✅ Storage functies uitgebreid
+✅ Legacy data check document
+✅ Cache-busting bestanden
+✅ Backwards compatibility behouden
+
+STATUS: Data layer klaar voor dagdeel ondersteuning
+VOLGENDE: DRAAD 78 - Grid transformatie naar 3 kolommen
