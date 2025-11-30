@@ -7,12 +7,18 @@
  * DRAAD 79: getServicesForEmployee updated om ServiceTypeWithTimes te returnen
  * DRAAD 82: service_code verwijderd uit updateAssignmentStatus (kolom bestaat niet meer)
  * DRAAD 83: Fix service_code mapping - JOIN returnt object, geen array
+ * DRAAD 89: Service blocking rules integratie
  */
 
 import { supabase } from '@/lib/supabase';
 import { PrePlanningAssignment, EmployeeWithServices, CellStatus, Dagdeel, ServiceTypeWithTimes } from '@/lib/types/preplanning';
 import { ServiceType } from '@/lib/types/service';
 import { getAllEmployees } from '@/lib/services/employees-storage';
+import { 
+  applyServiceBlockingRules, 
+  removeServiceBlockingRules,
+  getServiceBlockingProperties 
+} from './service-blocking-rules';
 
 /**
  * Haal alle PrePlanning assignments op voor een rooster periode
@@ -142,15 +148,24 @@ export async function savePrePlanningAssignment(
 /**
  * DRAAD 77: Nieuwe functie - Update assignment status
  * DRAAD 82: service_code VERWIJDERD - kolom bestaat niet meer in database schema
+ * DRAAD 89: Service blocking rules integratie met Clean Slate strategie
  * 
  * Voor het wijzigen van cel status (leeg, dienst, geblokkeerd, NB)
+ * 
+ * CLEAN SLATE FLOW:
+ * 1. Haal oude assignment op (indien aanwezig)
+ * 2. Verwijder ALLE oude blokkeringen (indien service met blokkeer_volgdag)
+ * 3. Update/create nieuwe assignment
+ * 4. Pas nieuwe blokkeringen toe (indien service met blokkeer_volgdag)
+ * 
  * @param rosterId - UUID van het rooster
  * @param employeeId - TEXT ID van de medewerker
  * @param date - Datum (YYYY-MM-DD)
  * @param dagdeel - Dagdeel (O/M/A)
  * @param status - Nieuwe status (0/1/2/3)
  * @param serviceId - UUID van service (alleen bij status 1)
- * @returns true bij succes, false bij fout
+ * @param rosterStartDate - Startdatum van rooster (voor periode validatie)
+ * @returns Object met { success: boolean, warnings: string[] }
  */
 export async function updateAssignmentStatus(
   rosterId: string,
@@ -158,15 +173,18 @@ export async function updateAssignmentStatus(
   date: string,
   dagdeel: Dagdeel,
   status: CellStatus,
-  serviceId: string | null
-): Promise<boolean> {
+  serviceId: string | null,
+  rosterStartDate?: string
+): Promise<{ success: boolean; warnings: string[] }> {
+  const warnings: string[] = [];
+  
   try {
     console.log('🔄 Updating assignment status:', { rosterId, employeeId, date, dagdeel, status, serviceId });
     
     // Validatie: bij status 1 moet service_id aanwezig zijn
     if (status === 1 && !serviceId) {
       console.error('❌ Status 1 (dienst) requires service_id');
-      return false;
+      return { success: false, warnings: [] };
     }
     
     // Bij status 0, 2, 3 moet service_id null zijn
@@ -174,7 +192,23 @@ export async function updateAssignmentStatus(
       console.warn('⚠️  Setting service_id to null for status', status);
       serviceId = null;
     }
+
+    // DRAAD 89: CLEAN SLATE STAP 1 - Haal oude assignment op
+    const oldAssignment = await getAssignmentForDate(rosterId, employeeId, date, dagdeel);
     
+    // DRAAD 89: CLEAN SLATE STAP 2 - Verwijder oude blokkeringen (indien aanwezig)
+    if (oldAssignment && oldAssignment.service_id) {
+      console.log('🧹 Clean Slate: Removing old blocking rules...');
+      await removeServiceBlockingRules(
+        rosterId,
+        employeeId,
+        date,
+        dagdeel,
+        oldAssignment.service_id
+      );
+    }
+    
+    // DRAAD 89: STAP 3 - Update/create assignment in database
     const { error } = await supabase
       .from('roster_assignments')
       .upsert({
@@ -184,8 +218,6 @@ export async function updateAssignmentStatus(
         dagdeel: dagdeel,
         status: status,
         service_id: serviceId,
-        // ✅ DRAAD 82: service_code is verwijderd in DRAAD77 - alleen service_id wordt gebruikt
-        // Database schema heeft alleen service_id (nullable, FK naar service_types.id)
         updated_at: new Date().toISOString()
       }, {
         onConflict: 'roster_id,employee_id,date,dagdeel'
@@ -193,14 +225,36 @@ export async function updateAssignmentStatus(
 
     if (error) {
       console.error('❌ Error updating assignment status:', error);
-      return false;
+      return { success: false, warnings: [] };
     }
 
     console.log('✅ Assignment status updated successfully');
-    return true;
+
+    // DRAAD 89: STAP 4 - Pas nieuwe blokkeringen toe (alleen bij status 1 met service)
+    if (status === 1 && serviceId && rosterStartDate) {
+      console.log('🔒 Applying new blocking rules...');
+      const blockingResult = await applyServiceBlockingRules(
+        rosterId,
+        employeeId,
+        date,
+        dagdeel,
+        serviceId,
+        rosterStartDate
+      );
+      
+      // Verzamel warnings
+      if (blockingResult.warnings.length > 0) {
+        warnings.push(...blockingResult.warnings);
+        console.log('⚠️  Blocking warnings:', blockingResult.warnings);
+      }
+      
+      console.log(`📊 Applied ${blockingResult.blocksApplied.length} blocks`);
+    }
+    
+    return { success: true, warnings };
   } catch (error) {
     console.error('❌ Exception in updateAssignmentStatus:', error);
-    return false;
+    return { success: false, warnings: [] };
   }
 }
 
@@ -258,6 +312,8 @@ export async function getServicesForEmployee(employeeId: string): Promise<Servic
 /**
  * Verwijder een PrePlanning assignment (cel leeg maken)
  * DRAAD 77: Nu met dagdeel parameter
+ * DRAAD 89: Verwijder ook blokkerings-regels
+ * 
  * @param rosterId - UUID van het rooster
  * @param employeeId - TEXT ID van de medewerker
  * @param date - Datum (YYYY-MM-DD)
@@ -273,6 +329,22 @@ export async function deletePrePlanningAssignment(
   try {
     console.log('🗑️  Deleting PrePlanning assignment:', { rosterId, employeeId, date, dagdeel });
     
+    // DRAAD 89: Haal assignment op om service_id te krijgen (voor blocking rules)
+    const assignment = await getAssignmentForDate(rosterId, employeeId, date, dagdeel);
+    
+    // DRAAD 89: Verwijder blokkerings-regels indien aanwezig
+    if (assignment && assignment.service_id) {
+      console.log('🔓 Removing blocking rules before delete...');
+      await removeServiceBlockingRules(
+        rosterId,
+        employeeId,
+        date,
+        dagdeel,
+        assignment.service_id
+      );
+    }
+    
+    // Delete assignment
     const { error } = await supabase
       .from('roster_assignments')
       .delete()
