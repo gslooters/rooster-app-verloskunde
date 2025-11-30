@@ -4,7 +4,7 @@ import { useMemo, useCallback } from 'react';
 import { PrePlanningAssignment, EmployeeWithServices, Dagdeel, CellStatus } from '@/lib/types/preplanning';
 
 /**
- * DRAAD 83A: Grid Component met Dagdelen - Verbeterde Medewerkerkolom
+ * DRAAD 83B: Sticky Header Fix - Grid Component met Dagdelen
  * 
  * Rendert tabel met 3 kolommen per datum (Ochtend/Middag/Avond)
  * Cel rendering op basis van status:
@@ -15,6 +15,10 @@ import { PrePlanningAssignment, EmployeeWithServices, Dagdeel, CellStatus } from
  * 
  * Medewerkerkolom: Team symbool (gekleurd rondje) + voornaam (18px)
  * Sortering: Team → Dienstverband → Voornaam alfabetisch
+ * 
+ * FIX: Alle 3 header rijen (weeknummers, datums, dagdelen) blijven sticky
+ * bij verticaal scrollen. Medewerkerkolom blijft sticky bij horizontaal scrollen.
+ * Z-index layering: medewerkerkolom (z-30) > header (z-20) > body (z-10)
  * 
  * Cache: 1733073716732
  */
@@ -218,14 +222,14 @@ export default function PlanningGridDagdelen({
   );
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto relative">
       <table className="min-w-full border-collapse">
-        <thead className="bg-gray-50 sticky top-0 z-10">
-          {/* Rij 1: Weeknummers */}
+        <thead className="bg-gray-50">
+          {/* Rij 1: Weeknummers - STICKY */}
           <tr>
             <th
               rowSpan={3}
-              className="border border-gray-300 px-3 py-2 text-left font-semibold text-gray-700 sticky left-0 bg-gray-50 z-20 min-w-[180px]"
+              className="border border-gray-300 px-3 py-2 text-left font-semibold text-gray-700 sticky left-0 top-0 bg-gray-50 z-30 min-w-[180px]"
             >
               Medewerker
             </th>
@@ -233,45 +237,45 @@ export default function PlanningGridDagdelen({
               <th
                 key={`week-${idx}`}
                 colSpan={week.dates.length * 3} // 3 dagdelen per datum
-                className="border border-gray-300 px-2 py-1 text-center text-sm font-bold text-gray-700 bg-gray-100"
+                className="border border-gray-300 px-2 py-1 text-center text-sm font-bold text-gray-700 bg-gray-100 sticky top-0 z-20"
               >
                 Week {week.weekNumber}
               </th>
             ))}
           </tr>
 
-          {/* Rij 2: Datums */}
+          {/* Rij 2: Datums - STICKY */}
           <tr>
             {dateInfo.map((date, idx) => (
               <th
                 key={`date-${idx}`}
                 colSpan={3} // 3 dagdelen (O/M/A)
-                className="border border-gray-300 px-1 py-1 text-center text-xs font-medium text-gray-700 bg-gray-50"
+                className="border border-gray-300 px-1 py-1 text-center text-xs font-medium text-gray-700 bg-gray-50 sticky top-[37px] z-20"
               >
                 {date.dayLabel}
               </th>
             ))}
           </tr>
 
-          {/* Rij 3: Dagdelen (O/M/A) */}
+          {/* Rij 3: Dagdelen (O/M/A) - STICKY */}
           <tr>
             {dateInfo.map((date, idx) => (
               <>
                 <th
                   key={`dagdeel-o-${idx}`}
-                  className="border border-gray-300 px-1 py-1 text-center text-xs font-medium text-gray-600 bg-blue-50 min-w-[60px]"
+                  className="border border-gray-300 px-1 py-1 text-center text-xs font-medium text-gray-600 bg-blue-50 min-w-[60px] sticky top-[65px] z-20"
                 >
                   O
                 </th>
                 <th
                   key={`dagdeel-m-${idx}`}
-                  className="border border-gray-300 px-1 py-1 text-center text-xs font-medium text-gray-600 bg-orange-50 min-w-[60px]"
+                  className="border border-gray-300 px-1 py-1 text-center text-xs font-medium text-gray-600 bg-orange-50 min-w-[60px] sticky top-[65px] z-20"
                 >
                   M
                 </th>
                 <th
                   key={`dagdeel-a-${idx}`}
-                  className="border border-gray-300 px-1 py-1 text-center text-xs font-medium text-gray-600 bg-purple-50 min-w-[60px]"
+                  className="border border-gray-300 px-1 py-1 text-center text-xs font-medium text-gray-600 bg-purple-50 min-w-[60px] sticky top-[65px] z-20"
                 >
                   A
                 </th>
