@@ -15,6 +15,8 @@
  * - Opties voor Leeg, Blokkade en NB
  * - Visuele markering van huidige status
  * - Read-only mode voor status='final'
+ * 
+ * Cache: 1733054719002
  */
 
 'use client';
