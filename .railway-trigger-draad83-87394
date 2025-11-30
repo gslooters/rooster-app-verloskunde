@@ -1,0 +1,15 @@
+# DRAAD83 Wijziging 1 - Railway Deployment Trigger
+Timestamp: 1733068543000
+Random: 87394
+
+DEPLOYMENT:
+- Scherm naam wijziging: Pre-planning → ROOSTER
+- client.tsx regel 229 aangepast
+- headerPrefix draft status nu "ROOSTER:"
+
+VERIFICATIE:
+- URL: https://rooster-app-verloskunde-production.up.railway.app/planning/design/preplanning?id=99516c26-c579-4fb2-ae2c-6ebccb51a606
+- Verwacht: "ROOSTER: Periode Week 48 - Week 52 2025   (In ontwerp)"
+
+COMMIT:
+aba293138a33c116e9c928dc93b474c29729a12c
