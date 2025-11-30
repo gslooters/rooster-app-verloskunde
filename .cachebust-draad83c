@@ -1,0 +1,16 @@
+DRAAD83C: Compactere dienstwijziging pop-up
+Timestamp: 1733077522000
+Wijzigingen:
+- Header compacter (text-lg i.p.v. text-xl)
+- Datum + Dagdeel horizontaal op 1 regel
+- Padding/margins gereduceerd (p-6 → px-5 py-3)
+- "Huidige status" → "Huidige dienst"
+- Tijdsaanduidingen verwijderd bij diensten
+- Dagdeel zonder tijden
+- Space-y-2 → space-y-1.5 voor compactere lijsten
+- Service label padding: p-3 → px-3 py-2
+- Modal max-h: 90vh → 85vh
+- Volledig zichtbaar bij 100% zoom
+
+Bestand: DienstSelectieModal.tsx
+Status: Geïmplementeerd en gecommit
