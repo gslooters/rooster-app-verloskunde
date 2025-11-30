@@ -1,0 +1,11 @@
+BLOKKEER_VOLGDAG_IMPLEMENTATION
+Timestamp: 2025-12-01T00:39:00+01:00
+Random: 89427
+DRAAD: 89
+Features:
+- Service blocking rules module
+- Regel 1: Nachtdienst eindtijd 09:00 blocks O+M next day
+- Regel 2: Dagdienst begintijd 09:00 blocks M same day
+- Regel 3: Clean Slate reverse blocking strategy
+- Toast warnings for out-of-period blocks
+- Generic for all service types
