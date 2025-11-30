@@ -5,6 +5,7 @@
  * 
  * DRAAD 77: Uitgebreid met dagdeel ondersteuning en status structuur
  * DRAAD 79: getServicesForEmployee updated om ServiceTypeWithTimes te returnen
+ * DRAAD 82: service_code verwijderd uit updateAssignmentStatus (kolom bestaat niet meer)
  */
 
 import { supabase } from '@/lib/supabase';
@@ -137,6 +138,8 @@ export async function savePrePlanningAssignment(
 
 /**
  * DRAAD 77: Nieuwe functie - Update assignment status
+ * DRAAD 82: service_code VERWIJDERD - kolom bestaat niet meer in database schema
+ * 
  * Voor het wijzigen van cel status (leeg, dienst, geblokkeerd, NB)
  * @param rosterId - UUID van het rooster
  * @param employeeId - TEXT ID van de medewerker
@@ -178,7 +181,8 @@ export async function updateAssignmentStatus(
         dagdeel: dagdeel,
         status: status,
         service_id: serviceId,
-        service_code: null, // Reset backwards compat field
+        // ✅ DRAAD 82: service_code is verwijderd in DRAAD77 - alleen service_id wordt gebruikt
+        // Database schema heeft alleen service_id (nullable, FK naar service_types.id)
         updated_at: new Date().toISOString()
       }, {
         onConflict: 'roster_id,employee_id,date,dagdeel'
