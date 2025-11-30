@@ -1,12 +1,6 @@
 {
-  "timestamp": 1733004741000,
-  "version": "DRAAD86",
-  "deploy": "toggle-nb-update-fix",
-  "changes": [
-    "Fixed toggleNBAssignment DELETE bug",
-    "NB records now UPDATED instead of DELETED",
-    "Status changes from 3 to 0 when NB is toggled off",
-    "Records always preserved in roster_assignments",
-    "Data integrity maintained - no more record loss"
-  ]
+  "timestamp": 1733090333000,
+  "version": "blokkeer-volgdag-v1",
+  "draad": "DRAAD89",
+  "description": "Service blocking rules implementation"
 }
