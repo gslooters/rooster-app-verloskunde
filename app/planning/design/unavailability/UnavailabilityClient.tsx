@@ -7,7 +7,16 @@ import { isDagdeelUnavailable, DagdeelAvailability } from '@/lib/types/roster';
 import { supabase } from '@/lib/supabase';
 
 // DRAAD73B: VERSION MARKER - Force client bundle regeneration
-const COMPONENT_VERSION = 'v2.1-draad73b-team-colors-fix';
+// DRAAD81: NB opslag fix - lees uit roster_assignments in plaats van unavailability_data
+const COMPONENT_VERSION = 'v2.2-draad81-roster-assignments-source';
+
+// DRAAD81: Type voor NB assignments uit roster_assignments tabel
+interface NBAssignment {
+  employee_id: string;
+  date: string;
+  dagdeel: 'O' | 'M' | 'A';
+  status: number;
+}
 
 // DRAAD73: ISO 8601 weeknummer (maandag = start week)
 function getWeekNumber(date: Date): number {
@@ -32,13 +41,6 @@ function getTeamColor(team: string): string {
   let color = 'bg-blue-600'; // Default: Overig
   if (normalized === 'groen') color = 'bg-green-500';
   if (normalized === 'oranje') color = 'bg-orange-500';
-  
-  // DRAAD73B: Debug logging
-  console.log('🎨 DRAAD73B getTeamColor:', {
-    original: team,
-    normalized: normalized,
-    color: color
-  });
   
   return color;
 }
@@ -66,6 +68,37 @@ export default function UnavailabilityClient() {
   const [designData, setDesignData] = useState<any>(null);
   const [dates, setDates] = useState<Date[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // DRAAD81: Nieuwe state voor NB assignments uit roster_assignments
+  const [nbAssignments, setNbAssignments] = useState<NBAssignment[]>([]);
+
+  // DRAAD81: Load functie voor NB assignments uit roster_assignments tabel
+  async function loadNBAssignments() {
+    if (!rosterId) return;
+    
+    console.log('🔄 [DRAAD81] Laden NB assignments uit roster_assignments...');
+    
+    const { data, error } = await supabase
+      .from('roster_assignments')
+      .select('employee_id, date, dagdeel, status')
+      .eq('roster_id', rosterId)
+      .eq('status', 3); // Status 3 = Niet Beschikbaar
+    
+    if (error) {
+      console.error('❌ [DRAAD81] Database error bij laden NB assignments:', error);
+      return;
+    }
+    
+    setNbAssignments(data || []);
+    console.log(`✅ [DRAAD81] Loaded ${(data || []).length} NB assignments from roster_assignments`);
+  }
+
+  // DRAAD81: Helper functie om te checken of dagdeel NB is
+  function isNBForDagdeel(employeeId: string, date: string, dagdeel: 'O' | 'M' | 'A'): boolean {
+    return nbAssignments.some(
+      nb => nb.employee_id === employeeId && nb.date === date && nb.dagdeel === dagdeel
+    );
+  }
 
   useEffect(() => {
     if (!rosterId) {
@@ -74,24 +107,27 @@ export default function UnavailabilityClient() {
     }
     (async function loadData() {
       try {
-        console.log('🔄 DRAAD73B: Laden NB scherm data...');
+        console.log('🔄 [DRAAD81] Laden NB scherm data...');
+        
+        // Laad roster design data (voor employees)
         const data = await loadRosterDesignData(rosterId);
         if (!data) throw new Error('Geen rooster design data gevonden');
         setDesignData(data);
         
-        console.log('👥 DRAAD73B: Employees data:', data.employees?.map((e: any) => ({
-          id: e.id,
-          voornaam: e.voornaam,
-          team: e.team,
-          teamType: typeof e.team
-        })));
+        console.log('👥 [DRAAD81] Employees data geladen:', data.employees?.length, 'medewerkers');
         
+        // DRAAD81: Laad NB assignments uit roster_assignments
+        await loadNBAssignments();
+        
+        // Laad start_date uit roosters tabel
         const { data: roster, error: rosterError } = await supabase
           .from('roosters')
           .select('start_date')
           .eq('id', rosterId)
           .single();
         if (rosterError || !roster) throw new Error('Kon start_date niet ophalen uit roosters tabel');
+        
+        // Genereer datums voor 35 dagen
         const generatedDates: Date[] = [];
         const startDate = new Date(roster.start_date + 'T00:00:00');
         for (let i = 0; i < 35; i++) {
@@ -100,9 +136,10 @@ export default function UnavailabilityClient() {
           generatedDates.push(date);
         }
         setDates(generatedDates);
-        console.log('✅ DRAAD73B: Data geladen met team kleur debug');
+        
+        console.log('✅ [DRAAD81] Data geladen en NB assignments gesynchroniseerd');
       } catch (error: any) {
-        console.error('❌ DRAAD73B: Fout bij laden:', error);
+        console.error('❌ [DRAAD81] Fout bij laden:', error);
         alert(error.message || 'Fout bij laden van data.');
       } finally {
         setLoading(false);
@@ -112,12 +149,18 @@ export default function UnavailabilityClient() {
 
   async function handleToggleUnavailable(emp: any, date: string, dagdeel: 'O' | 'M' | 'A') {
     if (!rosterId) return;
+    
     const employeeId = emp.originalEmployeeId || emp.id;
+    console.log('🔄 [DRAAD81] Toggle NB voor:', { employeeId, date, dagdeel });
+    
     const success = await toggleNBAssignment(rosterId, employeeId, date, dagdeel);
+    
     if (success) {
-      const updated = await loadRosterDesignData(rosterId);
-      setDesignData(updated);
+      // DRAAD81: Herlaad NB assignments uit roster_assignments
+      await loadNBAssignments();
+      console.log('✅ [DRAAD81] NB toggle succesvol, data gesynchroniseerd');
     } else {
+      console.error('❌ [DRAAD81] Fout bij opslaan niet-beschikbaarheid');
       alert('Fout bij opslaan niet-beschikbaarheid. Check console voor details.');
     }
   }
@@ -171,6 +214,9 @@ export default function UnavailabilityClient() {
               Periode: {dates[0] && formatDateLocal(dates[0])} tot {dates[dates.length - 1] && formatDateLocal(dates[dates.length - 1])}
               {' '} | Week {weekFirst} - {weekLast} ({dates.length} dagen)
             </p>
+            <p className="text-xs text-blue-600 mt-1">
+              🔄 DRAAD81: Data bron = roster_assignments (status=3) | Geladen: {nbAssignments.length} NB assignments
+            </p>
           </div>
           <button 
             onClick={()=>router.push(`/planning/design/dashboard?rosterId=${rosterId}`)} 
@@ -209,14 +255,6 @@ export default function UnavailabilityClient() {
                 const firstNameOnly = fullName.split(' ')[0];
                 const teamColor = getTeamColor(emp.team || 'Overig');
                 
-                // DRAAD73B: Per-employee debug
-                console.log('👤 DRAAD73B Employee render:', {
-                  id: emp.id,
-                  voornaam: emp.voornaam,
-                  team: emp.team,
-                  computedColor: teamColor
-                });
-                
                 return (
                   <tr key={emp.id}>
                     <td 
@@ -234,9 +272,10 @@ export default function UnavailabilityClient() {
                     </td>
                     {dates.map((date, dateIdx) => {
                       const dateStr = formatDateLocal(date);
-                      const unavailData = designData.unavailabilityData?.[employeeId]?.[dateStr];
                       return ['O', 'M', 'A'].map((dagdeel) => {
-                        const isNB = isDagdeelUnavailable(unavailData, dagdeel as 'O' | 'M' | 'A');
+                        // DRAAD81: Gebruik isNBForDagdeel() om uit roster_assignments te lezen
+                        const isNB = isNBForDagdeel(employeeId, dateStr, dagdeel as 'O' | 'M' | 'A');
+                        
                         let cellClass = 'border border-gray-300 p-2 text-center transition-colors ';
                         let cursorClass = '';
                         let title = '';
@@ -315,6 +354,7 @@ export default function UnavailabilityClient() {
           {/* Footer bericht geïntegreerd */}
           <div className="pt-4 border-t border-gray-200 text-center">
             <p className="text-sm text-gray-600">💾 Wijzigingen worden automatisch opgeslagen</p>
+            <p className="text-xs text-blue-600 mt-1">🔄 DRAAD81: Data wordt nu direct geschreven naar roster_assignments (single source of truth)</p>
           </div>
         </div>
       </div>
