@@ -1,0 +1,12 @@
+# Railway Deployment Trigger - DRAAD81
+# NB Opslag Fix - roster_assignments als single source of truth
+
+Deployment timestamp: 2025-11-30 09:11 CET
+Random deployment trigger: 8829375
+
+Changes:
+- lib/planning/rosterDesign.ts - toggleNBAssignment() naar roster_assignments
+- app/planning/design/unavailability/UnavailabilityClient.tsx - lees uit roster_assignments
+- public/cachebust-draad81.txt - client cache bust
+
+Dit bestand triggert automatische Railway herdeployment.
