@@ -1,6 +1,6 @@
 {
   "name": "rooster-app-final",
-  "version": "0.1.0-draad77.1-1732915089",
+  "version": "0.1.0-draad89.fix1-1733015073",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -20,6 +20,7 @@
     "next": "^14.2.33",
     "react": "18.3.1",
     "react-dom": "18.3.1",
+    "react-hot-toast": "^2.4.1",
     "xlsx": "^0.18.5",
     "zustand": "^5.0.8"
   },
