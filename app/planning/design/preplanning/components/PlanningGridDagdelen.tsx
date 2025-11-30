@@ -4,7 +4,7 @@ import { useMemo, useCallback } from 'react';
 import { PrePlanningAssignment, EmployeeWithServices, Dagdeel, CellStatus } from '@/lib/types/preplanning';
 
 /**
- * DRAAD 78: Grid Component met Dagdelen
+ * DRAAD 83A: Grid Component met Dagdelen - Verbeterde Medewerkerkolom
  * 
  * Rendert tabel met 3 kolommen per datum (Ochtend/Middag/Avond)
  * Cel rendering op basis van status:
@@ -13,7 +13,10 @@ import { PrePlanningAssignment, EmployeeWithServices, Dagdeel, CellStatus } from
  * - Status 2 (Geblokkeerd): `▓` grijs op lichtgrijs
  * - Status 3 (NB): `NB` zwart op geel
  * 
- * Cache: 1733054719001
+ * Medewerkerkolom: Team symbool (gekleurd rondje) + voornaam (18px)
+ * Sortering: Team → Dienstverband → Voornaam alfabetisch
+ * 
+ * Cache: 1733073716732
  */
 
 interface DateInfo {
@@ -63,6 +66,34 @@ export default function PlanningGridDagdelen({
     return groups;
   }, [dateInfo]);
 
+  // Sorteer employees: team → dienstverband → voornaam
+  const sortedEmployees = useMemo(() => {
+    return [...employees].sort((a, b) => {
+      // 1. Team sortering: Groen → Oranje → Overig
+      const teamOrder: Record<string, number> = { 
+        'Groen': 1, 
+        'Oranje': 2, 
+        'Overig': 3 
+      };
+      const teamA = teamOrder[a.team] || 99;
+      const teamB = teamOrder[b.team] || 99;
+      if (teamA !== teamB) return teamA - teamB;
+
+      // 2. Dienstverband sortering: Maat → Loondienst → ZZP
+      const dienstOrder: Record<string, number> = { 
+        'Maat': 1, 
+        'Loondienst': 2, 
+        'ZZP': 3 
+      };
+      const dienstA = dienstOrder[a.dienstverband] || 99;
+      const dienstB = dienstOrder[b.dienstverband] || 99;
+      if (dienstA !== dienstB) return dienstA - dienstB;
+
+      // 3. Voornaam alfabetisch (Nederlandse locale)
+      return a.voornaam.localeCompare(b.voornaam, 'nl');
+    });
+  }, [employees]);
+
   // Maak lookup map voor assignments: employeeId_date_dagdeel -> assignment
   const assignmentMap = useMemo(() => {
     const map = new Map<string, PrePlanningAssignment>();
@@ -81,6 +112,16 @@ export default function PlanningGridDagdelen({
     },
     [assignmentMap]
   );
+
+  // Helper functie voor team kleur symbool
+  const getTeamColor = useCallback((team: string): string => {
+    const teamColors: Record<string, string> = {
+      'Groen': '#22C55E',
+      'Oranje': '#F97316',
+      'Overig': '#3B82F6'
+    };
+    return teamColors[team] || '#3B82F6'; // Fallback naar blauw
+  }, []);
 
   // Handler voor cel klik
   const handleCellClick = useCallback(
@@ -240,20 +281,23 @@ export default function PlanningGridDagdelen({
         </thead>
 
         <tbody>
-          {employees.map(employee => (
+          {sortedEmployees.map(employee => (
             <tr key={employee.id} className="hover:bg-gray-50">
-              {/* Sticky left column voor medewerkernaam */}
+              {/* Sticky left column voor medewerkernaam met team symbool */}
               <td className="border border-gray-300 px-3 py-2 sticky left-0 bg-white z-10 min-w-[180px]">
-                <div className="flex flex-col gap-1">
-                  <span className="font-medium text-gray-900 text-sm">
-                    {employee.voornaam} {employee.achternaam}
+                <div className="flex items-center gap-2">
+                  {/* Team kleur symbool */}
+                  <div 
+                    className="w-3 h-3 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: getTeamColor(employee.team) }}
+                    title={`${employee.team} - ${employee.dienstverband}`}
+                    aria-label={`Team ${employee.team}`}
+                  />
+                  
+                  {/* Voornaam in grotere tekst */}
+                  <span className="font-medium text-gray-900 text-lg leading-tight">
+                    {employee.voornaam}
                   </span>
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                      {employee.team}
-                    </span>
-                    <span className="text-xs text-gray-600">{employee.dienstverband}</span>
-                  </div>
                 </div>
               </td>
 
