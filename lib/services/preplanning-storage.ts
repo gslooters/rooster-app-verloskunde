@@ -44,7 +44,8 @@ export async function getPrePlanningData(
       .eq('roster_id', rosterId)
       .gte('date', startDate)
       .lte('date', endDate)
-      .order('date', { ascending: true });
+      .order('date', { ascending: true })
+      .limit(10000); // ✅ Fix: Verhoog limit naar 10000 voor grote roosters
 
     if (error) {
       console.error('❌ Error loading PrePlanning data:', error);
