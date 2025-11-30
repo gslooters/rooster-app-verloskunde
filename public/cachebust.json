@@ -1,12 +1,12 @@
 {
-  "timestamp": 1732806000000,
-  "version": "DRAAD69",
-  "deploy": "wizard-assignments-fix",
+  "timestamp": 1733004741000,
+  "version": "DRAAD86",
+  "deploy": "toggle-nb-update-fix",
   "changes": [
-    "Added initialize_roster_assignments call to wizard",
-    "Fixed 0 assignments bug",
-    "Enhanced verification logging",
-    "Added assignments phase to UI",
-    "Assignments now created: 11 × 35 × 3 = 1155 records"
+    "Fixed toggleNBAssignment DELETE bug",
+    "NB records now UPDATED instead of DELETED",
+    "Status changes from 3 to 0 when NB is toggled off",
+    "Records always preserved in roster_assignments",
+    "Data integrity maintained - no more record loss"
   ]
 }
