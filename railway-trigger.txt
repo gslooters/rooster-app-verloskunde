@@ -1,5 +1,5 @@
-RAILWAY DEPLOY TRIGGER #6391
-Timestamp: 2025-11-27T15:25:45Z
-Commit: f1136c824ecceb056e402725c79a874cef0c0703
-Fix: DRAAD63A v2 - TypeScript compilation fixed
-Random: 6391
+RAILWAY DEPLOY TRIGGER #8247
+Timestamp: 2025-11-30T10:31:25Z
+Commit: 0f863895c18fb9ba33701d1af920bf636c355eec
+Fix: DRAAD82 - Removed service_code from updateAssignmentStatus upsert
+Random: 8247
