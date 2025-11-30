@@ -1,5 +1,5 @@
-RAILWAY DEPLOY TRIGGER #5938
-Timestamp: 2025-11-30T11:30:00Z
-Commit: 4fe0bca9634fb422de58de1694e78170360854bf
-Fix: DRAAD82A - Fixed datumbereik preplanning +33 naar +34 dagen
-Random: 5938
+RAILWAY DEPLOY TRIGGER #87342
+Timestamp: 2025-11-30T20:53:00Z
+Commit: a9a9386f169d2066fc375ce176042fe7b58a1c68
+Fix: DRAAD86 - toggleNBAssignment UPDATE ipv DELETE bij NB uitzetten
+Random: 87342
