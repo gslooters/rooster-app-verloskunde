@@ -1,0 +1,21 @@
+# DRAAD83 Wijziging 1: Scherm naam Pre-planning → ROOSTER
+timestamp: 1733068543000
+change: headerPrefix voor draft status aangepast
+file: app/planning/design/preplanning/client.tsx
+line: 229
+commit: aba293138a33c116e9c928dc93b474c29729a12c
+
+WIJZIGING:
+- VOOR: return 'Pre-planning:';
+- NA:   return 'ROOSTER:';
+
+WAAROM:
+- Blijvende scherm naam ongeacht fase
+- Pre-planning is activiteit, niet scherm naam  
+- Status badge geeft fase aan (In ontwerp)
+
+VERWACHT RESULTAAT:
+✅ "ROOSTER: Periode Week 48 - Week 52 2025   (In ontwerp)"
+
+WAS:
+❌ "Pre-planning: Periode Week 48 - Week 52 2025   (In ontwerp)"
