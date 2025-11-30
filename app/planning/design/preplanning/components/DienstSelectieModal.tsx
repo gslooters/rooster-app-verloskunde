@@ -1,5 +1,5 @@
 /**
- * DRAAD 79: Dienst Selectie Modal Component
+ * DRAAD 83C: Dienst Selectie Modal Component - Compacte Versie
  * 
  * Modal pop-up voor toewijzen/wijzigen van diensten aan cellen
  * Ondersteunt alle 4 statussen:
@@ -15,6 +15,12 @@
  * - Opties voor Leeg, Blokkade en NB
  * - Visuele markering van huidige status
  * - Read-only mode voor status='final'
+ * 
+ * DRAAD 83C Optimalisaties:
+ * - Compactere layout voor 100% zoom zichtbaarheid
+ * - Horizontale datum/dagdeel layout
+ * - Tijdsaanduidingen verwijderd
+ * - Gereduceerde padding en spacing
  * 
  * Cache: 1733054719002
  */
@@ -165,12 +171,12 @@ export default function DienstSelectieModal({
     return `${dagen[date.getDay()]} ${date.getDate()} ${maanden[date.getMonth()]} ${date.getFullYear()}`;
   }
 
-  // Helper: dagdeel naar label met tijden
+  // DRAAD 83C: Helper - dagdeel naar label ZONDER tijden (compacter)
   function getDagdeelLabel(dagdeel: Dagdeel): string {
     switch(dagdeel) {
-      case 'O': return 'Ochtend (09:00-13:00)';
-      case 'M': return 'Middag (13:00-18:00)';
-      case 'A': return 'Avond (18:00-09:00)';
+      case 'O': return 'Ochtend';
+      case 'M': return 'Middag';
+      case 'A': return 'Avond';
     }
   }
 
@@ -188,12 +194,12 @@ export default function DienstSelectieModal({
       onClick={handleBackdropClick}
     >
       <div 
-        className="bg-white rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-xl shadow-2xl max-w-md w-full max-h-[85vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header met Close Button */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h2 className="text-xl font-bold text-gray-900">Dienst wijzigen</h2>
+        {/* DRAAD 83C: Header compacter - px-5 py-3 + text-lg */}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-900">Dienst wijzigen</h2>
           <button
             onClick={onClose}
             disabled={isSaving}
@@ -204,25 +210,27 @@ export default function DienstSelectieModal({
           </button>
         </div>
 
-        {/* Info Section */}
-        <div className="p-6 space-y-2 bg-gray-50">
+        {/* DRAAD 83C: Info Section - Horizontale layout voor datum/dagdeel */}
+        <div className="px-5 py-3 bg-gray-50 space-y-1.5">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-gray-600">Medewerker:</span>
             <span className="text-sm text-gray-900">{cellData.employeeName}</span>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-gray-600">Datum:</span>
-            <span className="text-sm text-gray-900">{formatDate(cellData.date)}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-gray-600">Dagdeel:</span>
-            <span className="text-sm text-gray-900">{getDagdeelLabel(cellData.dagdeel)}</span>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-gray-600">Datum:</span>
+              <span className="text-sm text-gray-900">{formatDate(cellData.date)}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-gray-600">Dagdeel:</span>
+              <span className="text-sm text-gray-900">{getDagdeelLabel(cellData.dagdeel)}</span>
+            </div>
           </div>
         </div>
 
-        {/* Huidige Status Display */}
-        <div className="px-6 py-4 border-b border-gray-200">
-          <span className="text-sm font-medium text-gray-600">Huidige status: </span>
+        {/* DRAAD 83C: "Huidige dienst" ipv "Huidige status" + px-5 py-2.5 */}
+        <div className="px-5 py-2.5 border-b border-gray-200">
+          <span className="text-sm font-medium text-gray-600">Huidige dienst: </span>
           {cellData.currentAssignment && cellData.currentAssignment.status === 1 && currentService ? (
             <span className="text-sm font-bold text-gray-900">
               {currentService.code} ({currentService.naam})
@@ -240,23 +248,23 @@ export default function DienstSelectieModal({
           )}
         </div>
 
-        {/* Loading State */}
+        {/* DRAAD 83C: Loading State - px-5 py-6 */}
         {isLoading ? (
-          <div className="px-6 py-8 flex items-center justify-center">
+          <div className="px-5 py-6 flex items-center justify-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
             <span className="ml-3 text-sm text-gray-600">Diensten laden...</span>
           </div>
         ) : (
           <>
-            {/* Radio Button Lijst - Diensten */}
-            <div className="px-6 py-4">
-              <p className="text-sm font-medium text-gray-700 mb-3">Kies nieuwe dienst:</p>
+            {/* DRAAD 83C: Diensten lijst - px-5 py-3 + space-y-1.5 + px-3 py-2 per item */}
+            <div className="px-5 py-3">
+              <p className="text-sm font-medium text-gray-700 mb-2">Kies nieuwe dienst:</p>
               {availableServices.length > 0 ? (
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {availableServices.map(service => (
                     <label
                       key={service.id}
-                      className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer transition-colors"
+                      className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer transition-colors"
                     >
                       <input
                         type="radio"
@@ -267,15 +275,13 @@ export default function DienstSelectieModal({
                         className="w-4 h-4 text-blue-600"
                         disabled={readOnly || isSaving}
                       />
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-gray-900">{service.code}</span>
-                          <span className="text-sm text-gray-600">({service.naam})</span>
-                          {selectedServiceId === service.id && selectedStatus === 1 && (
-                            <Check className="w-4 h-4 text-blue-600 ml-auto" />
-                          )}
-                        </div>
-                        <span className="text-xs text-gray-500">{service.start_tijd}-{service.eind_tijd}</span>
+                      {/* DRAAD 83C: Tijden verwijderd, alles op 1 regel */}
+                      <div className="flex-1 flex items-center gap-2">
+                        <span className="font-medium text-gray-900">{service.code}</span>
+                        <span className="text-sm text-gray-600">({service.naam})</span>
+                        {selectedServiceId === service.id && selectedStatus === 1 && (
+                          <Check className="w-4 h-4 text-blue-600 ml-auto" />
+                        )}
                       </div>
                     </label>
                   ))}
@@ -285,9 +291,9 @@ export default function DienstSelectieModal({
               )}
             </div>
 
-            {/* Radio Button Lijst - Speciale Opties (Leeg, Blokkade, NB) */}
-            <div className="px-6 py-4 border-t border-gray-200">
-              <div className="space-y-2">
+            {/* DRAAD 83C: Speciale Opties - px-5 py-3 + space-y-1.5 */}
+            <div className="px-5 py-3 border-t border-gray-200">
+              <div className="space-y-1.5">
                 {/* Status 0: Leeg */}
                 <label className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer transition-colors">
                   <input
@@ -307,7 +313,7 @@ export default function DienstSelectieModal({
                   </div>
                 </label>
                 
-                {/* Status 2: Geblokkeerd - NIEUW */}
+                {/* Status 2: Geblokkeerd */}
                 <label className="flex items-center gap-3 p-3 rounded-lg border border-gray-300 bg-gray-100 hover:bg-gray-200 cursor-pointer transition-colors">
                   <input
                     type="radio"
@@ -349,8 +355,8 @@ export default function DienstSelectieModal({
               </div>
             </div>
 
-            {/* Footer met Action Buttons */}
-            <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end gap-3">
+            {/* DRAAD 83C: Footer - px-5 py-3 */}
+            <div className="px-5 py-3 border-t border-gray-200 flex items-center justify-end gap-3">
               <button
                 onClick={onClose}
                 disabled={isSaving}
