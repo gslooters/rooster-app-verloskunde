@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Home } from 'lucide-react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import toast from 'react-hot-toast';
 import { 
   getPrePlanningData,
   savePrePlanningAssignment,
@@ -45,13 +46,18 @@ import DienstSelectieModal from './components/DienstSelectieModal';
  * - Status badge toont de fase (In ontwerp)
  * - Blijvende scherm naam ongeacht fase
  * 
+ * DRAAD 89: Service blocking rules integratie
+ * - Toast warnings voor buiten-periode blokkeringen
+ * - Geeft rosterStartDate door aan updateAssignmentStatus
+ * - Gebruikt nieuwe return signature { success, warnings }
+ * 
  * Dit scherm toont:
  * - Grid met 35 dagen (5 weken) als kolommen x 3 dagdelen (O/M/A)
  * - Medewerkers als rijen
  * - Cellen op basis van status (0=leeg, 1=dienst, 2=geblokkeerd, 3=NB)
  * - Data wordt opgeslagen in Supabase roster_assignments
  * 
- * Cache: 1733054719000
+ * Cache: 1733090254000
  */
 export default function PrePlanningClient() {
   const router = useRouter();
@@ -204,37 +210,45 @@ export default function PrePlanningClient() {
     setModalOpen(true);
   }, [employees, assignments]);
 
-  // DRAAD 80: Modal save handler met database save + grid refresh
+  // DRAAD 80 + 89: Modal save handler met database save + grid refresh + toast warnings
   const handleModalSave = useCallback(async (serviceId: string | null, status: CellStatus) => {
     if (!selectedCell || !rosterId) return;
     
     try {
       setIsSaving(true);
 
-      let success = false;
+      let result: { success: boolean; warnings: string[] } | boolean = false;
 
       // Status 0: Delete assignment (cel leeg maken)
       if (status === 0) {
         console.log('[PrePlanning] Deleting assignment (status 0)...');
-        success = await deletePrePlanningAssignment(
+        const success = await deletePrePlanningAssignment(
           rosterId,
           selectedCell.employeeId,
           selectedCell.date,
           selectedCell.dagdeel
         );
+        result = { success, warnings: [] };
       }
       // Status 1, 2, 3: Update assignment status
       else {
         console.log(`[PrePlanning] Updating assignment (status ${status})...`);
-        success = await updateAssignmentStatus(
+        
+        // DRAAD 89: Geef rosterStartDate door voor periode validatie
+        result = await updateAssignmentStatus(
           rosterId,
           selectedCell.employeeId,
           selectedCell.date,
           selectedCell.dagdeel,
           status,
-          serviceId
+          serviceId,
+          startDate // DRAAD 89: Roster start date voor periode check
         );
       }
+
+      // Check result (backwards compatible met oude boolean return)
+      const success = typeof result === 'boolean' ? result : result.success;
+      const warnings = typeof result === 'object' ? result.warnings : [];
 
       if (!success) {
         throw new Error('Database operatie mislukt');
@@ -253,10 +267,26 @@ export default function PrePlanningClient() {
       setModalOpen(false);
       setSelectedCell(null);
 
-      // Succes feedback later met toast, nu alleen console graag
+      // DRAAD 89: Toon toast warnings voor buiten-periode blokkeringen
+      if (warnings.length > 0) {
+        warnings.forEach(warning => {
+          toast.error(warning, {
+            duration: 5000,
+            icon: '⚠️',
+            style: {
+              background: '#FEF3C7',
+              color: '#92400E',
+              border: '1px solid #F59E0B'
+            }
+          });
+        });
+      }
     } catch (error) {
       console.error('[PrePlanning] Error saving assignment:', error);
-      alert('Fout bij opslaan dienst. Probeer opnieuw.');
+      toast.error('Fout bij opslaan dienst. Probeer opnieuw.', {
+        duration: 4000,
+        icon: '❌'
+      });
     } finally {
       setIsSaving(false);
     }
