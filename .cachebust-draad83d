@@ -1,0 +1,14 @@
+DRAAD83D: Alfabetische sortering diensten op dienstcode
+Timestamp: 1733001020000
+
+Wijzigingen:
+- Diensten lijst gesorteerd op code (A-Z)
+- Gebruikt localeCompare voor correcte Nederlandse sortering
+- Kopie van array om origineel niet te muteren
+- Speciale opties (Leeg, Blokkade, NB) blijven onderaan
+- Betere gebruiksvriendelijkheid
+
+Bestand: DienstSelectieModal.tsx
+Regel: 224-226
+Status: Geïmplementeerd
+Commit: 1041aabf3b903d03f3edcbfb287a7b469f1fec2b
