@@ -1,5 +1,5 @@
-RAILWAY DEPLOY TRIGGER #8247
-Timestamp: 2025-11-30T10:31:25Z
-Commit: 0f863895c18fb9ba33701d1af920bf636c355eec
-Fix: DRAAD82 - Removed service_code from updateAssignmentStatus upsert
-Random: 8247
+RAILWAY DEPLOY TRIGGER #5938
+Timestamp: 2025-11-30T11:30:00Z
+Commit: 4fe0bca9634fb422de58de1694e78170360854bf
+Fix: DRAAD82A - Fixed datumbereik preplanning +33 naar +34 dagen
+Random: 5938
