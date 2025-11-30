@@ -35,9 +35,10 @@ import DienstSelectieModal from './components/DienstSelectieModal';
  * - Grid refresht automatisch na save
  * - isSaving prop voor loading feedback in modal
  * 
- * DRAAD 83: Fix datumbereik - +33 dagen ipv +34
- * - Periode loopt altijd van maandag (week N) t/m zondag (week N+4)
- * - Week 48-52: ma 25-11 t/m zo 28-12 = 34 dagen totaal, dus +33
+ * DRAAD 82A: Fix datumbereik - +34 dagen ipv +33
+ * - getDatesForRosterPeriod genereert 35 dagen (index 0-34)
+ * - Database query moet alle 35 dagen ophalen
+ * - Start (ma 25-11) + 34 dagen = di 30-12 ✅ (35 dagen totaal)
  * 
  * Dit scherm toont:
  * - Grid met 35 dagen (5 weken) als kolommen x 3 dagdelen (O/M/A)
@@ -45,7 +46,7 @@ import DienstSelectieModal from './components/DienstSelectieModal';
  * - Cellen op basis van status (0=leeg, 1=dienst, 2=geblokkeerd, 3=NB)
  * - Data wordt opgeslagen in Supabase roster_assignments
  * 
- * Cache: 1732963218000
+ * Cache: 1733054719000
  */
 export default function PrePlanningClient() {
   const router = useRouter();
@@ -102,13 +103,13 @@ export default function PrePlanningClient() {
           return;
         }
 
-        // DRAAD 83: Fix datumbereik - +33 dagen ipv +34
-        // Rooster loopt altijd maandag (week N) t/m zondag (week N+4) = 5 weken
-        // Week 48-52: ma 25-11 t/m zo 28-12 = 34 dagen totaal
-        // Start (ma 25-11) + 33 dagen = zo 28-12 ✅
+        // DRAAD 82A: Fix datumbereik - +34 dagen ipv +33
+        // getDatesForRosterPeriod genereert 35 dagen (index 0-34)
+        // Database query moet alle 35 dagen ophalen
+        // Start (ma 25-11) + 34 dagen = di 30-12 ✅ (35 dagen totaal)
         const startDateObj = new Date(start);
         const endDateObj = new Date(startDateObj);
-        endDateObj.setDate(startDateObj.getDate() + 33);
+        endDateObj.setDate(startDateObj.getDate() + 34);
         const end = endDateObj.toISOString().split('T')[0];
 
         setStartDate(start);
