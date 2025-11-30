@@ -1,0 +1,12 @@
+DRAAD81 - NB Opslag Fix - Schrijf naar roster_assignments
+Timestamp: 1732956467000
+Date: 2025-11-30 09:07:47 CET
+
+Implementatie:
+- toggleNBAssignment() schrijft nu direct naar roster_assignments tabel
+- UnavailabilityClient leest uit roster_assignments met status=3
+- Verwijderd: writes naar unavailability_data JSONB veld
+- Single source of truth: roster_assignments tabel
+- Fix: data mismatch tussen NB scherm en Pre-planning grid
+
+Cache-bust: Forceer client bundle reload na DRAAD81 deployment
