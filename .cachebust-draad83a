@@ -1,0 +1,17 @@
+DRAAD83A DEPLOYMENT TRIGGER
+Timestamp: 1733073135000
+Random: 0.9284713
+Build ID: draad83a-medewerkerkolom-layout-v1
+
+DEPLOYMENT DETAILS:
+- Commit: cbff58ff01ab21a98cb76c78adcd0a280ed31ce5
+- Component: PlanningGridDagdelen.tsx
+- Feature: Team symbool + voornaam layout
+
+VERIFICATIE:
+- Gekleurd symbool zichtbaar
+- Voornaam 18px
+- Gesorteerd op team/dienstverband/voornaam
+- Celgrootte behouden (180px x ~60px)
+
+Force rebuild: YES
