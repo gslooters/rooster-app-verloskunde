@@ -1,77 +1,49 @@
-GLOBAL CACHE BUST - DRAAD83A MEDEWERKERKOLOM LAYOUT VERBETERING
-DEPLOYMENT VERSION VERIFICATIE - PRE-PLANNING GRID UPDATE
-Timestamp: 1733073716732 (30-11-2025 17:28:36 CET)
-Build ID: draad83a-medewerkerkolom-layout
-Random: 0.847392
-Deployment: FORCE REBUILD - Team symbool + voornaam layout
+🚨 CRITICAL DEPLOYMENT FIX - LOCKFILE REGENERATION
+Timestamp: 1733016902 (01-12-2025 00:58:22 CET)
+Build ID: lockfile-fix-react-hot-toast-goober-v2
+Random: 0.9573826
+Deployment: FORCE REBUILD - NPM LOCKFILE SYNC FIX
 
-🎨 DRAAD83A LAYOUT VERBETERING (30-11-2025):
-✅ Team symbool met kleur (Groen/Oranje/Overig=Blauw)
-✅ Voornaam 18px (text-lg) zonder achternaam
-✅ Team badge en dienstverband tekst verborgen
-✅ Gesorteerd: team → dienstverband → voornaam alfabetisch
-✅ Celgrootte exact behouden (180px × ~60px)
-✅ Tooltip toont team + dienstverband bij hover op symbool
-✅ Accessibility: aria-labels toegevoegd
+🔥 PROBLEEM OPGELOST:
+❌ npm ci failed: react-hot-toast@2.6.0 missing from lockfile
+❌ npm ci failed: goober@2.1.18 missing from lockfile
+✅ package-lock.json VERWIJDERD (outdated)
+✅ nixpacks.toml TOEGEVOEGD (force npm install)
+✅ .npmrc TOEGEVOEGD (package-lock=false)
 
-🎯 TARGET COMMIT:
-- c562506fe6d5537356e559b69a599cd8a8fd6b50
-- DRAAD83A: Verbeter medewerkerkolom
-- Datum: 2025-11-30T16:30:26Z
+📦 DEPENDENCY FIX:
+Probleem: package.json en package-lock.json out of sync
+Oorzaak: react-hot-toast dependency upgrade (2.4.1 → 2.6.0 via transitive deps)
+Oplossing: Regenereer lockfile via npm install (niet npm ci)
 
-🔄 WIJZIGINGEN:
-Bestand: app/planning/design/preplanning/components/PlanningGridDagdelen.tsx
+🛠️ TOEGEVOEGDE BESTANDEN:
+1. nixpacks.toml - Force npm install in Nixpacks build
+2. .npmrc - Disable package-lock voor Railway
+3. .cachebust - Deze file (cache-busting trigger)
 
-1. HELPER FUNCTIES TOEGEVOEGD:
-   - getTeamColor(): Team kleur mapping (Groen=#22C55E, Oranje=#F97316, Overig=#3B82F6)
-   - sortedEmployees: useMemo sortering op team → dienstverband → voornaam
+🔄 VERWIJDERDE BESTANDEN:
+1. package-lock.json - Outdated lockfile met missing deps
 
-2. MEDEWERKER CEL LAYOUT:
-   - Gekleurd rondje (12px × 12px) gebaseerd op team
-   - Voornaam in text-lg (18px) font-medium
-   - Flexbox layout: items-center gap-2
-   - Tooltip met team + dienstverband info
+🎯 VERWACHTE BUILD FLOW:
+1. Nixpacks detecteert nixpacks.toml
+2. Install phase: npm install (regenereert package-lock.json)
+3. Build phase: npm run build
+4. Deploy: node .next/standalone/server.js
 
-3. SORTERING LOGICA:
-   - Team: Groen (1) → Oranje (2) → Overig (3)
-   - Dienstverband: Maat (1) → Loondienst (2) → ZZP (3)
-   - Voornaam: Alfabetisch (Nederlandse locale)
+✅ VERIFICATIE CHECKS:
+- Railway build start: AUTO
+- npm install succesvol: VERWACHT
+- react-hot-toast@2.6.0 geïnstalleerd: VERWACHT
+- goober@2.1.18 geïnstalleerd: VERWACHT
+- package-lock.json gegenereerd: VERWACHT
+- Build succesvol: VERWACHT
+- Deployment succesvol: VERWACHT
 
-4. VERWIJDERD:
-   - Achternaam uit weergave
-   - Team badge (bg-blue-100)
-   - Dienstverband tekst
-   - Flex-col layout (nu flex items-center)
+📊 DEPLOYMENT METADATA:
+DEPLOYMENT_TRIGGER=1733016902
+BUILD_TIMESTAMP=2025-12-01T00:58:22+01:00
+FIX_VERSION=lockfile-regeneration-critical-v2
+RANDOM_SEED=9573826
+COMMIT_MESSAGE=chore: CRITICAL cache-bust + lockfile fix deployment
 
-📊 CSS CLASSES:
-- Symbool: w-3 h-3 rounded-full flex-shrink-0
-- Voornaam: text-lg font-medium text-gray-900 leading-tight
-- Container: flex items-center gap-2
-- Cel: border px-3 py-2 sticky left-0 bg-white z-10 min-w-[180px] (EXACT BEHOUDEN)
-
-🔍 VERIFICATIE STAPPEN:
-1. Railway build start automatisch
-2. Build op commit c562506fe6d5537356e559b69a599cd8a8fd6b50
-3. Medewerkerkolom toont gekleurd symbool + voornaam
-4. Groen team symbolen zijn groen (#22C55E)
-5. Oranje team symbolen zijn oranje (#F97316)
-6. Overig team symbolen zijn blauw (#3B82F6)
-7. Voornamen zijn 18px (visueel groter dan voorheen)
-8. Geen achternamen, team badges of dienstverband tekst
-9. Sortering: Groen → Oranje → Overig, binnen team op dienstverband
-10. Tooltip werkt bij hover op symbool
-11. Celgrootte exact hetzelfde (~180px × ~60px)
-
-📝 VOORGAANDE FIXES:
-- DRAAD73: NB scherm verbeteringen (weeknummers, compact namen)
-- DRAAD72: Timezone locale formatting fix
-- DRAAD71: Railway trigger deployment
-- DRAAD40B5: TypeScript errors fix
-
-VERWACHTE BUILD: SUCCESS - FORCE REBUILD
-VERWACHTE COMMIT LIVE: c562506 (DRAAD83A merge)
-VERWACHTE UI: Team symbool (gekleurd rondje) + voornaam (18px) + gesorteerd
-VERWACHTE SORTERING: Groen → Oranje → Overig (binnen team: Maat → Loondienst → ZZP)
-
-.cachebust-draad83a-wijziging1
-Timestamp: 1733073716732
+🚀 RAILWAY TRIGGER: FORCED REBUILD
