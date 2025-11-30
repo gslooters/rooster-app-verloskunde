@@ -1,51 +1,77 @@
-GLOBAL CACHE BUST - DRAAD73 UI FIXES FORCE DEPLOYMENT
-DEPLOYMENT VERSION VERIFICATIE - CRITICAL FIX
-Timestamp: 1732825793000 (28-11-2025 20:29:53 CET)
-Build ID: draad73-force-deployment-fix
-Random: 0.926471
-Deployment: FORCE REBUILD - Correcte commit moet live
+GLOBAL CACHE BUST - DRAAD83A MEDEWERKERKOLOM LAYOUT VERBETERING
+DEPLOYMENT VERSION VERIFICATIE - PRE-PLANNING GRID UPDATE
+Timestamp: 1733073716732 (30-11-2025 17:28:36 CET)
+Build ID: draad83a-medewerkerkolom-layout
+Random: 0.847392
+Deployment: FORCE REBUILD - Team symbool + voornaam layout
 
-🔴 CRITICAL FIX - DRAAD73 FORCE DEPLOY (28-11-2025):
-✅ Weeknummer weergave in header toegevoegd
-✅ Medewerkernaam compact (alleen voornaam)
-✅ Teamkleur indicators verbeterd (fallback logic)
-✅ Legenda verplaatst naar footer (compact)
-✅ Dubbele instructie verwijderd
-✅ Layout spacing verbeterd
-✅ Debug/console logs opgeschoond
+🎨 DRAAD83A LAYOUT VERBETERING (30-11-2025):
+✅ Team symbool met kleur (Groen/Oranje/Overig=Blauw)
+✅ Voornaam 18px (text-lg) zonder achternaam
+✅ Team badge en dienstverband tekst verborgen
+✅ Gesorteerd: team → dienstverband → voornaam alfabetisch
+✅ Celgrootte exact behouden (180px × ~60px)
+✅ Tooltip toont team + dienstverband bij hover op symbool
+✅ Accessibility: aria-labels toegevoegd
 
 🎯 TARGET COMMIT:
-- 2c1811cd27300ad94134cf1535d67a000968f240
-- Merge DRAAD73: Verbeterd NB scherm
-- Datum: 2025-11-28T19:13:08Z
+- c562506fe6d5537356e559b69a599cd8a8fd6b50
+- DRAAD83A: Verbeter medewerkerkolom
+- Datum: 2025-11-30T16:30:26Z
 
-⚠️ DEPLOYMENT PROBLEEM OPGELOST:
-Vorige deployment draaide op verkeerde commit (oude code).
-Dit cachebust bestand forceert rebuild op correcte commit.
+🔄 WIJZIGINGEN:
+Bestand: app/planning/design/preplanning/components/PlanningGridDagdelen.tsx
 
-🛠️ GEFIXTE UI ELEMENTEN:
-- Weeknummer range in periode-indicator
-- Team Groen/Oranje/Overig kleuren correct
-- Compacte namen (voornaam only)
-- Footer legenda layout
-- Geen dubbele instructies meer
-- Clean console (geen debug spam)
+1. HELPER FUNCTIES TOEGEVOEGD:
+   - getTeamColor(): Team kleur mapping (Groen=#22C55E, Oranje=#F97316, Overig=#3B82F6)
+   - sortedEmployees: useMemo sortering op team → dienstverband → voornaam
 
-📝 VERIFICATIE STAPPEN:
+2. MEDEWERKER CEL LAYOUT:
+   - Gekleurd rondje (12px × 12px) gebaseerd op team
+   - Voornaam in text-lg (18px) font-medium
+   - Flexbox layout: items-center gap-2
+   - Tooltip met team + dienstverband info
+
+3. SORTERING LOGICA:
+   - Team: Groen (1) → Oranje (2) → Overig (3)
+   - Dienstverband: Maat (1) → Loondienst (2) → ZZP (3)
+   - Voornaam: Alfabetisch (Nederlandse locale)
+
+4. VERWIJDERD:
+   - Achternaam uit weergave
+   - Team badge (bg-blue-100)
+   - Dienstverband tekst
+   - Flex-col layout (nu flex items-center)
+
+📊 CSS CLASSES:
+- Symbool: w-3 h-3 rounded-full flex-shrink-0
+- Voornaam: text-lg font-medium text-gray-900 leading-tight
+- Container: flex items-center gap-2
+- Cel: border px-3 py-2 sticky left-0 bg-white z-10 min-w-[180px] (EXACT BEHOUDEN)
+
+🔍 VERIFICATIE STAPPEN:
 1. Railway build start automatisch
-2. Build moet op commit 2c1811cd draaien
-3. UI toont weeknummers in header
-4. Medewerkernamen zijn compact
-5. Teamkleuren zijn zichtbaar
-6. Legenda onderaan scherm
-7. Geen dubbele instructie-balk
+2. Build op commit c562506fe6d5537356e559b69a599cd8a8fd6b50
+3. Medewerkerkolom toont gekleurd symbool + voornaam
+4. Groen team symbolen zijn groen (#22C55E)
+5. Oranje team symbolen zijn oranje (#F97316)
+6. Overig team symbolen zijn blauw (#3B82F6)
+7. Voornamen zijn 18px (visueel groter dan voorheen)
+8. Geen achternamen, team badges of dienstverband tekst
+9. Sortering: Groen → Oranje → Overig, binnen team op dienstverband
+10. Tooltip werkt bij hover op symbool
+11. Celgrootte exact hetzelfde (~180px × ~60px)
 
-📊 VOORGAANDE FIXES:
+📝 VOORGAANDE FIXES:
+- DRAAD73: NB scherm verbeteringen (weeknummers, compact namen)
 - DRAAD72: Timezone locale formatting fix
 - DRAAD71: Railway trigger deployment
 - DRAAD40B5: TypeScript errors fix
-- DRAAD3: Path mapping fix
 
 VERWACHTE BUILD: SUCCESS - FORCE REBUILD
-VERWACHTE COMMIT LIVE: 2c1811cd (DRAAD73 merge)
-VERWACHTE UI: Weeknummers + compact namen + teamkleuren
+VERWACHTE COMMIT LIVE: c562506 (DRAAD83A merge)
+VERWACHTE UI: Team symbool (gekleurd rondje) + voornaam (18px) + gesorteerd
+VERWACHTE SORTERING: Groen → Oranje → Overig (binnen team: Maat → Loondienst → ZZP)
+
+.cachebust-draad83a-wijziging1
+Timestamp: 1733073716732
