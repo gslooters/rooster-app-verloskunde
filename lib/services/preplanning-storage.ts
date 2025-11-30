@@ -6,6 +6,7 @@
  * DRAAD 77: Uitgebreid met dagdeel ondersteuning en status structuur
  * DRAAD 79: getServicesForEmployee updated om ServiceTypeWithTimes te returnen
  * DRAAD 82: service_code verwijderd uit updateAssignmentStatus (kolom bestaat niet meer)
+ * DRAAD 83: Fix service_code mapping - JOIN returnt object, geen array
  */
 
 import { supabase } from '@/lib/supabase';
@@ -16,6 +17,7 @@ import { getAllEmployees } from '@/lib/services/employees-storage';
 /**
  * Haal alle PrePlanning assignments op voor een rooster periode
  * DRAAD 77: Nu met dagdeel, status en service JOIN voor kleur
+ * DRAAD 83: Fix service_code mapping - verwijder [0] array index
  * @param rosterId - UUID van het rooster
  * @param startDate - Start datum van periode (YYYY-MM-DD)
  * @param endDate - Eind datum van periode (YYYY-MM-DD)
@@ -61,8 +63,8 @@ export async function getPrePlanningData(
       status: row.status !== null && row.status !== undefined ? row.status : 1, // Default dienst
       service_id: row.service_id || null,
       
-      // BACKWARDS COMPATIBILITY: service_code blijft bestaan
-      service_code: row.service_types?.[0]?.code || row.service_code || '',
+      // DRAAD 83: FIX - JOIN returnt object, geen array - verwijder [0] index
+      service_code: row.service_types?.code || row.service_code || '',
       
       created_at: row.created_at,
       updated_at: row.updated_at
@@ -358,6 +360,7 @@ export async function getEmployeesWithServices(): Promise<EmployeeWithServices[]
 /**
  * Helper functie: controleer of assignment bestaat voor specifieke datum
  * DRAAD 77: Nu met dagdeel parameter
+ * DRAAD 83: Fix service_code mapping - verwijder [0] array index
  * @param rosterId - UUID van het rooster
  * @param employeeId - TEXT ID van de medewerker
  * @param date - Datum (YYYY-MM-DD)
@@ -395,7 +398,7 @@ export async function getAssignmentForDate(
       return null;
     }
 
-    // Map naar PrePlanningAssignment met backwards compatibility
+    // DRAAD 83: FIX - JOIN returnt object, geen array - verwijder [0] index
     return {
       id: data.id,
       roster_id: data.roster_id,
@@ -404,7 +407,7 @@ export async function getAssignmentForDate(
       dagdeel: data.dagdeel || 'O',
       status: data.status !== null && data.status !== undefined ? data.status : 1,
       service_id: data.service_id || null,
-      service_code: data.service_types?.[0]?.code || data.service_code || '',
+      service_code: data.service_types?.code || data.service_code || '',
       created_at: data.created_at,
       updated_at: data.updated_at
     };
