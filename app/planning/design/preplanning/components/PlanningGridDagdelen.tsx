@@ -12,6 +12,8 @@ import { PrePlanningAssignment, EmployeeWithServices, Dagdeel, CellStatus } from
  * - Status 1 (Dienst): Service code wit op dienstkleur
  * - Status 2 (Geblokkeerd): `▓` grijs op lichtgrijs
  * - Status 3 (NB): `NB` zwart op geel
+ * 
+ * Cache: 1733054719001
  */
 
 interface DateInfo {
