@@ -4,19 +4,25 @@ import { useMemo, useCallback } from 'react';
 import { PrePlanningAssignment, EmployeeWithServices, Dagdeel, CellStatus } from '@/lib/types/preplanning';
 
 /**
- * DRAAD 83A: Grid Component met Dagdelen - Verbeterde Medewerkerkolom
+ * DRAAD 87: Bevestigingsdialoog voor Status 2 Cellen
  * 
  * Rendert tabel met 3 kolommen per datum (Ochtend/Middag/Avond)
  * Cel rendering op basis van status:
  * - Status 0 (Leeg): `-` grijs op wit
  * - Status 1 (Dienst): Service code wit op dienstkleur
- * - Status 2 (Geblokkeerd): `▓` grijs op lichtgrijs
+ * - Status 2 (Geblokkeerd): `▓` grijs op lichtgrijs + bevestigingsdialoog bij klik
  * - Status 3 (NB): `NB` zwart op geel
+ * 
+ * Status 2 cellen:
+ * - Visueel: Grijs met ▓ symbool (blijft behouden)
+ * - Functionaliteit: Klikbaar met bevestigingsdialoog
+ * - Bij annuleren: Geen actie
+ * - Bij bevestigen: Modal opent normaal
  * 
  * Medewerkerkolom: Team symbool (gekleurd rondje) + voornaam (18px)
  * Sortering: Team → Dienstverband → Voornaam alfabetisch
  * 
- * Cache: 1733073716732
+ * Cache: 1733086340000
  */
 
 interface DateInfo {
@@ -123,14 +129,29 @@ export default function PlanningGridDagdelen({
     return teamColors[team] || '#3B82F6'; // Fallback naar blauw
   }, []);
 
-  // Handler voor cel klik
+  // DRAAD 87: Handler voor cel klik met bevestigingsdialoog voor status 2
   const handleCellClick = useCallback(
     (employeeId: string, date: string, dagdeel: Dagdeel, status: CellStatus) => {
-      // Geblokkeerde cellen (status 2) zijn niet klikbaar
-      if (status === 2) return;
       // Read-only mode: geen klikken
       if (readOnly) return;
       
+      // DRAAD 87: Bevestigingsdialoog voor geblokkeerde cellen (status 2)
+      if (status === 2) {
+        const confirmed = window.confirm(
+          '⚠️ LET OP: Je staat op het punt een blokkade (door vorige dienst) te overschrijven.\n\n' +
+          'Deze cel is geblokkeerd omdat een eerdere dienst doorloopt.\n\n' +
+          'Weet je zeker dat je deze cel wilt wijzigen?'
+        );
+        
+        // Bij annuleren: geen actie
+        if (!confirmed) {
+          return;
+        }
+        
+        // Bij bevestigen: ga door naar modal
+      }
+      
+      // Open modal voor alle statussen (na eventuele bevestiging)
       onCellClick(employeeId, date, dagdeel);
     },
     [onCellClick, readOnly]
@@ -177,12 +198,16 @@ export default function PlanningGridDagdelen({
         );
       }
 
-      // Status 2: Geblokkeerd
+      // DRAAD 87: Status 2: Geblokkeerd - Nu klikbaar met bevestigingsdialoog
       if (status === 2) {
         return (
           <td
             key={`${employeeId}_${date}_${dagdeel}`}
-            className="border border-gray-300 text-center min-w-[60px] h-[40px] p-1 bg-gray-200 cursor-not-allowed opacity-60"
+            className={`border border-gray-300 text-center min-w-[60px] h-[40px] p-1 bg-gray-200 opacity-60 ${
+              readOnly ? 'cursor-default' : 'cursor-pointer hover:opacity-80 transition-all duration-150'
+            }`}
+            onClick={() => handleCellClick(employeeId, date, dagdeel, status)}
+            title="Geblokkeerd door vorige dienst - Klik om te wijzigen"
           >
             <span className="text-gray-600 text-sm">▓</span>
           </td>
