@@ -1,5 +1,5 @@
 /**
- * DRAAD 83C: Dienst Selectie Modal Component - Compacte Versie
+ * DRAAD 83D: Dienst Selectie Modal Component - Alfabetische Sortering
  * 
  * Modal pop-up voor toewijzen/wijzigen van diensten aan cellen
  * Ondersteunt alle 4 statussen:
@@ -10,7 +10,7 @@
  * 
  * Features:
  * - Toont medewerker info, datum en dagdeel
- * - Lijst met diensten die medewerker kan uitvoeren
+ * - Lijst met diensten die medewerker kan uitvoeren (alfabetisch op code)
  * - Radio buttons voor dienst selectie
  * - Opties voor Leeg, Blokkade en NB
  * - Visuele markering van huidige status
@@ -22,7 +22,12 @@
  * - Tijdsaanduidingen verwijderd
  * - Gereduceerde padding en spacing
  * 
- * Cache: 1733054719002
+ * DRAAD 83D Verbeteringen:
+ * - Diensten alfabetisch gesorteerd op dienstcode (A-Z)
+ * - Gebruikt localeCompare voor Nederlandse sortering
+ * - Betere vindbaarheid diensten
+ * 
+ * Cache: 1733001000000
  */
 
 'use client';
@@ -256,12 +261,14 @@ export default function DienstSelectieModal({
           </div>
         ) : (
           <>
-            {/* DRAAD 83C: Diensten lijst - px-5 py-3 + space-y-1.5 + px-3 py-2 per item */}
+            {/* DRAAD 83D: Diensten lijst - ALFABETISCH GESORTEERD op code */}
             <div className="px-5 py-3">
               <p className="text-sm font-medium text-gray-700 mb-2">Kies nieuwe dienst:</p>
               {availableServices.length > 0 ? (
                 <div className="space-y-1.5">
-                  {availableServices.map(service => (
+                  {[...availableServices]
+                    .sort((a, b) => a.code.localeCompare(b.code, 'nl'))
+                    .map(service => (
                     <label
                       key={service.id}
                       className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer transition-colors"
