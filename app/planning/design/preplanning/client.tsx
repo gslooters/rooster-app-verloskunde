@@ -40,6 +40,11 @@ import DienstSelectieModal from './components/DienstSelectieModal';
  * - Database query moet alle 35 dagen ophalen
  * - Start (ma 25-11) + 34 dagen = di 30-12 ✅ (35 dagen totaal)
  * 
+ * DRAAD 83: Scherm naam wijziging
+ * - headerPrefix voor draft: "ROOSTER:" ipv "Pre-planning:"
+ * - Status badge toont de fase (In ontwerp)
+ * - Blijvende scherm naam ongeacht fase
+ * 
  * Dit scherm toont:
  * - Grid met 35 dagen (5 weken) als kolommen x 3 dagdelen (O/M/A)
  * - Medewerkers als rijen
@@ -261,11 +266,11 @@ export default function PrePlanningClient() {
     router.push(`/planning/design/dashboard?rosterId=${rosterId}`);
   }, [rosterId, router]);
 
-  // Status-afhankelijke content
+  // DRAAD 83: Status-afhankelijke content - headerPrefix aangepast
   const headerPrefix = useMemo(() => {
     switch(rosterStatus) {
       case 'draft':
-        return 'Pre-planning:';
+        return 'ROOSTER:';
       case 'in_progress':
         return 'Planrooster:';
       case 'final':
