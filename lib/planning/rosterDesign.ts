@@ -5,6 +5,7 @@
 // DRAAD68.3 - TypeScript fix: includes check met expliciete array typing
 // DRAAD74 - Team data in employee snapshot voor team kleuren
 // DRAAD81 - Fix NB opslag - schrijf naar roster_assignments in plaats van unavailability_data
+// DRAAD86 - Fix toggleNBAssignment DELETE bug - UPDATE ipv DELETE bij NB uitzetten
 import { RosterEmployee, RosterStatus, RosterDesignData, validateMaxShifts, createDefaultRosterEmployee, createDefaultRosterStatus, DagdeelAvailability, convertLegacyUnavailability } from '@/lib/types/roster';
 import { getAllEmployees } from '@/lib/services/employees-storage';
 import { TeamType, DienstverbandType, getFullName, DagblokType } from '@/lib/types/employee';
@@ -222,16 +223,15 @@ export async function initializeRosterDesign(rosterId: string, start_date: strin
 }
 
 /**
- * 🔥 DRAAD81 - Toggle NB (Niet Beschikbaar) assignment per dagdeel
- * 
- * CRITICAL CHANGE: Schrijft nu DIRECT naar roster_assignments tabel, NIET naar unavailability_data JSONB veld
+ * 🔥 DRAAD86 - Toggle NB (Niet Beschikbaar) assignment per dagdeel
+ * FIX: Records worden NU BEHOUDEN bij uitzetten NB (UPDATE ipv DELETE)
  * 
  * Toggle NB voor een medewerker op specifieke datum en dagdeel:
  * - Als dagdeel niet NB is → UPSERT record met status=3, service_id=NULL
- * - Als dagdeel wel NB is → DELETE record uit roster_assignments
+ * - Als dagdeel wel NB is → UPDATE record naar status=0, service_id=NULL
  * 
- * Dit lost de data mismatch op tussen NB scherm en Pre-planning grid.
- * Single source of truth: roster_assignments tabel met status=3 voor NB.
+ * BELANGRIJK: Records blijven ALTIJD bestaan in roster_assignments
+ * Alleen 'status' en 'service_id' velden wijzigen, record wordt NOOIT verwijderd
  * 
  * @param rosterId - UUID van het rooster
  * @param employeeId - TEXT ID van de medewerker (gebruik originalEmployeeId uit snapshot)
@@ -246,9 +246,9 @@ export async function toggleNBAssignment(
   dagdeel: 'O' | 'M' | 'A'
 ): Promise<boolean> {
   try {
-    console.log('🔄 [DRAAD81] Toggle NB assignment:', { rosterId, employeeId, date, dagdeel });
+    console.log('🔄 [DRAAD86] Toggle NB assignment:', { rosterId, employeeId, date, dagdeel });
     
-    // DRAAD81: Check of NB assignment bestaat in roster_assignments
+    // DRAAD86: Check of NB assignment bestaat in roster_assignments
     const { data: existing, error: selectError } = await supabase
       .from('roster_assignments')
       .select('id, status')
@@ -259,28 +259,32 @@ export async function toggleNBAssignment(
       .maybeSingle();
     
     if (selectError) {
-      console.error('❌ [DRAAD81] Database select error:', selectError);
+      console.error('❌ [DRAAD86] Database select error:', selectError);
       return false;
     }
     
     if (existing && existing.status === 3) {
-      // DRAAD81: NB bestaat → DELETE
-      console.log('➖ [DRAAD81] NB bestaat, verwijderen...');
+      // DRAAD86: NB bestaat → UPDATE status naar 0 (in plaats van DELETE)
+      console.log('🔄 [DRAAD86] NB uitzetten, status 3 → 0...');
       
-      const { error: deleteError } = await supabase
+      const { error: updateError } = await supabase
         .from('roster_assignments')
-        .delete()
+        .update({
+          status: 0, // Terug naar Beschikbaar
+          service_id: null, // Blijft null (was al null bij status=3)
+          updated_at: new Date().toISOString()
+        })
         .eq('id', existing.id);
       
-      if (deleteError) {
-        console.error('❌ [DRAAD81] Database delete error:', deleteError);
+      if (updateError) {
+        console.error('❌ [DRAAD86] Database update error:', updateError);
         return false;
       }
       
-      console.log('✅ [DRAAD81] NB verwijderd uit roster_assignments (id:', existing.id, ')');
+      console.log('✅ [DRAAD86] NB uitgezet, record behouden met status=0 (id:', existing.id, ')');
     } else {
-      // DRAAD81: NB bestaat niet → UPSERT met status=3
-      console.log('➕ [DRAAD81] NB toevoegen/updaten...');
+      // DRAAD86: NB bestaat niet → UPSERT met status=3
+      console.log('➕ [DRAAD86] NB toevoegen/updaten...');
       
       const { error: upsertError } = await supabase
         .from('roster_assignments')
@@ -297,17 +301,17 @@ export async function toggleNBAssignment(
         });
       
       if (upsertError) {
-        console.error('❌ [DRAAD81] Database upsert error:', upsertError);
+        console.error('❌ [DRAAD86] Database upsert error:', upsertError);
         return false;
       }
       
-      console.log('✅ [DRAAD81] NB toegevoegd/geupdatet in roster_assignments met status=3');
+      console.log('✅ [DRAAD86] NB toegevoegd/geupdatet in roster_assignments met status=3');
     }
     
-    console.log('✅ [DRAAD81] Toggle NB succesvol');
+    console.log('✅ [DRAAD86] Toggle NB succesvol');
     return true;
   } catch (error) {
-    console.error('❌ [DRAAD81] Exception in toggleNBAssignment:', error);
+    console.error('❌ [DRAAD86] Exception in toggleNBAssignment:', error);
     return false;
   }
 }
