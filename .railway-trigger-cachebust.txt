@@ -1,2 +1,3 @@
-// Railway cache-bust config
-ts = Date.now() + '-' + Math.random().toString(36).slice(2);
+DRAAD90-FIX deployment trigger
+Timestamp: 1733069882000
+Build: restore-functions-fix
