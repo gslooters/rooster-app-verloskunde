@@ -1,6 +1,6 @@
 // Database helper functions voor planning constraints
-// Supabase queries voor planningconstraints tabel
-// DRAAD95A Fase 2 UI Implementatie
+// Supabase queries voor planning_constraints tabel
+// DRAAD95C Database Table Name Fix
 
 import { supabase } from '@/lib/supabase';
 import { PlanningConstraint, CreateConstraintRequest, UpdateConstraintRequest } from '@/lib/types/planning-constraint';
@@ -10,7 +10,7 @@ import { PlanningConstraint, CreateConstraintRequest, UpdateConstraintRequest } 
  */
 export async function getAllPlanningConstraints(): Promise<PlanningConstraint[]> {
   const { data, error } = await supabase
-    .from('planningconstraints')
+    .from('planning_constraints')
     .select('*')
     .order('priority', { ascending: true })
     .order('naam', { ascending: true });
@@ -28,7 +28,7 @@ export async function getAllPlanningConstraints(): Promise<PlanningConstraint[]>
  */
 export async function getPlanningConstraintById(id: string): Promise<PlanningConstraint | null> {
   const { data, error } = await supabase
-    .from('planningconstraints')
+    .from('planning_constraints')
     .select('*')
     .eq('id', id)
     .single();
@@ -46,7 +46,7 @@ export async function getPlanningConstraintById(id: string): Promise<PlanningCon
  */
 export async function createPlanningConstraint(request: CreateConstraintRequest): Promise<PlanningConstraint> {
   const { data, error } = await supabase
-    .from('planningconstraints')
+    .from('planning_constraints')
     .insert([request])
     .select()
     .single();
@@ -67,7 +67,7 @@ export async function updatePlanningConstraint(
   updates: Partial<UpdateConstraintRequest>
 ): Promise<PlanningConstraint> {
   const { data, error } = await supabase
-    .from('planningconstraints')
+    .from('planning_constraints')
     .update(updates)
     .eq('id', id)
     .select()
@@ -86,7 +86,7 @@ export async function updatePlanningConstraint(
  */
 export async function deletePlanningConstraint(id: string): Promise<void> {
   const { error } = await supabase
-    .from('planningconstraints')
+    .from('planning_constraints')
     .delete()
     .eq('id', id);
 
