@@ -1,23 +1,27 @@
-// API route: GET by roosterid voor rosterplanningconstraints
-// Next.js route handler - rooster-specifiek
-import { NextApiRequest, NextApiResponse } from 'next';
-import { RosterPlanningConstraint } from '@/lib/types/planning-constraint';
+// API route: GET roster planning constraints by roosterid
+// Next.js App Router route handler
+import { NextRequest, NextResponse } from 'next/server';
 import { getRosterPlanningConstraintsByRoosterId } from '@/lib/db/rosterPlanningConstraints';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method === 'GET') {
-    const { roosterid } = req.query;
-    if (!roosterid) {
-      res.status(400).json({ error: 'roosterid verplicht' });
-      return;
+export async function GET(request: NextRequest) {
+  try {
+    const searchParams = request.nextUrl.searchParams;
+    const roosterId = searchParams.get('roosterid');
+
+    if (!roosterId) {
+      return NextResponse.json(
+        { error: 'roosterid parameter is verplicht' },
+        { status: 400 }
+      );
     }
-    try {
-      const constraints: RosterPlanningConstraint[] = await getRosterPlanningConstraintsByRoosterId(roosterid as string);
-      res.status(200).json(constraints);
-    } catch (error) {
-      res.status(500).json({ error: 'Database error' });
-    }
-  } else {
-    res.status(405).end();
+
+    const constraints = await getRosterPlanningConstraintsByRoosterId(roosterId);
+    return NextResponse.json(constraints);
+  } catch (error) {
+    console.error('API Error:', error);
+    return NextResponse.json(
+      { error: 'Database error' },
+      { status: 500 }
+    );
   }
 }
