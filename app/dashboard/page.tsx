@@ -23,7 +23,7 @@ export default function DashboardPage() {
                 <span className="text-2xl mr-3">📝</span>
                 <h3 className="font-bold text-indigo-900 text-lg">Rooster Bewerken</h3>
               </div>
-              <p className="text-indigo-700 font-medium">Bestaande aanpassen</p>
+              <p className="text-indigo-700 text-sm">Bestaande aanpassen</p>
             </Link>
             
             <Link href="/planning" className="bg-blue-50 p-6 rounded-xl hover:bg-blue-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md">
@@ -31,7 +31,7 @@ export default function DashboardPage() {
                 <span className="text-2xl mr-3">📋</span>
                 <h3 className="font-bold text-blue-900 text-lg">Rooster Ontwerpen</h3>
               </div>
-              <p className="text-blue-700 font-medium">Nieuwe planning starten</p>
+              <p className="text-blue-700 text-sm">Roosters ontwerpen en starten</p>
             </Link>
             
             <Link href="/employees" className="bg-green-50 p-6 rounded-xl hover:bg-green-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md">
@@ -39,7 +39,7 @@ export default function DashboardPage() {
                 <span className="text-2xl mr-3">👥</span>
                 <h3 className="font-bold text-green-900 text-lg">Medewerkers Beheer</h3>
               </div>
-              <p className="text-green-700 font-medium">Personeel + diensten</p>
+              <p className="text-green-700 text-sm">Onderhoud gegevens medewerkers in het rooster</p>
             </Link>
             
             <Link href="/reports" className="bg-orange-50 p-6 rounded-xl hover:bg-orange-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md">
@@ -47,7 +47,7 @@ export default function DashboardPage() {
                 <span className="text-2xl mr-3">📊</span>
                 <h3 className="font-bold text-orange-900 text-lg">Rooster Rapporten</h3>
               </div>
-              <p className="text-orange-700 font-medium">Statistieken</p>
+              <p className="text-orange-700 text-sm">Overzichten en statistieken</p>
             </Link>
             
             <Link href="/archived" className="bg-gray-50 p-6 rounded-xl hover:bg-gray-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md">
@@ -55,7 +55,7 @@ export default function DashboardPage() {
                 <span className="text-2xl mr-3">🔒</span>
                 <h3 className="font-bold text-gray-900 text-lg">Archief Raadplegen</h3>
               </div>
-              <p className="text-gray-700 font-medium">Afgesloten roosters</p>
+              <p className="text-gray-700 text-sm">Afgesloten roosters</p>
             </Link>
             
             <Link href="/services" className="bg-purple-50 p-6 rounded-xl hover:bg-purple-100 transition-all duration-300 cursor-pointer block shadow-sm hover:shadow-md">
@@ -63,7 +63,7 @@ export default function DashboardPage() {
                 <span className="text-2xl mr-3">💼</span>
                 <h3 className="font-bold text-purple-900 text-lg">Diensten Beheren</h3>
               </div>
-              <p className="text-purple-700 font-medium">Types, medewerkers en regels</p>
+              <p className="text-purple-700 text-sm">Onderhoud diensten en planregels</p>
             </Link>
           </div>
 
