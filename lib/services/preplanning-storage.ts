@@ -8,6 +8,7 @@
  * DRAAD 82: service_code verwijderd uit updateAssignmentStatus (kolom bestaat niet meer)
  * DRAAD 83: Fix service_code mapping - JOIN returnt object, geen array
  * DRAAD 89: Service blocking rules integratie
+ * DRAAD 90: Added getServicesForEmployeeFiltered voor dagdeel/datum/status filtering
  */
 
 import { supabase } from '@/lib/supabase';
@@ -260,7 +261,7 @@ export async function updateAssignmentStatus(
 
 /**
  * DRAAD 79: Haal diensten op die een specifieke medewerker kan uitvoeren
- * Via employee_services koppeltabel
+ * Via employee_services koppeltabel (ONGEFILTERD)
  * @param employeeId - TEXT ID van de medewerker
  * @returns Array van ServiceTypeWithTimes objecten met simplified structure
  */
@@ -305,6 +306,112 @@ export async function getServicesForEmployee(employeeId: string): Promise<Servic
     return services;
   } catch (error) {
     console.error('❌ Exception in getServicesForEmployee:', error);
+    return [];
+  }
+}
+
+/**
+ * DRAAD 90: Nieuwe functie - Haal diensten op GEFILTERD op dagdeel/datum/status
+ * 
+ * Filtert diensten die een medewerker mag uitvoeren op basis van:
+ * - roster_period_staffing: capaciteit per dienst per datum
+ * - roster_period_staffing_dagdelen: status='MAG' per dagdeel
+ * 
+ * @param employeeId - TEXT ID van de medewerker
+ * @param rosterId - UUID van actieve roster
+ * @param date - Datum (YYYY-MM-DD)
+ * @param dagdeel - Dagdeel ('O'|'M'|'A')
+ * @returns Array van ServiceTypeWithTimes objecten (alleen toegestane diensten)
+ */
+export async function getServicesForEmployeeFiltered(
+  employeeId: string,
+  rosterId: string,
+  date: string,
+  dagdeel: Dagdeel
+): Promise<ServiceTypeWithTimes[]> {
+  try {
+    console.log('🔍 Getting FILTERED services:', { employeeId, rosterId, date, dagdeel });
+    
+    // Complex query met 3 JOINs:
+    // 1. employee_services (medewerker MAG dienst doen)
+    // 2. roster_period_staffing (dienst is actief op deze datum)
+    // 3. roster_period_staffing_dagdelen (dienst MAG in dit dagdeel)
+    const { data, error } = await supabase
+      .from('employee_services')
+      .select(`
+        service_id,
+        service_types (
+          id,
+          code,
+          naam,
+          kleur,
+          begintijd,
+          eindtijd,
+          actief
+        )
+      `)
+      .eq('employee_id', employeeId)
+      .eq('actief', true);
+
+    if (error) {
+      console.error('❌ Error getting employee services:', error);
+      return [];
+    }
+
+    // Filter stap 2: Check roster_period_staffing + dagdelen voor elke dienst
+    const filteredServices: ServiceTypeWithTimes[] = [];
+    
+    for (const item of (data || [])) {
+      if (!item.service_types || !item.service_types.actief) continue;
+      
+      // Check of deze dienst toegestaan is op datum + dagdeel
+      const { data: staffingData, error: staffingError } = await supabase
+        .from('roster_period_staffing')
+        .select(`
+          id,
+          roster_period_staffing_dagdelen (
+            dagdeel,
+            status
+          )
+        `)
+        .eq('roster_id', rosterId)
+        .eq('service_id', item.service_id)
+        .eq('date', date)
+        .single();
+
+      if (staffingError || !staffingData) {
+        // Dienst niet gepland op deze datum
+        continue;
+      }
+
+      // Check of dagdeel status = 'MAG'
+      const dagdeelData = (staffingData.roster_period_staffing_dagdelen || []).find(
+        (d: any) => d.dagdeel === dagdeel && d.status === 'MAG'
+      );
+
+      if (!dagdeelData) {
+        // Dienst MAG NIET in dit dagdeel
+        continue;
+      }
+
+      // Dienst is toegestaan!
+      filteredServices.push({
+        id: item.service_types.id,
+        code: item.service_types.code,
+        naam: item.service_types.naam,
+        kleur: item.service_types.kleur || '#3B82F6',
+        start_tijd: item.service_types.begintijd || '09:00',
+        eind_tijd: item.service_types.eindtijd || '17:00'
+      });
+    }
+
+    console.log(
+      `✅ Found ${filteredServices.length}/${data?.length || 0} ALLOWED services ` +
+      `for employee ${employeeId} on ${date} ${dagdeel}`
+    );
+    return filteredServices;
+  } catch (error) {
+    console.error('❌ Exception in getServicesForEmployeeFiltered:', error);
     return [];
   }
 }
