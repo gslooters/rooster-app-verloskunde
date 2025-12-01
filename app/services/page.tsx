@@ -30,11 +30,11 @@ export default function DienstenDashboardPage() {
 
           {/* Beschrijving */}
           <p className="text-gray-600 mb-8">
-            Beheer alle aspecten van diensten: types en medewerker-toewijzingen.
+            Beheer alle aspecten van diensten: types, medewerker-toewijzingen en planregels.
           </p>
 
-          {/* Grid met twee opties */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Grid met drie opties */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Optie 1: Diensten Types */}
             <Link
               href="/services/types"
@@ -70,16 +70,33 @@ export default function DienstenDashboardPage() {
                 </p>
               </div>
             </Link>
+
+            {/* Optie 3: Planregels */}
+            <Link
+              href="/services/planning-rules"
+              className="bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-xl hover:shadow-lg transition-all duration-300 cursor-pointer block border border-purple-200 hover:border-purple-300"
+            >
+              <div className="flex flex-col items-center text-center">
+                <div className="w-16 h-16 mb-4 rounded-full bg-purple-200 flex items-center justify-center">
+                  <span className="text-3xl">📋</span>
+                </div>
+                <h3 className="font-bold text-purple-900 text-xl mb-2">
+                  Planregels
+                </h3>
+                <p className="text-purple-700 text-sm">
+                  Beheer algemene planregels voor alle nieuwe roosters
+                </p>
+              </div>
+            </Link>
           </div>
 
           {/* Info sectie onderaan */}
           <div className="mt-8 p-4 bg-purple-50 rounded-lg border border-purple-200">
             <p className="text-sm text-purple-800">
-              <strong>💡 Tip:</strong> Klik op een van de twee opties hierboven om specifieke dienst-instellingen te beheren.
+              <strong>💡 Tip:</strong> Klik op een van de drie opties hierboven om specifieke dienst-instellingen te beheren.
             </p>
           </div>
         </div>
       </div>
     </div>
-  );
-}
+  );}
