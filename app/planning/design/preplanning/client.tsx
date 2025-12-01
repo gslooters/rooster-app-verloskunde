@@ -51,13 +51,17 @@ import DienstSelectieModal from './components/DienstSelectieModal';
  * - Geeft rosterStartDate door aan updateAssignmentStatus
  * - Gebruikt nieuwe return signature { success, warnings }
  * 
+ * DRAAD 90: Dienst filtering op dagdeel/datum/status
+ * - rosterId wordt doorgegeven aan DienstSelectieModal via selectedCell
+ * - Modal gebruikt rosterId voor gefilterde diensten query
+ * 
  * Dit scherm toont:
  * - Grid met 35 dagen (5 weken) als kolommen x 3 dagdelen (O/M/A)
  * - Medewerkers als rijen
  * - Cellen op basis van status (0=leeg, 1=dienst, 2=geblokkeerd, 3=NB)
  * - Data wordt opgeslagen in Supabase roster_assignments
  * 
- * Cache: 1733090254000
+ * Cache: 1733066174000
  */
 export default function PrePlanningClient() {
   const router = useRouter();
@@ -74,13 +78,14 @@ export default function PrePlanningClient() {
   const [endDate, setEndDate] = useState<string>('');
   const [rosterStatus, setRosterStatus] = useState<'draft' | 'in_progress' | 'final'>('draft');
 
-  // DRAAD 79: Modal state
+  // DRAAD 79 + 90: Modal state - nu met rosterId
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedCell, setSelectedCell] = useState<{
     employeeId: string;
     employeeName: string;
     date: string;
     dagdeel: Dagdeel;
+    rosterId: string; // ⭐ NIEUW - DRAAD 90
     currentAssignment?: PrePlanningAssignment;
   } | null>(null);
 
@@ -188,7 +193,7 @@ export default function PrePlanningClient() {
     return groupDatesByWeek(dateInfo);
   }, [dateInfo]);
 
-  // DRAAD 79: Open modal bij cel klik
+  // DRAAD 79 + 90: Open modal bij cel klik - nu met rosterId
   const handleCellClick = useCallback((employeeId: string, date: string, dagdeel: Dagdeel) => {
     // Vind medewerker voor naam
     const employee = employees.find(e => e.id === employeeId);
@@ -199,16 +204,23 @@ export default function PrePlanningClient() {
       a => a.employee_id === employeeId && a.date === date && a.dagdeel === dagdeel
     );
     
-    // Open modal met cel data
+    // DRAAD 90: rosterId toevoegen aan cel data
+    if (!rosterId) {
+      console.error('[PrePlanning] No rosterId available for modal');
+      return;
+    }
+    
+    // Open modal met cel data inclusief rosterId
     setSelectedCell({
       employeeId,
       employeeName: `${employee.voornaam} ${employee.achternaam}`,
       date,
       dagdeel,
+      rosterId, // ⭐ NIEUW - DRAAD 90
       currentAssignment
     });
     setModalOpen(true);
-  }, [employees, assignments]);
+  }, [employees, assignments, rosterId]); // ⭐ rosterId toegevoegd aan dependencies
 
   // DRAAD 80 + 89: Modal save handler met database save + grid refresh + toast warnings
   const handleModalSave = useCallback(async (serviceId: string | null, status: CellStatus) => {
@@ -400,7 +412,7 @@ export default function PrePlanningClient() {
         </div>
       </div>
 
-      {/* DRAAD 80: Dienst Selectie Modal met isSaving prop */}
+      {/* DRAAD 80 + 90: Dienst Selectie Modal met isSaving prop + rosterId in cellData */}
       <DienstSelectieModal
         isOpen={modalOpen}
         cellData={selectedCell}
