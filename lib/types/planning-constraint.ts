@@ -1,6 +1,7 @@
 // TypeScript types voor planning constraints
 // Fase 2: UI Implementatie rooster-app-verloskunde
 // Structuur en Nederlands commentaar -- DRAAD95A
+// DRAAD95E: Column name fix rosterid -> roster_id
 
 export type ConstraintType =
   | 'coverageminimum'
@@ -36,7 +37,7 @@ export interface PlanningConstraint {
 
 export interface RosterPlanningConstraint {
   id: string; // UUID
-  rosterid: string;
+  roster_id: string; // DRAAD95E: Fixed rosterid -> roster_id
   baseconstraintid?: string;
   naam: string;
   type: ConstraintType;
