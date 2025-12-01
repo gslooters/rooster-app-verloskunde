@@ -1,0 +1,14 @@
+DRAAD90: Dienst filtering op dagdeel/datum/status - 1733066174000
+
+Implementaties:
+- getServicesForEmployeeFiltered() API functie toegevoegd
+- Admin toggle in DienstSelectieModal
+- Filtering op basis van roster_period_staffing_dagdelen.status='MAG'
+- rosterId wordt doorgegeven via modal cellData
+
+Database queries:
+- Complexe JOIN: employee_services + roster_period_staffing + roster_period_staffing_dagdelen
+- Filters diensten op dagdeel/datum/status combinatie
+- Admin toggle toont alle diensten (ongefilterd)
+
+Tijdstempel: 2025-12-01 16:22:54 CET
