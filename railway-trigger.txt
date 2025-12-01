@@ -1,5 +1,5 @@
-RAILWAY DEPLOY TRIGGER #87342
-Timestamp: 2025-11-30T20:53:00Z
-Commit: a9a9386f169d2066fc375ce176042fe7b58a1c68
-Fix: DRAAD86 - toggleNBAssignment UPDATE ipv DELETE bij NB uitzetten
-Random: 87342
+RAILWAY DEPLOY TRIGGER #92814
+Timestamp: 2025-12-01T17:51:09Z
+Commit: 4e21bb0de6daa6db68b06e100c5eecebffdfa3b1
+Fix: DRAAD92 - Status filtering !== MAG_NIET ipv === MAG
+Random: 92814
