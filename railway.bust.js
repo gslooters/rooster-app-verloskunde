@@ -1,6 +1,6 @@
 // Railway triggerbestand voor cache-bust
 // Elke deployment vereist nieuwe random string in bust value
-// DRAAD95B - Planning Rules UI Fase 2 implementatie
+// DRAAD95C - Database Table Name Fix
 module.exports = {
-  bust: `1733091600000-${Math.floor(Math.random() * 100000)}` // DRAAD95B - Dec 1, 2025 23:00 CET
+  bust: `1733092800000-${Math.floor(Math.random() * 100000)}` // DRAAD95C - Dec 1, 2025 23:20 CET
 };
