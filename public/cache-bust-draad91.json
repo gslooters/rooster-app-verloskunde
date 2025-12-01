@@ -1,0 +1,7 @@
+{
+  "bust_id": "draad91-typefix",
+  "timestamp": 1733071533000,
+  "random": 0.8479234592834,
+  "reason": "TypeScript type error fix - force Railway rebuild",
+  "commit_sha": "ed3601523d2e1642852026eb0d03d5f90eb2d7ee"
+}
