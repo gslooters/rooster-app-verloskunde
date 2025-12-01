@@ -1,6 +1,7 @@
 // Database helper functions voor roster planning constraints
 // Supabase queries voor roster_planning_constraints tabel
 // DRAAD95C Database Table Name Fix
+// DRAAD95E Column Name Fix: rosterid -> roster_id
 
 import { supabase } from '@/lib/supabase';
 import { RosterPlanningConstraint, OverrideConstraintRequest } from '@/lib/types/planning-constraint';
@@ -14,7 +15,7 @@ export async function getRosterPlanningConstraintsByRoosterId(
   const { data, error } = await supabase
     .from('roster_planning_constraints')
     .select('*')
-    .eq('rosterid', roosterId)
+    .eq('roster_id', roosterId) // DRAAD95E: Fixed rosterid -> roster_id
     .order('priority', { ascending: true })
     .order('naam', { ascending: true });
 
@@ -132,13 +133,13 @@ export async function resetRosterPlanningConstraintToOriginal(
  */
 export async function createAdHocRosterPlanningConstraint(
   roosterId: string,
-  constraintData: Omit<RosterPlanningConstraint, 'id' | 'rosterid' | 'createdat' | 'updatedat'>
+  constraintData: Omit<RosterPlanningConstraint, 'id' | 'roster_id' | 'createdat' | 'updatedat'>
 ): Promise<RosterPlanningConstraint> {
   const { data, error } = await supabase
     .from('roster_planning_constraints')
     .insert([{
       ...constraintData,
-      rosterid: roosterId,
+      roster_id: roosterId, // DRAAD95E: Fixed rosterid -> roster_id
       baseconstraintid: null, // Ad-hoc heeft geen base
       isoverride: false, // Is geen override, maar nieuwe regel
     }])
