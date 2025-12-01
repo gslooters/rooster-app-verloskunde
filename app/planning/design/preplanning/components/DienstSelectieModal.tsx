@@ -1,5 +1,5 @@
 /**
- * DRAAD 83D: Dienst Selectie Modal Component - Alfabetische Sortering
+ * DRAAD 90: Dienst Selectie Modal - Met Filtering op Dagdeel/Datum/Status
  * 
  * Modal pop-up voor toewijzen/wijzigen van diensten aan cellen
  * Ondersteunt alle 4 statussen:
@@ -8,45 +8,45 @@
  * - Status 2: Geblokkeerd door vorige dienst
  * - Status 3: Niet Beschikbaar (NB)
  * 
+ * NIEUW in DRAAD 90:
+ * - Filtering op basis van dagdeel/datum/status='MAG' in roster_period_staffing_dagdelen
+ * - Admin toggle om alle diensten te tonen (inclusief niet-toegestane)
+ * - Visuele indicatie voor niet-toegestane diensten in admin modus
+ * - rosterId wordt doorgegeven voor filtering query
+ * 
  * Features:
  * - Toont medewerker info, datum en dagdeel
  * - Lijst met diensten die medewerker kan uitvoeren (alfabetisch op code)
+ * - Gefilterd op dagdeel/datum/status (tenzij admin toggle actief)
  * - Radio buttons voor dienst selectie
  * - Opties voor Leeg, Blokkade en NB
  * - Visuele markering van huidige status
  * - Read-only mode voor status='final'
  * 
- * DRAAD 83C Optimalisaties:
- * - Compactere layout voor 100% zoom zichtbaarheid
- * - Horizontale datum/dagdeel layout
- * - Tijdsaanduidingen verwijderd
- * - Gereduceerde padding en spacing
- * 
- * DRAAD 83D Verbeteringen:
- * - Diensten alfabetisch gesorteerd op dienstcode (A-Z)
- * - Gebruikt localeCompare voor Nederlandse sortering
- * - Betere vindbaarheid diensten
- * 
- * Cache: 1733001000000
+ * Cache: 1733066174000
  */
 
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { X, Check } from 'lucide-react';
+import { X, Check, Lock, LockOpen, AlertCircle } from 'lucide-react';
 import { 
   PrePlanningAssignment, 
   Dagdeel, 
   CellStatus, 
   ServiceTypeWithTimes 
 } from '@/lib/types/preplanning';
-import { getServicesForEmployee } from '@/lib/services/preplanning-storage';
+import { 
+  getServicesForEmployee, 
+  getServicesForEmployeeFiltered 
+} from '@/lib/services/preplanning-storage';
 
 interface ModalCellData {
   employeeId: string;
   employeeName: string;
   date: string; // YYYY-MM-DD
   dagdeel: Dagdeel; // 'O' | 'M' | 'A'
+  rosterId: string; // ⭐ NIEUW - UUID van actieve roster
   currentAssignment?: PrePlanningAssignment; // Huidige assignment indien aanwezig
 }
 
@@ -71,20 +71,37 @@ export default function DienstSelectieModal({
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
   const [selectedStatus, setSelectedStatus] = useState<CellStatus>(0); // 0, 1, 2, of 3
   const [isLoading, setIsLoading] = useState(false);
+  const [showAllServices, setShowAllServices] = useState(false); // ⭐ NIEUW - Admin toggle
 
-  // Load services when modal opens
+  // Load services when modal opens or showAllServices changes
   useEffect(() => {
     if (isOpen && cellData) {
       loadServices();
     }
-  }, [isOpen, cellData]);
+  }, [isOpen, cellData, showAllServices]); // ⭐ showAllServices toegevoegd
 
   async function loadServices() {
     if (!cellData) return;
     
     setIsLoading(true);
     try {
-      const services = await getServicesForEmployee(cellData.employeeId);
+      let services: ServiceTypeWithTimes[];
+      
+      if (showAllServices) {
+        // Admin modus: toon alle diensten (ongefilterd)
+        services = await getServicesForEmployee(cellData.employeeId);
+        console.log('[DienstSelectieModal] Admin mode: loaded', services.length, 'services');
+      } else {
+        // Normale modus: filter op dagdeel/datum/status
+        services = await getServicesForEmployeeFiltered(
+          cellData.employeeId,
+          cellData.rosterId,
+          cellData.date,
+          cellData.dagdeel
+        );
+        console.log('[DienstSelectieModal] Filtered mode: loaded', services.length, 'services');
+      }
+      
       setAvailableServices(services);
       
       // Pre-select current status and service if exists
@@ -202,7 +219,7 @@ export default function DienstSelectieModal({
         className="bg-white rounded-xl shadow-2xl max-w-md w-full max-h-[85vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* DRAAD 83C: Header compacter - px-5 py-3 + text-lg */}
+        {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900">Dienst wijzigen</h2>
           <button
@@ -215,7 +232,7 @@ export default function DienstSelectieModal({
           </button>
         </div>
 
-        {/* DRAAD 83C: Info Section - Horizontale layout voor datum/dagdeel */}
+        {/* Info Section - Horizontale layout voor datum/dagdeel */}
         <div className="px-5 py-3 bg-gray-50 space-y-1.5">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-gray-600">Medewerker:</span>
@@ -233,7 +250,7 @@ export default function DienstSelectieModal({
           </div>
         </div>
 
-        {/* DRAAD 83C: "Huidige dienst" ipv "Huidige status" + px-5 py-2.5 */}
+        {/* Huidige dienst */}
         <div className="px-5 py-2.5 border-b border-gray-200">
           <span className="text-sm font-medium text-gray-600">Huidige dienst: </span>
           {cellData.currentAssignment && cellData.currentAssignment.status === 1 && currentService ? (
@@ -253,7 +270,7 @@ export default function DienstSelectieModal({
           )}
         </div>
 
-        {/* DRAAD 83C: Loading State - px-5 py-6 */}
+        {/* Loading State */}
         {isLoading ? (
           <div className="px-5 py-6 flex items-center justify-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -261,9 +278,33 @@ export default function DienstSelectieModal({
           </div>
         ) : (
           <>
-            {/* DRAAD 83D: Diensten lijst - ALFABETISCH GESORTEERD op code */}
+            {/* DRAAD 90: Diensten lijst met Admin Toggle */}
             <div className="px-5 py-3">
-              <p className="text-sm font-medium text-gray-700 mb-2">Kies nieuwe dienst:</p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-medium text-gray-700">
+                  Kies nieuwe dienst:
+                </p>
+                
+                {/* ⭐ NIEUW: Admin toggle - rechts uitgelijnd, compact */}
+                <button
+                  onClick={() => setShowAllServices(!showAllServices)}
+                  className="flex items-center gap-1.5 px-2 py-1 text-xs text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                  title={showAllServices ? "Verberg niet-toegestane diensten" : "Toon alle diensten (admin)"}
+                >
+                  {showAllServices ? (
+                    <>
+                      <LockOpen className="w-3.5 h-3.5" />
+                      <span className="whitespace-nowrap">toon alle diensten</span>
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="w-3.5 h-3.5" />
+                      <span className="whitespace-nowrap">toon alle diensten</span>
+                    </>
+                  )}
+                </button>
+              </div>
+              
               {availableServices.length > 0 ? (
                 <div className="space-y-1.5">
                   {[...availableServices]
@@ -282,7 +323,6 @@ export default function DienstSelectieModal({
                         className="w-4 h-4 text-blue-600"
                         disabled={readOnly || isSaving}
                       />
-                      {/* DRAAD 83C: Tijden verwijderd, alles op 1 regel */}
                       <div className="flex-1 flex items-center gap-2">
                         <span className="font-medium text-gray-900">{service.code}</span>
                         <span className="text-sm text-gray-600">({service.naam})</span>
@@ -294,11 +334,15 @@ export default function DienstSelectieModal({
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-gray-500 italic">Geen diensten beschikbaar voor deze medewerker</p>
+                <p className="text-sm text-gray-500 italic">
+                  {showAllServices 
+                    ? "Geen diensten beschikbaar voor deze medewerker" 
+                    : "Geen diensten beschikbaar voor dit dagdeel"}
+                </p>
               )}
             </div>
 
-            {/* DRAAD 83C: Speciale Opties - px-5 py-3 + space-y-1.5 */}
+            {/* Speciale Opties */}
             <div className="px-5 py-3 border-t border-gray-200">
               <div className="space-y-1.5">
                 {/* Status 0: Leeg */}
@@ -362,7 +406,7 @@ export default function DienstSelectieModal({
               </div>
             </div>
 
-            {/* DRAAD 83C: Footer - px-5 py-3 */}
+            {/* Footer */}
             <div className="px-5 py-3 border-t border-gray-200 flex items-center justify-end gap-3">
               <button
                 onClick={onClose}
