@@ -1,29 +1,37 @@
-// API route: PATCH override & DELETE voor ad-hoc roosterconstraint
-// Next.js route handler - roster-planning-constraints/[id]
-import { NextApiRequest, NextApiResponse } from 'next';
+// API route: PATCH override & DELETE roster planning constraint by id
+// Next.js App Router route handler
+import { NextRequest, NextResponse } from 'next/server';
 import { updateRosterPlanningConstraint, deleteRosterPlanningConstraint } from '@/lib/db/rosterPlanningConstraints';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const {
-    query: { id },
-    method
-  } = req;
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const body = await request.json();
+    const updated = await updateRosterPlanningConstraint(params.id, body);
+    return NextResponse.json(updated);
+  } catch (error) {
+    console.error('API Error:', error);
+    return NextResponse.json(
+      { error: 'Database error' },
+      { status: 500 }
+    );
+  }
+}
 
-  if (method === 'PATCH') {
-    try {
-      const updated = await updateRosterPlanningConstraint(id as string, req.body);
-      res.status(200).json(updated);
-    } catch (error) {
-      res.status(500).json({ error: 'Database error' });
-    }
-  } else if (method === 'DELETE') {
-    try {
-      await deleteRosterPlanningConstraint(id as string);
-      res.status(204).end();
-    } catch (error) {
-      res.status(500).json({ error: 'Database error' });
-    }
-  } else {
-    res.status(405).end();
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    await deleteRosterPlanningConstraint(params.id);
+    return new NextResponse(null, { status: 204 });
+  } catch (error) {
+    console.error('API Error:', error);
+    return NextResponse.json(
+      { error: 'Database error' },
+      { status: 500 }
+    );
   }
 }
