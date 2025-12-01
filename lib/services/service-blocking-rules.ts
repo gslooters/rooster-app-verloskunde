@@ -106,7 +106,8 @@ export async function applyServiceBlockingRules(
 
     // REGEL 1: Nachtdienst doorloop (eindtijd="09:00")
     // Dienst eindigt om 09:00 → blokkeert O+M van volgende dag
-    if (serviceProps.eindtijd === '09:00' && assignmentDagdeel === 'A') {
+    // 🔒 EXTRA CHECK: begintijd mag NIET 09:00 zijn (dat is dagdienst)
+    if (serviceProps.eindtijd === '09:00' && assignmentDagdeel === 'A' && serviceProps.begintijd !== '09:00') {
       console.log('🌙 Regel 1: Nachtdienst eindigt 09:00, blokkeert O+M volgende dag');
       
       const nextDay = getNextDay(assignmentDate);
@@ -215,7 +216,8 @@ export async function removeServiceBlockingRules(
 
     // REGEL 1 REVERSE: Nachtdienst doorloop (eindtijd="09:00")
     // Deblokkeer O+M van volgende dag
-    if (serviceProps.eindtijd === '09:00' && assignmentDagdeel === 'A') {
+    // 🔒 EXTRA CHECK: begintijd mag NIET 09:00 zijn (dat is dagdienst)
+    if (serviceProps.eindtijd === '09:00' && assignmentDagdeel === 'A' && serviceProps.begintijd !== '09:00') {
       console.log('🌙 Reverse Regel 1: Deblokker O+M volgende dag');
       
       const nextDay = getNextDay(assignmentDate);
