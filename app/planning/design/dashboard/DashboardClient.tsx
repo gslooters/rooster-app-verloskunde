@@ -1,5 +1,6 @@
 /* DRAAD27H: Link gecorrigeerd naar nieuwe dagdelen-dashboard volgens handover.
  * Oud period-staffing scherm wordt niet meer aangeroepen vanuit dashboard.
+ * DRAAD95D: RosterPlanningRulesModal geïntegreerd voor planregels beheer
 */
 'use client';
 import { useEffect, useState } from 'react';
@@ -9,6 +10,7 @@ import { getRosterIdFromParams } from '@/lib/utils/getRosterIdFromParams';
 import { loadRosterDesignData } from '@/lib/planning/rosterDesign';
 import { formatWeekRange, formatDateRangeNl } from '@/lib/planning/storage';
 import type { RosterDesignData } from '@/lib/types/roster';
+import RosterPlanningRulesModal from './components/RosterPlanningRulesModal';
 
 type CompletionStatus = {
   diensten_per_dag: boolean;
@@ -110,6 +112,8 @@ export default function DashboardClient() {
     endDate: null,
     periodTitle: 'Onbekende periode'
   });
+  // DRAAD95D: State voor planregels modal
+  const [showPlanningRulesModal, setShowPlanningRulesModal] = useState(false);
 
   useEffect(() => {
     if (!rosterId) { setError('Geen roster ID gevonden'); setLoading(false); return; }
@@ -283,7 +287,7 @@ export default function DashboardClient() {
                 </div>
                 <div className="flex items-center gap-3 sm:flex-row flex-col">
                   <StatusBadgeToggle completed={completionStatus.planregels} onToggle={()=>toggleStep('planregels')} label="Planregels"/>
-                  <button onClick={()=>alert('Deze functie wordt binnenkort toegevoegd')} className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-medium whitespace-nowrap">Openen →</button>
+                  <button onClick={()=>setShowPlanningRulesModal(true)} className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-medium whitespace-nowrap">Openen →</button>
                 </div>
               </div>
             </div>
@@ -344,6 +348,15 @@ export default function DashboardClient() {
           </div>
         </div>
       </div>
+      
+      {/* DRAAD95D: RosterPlanningRulesModal */}
+      {showPlanningRulesModal && rosterId && (
+        <RosterPlanningRulesModal
+          rosterId={rosterId}
+          isOpen={showPlanningRulesModal}
+          onClose={()=>setShowPlanningRulesModal(false)}
+        />
+      )}
     </div>
   );
 }
