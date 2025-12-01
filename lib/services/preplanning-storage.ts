@@ -9,6 +9,7 @@
  * DRAAD 83: Fix service_code mapping - JOIN returnt object, geen array
  * DRAAD 89: Service blocking rules integratie
  * DRAAD 90: Added getServicesForEmployeeFiltered voor dagdeel/datum/status filtering
+ * DRAAD 91: Fix TypeScript type error - type casting op regel 360
  */
 
 import { supabase } from '@/lib/supabase';
@@ -315,6 +316,8 @@ export async function getServicesForEmployee(employeeId: string): Promise<Servic
  * Haal diensten op die beschikbaar zijn voor specifieke medewerker op datum/dagdeel
  * Filtert op basis van roster_period_staffing status (MAG)
  * 
+ * DRAAD 91: Fix TypeScript type error - toegevoegd type casting as any[]
+ * 
  * @param employeeId - TEXT ID van de medewerker
  * @param rosterId - UUID van het rooster (voor staffing check)
  * @param date - Datum (YYYY-MM-DD)
@@ -356,7 +359,8 @@ export async function getServicesForEmployeeFiltered(
     // Stap 2: Filter diensten op basis van staffing status
     const filteredServices: ServiceTypeWithTimes[] = [];
     
-    for (const item of (data || [])) {
+    // DRAAD 91: FIX - Type casting toegevoegd voor TypeScript build
+    for (const item of (data || []) as any[]) {
       if (!item.service_types || !item.service_types.actief) continue;
       
       // Check staffing status voor deze dienst op datum/dagdeel
