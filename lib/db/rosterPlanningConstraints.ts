@@ -1,6 +1,6 @@
 // Database helper functions voor roster planning constraints
-// Supabase queries voor rosterplanningconstraints tabel
-// DRAAD95A Fase 2 UI Implementatie
+// Supabase queries voor roster_planning_constraints tabel
+// DRAAD95C Database Table Name Fix
 
 import { supabase } from '@/lib/supabase';
 import { RosterPlanningConstraint, OverrideConstraintRequest } from '@/lib/types/planning-constraint';
@@ -12,7 +12,7 @@ export async function getRosterPlanningConstraintsByRoosterId(
   roosterId: string
 ): Promise<RosterPlanningConstraint[]> {
   const { data, error } = await supabase
-    .from('rosterplanningconstraints')
+    .from('roster_planning_constraints')
     .select('*')
     .eq('rosterid', roosterId)
     .order('priority', { ascending: true })
@@ -33,7 +33,7 @@ export async function getRosterPlanningConstraintById(
   id: string
 ): Promise<RosterPlanningConstraint | null> {
   const { data, error } = await supabase
-    .from('rosterplanningconstraints')
+    .from('roster_planning_constraints')
     .select('*')
     .eq('id', id)
     .single();
@@ -60,7 +60,7 @@ export async function updateRosterPlanningConstraint(
   };
 
   const { data, error } = await supabase
-    .from('rosterplanningconstraints')
+    .from('roster_planning_constraints')
     .update(updateData)
     .eq('id', id)
     .select()
@@ -79,7 +79,7 @@ export async function updateRosterPlanningConstraint(
  */
 export async function deleteRosterPlanningConstraint(id: string): Promise<void> {
   const { error } = await supabase
-    .from('rosterplanningconstraints')
+    .from('roster_planning_constraints')
     .delete()
     .eq('id', id);
 
@@ -108,7 +108,7 @@ export async function resetRosterPlanningConstraintToOriginal(
 
   // Haal origineel op
   const { data: original, error: origError } = await supabase
-    .from('planningconstraints')
+    .from('planning_constraints')
     .select('*')
     .eq('id', constraint.baseconstraintid)
     .single();
@@ -135,7 +135,7 @@ export async function createAdHocRosterPlanningConstraint(
   constraintData: Omit<RosterPlanningConstraint, 'id' | 'rosterid' | 'createdat' | 'updatedat'>
 ): Promise<RosterPlanningConstraint> {
   const { data, error } = await supabase
-    .from('rosterplanningconstraints')
+    .from('roster_planning_constraints')
     .insert([{
       ...constraintData,
       rosterid: roosterId,
