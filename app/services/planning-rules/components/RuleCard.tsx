@@ -13,7 +13,8 @@ export function RuleCard({ constraint, onToggle }: RuleCardProps) {
   const [actief, setActief] = useState(constraint.actief);
 
   const handleToggle = async () => {
-    if (constraint.isfixed) return; // Vaste regels niet wijzigen
+    // DRAAD96A: Fixed isfixed -> is_fixed
+    if (constraint.is_fixed) return; // Vaste regels niet wijzigen
     
     setIsToggling(true);
     try {
@@ -41,7 +42,8 @@ export function RuleCard({ constraint, onToggle }: RuleCardProps) {
       className={`
         rounded-xl p-6 border-2 transition-all duration-300
         ${
-          constraint.isfixed
+          // DRAAD96A: Fixed isfixed -> is_fixed
+          constraint.is_fixed
             ? 'bg-gray-50 border-gray-300'
             : actief
             ? 'bg-white border-purple-300 shadow-md'
@@ -53,10 +55,11 @@ export function RuleCard({ constraint, onToggle }: RuleCardProps) {
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
-            {constraint.isfixed && (
+            {/* DRAAD96A: Fixed isfixed -> is_fixed and canrelax -> can_relax */}
+            {constraint.is_fixed && (
               <Lock className="w-4 h-4 text-gray-600" />
             )}
-            {!constraint.isfixed && constraint.canrelax && (
+            {!constraint.is_fixed && constraint.can_relax && (
               <LockOpen className="w-4 h-4 text-blue-600" />
             )}
             <h3 className="font-bold text-lg text-gray-900">
@@ -87,7 +90,8 @@ export function RuleCard({ constraint, onToggle }: RuleCardProps) {
 
         {/* Toggle switch */}
         <div className="flex flex-col items-end gap-2">
-          {constraint.isfixed ? (
+          {/* DRAAD96A: Fixed isfixed -> is_fixed */}
+          {constraint.is_fixed ? (
             <div className="px-3 py-1.5 rounded-lg bg-gray-200 text-gray-700 text-sm font-medium">
               Vast
             </div>
@@ -110,7 +114,8 @@ export function RuleCard({ constraint, onToggle }: RuleCardProps) {
             </button>
           )}
           <span className="text-xs text-gray-500">
-            {constraint.isfixed ? 'Niet aanpasbaar' : actief ? 'Actief' : 'Uit'}
+            {/* DRAAD96A: Fixed isfixed -> is_fixed */}
+            {constraint.is_fixed ? 'Niet aanpasbaar' : actief ? 'Actief' : 'Uit'}
           </span>
         </div>
       </div>
@@ -145,7 +150,8 @@ export function RuleCard({ constraint, onToggle }: RuleCardProps) {
       )}
 
       {/* Waarschuwing voor vaste regels */}
-      {constraint.isfixed && (
+      {/* DRAAD96A: Fixed isfixed -> is_fixed */}
+      {constraint.is_fixed && (
         <div className="mt-3 pt-3 border-t border-gray-200">
           <div className="flex items-start gap-2 text-xs text-gray-600">
             <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />

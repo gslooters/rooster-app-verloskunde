@@ -3,6 +3,7 @@
 // Structuur en Nederlands commentaar -- DRAAD95A
 // DRAAD95E: Column name fix rosterid -> roster_id
 // DRAAD95F: Add missing isfixed property to RosterPlanningConstraint
+// DRAAD96A: Fix property name mismatch - database snake_case vs TypeScript camelCase
 
 export type ConstraintType =
   | 'coverageminimum'
@@ -29,29 +30,29 @@ export interface PlanningConstraint {
   parameters: Record<string, any>;
   actief: boolean;
   priority: ConstraintPriority;
-  canrelax: boolean;
-  isfixed: boolean;
+  can_relax: boolean; // DRAAD96A: Fixed canrelax -> can_relax
+  is_fixed: boolean; // DRAAD96A: Fixed isfixed -> is_fixed
   team?: string;
-  createdat: string;
-  updatedat: string;
+  created_at: string; // DRAAD96A: Fixed createdat -> created_at
+  updated_at: string; // DRAAD96A: Fixed updatedat -> updated_at
 }
 
 export interface RosterPlanningConstraint {
   id: string; // UUID
   roster_id: string; // DRAAD95E: Fixed rosterid -> roster_id
-  baseconstraintid?: string;
+  base_constraint_id?: string; // DRAAD96A: Fixed baseconstraintid -> base_constraint_id
   naam: string;
   type: ConstraintType;
   beschrijving?: string;
   parameters: Record<string, any>;
   actief: boolean;
   priority: ConstraintPriority;
-  canrelax: boolean;
-  isfixed: boolean; // DRAAD95F: Added missing property
-  isoverride: boolean;
+  can_relax: boolean; // DRAAD96A: Fixed canrelax -> can_relax
+  is_fixed: boolean; // DRAAD96A: Fixed isfixed -> is_fixed
+  is_override: boolean; // DRAAD96A: Fixed isoverride -> is_override
   team?: string;
-  createdat: string;
-  updatedat: string;
+  created_at: string; // DRAAD96A: Fixed createdat -> created_at
+  updated_at: string; // DRAAD96A: Fixed updatedat -> updated_at
 }
 
 export interface CreateConstraintRequest {
@@ -61,8 +62,8 @@ export interface CreateConstraintRequest {
   parameters: Record<string, any>;
   actief?: boolean;
   priority?: ConstraintPriority;
-  canrelax?: boolean;
-  isfixed?: boolean;
+  can_relax?: boolean; // DRAAD96A: Fixed canrelax -> can_relax
+  is_fixed?: boolean; // DRAAD96A: Fixed isfixed -> is_fixed
   team?: string;
 }
 
@@ -74,8 +75,8 @@ export interface UpdateConstraintRequest {
   parameters?: Record<string, any>;
   actief?: boolean;
   priority?: ConstraintPriority;
-  canrelax?: boolean;
-  isfixed?: boolean;
+  can_relax?: boolean; // DRAAD96A: Fixed canrelax -> can_relax
+  is_fixed?: boolean; // DRAAD96A: Fixed isfixed -> is_fixed
   team?: string;
 }
 
@@ -84,8 +85,8 @@ export interface OverrideConstraintRequest {
   parameters?: Record<string, any>;
   actief?: boolean;
   priority?: ConstraintPriority;
-  canrelax?: boolean;
-  isoverride?: boolean;
+  can_relax?: boolean; // DRAAD96A: Fixed canrelax -> can_relax
+  is_override?: boolean; // DRAAD96A: Fixed isoverride -> is_override
   team?: string;
 }
 
