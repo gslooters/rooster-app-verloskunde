@@ -1,0 +1,18 @@
+# DRAAD98A Deployment Trigger
+# Datum: 2025-12-03 00:31 CET
+# Commit: 5ba5264df015f74a7942a1b1262f90ec93a89a9e
+
+Fix toegepast voor: column employees.naam does not exist
+
+Gewijzigde bestanden:
+- app/api/roster/solve/route.ts
+  - SELECT query: naam → voornaam, achternaam  
+  - Transform: samenvoegen met template literal
+
+Verwacht resultaat na deploy:
+✅ ORT solver kan employees ophalen
+✅ Geen "Fout bij ophalen medewerkers" meer
+✅ Dashboard kan roosterbewerking starten
+
+Deploy timestamp: 2025-12-03T00:31:01+01:00
+Build ID: draad98a-fix-$(date +%s)
