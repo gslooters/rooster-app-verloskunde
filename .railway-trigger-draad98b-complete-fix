@@ -1,0 +1,16 @@
+# DRAAD98B Complete Database Schema Fix
+Datum: 2025-12-03 00:48 CET
+Commit: ad6dff78d5e0bbd410ffeef1684008c78847a75a
+
+Fixed alle 4 database schema mismatches:
+✅ employees.max_werkdagen → aantalwerkdagen
+✅ roosters.start_datum → start_date
+✅ roster_assignments.datum → date (3 plekken)
+✅ Verwijderd created_at override
+
+Verwacht resultaat:
+✅ ORT solver volledig functioneel
+✅ Geen 42703 column errors meer
+✅ Correcte datum handling
+
+Deploy timestamp: 2025-12-03T00:48:53Z
