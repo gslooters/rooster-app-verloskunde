@@ -7,7 +7,12 @@ import { getAllPlanningConstraints } from '@/lib/db/planningConstraints';
 export async function GET() {
   try {
     const constraints = await getAllPlanningConstraints();
-    return NextResponse.json(constraints);
+    // Voeg expliciet cache-busting headers toe
+    const res = NextResponse.json(constraints);
+    res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.headers.set('Pragma', 'no-cache');
+    res.headers.set('Expires', '0');
+    return res;
   } catch (error) {
     console.error('API Error:', error);
     return NextResponse.json(
