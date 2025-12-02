@@ -1,5 +1,6 @@
 // RosterPlanningRulesModal - parameterblokje verwijderd
 // DRAAD95G update: Parameters blok verwijderd voor overzichtelijkheid
+// DRAAD96A: Fix property name mismatch - database snake_case vs TypeScript camelCase
 'use client';
 
 import { RosterPlanningConstraint } from '@/lib/types/planning-constraint';
@@ -98,8 +99,9 @@ export default function RosterPlanningRulesModal({ rosterId, periodTitle, isOpen
 
   if (!isOpen) return null;
 
-  const vasteRegels = rules.filter(r => r.isfixed || r.canrelax === false);
-  const aanpasbaareRegels = rules.filter(r => !r.isfixed && r.canrelax !== false);
+  // DRAAD96A: Fixed isfixed -> is_fixed and canrelax -> can_relax
+  const vasteRegels = rules.filter(r => r.is_fixed || r.can_relax === false);
+  const aanpasbaareRegels = rules.filter(r => !r.is_fixed && r.can_relax !== false);
   const totalActief = rules.filter(r => r.actief).length;
   const aanpasbaareActief = aanpasbaareRegels.filter(r => r.actief).length;
 
