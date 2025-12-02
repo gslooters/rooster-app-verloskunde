@@ -2,6 +2,7 @@
 // Supabase queries voor roster_planning_constraints tabel
 // DRAAD95C Database Table Name Fix
 // DRAAD95E Column Name Fix: rosterid -> roster_id
+// DRAAD96A Property Name Fix: baseconstraintid -> base_constraint_id
 
 import { supabase } from '@/lib/supabase';
 import { RosterPlanningConstraint, OverrideConstraintRequest } from '@/lib/types/planning-constraint';
@@ -57,7 +58,7 @@ export async function updateRosterPlanningConstraint(
   // Zet isoverride op true als er wijzigingen zijn
   const updateData = {
     ...updates,
-    isoverride: true,
+    is_override: true, // DRAAD96A: Fixed isoverride -> is_override
   };
 
   const { data, error } = await supabase
@@ -102,8 +103,8 @@ export async function resetRosterPlanningConstraintToOriginal(
     throw new Error('Constraint not found');
   }
 
-  // Als geen baseconstraintid, kan niet resetten
-  if (!constraint.baseconstraintid) {
+  // Als geen base_constraint_id, kan niet resetten
+  if (!constraint.base_constraint_id) { // DRAAD96A: Fixed baseconstraintid -> base_constraint_id
     throw new Error('Constraint heeft geen origineel om terug te zetten');
   }
 
@@ -111,7 +112,7 @@ export async function resetRosterPlanningConstraintToOriginal(
   const { data: original, error: origError } = await supabase
     .from('planning_constraints')
     .select('*')
-    .eq('id', constraint.baseconstraintid)
+    .eq('id', constraint.base_constraint_id) // DRAAD96A: Fixed baseconstraintid -> base_constraint_id
     .single();
 
   if (origError || !original) {
@@ -123,8 +124,8 @@ export async function resetRosterPlanningConstraintToOriginal(
     parameters: original.parameters,
     actief: original.actief,
     priority: original.priority,
-    canrelax: original.canrelax,
-    isoverride: false,
+    can_relax: original.can_relax, // DRAAD96A: Fixed canrelax -> can_relax
+    is_override: false, // DRAAD96A: Fixed isoverride -> is_override
   });
 }
 
@@ -133,15 +134,15 @@ export async function resetRosterPlanningConstraintToOriginal(
  */
 export async function createAdHocRosterPlanningConstraint(
   roosterId: string,
-  constraintData: Omit<RosterPlanningConstraint, 'id' | 'roster_id' | 'createdat' | 'updatedat'>
+  constraintData: Omit<RosterPlanningConstraint, 'id' | 'roster_id' | 'created_at' | 'updated_at'> // DRAAD96A: Fixed createdat/updatedat -> created_at/updated_at
 ): Promise<RosterPlanningConstraint> {
   const { data, error } = await supabase
     .from('roster_planning_constraints')
     .insert([{
       ...constraintData,
       roster_id: roosterId, // DRAAD95E: Fixed rosterid -> roster_id
-      baseconstraintid: null, // Ad-hoc heeft geen base
-      isoverride: false, // Is geen override, maar nieuwe regel
+      base_constraint_id: null, // DRAAD96A: Fixed baseconstraintid -> base_constraint_id - Ad-hoc heeft geen base
+      is_override: false, // DRAAD96A: Fixed isoverride -> is_override - Is geen override, maar nieuwe regel
     }])
     .select()
     .single();
