@@ -4,6 +4,19 @@
 
 import { supabase } from '@/lib/supabase';
 import { PlanningConstraint, CreateConstraintRequest, UpdateConstraintRequest } from '@/lib/types/planning-constraint';
+import { revalidatePath } from 'next/cache';
+
+/**
+ * Revalideer het cache van de planning rules pagina
+ * Standaard Next.js helper die Railway en App Router cache forceert te verversen
+ */
+export async function revalidatePlanningRulesCache() {
+  try {
+    await revalidatePath('/services/planning-rules'); // forceer herladen
+  } catch (error) {
+    console.error('Path revalidation error:', error);
+  }
+}
 
 /**
  * Haal alle planning constraints op, gesorteerd op priority
@@ -22,7 +35,6 @@ export async function getAllPlanningConstraints(): Promise<PlanningConstraint[]>
 
   return data || [];
 }
-
 /**
  * Haal één planning constraint op via ID
  */
@@ -40,7 +52,6 @@ export async function getPlanningConstraintById(id: string): Promise<PlanningCon
 
   return data;
 }
-
 /**
  * Maak nieuwe planning constraint
  */
@@ -58,7 +69,6 @@ export async function createPlanningConstraint(request: CreateConstraintRequest)
 
   return data;
 }
-
 /**
  * Update bestaande planning constraint
  */
@@ -80,7 +90,6 @@ export async function updatePlanningConstraint(
 
   return data;
 }
-
 /**
  * Verwijder planning constraint
  */
@@ -95,7 +104,6 @@ export async function deletePlanningConstraint(id: string): Promise<void> {
     throw new Error(`Database error: ${error.message}`);
   }
 }
-
 /**
  * Toggle actief status van planning constraint
  */
