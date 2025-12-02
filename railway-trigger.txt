@@ -1,5 +1,5 @@
-RAILWAY DEPLOY TRIGGER #92814
-Timestamp: 2025-12-01T17:51:09Z
-Commit: 4e21bb0de6daa6db68b06e100c5eecebffdfa3b1
-Fix: DRAAD92 - Status filtering !== MAG_NIET ipv === MAG
-Random: 92814
+RAILWAY DEPLOY TRIGGER #96742
+Timestamp: 2025-12-02T19:15:00Z
+Commit: 131fbc79e136be4b08d79b0094f113dab0b7161d
+Fix: DRAAD96A - Property name mismatch database snake_case vs TypeScript camelCase
+Random: 96742
