@@ -2,7 +2,7 @@
  * Server-side Supabase client
  * 
  * Deze module biedt server-side Supabase client voor gebruik in:
- * - API Routes (app/api/**/route.ts)
+ * - API Routes (app/api/[route]/route.ts)
  * - Server Components
  * - Server Actions
  * 
