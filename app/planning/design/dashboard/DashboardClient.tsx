@@ -1,6 +1,7 @@
 /* DRAAD27H: Link gecorrigeerd naar nieuwe dagdelen-dashboard volgens handover.
  * Oud period-staffing scherm wordt niet meer aangeroepen vanuit dashboard.
  * DRAAD95D: RosterPlanningRulesModal geïntegreerd voor planregels beheer
+ * DRAAD95G: periodTitle doorgeven aan modal voor dynamische periode titel
 */
 'use client';
 import { useEffect, useState } from 'react';
@@ -349,10 +350,11 @@ export default function DashboardClient() {
         </div>
       </div>
       
-      {/* DRAAD95D: RosterPlanningRulesModal */}
+      {/* DRAAD95G: RosterPlanningRulesModal met periodTitle */}
       {showPlanningRulesModal && rosterId && (
         <RosterPlanningRulesModal
           rosterId={rosterId}
+          periodTitle={periodInfo.periodTitle}
           isOpen={showPlanningRulesModal}
           onClose={()=>setShowPlanningRulesModal(false)}
         />
