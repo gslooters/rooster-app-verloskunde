@@ -15,8 +15,9 @@ export default function PlanningRulesClient({ initialConstraints }: PlanningRule
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Groepeer regels: vaste vs aanpasbare
-  const vasteRegels = constraints.filter(c => c.isfixed);
-  const standaardRegels = constraints.filter(c => !c.isfixed);
+  // DRAAD96A: Fixed isfixed -> is_fixed
+  const vasteRegels = constraints.filter(c => c.is_fixed);
+  const standaardRegels = constraints.filter(c => !c.is_fixed);
 
   // Statistieken
   const totalActief = constraints.filter(c => c.actief).length;
