@@ -1,0 +1,11 @@
+Railway deployment trigger - DRAAD97A DEPLOYFOUT1 FIX
+Timestamp: 1733180662
+Random: 0.8472619384756291
+
+Changes:
+- Fixed package.json JSON syntax error
+- Removed Date.now() expression from version field
+- Static version string: 0.1.1-draad97a.1733180335942
+- Cache-busting now only in next.config.js (where it belongs)
+
+Expected: BUILD SUCCESS ✅
