@@ -1,7 +1,11 @@
 // API route: PATCH update & DELETE planning constraint by id
 // Next.js App Router route handler
 import { NextRequest, NextResponse } from 'next/server';
-import { updatePlanningConstraint, deletePlanningConstraint } from '@/lib/db/planningConstraints';
+import {
+  updatePlanningConstraint,
+  deletePlanningConstraint,
+  revalidatePlanningRulesCache
+} from '@/lib/db/planningConstraints';
 
 export async function PATCH(
   request: NextRequest,
@@ -10,6 +14,7 @@ export async function PATCH(
   try {
     const body = await request.json();
     const updated = await updatePlanningConstraint(params.id, body);
+    await revalidatePlanningRulesCache(); // Forceer cache refresh
     return NextResponse.json(updated);
   } catch (error) {
     console.error('API Error:', error);
@@ -26,6 +31,7 @@ export async function DELETE(
 ) {
   try {
     await deletePlanningConstraint(params.id);
+    await revalidatePlanningRulesCache(); // Forceer cache refresh
     return new NextResponse(null, { status: 204 });
   } catch (error) {
     console.error('API Error:', error);
