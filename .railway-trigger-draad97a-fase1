@@ -1,0 +1,16 @@
+DRAAD97A - Railway Deployment Trigger
+Fase 1: Python Solver Microservice
+
+Timestamp: 1733176200000
+Random deploy ID: 738291
+
+Changes:
+- New /solver directory
+- FastAPI service (main.py)
+- CP-SAT engine (solver_engine.py)
+- Pydantic models (models.py)
+- Docker + requirements
+- README documentation
+
+Action: Deploy Python solver service
+Expected: New service on Railway

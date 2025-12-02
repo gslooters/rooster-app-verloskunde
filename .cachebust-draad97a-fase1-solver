@@ -1,0 +1,13 @@
+DRAAD97A - Fase 1 ORT Solver Implementation
+Timestamp: 1733176200000
+Random: 847392
+
+Python FastAPI Solver Service:
+- Google OR-Tools CP-SAT 9.8
+- 6 basis constraints (Fase 1)
+- Health + Version endpoints
+- Pydantic models voor I/O
+- Dockerfile voor Railway
+- Solve endpoint met rapportage
+
+Deploy: Railway auto-trigger

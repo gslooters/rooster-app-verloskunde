@@ -1,49 +1,19 @@
-🚨 CRITICAL DEPLOYMENT FIX - LOCKFILE REGENERATION
-Timestamp: 1733016902 (01-12-2025 00:58:22 CET)
-Build ID: lockfile-fix-react-hot-toast-goober-v2
-Random: 0.9573826
-Deployment: FORCE REBUILD - NPM LOCKFILE SYNC FIX
+# Global Cache Bust File
+# DRAAD97A - Updated: 2025-12-02 23:10 CET
 
-🔥 PROBLEEM OPGELOST:
-❌ npm ci failed: react-hot-toast@2.6.0 missing from lockfile
-❌ npm ci failed: goober@2.1.18 missing from lockfile
-✅ package-lock.json VERWIJDERD (outdated)
-✅ nixpacks.toml TOEGEVOEGD (force npm install)
-✅ .npmrc TOEGEVOEGD (package-lock=false)
+DRAAD97A_TIMESTAMP=1733176200000
+DRAAD97A_PHASE=fase1_solver_implementation
+DRAAD97A_RANDOM=928374
 
-📦 DEPENDENCY FIX:
-Probleem: package.json en package-lock.json out of sync
-Oorzaak: react-hot-toast dependency upgrade (2.4.1 → 2.6.0 via transitive deps)
-Oplossing: Regenereer lockfile via npm install (niet npm ci)
+# Alle vorige cache busts blijven geldig
+# Dit is een cumulatieve update
 
-🛠️ TOEGEVOEGDE BESTANDEN:
-1. nixpacks.toml - Force npm install in Nixpacks build
-2. .npmrc - Disable package-lock voor Railway
-3. .cachebust - Deze file (cache-busting trigger)
+# Fase 1 Week 1 Deliverables:
+# ✅ Python FastAPI service skeleton
+# ✅ Dockerfile + Railway configuratie  
+# ✅ Health check endpoint
+# ✅ Version endpoint
+# ✅ Pydantic input/output models
+# 🔄 Deploy op Railway (in progress)
 
-🔄 VERWIJDERDE BESTANDEN:
-1. package-lock.json - Outdated lockfile met missing deps
-
-🎯 VERWACHTE BUILD FLOW:
-1. Nixpacks detecteert nixpacks.toml
-2. Install phase: npm install (regenereert package-lock.json)
-3. Build phase: npm run build
-4. Deploy: node .next/standalone/server.js
-
-✅ VERIFICATIE CHECKS:
-- Railway build start: AUTO
-- npm install succesvol: VERWACHT
-- react-hot-toast@2.6.0 geïnstalleerd: VERWACHT
-- goober@2.1.18 geïnstalleerd: VERWACHT
-- package-lock.json gegenereerd: VERWACHT
-- Build succesvol: VERWACHT
-- Deployment succesvol: VERWACHT
-
-📊 DEPLOYMENT METADATA:
-DEPLOYMENT_TRIGGER=1733016902
-BUILD_TIMESTAMP=2025-12-01T00:58:22+01:00
-FIX_VERSION=lockfile-regeneration-critical-v2
-RANDOM_SEED=9573826
-COMMIT_MESSAGE=chore: CRITICAL cache-bust + lockfile fix deployment
-
-🚀 RAILWAY TRIGGER: FORCED REBUILD
+# Next: Railway deployment verificatie
