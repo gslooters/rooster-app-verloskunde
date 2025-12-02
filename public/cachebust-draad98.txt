@@ -1,0 +1,15 @@
+CACHE BUST - DRAAD98
+=====================
+Datum: 2025-12-03 00:17:30 CET
+Deployment trigger: 847219
+Reden: ORT knop functionaliteit geïmplementeerd
+
+Wijzigingen:
+- DashboardClient.tsx: ORT API call geïmplementeerd
+- Vervangen: alert() → fetch('/api/roster/solve')
+- Loading state + result feedback toegevoegd
+- Error handling met gebruikersmeldingen
+- Success flow met redirect naar rooster
+
+Deployment: Railway auto-deploy via GitHub webhook
+Status: Triggered
