@@ -1,17 +1,15 @@
 # Railway Deployment Trigger
-# DRAAD 80 FIX - Syntax Error Verholpen
 
-Timestamp: 1732921010000
-Random: 9147
-Datum: 2025-11-29T23:36:50.000Z
+Timestamp: 2025-12-02T22:32:00Z
+Draad: 97B
+Fix: Module resolution error voor @/lib/supabase/server
 
-Deze wijziging triggert automatische deployment op Railway.
+## Changes:
+1. Created lib/supabase/server.ts with async createClient() export
+2. Bumped package.json version to 0.1.1-draad97b.1733182260000
+3. Fixed import path mismatch in app/api/roster/solve/route.ts
 
-Wijzigingen in deze deployment:
-- FIX: Verwijderd ongeldige ... syntax uit client.tsx
-- Volledige werkende code hersteld
-- Database save functionaliteit intact
-- Grid refresh functionaliteit intact
-- Alle 4 statussen (0/1/2/3) werkend
+## Expected Result:
+Successful Next.js build without module resolution errors
 
-Cache: 1732921010000
+Cache-bust: 1733182320
