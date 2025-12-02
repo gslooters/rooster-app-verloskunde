@@ -2,7 +2,7 @@
  * Server-side Supabase client
  * 
  * Deze module biedt server-side Supabase client voor gebruik in:
- * - API Routes (app/api/**\/route.ts)
+ * - API Routes (app/api/**/route.ts)
  * - Server Components
  * - Server Actions
  * 
@@ -35,32 +35,32 @@ export async function createClient(): Promise<SupabaseClient> {
     console.warn('[Supabase] SUPABASE_ANON_KEY not set');
   }
 
-  // Create Supabase client
+  // Probeer auth cookie te lezen (alleen runtime, niet build-time)
+  let authHeader: Record<string, string> = {};
+  
+  try {
+    const cookieStore = await cookies();
+    const authCookie = cookieStore.get('sb-access-token')?.value;
+    
+    if (authCookie) {
+      authHeader = {
+        Authorization: `Bearer ${authCookie}`
+      };
+    }
+  } catch (error) {
+    // Cookies niet beschikbaar (build-time of statische export)
+    // Dit is normaal tijdens build, negeer
+  }
+
+  // Create Supabase client with resolved headers
   return createSupabaseClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: false, // Server-side doesn't persist sessions
       autoRefreshToken: false,
       detectSessionInUrl: false
     },
-    // Optioneel: gebruik cookies voor auth (indien ingelogd)
     global: {
-      headers: async () => {
-        try {
-          const cookieStore = await cookies();
-          const authCookie = cookieStore.get('sb-access-token')?.value;
-          
-          if (authCookie) {
-            return {
-              Authorization: `Bearer ${authCookie}`
-            };
-          }
-        } catch (error) {
-          // Cookies niet beschikbaar (build-time of statische export)
-          // Dit is normaal tijdens build, negeer
-        }
-        
-        return {};
-      }
+      headers: authHeader // Synchronous headers object
     }
   });
 }
