@@ -1,0 +1,18 @@
+DRAAD97A - Railway Deployment Trigger
+Fase 1: Python Solver Microservice
+
+Timestamp: 1733177105123
+Random deploy ID: 492731
+
+Action: Force Railway deploy van laatste commit
+
+Notities:
+- Nieuwe solver service aanwezig in /solver
+- Next.js API route /api/roster/solve toegevoegd
+- Cache-bust bestanden geüpdatet
+- Environment voorbeeld met SOLVER_SERVICE_URL aanwezig
+
+Verwachting:
+- Nieuwe build & deploy op Railway
+- Health endpoint /health bereikbaar
+- Version endpoint /version bereikbaar
