@@ -75,10 +75,10 @@ export async function POST(request: NextRequest) {
     
     console.log(`[Solver API] Roster gevonden: ${roster.naam}, periode ${roster.start_datum} - ${roster.eind_datum}`);
     
-    // 4. Fetch employees
+    // 4. Fetch employees - FIX DRAAD98A: gebruik voornaam + achternaam ipv naam
     const { data: employees, error: empError } = await supabase
       .from('employees')
-      .select('id, naam, team, structureel_nbh, max_werkdagen, min_werkdagen')
+      .select('id, voornaam, achternaam, team, structureel_nbh, max_werkdagen, min_werkdagen')
       .eq('active', true);
     
     if (empError) {
@@ -131,14 +131,14 @@ export async function POST(request: NextRequest) {
     
     console.log(`[Solver API] Data verzameld: ${employees?.length || 0} medewerkers, ${services?.length || 0} diensten, ${empServices?.length || 0} bevoegdheden, ${preAssignments?.length || 0} pre-assignments`);
     
-    // 8. Transform naar solver input format
+    // 8. Transform naar solver input format - FIX DRAAD98A: samenvoegen voornaam + achternaam
     const solverRequest: SolveRequest = {
       roster_id,
       start_date: roster.start_datum,
       end_date: roster.eind_datum,
       employees: (employees || []).map(emp => ({
         id: emp.id,
-        name: emp.naam,
+        name: `${emp.voornaam} ${emp.achternaam}`.trim(), // FIX: voornaam + achternaam
         team: emp.team as 'maat' | 'loondienst' | 'overig',
         structureel_nbh: emp.structureel_nbh || undefined,
         max_werkdagen: emp.max_werkdagen || undefined,
