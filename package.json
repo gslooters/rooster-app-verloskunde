@@ -1,6 +1,6 @@
 {
   "name": "rooster-app-final",
-  "version": "0.1.1-draad96c.cachebust-" + Date.now(),
+  "version": "0.1.1-draad97a.1733180335942",
   "private": true,
   "scripts": {
     "dev": "next dev",
