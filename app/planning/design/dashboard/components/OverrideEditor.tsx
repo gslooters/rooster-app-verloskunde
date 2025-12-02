@@ -1,5 +1,6 @@
 // OverrideEditor: Nested modal voor parameter wijzigingen
 // DRAAD95D: Rooster-specifieke Planregels UI Implementatie
+// DRAAD96A-fix: Property name mismatch - canrelax → can_relax, isoverride → is_override
 'use client';
 
 import { RosterPlanningConstraint } from '@/lib/types/planning-constraint';
@@ -22,7 +23,7 @@ export default function OverrideEditor({
   const [parameters, setParameters] = useState(JSON.stringify(rule.parameters, null, 2));
   const [actief, setActief] = useState(rule.actief);
   const [priority, setPriority] = useState(rule.priority);
-  const [canrelax, setCanrelax] = useState(rule.canrelax);
+  const [can_relax, setCanRelax] = useState(rule.can_relax);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   
@@ -31,7 +32,7 @@ export default function OverrideEditor({
     setParameters(JSON.stringify(rule.parameters, null, 2));
     setActief(rule.actief);
     setPriority(rule.priority);
-    setCanrelax(rule.canrelax);
+    setCanRelax(rule.can_relax);
     setError(null);
   }, [rule]);
   
@@ -53,7 +54,7 @@ export default function OverrideEditor({
         parameters: parsed,
         actief,
         priority,
-        canrelax
+        can_relax
       });
       
       // onSave sluit modal
@@ -109,7 +110,7 @@ export default function OverrideEditor({
               {/* Huidige parameters */}
               <div>
                 <div className="text-xs font-medium text-gray-600 mb-1">
-                  {rule.isoverride ? 'Aangepaste waarden:' : 'Nieuwe waarden:'}
+                  {rule.is_override ? 'Aangepaste waarden:' : 'Nieuwe waarden:'}
                 </div>
                 <textarea
                   value={parameters}
@@ -182,12 +183,12 @@ export default function OverrideEditor({
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={canrelax}
-                  onChange={(e) => setCanrelax(e.target.checked)}
+                  checked={can_relax}
+                  onChange={(e) => setCanRelax(e.target.checked)}
                   className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
                 <span className="text-sm text-gray-700">
-                  {canrelax ? 'Kan relaxen' : 'Harde eis'}
+                  {can_relax ? 'Kan relaxen' : 'Harde eis'}
                 </span>
               </label>
             </div>
