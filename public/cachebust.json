@@ -1,5 +1,6 @@
 {
-  "timestamp": 1733081864978,
-  "version": "dashboard-subtitels-uniformering-94",
-  "railway_trigger": 847261
+  "timestamp": 1733181456000,
+  "version": "ort-knop-activated-98",
+  "railway_trigger": 984572,
+  "description": "ORT solver integration actief - Dashboard roep /api/roster/solve aan"
 }
