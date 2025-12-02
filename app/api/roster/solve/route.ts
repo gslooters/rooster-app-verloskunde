@@ -73,12 +73,13 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    console.log(`[Solver API] Roster gevonden: ${roster.naam}, periode ${roster.start_datum} - ${roster.eind_datum}`);
+    console.log(`[Solver API] Roster gevonden: ${roster.naam}, periode ${roster.start_date} - ${roster.end_date}`);
     
     // 4. Fetch employees - FIX DRAAD98A: gebruik voornaam + achternaam ipv naam
+    // FIX DRAAD98B: aantalwerkdagen ipv max/min_werkdagen
     const { data: employees, error: empError } = await supabase
       .from('employees')
-      .select('id, voornaam, achternaam, team, structureel_nbh, max_werkdagen, min_werkdagen')
+      .select('id, voornaam, achternaam, team, structureel_nbh, aantalwerkdagen')
       .eq('active', true);
     
     if (empError) {
@@ -118,9 +119,10 @@ export async function POST(request: NextRequest) {
     }
     
     // 7. Fetch pre-assignments (status > 0)
+    // FIX DRAAD98B: date ipv datum
     const { data: preAssignments, error: paError } = await supabase
       .from('roster_assignments')
-      .select('employee_id, datum, dagdeel, service_id, status')
+      .select('employee_id, date, dagdeel, service_id, status')
       .eq('roster_id', roster_id)
       .gt('status', 0);
     
@@ -132,17 +134,18 @@ export async function POST(request: NextRequest) {
     console.log(`[Solver API] Data verzameld: ${employees?.length || 0} medewerkers, ${services?.length || 0} diensten, ${empServices?.length || 0} bevoegdheden, ${preAssignments?.length || 0} pre-assignments`);
     
     // 8. Transform naar solver input format - FIX DRAAD98A: samenvoegen voornaam + achternaam
+    // FIX DRAAD98B: aantalwerkdagen mapping
     const solverRequest: SolveRequest = {
       roster_id,
-      start_date: roster.start_datum,
-      end_date: roster.eind_datum,
+      start_date: roster.start_date,
+      end_date: roster.end_date,
       employees: (employees || []).map(emp => ({
         id: emp.id,
         name: `${emp.voornaam} ${emp.achternaam}`.trim(), // FIX: voornaam + achternaam
         team: emp.team as 'maat' | 'loondienst' | 'overig',
         structureel_nbh: emp.structureel_nbh || undefined,
-        max_werkdagen: emp.max_werkdagen || undefined,
-        min_werkdagen: emp.min_werkdagen || undefined
+        max_werkdagen: emp.aantalwerkdagen || undefined,
+        min_werkdagen: undefined
       })),
       services: (services || []).map(svc => ({
         id: svc.id,
@@ -157,7 +160,7 @@ export async function POST(request: NextRequest) {
       })),
       pre_assignments: (preAssignments || []).map(pa => ({
         employee_id: pa.employee_id,
-        date: pa.datum,
+        date: pa.date,
         dagdeel: pa.dagdeel as 'O' | 'M' | 'A',
         service_id: pa.service_id,
         status: pa.status
@@ -204,14 +207,14 @@ export async function POST(request: NextRequest) {
       }
       
       // Insert nieuwe assignments (status=1)
+      // FIX DRAAD98B: date ipv datum, verwijder created_at (DB heeft default)
       const assignmentsToInsert = solverResult.assignments.map(a => ({
         roster_id,
         employee_id: a.employee_id,
-        datum: a.date,
+        date: a.date,
         dagdeel: a.dagdeel,
         service_id: a.service_id,
-        status: 1, // ORT-gegenereerd
-        created_at: new Date().toISOString()
+        status: 1 // ORT-gegenereerd
       }));
       
       if (assignmentsToInsert.length > 0) {
