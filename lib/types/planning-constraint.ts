@@ -2,6 +2,7 @@
 // Fase 2: UI Implementatie rooster-app-verloskunde
 // Structuur en Nederlands commentaar -- DRAAD95A
 // DRAAD95E: Column name fix rosterid -> roster_id
+// DRAAD95F: Add missing isfixed property to RosterPlanningConstraint
 
 export type ConstraintType =
   | 'coverageminimum'
@@ -46,6 +47,7 @@ export interface RosterPlanningConstraint {
   actief: boolean;
   priority: ConstraintPriority;
   canrelax: boolean;
+  isfixed: boolean; // DRAAD95F: Added missing property
   isoverride: boolean;
   team?: string;
   createdat: string;
