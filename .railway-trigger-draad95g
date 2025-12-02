@@ -1,0 +1,11 @@
+Railway deployment trigger - DRAAD95G Herontwerp RosterPlanningRulesModal
+Timestamp: 1733157306890
+Random: 7394
+
+Nieuwe layout met PlanningRulesClient style:
+- Header met icon + gradient
+- Dynamische periode titel
+- Statistieken tegels (3)
+- Secties: Vaste/Aanpasbare regels
+- Info banner rooster-specifiek
+- Toast notificaties
