@@ -1,0 +1,21 @@
+RAILWAY DEPLOY TRIGGER - DRAAD 99B
+Datum: 2025-12-03
+Tijd: 11:29 CET
+Random: 82641
+
+DEPLOY SCOPE:
+- Verwijderd: service-blocking-rules.ts
+- Updated: preplanning-storage.ts (removed imports and calls)
+- Cache bust: draad99b-cleanup
+
+VALIDATIE NA DEPLOY:
+1. TypeScript compileert zonder errors
+2. app/services/types pagina laadt correct
+3. blokkeert_volgdag dropdown werkt normaal
+4. Geen console errors
+5. service_types.blokkeert_volgdag kolom bestaat nog
+
+DATABASE:
+- Constraint records handmatig verwijderd via Supabase (door gebruiker)
+- service_types.blokkeert_volgdag kolom blijft bestaan
+- Geen schema wijzigingen
