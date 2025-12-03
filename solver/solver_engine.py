@@ -24,7 +24,7 @@ class RosterSolver:
     
     def __init__(
         self,
-        roster_id: int,
+        roster_id: str,  # uuid in database
         employees: List[Employee],
         services: List[Service],
         employee_services: List[EmployeeService],
@@ -34,8 +34,9 @@ class RosterSolver:
         timeout_seconds: int = 30
     ):
         self.roster_id = roster_id
-        self.employees = {emp.id: emp for emp.id in employees}
-        self.services = {svc.id: svc for svc.id in services}
+        # Fix: correcte dictionary comprehension
+        self.employees = {emp.id: emp for emp in employees}
+        self.services = {svc.id: svc for svc in services}
         self.employee_services = employee_services
         self.start_date = start_date
         self.end_date = end_date
@@ -51,7 +52,8 @@ class RosterSolver:
         
         # Model en variabelen
         self.model = cp_model.CpModel()
-        self.assignments_vars: Dict[Tuple[int, date, str, int], cp_model.IntVar] = {}
+        # Type hints: employee_id en service_id zijn nu str
+        self.assignments_vars: Dict[Tuple[str, date, str, str], cp_model.IntVar] = {}
         
         # Tracking
         self.violations: List[ConstraintViolation] = []
@@ -152,8 +154,8 @@ class RosterSolver:
         """
         logger.info("Toevoegen constraint 1: Bevoegdheden...")
         
-        # Maak bevoegdheden lookup
-        allowed: Dict[int, Set[int]] = {}
+        # Maak bevoegdheden lookup (nu met str IDs)
+        allowed: Dict[str, Set[str]] = {}
         for emp_id in self.employees:
             allowed[emp_id] = set()
         
@@ -208,8 +210,8 @@ class RosterSolver:
         """
         logger.info("Toevoegen constraint 3: Pre-assignments...")
         
-        # Verzamel alle pre-assigned slots
-        pre_slots: Set[Tuple[int, date, str]] = set()
+        # Verzamel alle pre-assigned slots (nu met str IDs)
+        pre_slots: Set[Tuple[str, date, str]] = set()
         
         for pa in self.pre_assignments:
             pre_slots.add((pa.employee_id, pa.date, pa.dagdeel.value))
@@ -223,15 +225,17 @@ class RosterSolver:
         
         # Verbied andere diensten in pre-assigned slots
         for (emp_id, dt, dagdeel_str) in pre_slots:
+            assigned_svc = None
             for pa in self.pre_assignments:
                 if pa.employee_id == emp_id and pa.date == dt and pa.dagdeel.value == dagdeel_str:
                     assigned_svc = pa.service_id
                     break
             
-            for svc_id in self.services:
-                if svc_id != assigned_svc:
-                    var = self.assignments_vars[(emp_id, dt, dagdeel_str, svc_id)]
-                    self.model.Add(var == 0)
+            if assigned_svc:
+                for svc_id in self.services:
+                    if svc_id != assigned_svc:
+                        var = self.assignments_vars[(emp_id, dt, dagdeel_str, svc_id)]
+                        self.model.Add(var == 0)
         
         logger.info(f"Constraint 3: {len(self.pre_assignments)} pre-assignments gefixeerd")
     
@@ -255,7 +259,7 @@ class RosterSolver:
         logger.info("Constraint 4: Een dienst per dagdeel toegepast")
     
     def _constraint_5_max_werkdagen(self):
-        """Constraint 5: Respecteer max_werkdagen per week.
+        """Constraint 5: Respecteer aantalwerkdagen per week.
         
         Priority: 2 (is_fixed: false) - kan warnings geven
         """
@@ -265,8 +269,8 @@ class RosterSolver:
         # (vereenvoudiging - later per week)
         
         for emp_id, emp in self.employees.items():
-            if emp.max_werkdagen is None:
-                continue
+            # Fix: gebruik aantalwerkdagen i.p.v. max_werkdagen
+            max_werkdagen = emp.aantalwerkdagen
             
             # Tel dagen waarop medewerker >=1 dienst heeft
             werkdagen_vars = []
@@ -288,7 +292,7 @@ class RosterSolver:
                 werkdagen_vars.append(dag_var)
             
             # Constraint: totaal aantal werkdagen <= max
-            max_dagen = emp.max_werkdagen * len(self.dates) // 7  # Schaling naar periode
+            max_dagen = max_werkdagen * len(self.dates) // 7  # Schaling naar periode
             self.model.Add(sum(werkdagen_vars) <= max(max_dagen, 1))
         
         logger.info("Constraint 5: Max werkdagen toegepast")
@@ -366,9 +370,10 @@ class RosterSolver:
                     emp = self.employees[emp_id]
                     svc = self.services[svc_id]
                     
+                    # Fix: gebruik employee.name property
                     assignments.append(Assignment(
                         employee_id=emp_id,
-                        employee_name=emp.name,
+                        employee_name=emp.name,  # Dit gebruikt de @property
                         date=dt,
                         dagdeel=Dagdeel(dagdeel_str),
                         service_id=svc_id,
