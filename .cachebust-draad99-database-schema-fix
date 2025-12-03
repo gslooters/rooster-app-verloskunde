@@ -1,0 +1,12 @@
+Cache bust for database schema fixes - Draad 99
+Timestamp: 1733220236000
+Date: 2025-12-03 10:43 CET
+
+Changes:
+- Fixed Employee model: id int->str, name->voornaam+achternaam, max_werkdagen->aantalwerkdagen
+- Fixed Service model: id int->str (uuid)
+- Fixed EmployeeService model: employee_id int->str, service_id int->str
+- Fixed PreAssignment model: employee_id int->str, service_id int->str
+- Fixed Assignment model: employee_id int->str, service_id int->str
+- Fixed solver_engine.py: dictionary comprehension, employee.name property
+- All changes conform to Supabase database schema
