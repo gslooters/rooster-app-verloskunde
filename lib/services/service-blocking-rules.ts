@@ -17,6 +17,7 @@
  * 4. isServiceBlockedBy() - Check specifieke blokkering
  * 
  * DRAAD 97E: Fix import error - @/lib/supabase/client → @/lib/supabase
+ * DRAAD 100: Fix TypeScript build error - maak applyServiceBlocks generic
  */
 
 import { supabase } from '@/lib/supabase';
@@ -51,6 +52,15 @@ export interface ServiceType {
   omschrijving?: string;
   kleur: string;
   actief: boolean;
+}
+
+/**
+ * DRAAD 100: Generic interface voor service blocking
+ * Accepteert elk type met minimaal een 'id' property
+ */
+export interface ServiceWithId {
+  id: string;
+  [key: string]: any; // Allow additional properties
 }
 
 // ============================================================================
@@ -141,23 +151,27 @@ export async function isServiceBlockedBy(
 // ============================================================================
 
 /**
+ * DRAAD 100: Generic versie van applyServiceBlocks
  * Filter een lijst van services door blokkerings regels toe te passen
+ * 
+ * Accepteert elk type met minimaal een 'id' property.
+ * Werkt nu met zowel ServiceType als ServiceTypeWithTimes.
  * 
  * Scenario:
  * - Medewerker heeft dienst A toegewezen (blocker)
  * - Dienst B is geblokkeerd door dienst A
  * - Return: services zonder dienst B
  * 
- * @param services - Alle beschikbare services
+ * @param services - Alle beschikbare services (met minimaal 'id' property)
  * @param assignedServiceIds - Services al toegewezen aan medewerker
  * @param rules - Optioneel: vooraf opgehaalde regels
  * @returns Gefilterde lijst van toegestane services
  */
-export async function applyServiceBlocks(
-  services: ServiceType[],
+export async function applyServiceBlocks<T extends ServiceWithId>(
+  services: T[],
   assignedServiceIds: string[],
   rules?: ServiceBlockingRule[]
-): Promise<ServiceType[]> {
+): Promise<T[]> {
   // Early return als geen assigned services
   if (assignedServiceIds.length === 0) {
     return services;
