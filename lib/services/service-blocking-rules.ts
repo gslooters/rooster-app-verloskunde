@@ -15,9 +15,11 @@
  * 2. applyServiceBlocks() - Filter diensten lijst op basis van regels
  * 3. getBlockedServiceIds() - Quick lookup voor geblokkeerde dienst IDs
  * 4. isServiceBlockedBy() - Check specifieke blokkering
+ * 
+ * DRAAD 97E: Fix import error - @/lib/supabase/client → @/lib/supabase
  */
 
-import { createClient } from '@/lib/supabase/client';
+import { supabase } from '@/lib/supabase';
 
 // ============================================================================
 // TYPES & INTERFACES
@@ -63,8 +65,6 @@ export interface ServiceType {
  */
 export async function getServiceBlockingRules(): Promise<ServiceBlockingRule[]> {
   try {
-    const supabase = createClient();
-    
     const { data, error } = await supabase
       .from('service_blocking_rules')
       .select(`
@@ -199,8 +199,6 @@ export async function getServicesByIds(serviceIds: string[]): Promise<ServiceTyp
   if (serviceIds.length === 0) return [];
 
   try {
-    const supabase = createClient();
-    
     const { data, error } = await supabase
       .from('service_types')
       .select('id, code, naam, omschrijving, kleur, actief')
