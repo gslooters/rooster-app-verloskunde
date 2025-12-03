@@ -1,0 +1,27 @@
+DRAAD99B - Systeemdiensten Bescherming
+Timestamp: 1733259600000
+Datum: 2024-12-03 22:40:00 CET
+
+Wijzigingen:
+- SQL migratie: is_system kolom + database triggers
+- Type definitie: is_system veld toegevoegd
+- Frontend: verberg verwijder knop voor systeemdiensten
+- Frontend: disable code veld voor systeemdiensten
+- Frontend: toggle tekst gewijzigd naar "blokkeert volgende dagdeel"
+- Frontend: alle .system vervangen door .is_system
+- Backend: is_system check in canDeleteService
+- Database mapping: is_system in fromDatabase/toDatabase
+
+Systeemdiensten:
+- DIO: Dienst Inroosteren Ochtend (blokkeert ochtend na trigger)
+- DDO: Dienst Deler Out (blokkeert middag na trigger)
+- DIA: Dienst Inroosteren Avond (blokkeert avond na trigger)
+- DDA: Dienst Deler Avond (blokkeert avond na trigger)
+
+Bescherming:
+✅ Geen verwijder knop in UI
+✅ Code veld disabled bij bewerken
+✅ Correcte toggle tekst
+✅ API weigert DELETE (403)
+✅ API weigert code wijziging (403)
+✅ Database triggers blokkeren wijzigingen
