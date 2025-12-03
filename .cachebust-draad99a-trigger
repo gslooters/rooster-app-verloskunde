@@ -1,0 +1,12 @@
+DRAAD 99A - Automatische Blokkering Trigger
+Timestamp: 1733256130000
+Datum: 3 december 2025, 21:02 CET
+
+Implementatie:
+- PostgreSQL trigger function: trg_roster_assignment_status_management()
+- Trigger geactiveerd: trg_roster_assignment_auto_blocking
+- Automatische blokkering bij INSERT/UPDATE/DELETE
+- Status 3 bescherming actief
+- Geen frontend/backend wijzigingen nodig
+
+Status: VOLTOOID
