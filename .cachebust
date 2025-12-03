@@ -1,19 +1,21 @@
 # Global Cache Bust File
-# DRAAD97A - Updated: 2025-12-02 23:10 CET
+# DRAAD99B - Updated: 2025-12-03 11:29 CET
 
-DRAAD97A_TIMESTAMP=1733176200000
-DRAAD97A_PHASE=fase1_solver_implementation
-DRAAD97A_RANDOM=928374
+DRAAD99B_TIMESTAMP=1733225340000
+DRAAD99B_PHASE=constraint_cleanup
+DRAAD99B_RANDOM=47289
 
 # Alle vorige cache busts blijven geldig
 # Dit is een cumulatieve update
 
-# Fase 1 Week 1 Deliverables:
-# ✅ Python FastAPI service skeleton
-# ✅ Dockerfile + Railway configuratie  
-# ✅ Health check endpoint
-# ✅ Version endpoint
-# ✅ Pydantic input/output models
-# 🔄 Deploy op Railway (in progress)
+# DRAAD 99B: VERWIJDEREN PLANREGELS - CONSTRAINT RECORDS
+# ✅ service-blocking-rules.ts verwijderd
+# ✅ preplanning-storage.ts imports/calls verwijderd
+# ✅ Database: blokkeert_volgdag kolom blijft bestaan
+# ✅ Frontend: blokkeert_volgdag UI blijft bestaan
+# ✅ Types: blokkeert_volgdag types blijven bestaan
 
-# Next: Railway deployment verificatie
+# DRAAD97A - Previous: 2025-12-02 23:10 CET
+DRAAD97A_TIMESTAMP=1733176200000
+DRAAD97A_PHASE=fase1_solver_implementation
+DRAAD97A_RANDOM=928374
