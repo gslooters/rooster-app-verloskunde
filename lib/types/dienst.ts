@@ -3,6 +3,7 @@
 // DIENST TYPE DEFINITION
 // ============================================================================
 // DRAAD30B Update: Nieuwe velden voor dagblok regels per team
+// DRAAD99B Update: is_system veld voor systeemdiensten bescherming
 // Backward compatible met bestaande implementatie
 // ============================================================================
 
@@ -52,13 +53,23 @@ export interface Dienst {
   team_totaal_regels?: TeamRegels;
   
   // ========================================================================
+  // DRAAD99B: SYSTEEMDIENSTEN BESCHERMING
+  // ========================================================================
+  
+  /**
+   * Markering voor systeemdiensten die niet verwijderd of aangepast mogen worden
+   * TRUE voor: DIO, DDO, DIA, DDA (automatische blokkering diensten)
+   * Deze diensten worden gebruikt door de automatische dagblok blokkering
+   */
+  is_system?: boolean;
+  
+  // ========================================================================
   // DEPRECATED VELDEN
   // ========================================================================
   
   /**
-   * @deprecated Wordt verwijderd in volgende fase
-   * Systeemdiensten concept wordt vervangen door nieuwe team regels
-   * Gebruik team_*_regels in plaats daarvan
+   * @deprecated Wordt vervangen door is_system in DRAAD99B
+   * Gebruik is_system in plaats daarvan voor nieuwe code
    */
   system?: boolean;
 }
