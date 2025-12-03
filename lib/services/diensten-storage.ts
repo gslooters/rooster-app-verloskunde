@@ -2,6 +2,7 @@
 // ============================================================================
 // DRAAD30D-v2 - FIX: Uppercase code constraint + Optimistische health check
 // DRAAD99B - ADD: is_system ondersteuning voor systeemdiensten bescherming
+// DRAAD99C - ADD: Systeemdiensten bewerkbaar maken (beperkt)
 // ============================================================================
 import { Dienst, validateDienstwaarde, calculateDuration } from "../types/dienst";
 import { teamRegelsFromJSON, teamRegelsToJSON, DEFAULT_TEAM_REGELS } from '../validators/service';
@@ -371,9 +372,40 @@ export async function createService(dienst: Omit<Dienst, 'id' | 'created_at' | '
 
 /**
  * Update existing service
+ * DRAAD99C: Extra validatie voor systeemdiensten
  */
 export async function updateService(id: string, updates: Partial<Dienst>): Promise<Dienst> {
   try {
+    // Haal huidige dienst op
+    const currentService = await getServiceById(id);
+    
+    if (!currentService) {
+      throw new Error('Dienst niet gevonden');
+    }
+    
+    // DRAAD99C: Extra checks voor systeemdiensten
+    if (currentService.is_system) {
+      // Check 1: Code mag niet gewijzigd worden
+      if (updates.code && updates.code.toUpperCase() !== currentService.code.toUpperCase()) {
+        throw new Error('Code van systeemdiensten kan niet gewijzigd worden');
+      }
+      
+      // Check 2: Actief moet altijd true blijven
+      if (typeof updates.actief === 'boolean' && updates.actief === false) {
+        throw new Error('Systeemdiensten moeten altijd actief blijven');
+      }
+      
+      // Check 3: Blokkeert_volgdag moet altijd true blijven
+      if (typeof updates.blokkeert_volgdag === 'boolean' && updates.blokkeert_volgdag === false) {
+        throw new Error('Systeemdiensten moeten altijd volgende dagdeel blokkeren');
+      }
+      
+      // Force deze waarden (extra veiligheid)
+      updates.actief = true;
+      updates.blokkeert_volgdag = true;
+      updates.code = currentService.code; // Voorkom code wijziging
+    }
+    
     const dbData = toDatabase(updates);
     delete dbData.id;
     delete dbData.created_at;
