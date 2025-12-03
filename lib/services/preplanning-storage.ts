@@ -11,12 +11,17 @@
  * DRAAD 91: Fix TypeScript type error - type casting op regel 360
  * DRAAD 92: Fix status filtering - !== 'MAG_NIET' ipv === 'MAG', verwijder onjuist actief filter
  * DRAAD 99B: Verwijderd service blocking rules (constraints disabled)
+ * HERSTEL: Service blocking rules ge-integreerd in getServicesForEmployee + getServicesForEmployeeFiltered
  */
 
 import { supabase } from '@/lib/supabase';
 import { PrePlanningAssignment, EmployeeWithServices, CellStatus, Dagdeel, ServiceTypeWithTimes } from '@/lib/types/preplanning';
 import { ServiceType } from '@/lib/types/service';
 import { getAllEmployees } from '@/lib/services/employees-storage';
+import { 
+  getServiceBlockingRules, 
+  applyServiceBlocks 
+} from '@/lib/services/service-blocking-rules';
 
 /**
  * Haal alle PrePlanning assignments op voor een rooster periode
@@ -147,6 +152,7 @@ export async function savePrePlanningAssignment(
  * DRAAD 77: Nieuwe functie - Update assignment status
  * DRAAD 82: service_code VERWIJDERD - kolom bestaat niet meer in database schema
  * DRAAD 99B: Service blocking rules verwijderd (constraints zijn disabled)
+ * HERSTEL: Service blocking validatie weer toegevoegd
  * 
  * Voor het wijzigen van cel status (leeg, dienst, geblokkeerd, NB)
  * 
@@ -217,10 +223,22 @@ export async function updateAssignmentStatus(
 /**
  * DRAAD 79: Haal diensten op die een specifieke medewerker kan uitvoeren
  * Via employee_services koppeltabel
+ * HERSTEL: Service blocking rules integratie
+ * 
+ * BLOCKING LOGIC:
+ * - Haal alle assignments van medewerker op (alle datums in roster)
+ * - Verzamel toegewezen service IDs
+ * - Pas service blocking rules toe
+ * - Retourneer alleen diensten die NIET geblokkeerd zijn
+ * 
  * @param employeeId - TEXT ID van de medewerker
+ * @param rosterId - Optional: UUID van roster voor blocking check
  * @returns Array van ServiceTypeWithTimes objecten met simplified structure
  */
-export async function getServicesForEmployee(employeeId: string): Promise<ServiceTypeWithTimes[]> {
+export async function getServicesForEmployee(
+  employeeId: string,
+  rosterId?: string
+): Promise<ServiceTypeWithTimes[]> {
   try {
     console.log('🔍 Getting services for employee:', employeeId);
     
@@ -246,7 +264,7 @@ export async function getServicesForEmployee(employeeId: string): Promise<Servic
     }
 
     // Transform nested data naar platte structuur
-    const services: ServiceTypeWithTimes[] = (data || [])
+    let services: ServiceTypeWithTimes[] = (data || [])
       .filter((item: any) => item.service_types && item.service_types.actief)
       .map((item: any) => ({
         id: item.service_types.id,
@@ -254,8 +272,38 @@ export async function getServicesForEmployee(employeeId: string): Promise<Servic
         naam: item.service_types.naam,
         kleur: item.service_types.kleur || '#3B82F6',
         start_tijd: item.service_types.begintijd || '09:00',
-        eind_tijd: item.service_types.eindtijd || '17:00'
+        eind_tijd: item.service_types.eindtijd || '17:00',
+        actief: true
       }));
+
+    // HERSTEL: Service blocking filter
+    if (rosterId) {
+      try {
+        // Haal alle assignments van deze medewerker in dit rooster
+        const { data: assignments, error: assignError } = await supabase
+          .from('roster_assignments')
+          .select('service_id')
+          .eq('roster_id', rosterId)
+          .eq('employee_id', employeeId)
+          .eq('status', 1) // Alleen dienst status
+          .not('service_id', 'is', null);
+
+        if (assignError) {
+          console.error('[getServicesForEmployee] Error fetching assignments:', assignError);
+        } else if (assignments && assignments.length > 0) {
+          const assignedServiceIds = assignments.map(a => a.service_id).filter(Boolean) as string[];
+          
+          console.log(`[getServicesForEmployee] Found ${assignedServiceIds.length} assigned services, applying blocking rules`);
+          
+          // Pas service blocking toe
+          const blockingRules = await getServiceBlockingRules();
+          services = await applyServiceBlocks(services, assignedServiceIds, blockingRules);
+        }
+      } catch (blockError) {
+        console.error('[getServicesForEmployee] Error applying service blocks:', blockError);
+        // Continue zonder blocking (graceful degradation)
+      }
+    }
 
     console.log(`✅ Found ${services.length} active services for employee ${employeeId}`);
     return services;
@@ -269,6 +317,7 @@ export async function getServicesForEmployee(employeeId: string): Promise<Servic
  * DRAAD 90: Nieuwe functie - Gefilterde diensten ophalen
  * Haal diensten op die beschikbaar zijn voor specifieke medewerker op datum/dagdeel
  * Filtert op basis van roster_period_staffing status (NIET status='MAG_NIET')
+ * HERSTEL: Service blocking rules integratie
  * 
  * DRAAD 91: Fix TypeScript type error - toegevoegd type casting as any[]
  * DRAAD 92: Fix status filtering - !== 'MAG_NIET' ipv === 'MAG', verwijder onjuist actief filter
@@ -318,13 +367,51 @@ export async function getServicesForEmployeeFiltered(
       return [];
     }
 
+    // HERSTEL: Service blocking filter - VOOR staffing filter (efficiency)
+    let baseServices: ServiceTypeWithTimes[] = (data || [])
+      .filter((item: any) => item.service_types && item.service_types.actief)
+      .map((item: any) => ({
+        id: item.service_types.id,
+        code: item.service_types.code,
+        naam: item.service_types.naam,
+        kleur: item.service_types.kleur || '#3B82F6',
+        start_tijd: item.service_types.begintijd || '09:00',
+        eind_tijd: item.service_types.eindtijd || '17:00',
+        actief: true
+      }));
+
+    // HERSTEL: Pas service blocking toe
+    try {
+      // Haal alle assignments van deze medewerker in dit rooster
+      const { data: assignments, error: assignError } = await supabase
+        .from('roster_assignments')
+        .select('service_id')
+        .eq('roster_id', rosterId)
+        .eq('employee_id', employeeId)
+        .eq('status', 1) // Alleen dienst status
+        .not('service_id', 'is', null);
+
+      if (assignError) {
+        console.error('[getServicesForEmployeeFiltered] Error fetching assignments:', assignError);
+      } else if (assignments && assignments.length > 0) {
+        const assignedServiceIds = assignments.map(a => a.service_id).filter(Boolean) as string[];
+        
+        console.log(`[getServicesForEmployeeFiltered] Found ${assignedServiceIds.length} assigned services, applying blocking rules`);
+        
+        // Pas service blocking toe
+        const blockingRules = await getServiceBlockingRules();
+        baseServices = await applyServiceBlocks(baseServices, assignedServiceIds, blockingRules);
+      }
+    } catch (blockError) {
+      console.error('[getServicesForEmployeeFiltered] Error applying service blocks:', blockError);
+      // Continue zonder blocking (graceful degradation)
+    }
+
     // Stap 2: Filter diensten op basis van staffing status
     const filteredServices: ServiceTypeWithTimes[] = [];
     
     // DRAAD 91: FIX - Type casting toegevoegd voor TypeScript build
-    for (const item of (data || []) as any[]) {
-      if (!item.service_types || !item.service_types.actief) continue;
-      
+    for (const service of baseServices) {
       // Check staffing status voor deze dienst op datum/dagdeel
       const { data: staffingData, error: staffingError } = await supabase
         .from('roster_period_staffing')
@@ -336,13 +423,13 @@ export async function getServicesForEmployeeFiltered(
           )
         `)
         .eq('roster_id', rosterId)
-        .eq('service_id', item.service_id)
+        .eq('service_id', service.id)
         .eq('date', date)
         .single();
 
       if (staffingError) {
         console.warn(
-          `[getServicesForEmployeeFiltered] No staffing data for service ${item.service_types?.code || item.service_id} ` +
+          `[getServicesForEmployeeFiltered] No staffing data for service ${service.code} ` +
           `on ${date} ${dagdeel}:`,
           staffingError
         );
@@ -351,7 +438,7 @@ export async function getServicesForEmployeeFiltered(
       
       if (!staffingData) {
         console.warn(
-          `[getServicesForEmployeeFiltered] No staffing record for service ${item.service_types?.code || item.service_id} ` +
+          `[getServicesForEmployeeFiltered] No staffing record for service ${service.code} ` +
           `on ${date} dagdeel ${dagdeel} - service may not be configured for this date`
         );
         continue;
@@ -366,19 +453,12 @@ export async function getServicesForEmployeeFiltered(
       if (!dagdeelData) continue;
       
       // Dienst is toegestaan - voeg toe aan resultaat
-      filteredServices.push({
-        id: item.service_types.id,
-        code: item.service_types.code,
-        naam: item.service_types.naam,
-        kleur: item.service_types.kleur || '#3B82F6',
-        start_tijd: item.service_types.begintijd || '09:00',
-        eind_tijd: item.service_types.eindtijd || '17:00'
-      });
+      filteredServices.push(service);
     }
     
     console.log(
-      `✅ Found ${filteredServices.length}/${data?.length || 0} ALLOWED services ` +
-      `for employee ${employeeId} on ${date} ${dagdeel}`
+      `✅ Found ${filteredServices.length}/${baseServices.length} ALLOWED services ` +
+      `for employee ${employeeId} on ${date} ${dagdeel} (after blocking + staffing filter)`
     );
     return filteredServices;
   } catch (error) {
