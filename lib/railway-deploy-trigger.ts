@@ -1,2 +1,2 @@
-// Railway deploy trigger - DRAAD78-FIX: Supabase import correctie
-export const DEPLOY_TRIGGER = Date.now(); // 1732918470000
+// Railway deploy trigger - DRAAD 97E: Import fix service-blocking-rules
+export const DEPLOY_TRIGGER = 1733238867000;
