@@ -477,28 +477,23 @@ export default function ServiceTypesPage() {
                     </div>
                   )}
 
+                  {/* DRAAD99C: ALLE diensten hebben Bewerken knop, alleen niet-systeemdiensten hebben Verwijderen knop */}
                   <div className="flex gap-2 mt-auto">
-                    {!dienst.is_system ? (
-                      <>
-                        <button 
-                          onClick={() => openModal(dienst)} 
-                          className="flex-1 px-3 py-2 bg-indigo-100 text-indigo-700 rounded-md hover:bg-indigo-200 transition-colors text-sm font-medium disabled:opacity-50"
-                          disabled={!healthStatus.healthy || submitting}
-                        >
-                          Bewerken
-                        </button>
-                        <button 
-                          onClick={() => handleDelete(dienst)} 
-                          className="flex-1 px-3 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 transition-colors text-sm font-medium disabled:opacity-50"
-                          disabled={!healthStatus.healthy || submitting}
-                        >
-                          Verwijderen
-                        </button>
-                      </>
-                    ) : (
-                      <div className="w-full text-center text-xs text-gray-400 py-2 border border-gray-200 rounded">
-                        Systeemdienst - Niet bewerkbaar
-                      </div>
+                    <button 
+                      onClick={() => openModal(dienst)} 
+                      className="flex-1 px-3 py-2 bg-indigo-100 text-indigo-700 rounded-md hover:bg-indigo-200 transition-colors text-sm font-medium disabled:opacity-50"
+                      disabled={!healthStatus.healthy || submitting}
+                    >
+                      Bewerken
+                    </button>
+                    {!dienst.is_system && (
+                      <button 
+                        onClick={() => handleDelete(dienst)} 
+                        className="flex-1 px-3 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 transition-colors text-sm font-medium disabled:opacity-50"
+                        disabled={!healthStatus.healthy || submitting}
+                      >
+                        Verwijderen
+                      </button>
                     )}
                   </div>
                 </div>
@@ -558,11 +553,12 @@ export default function ServiceTypesPage() {
                             <label className="block text-sm font-medium text-gray-700 mb-2">
                               Code (2-3 tekens)
                             </label>
+                            {/* DRAAD99C: Code blijft disabled voor systeemdiensten */}
                             <input 
                               type="text" 
                               value={formData.code} 
                               onChange={(e) => setFormData({...formData, code: e.target.value.toUpperCase()})} 
-                              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent uppercase" 
+                              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent uppercase disabled:bg-gray-100 disabled:cursor-not-allowed" 
                               placeholder="bijv. D, ND" 
                               maxLength={4} 
                               required 
@@ -573,6 +569,7 @@ export default function ServiceTypesPage() {
                             <label className="block text-sm font-medium text-gray-700 mb-2">
                               Naam
                             </label>
+                            {/* DRAAD99C: Naam is bewerkbaar voor systeemdiensten */}
                             <input 
                               type="text" 
                               value={formData.naam} 
@@ -580,7 +577,7 @@ export default function ServiceTypesPage() {
                               className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
                               placeholder="bijv. Dagdienst" 
                               required 
-                              disabled={editingDienst?.is_system || submitting}
+                              disabled={submitting}
                             />
                           </div>
                         </div>
@@ -589,13 +586,14 @@ export default function ServiceTypesPage() {
                           <label className="block text-sm font-medium text-gray-700 mb-2">
                             Beschrijving
                           </label>
+                          {/* DRAAD99C: Beschrijving is bewerkbaar voor systeemdiensten */}
                           <textarea 
                             value={formData.beschrijving} 
                             onChange={(e) => setFormData({...formData, beschrijving: e.target.value})} 
                             className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
                             placeholder="Uitleg van de dienst" 
                             rows={2} 
-                            disabled={editingDienst?.is_system || submitting}
+                            disabled={submitting}
                           />
                         </div>
 
@@ -603,13 +601,14 @@ export default function ServiceTypesPage() {
                           <label className="block text-sm font-medium text-gray-700 mb-2">
                             Planregels
                           </label>
+                          {/* DRAAD99C: Planregels is bewerkbaar voor systeemdiensten */}
                           <textarea 
                             value={formData.planregels} 
                             onChange={(e) => setFormData({...formData, planregels: e.target.value})} 
                             className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
                             placeholder="Bijv: na deze dienst altijd een Uitnacht inplannen" 
                             rows={2} 
-                            disabled={editingDienst?.is_system || submitting}
+                            disabled={submitting}
                           />
                         </div>
 
@@ -618,6 +617,7 @@ export default function ServiceTypesPage() {
                             <label className="block text-sm font-medium text-gray-700 mb-2">
                               Begintijd
                             </label>
+                            {/* DRAAD99C: Begintijd is bewerkbaar voor systeemdiensten */}
                             <input 
                               type="time" 
                               value={formData.begintijd} 
@@ -626,13 +626,14 @@ export default function ServiceTypesPage() {
                                 setTimeout(handleTimeChange, 100); 
                               }} 
                               className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
-                              disabled={editingDienst?.is_system || submitting}
+                              disabled={submitting}
                             />
                           </div>
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
                               Eindtijd
                             </label>
+                            {/* DRAAD99C: Eindtijd is bewerkbaar voor systeemdiensten */}
                             <input 
                               type="time" 
                               value={formData.eindtijd} 
@@ -641,7 +642,7 @@ export default function ServiceTypesPage() {
                                 setTimeout(handleTimeChange, 100); 
                               }} 
                               className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent" 
-                              disabled={editingDienst?.is_system || submitting}
+                              disabled={submitting}
                             />
                           </div>
                         </div>
@@ -651,13 +652,14 @@ export default function ServiceTypesPage() {
                             <label className="block text-sm font-medium text-gray-700 mb-2">
                               Kleur
                             </label>
+                            {/* DRAAD99C: Kleur is bewerkbaar voor systeemdiensten */}
                             <div className="flex items-center gap-3">
                               <input 
                                 type="color" 
                                 value={formData.kleur} 
                                 onChange={(e) => setFormData({...formData, kleur: e.target.value})} 
                                 className="w-12 h-12 rounded-lg border border-gray-300" 
-                                disabled={editingDienst?.is_system || submitting}
+                                disabled={submitting}
                               />
                               <div 
                                 className="w-12 h-12 rounded-lg border border-gray-300 flex items-center justify-center text-white font-bold text-sm" 
@@ -671,6 +673,7 @@ export default function ServiceTypesPage() {
                             <label className="block text-sm font-medium text-gray-700 mb-2">
                               Dienstwaarde (0–6)
                             </label>
+                            {/* DRAAD99C: Dienstwaarde is bewerkbaar voor systeemdiensten */}
                             <input 
                               type="number" 
                               min={0} 
@@ -680,12 +683,13 @@ export default function ServiceTypesPage() {
                               onChange={(e) => setFormData({...formData, dienstwaarde: parseFloat(e.target.value) || 0})} 
                               className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
                               required 
-                              disabled={editingDienst?.is_system || submitting}
+                              disabled={submitting}
                             />
                           </div>
                         </div>
 
                         <div className="space-y-3">
+                          {/* DRAAD99C: Actief checkbox disabled voor systeemdiensten (altijd TRUE) */}
                           <div className="flex items-center">
                             <input 
                               type="checkbox" 
@@ -693,13 +697,14 @@ export default function ServiceTypesPage() {
                               checked={formData.actief} 
                               onChange={(e) => setFormData({...formData, actief: e.target.checked})} 
                               className="mr-2" 
-                              disabled={submitting}
+                              disabled={editingDienst?.is_system || submitting}
                             />
                             <label htmlFor="actief" className="text-sm font-medium text-gray-700">
                               Actief (beschikbaar in roosters)
                             </label>
                           </div>
                           
+                          {/* DRAAD99C: Blokkeert volgdag checkbox disabled voor systeemdiensten (altijd TRUE) */}
                           <div className="flex items-center">
                             <input 
                               type="checkbox" 
@@ -747,6 +752,7 @@ export default function ServiceTypesPage() {
                             </p>
                           </div>
 
+                          {/* DRAAD99C: Team regels zijn bewerkbaar voor systeemdiensten */}
                           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                             <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
                               <h4 className="font-semibold text-green-700 mb-3 flex items-center">
@@ -756,7 +762,7 @@ export default function ServiceTypesPage() {
                                 teamRegels={formData.team_groen_regels}
                                 onChange={(regels) => handleTeamRegelsChange('groen', regels)}
                                 teamNaam="Groen"
-                                disabled={editingDienst?.is_system || submitting}
+                                disabled={submitting}
                               />
                             </div>
 
@@ -768,7 +774,7 @@ export default function ServiceTypesPage() {
                                 teamRegels={formData.team_oranje_regels}
                                 onChange={(regels) => handleTeamRegelsChange('oranje', regels)}
                                 teamNaam="Oranje"
-                                disabled={editingDienst?.is_system || submitting}
+                                disabled={submitting}
                               />
                             </div>
 
@@ -780,7 +786,7 @@ export default function ServiceTypesPage() {
                                 teamRegels={formData.team_totaal_regels}
                                 onChange={(regels) => handleTeamRegelsChange('totaal', regels)}
                                 teamNaam="Totaal"
-                                disabled={editingDienst?.is_system || submitting}
+                                disabled={submitting}
                               />
                             </div>
                           </div>
@@ -813,7 +819,7 @@ export default function ServiceTypesPage() {
                     <button 
                       type="submit" 
                       className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled={editingDienst?.is_system || submitting}
+                      disabled={submitting}
                     >
                       {submitting ? 'Bezig...' : (editingDienst ? 'Bijwerken' : 'Aanmaken')}
                     </button>
