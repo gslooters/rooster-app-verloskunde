@@ -18,6 +18,7 @@
  * 
  * DRAAD 97E: Fix import error - @/lib/supabase/client → @/lib/supabase
  * DRAAD 100: Fix TypeScript build error - maak applyServiceBlocks generic
+ * DRAAD 100.4: Fix TypeScript type error - cast Supabase nested relations
  */
 
 import { supabase } from '@/lib/supabase';
@@ -71,6 +72,9 @@ export interface ServiceWithId {
  * Haal alle actieve blokkerings regels op uit de database
  * Inclusief metadata van blocker en blocked services
  * 
+ * DRAAD 100.4: Supabase retourneert arrays voor foreign key relations.
+ * We moeten expliciete type casting doen na de query.
+ * 
  * @returns Array van actieve service blocking rules
  */
 export async function getServiceBlockingRules(): Promise<ServiceBlockingRule[]> {
@@ -102,7 +106,22 @@ export async function getServiceBlockingRules(): Promise<ServiceBlockingRule[]> 
       throw new Error(`Failed to fetch service blocking rules: ${error.message}`);
     }
 
-    return data || [];
+    // DRAAD 100.4: Supabase returns arrays, maar we willen objecten
+    // Cast naar correct formaat
+    const mappedData = (data || []).map(rule => ({
+      id: rule.id,
+      blocker_service_id: rule.blocker_service_id,
+      blocked_service_id: rule.blocked_service_id,
+      actief: rule.actief,
+      blocker_service: Array.isArray(rule.blocker_service) 
+        ? rule.blocker_service[0] 
+        : rule.blocker_service,
+      blocked_service: Array.isArray(rule.blocked_service)
+        ? rule.blocked_service[0]
+        : rule.blocked_service
+    })) as ServiceBlockingRule[];
+
+    return mappedData;
   } catch (error) {
     console.error('[service-blocking-rules] Unexpected error:', error);
     return []; // Graceful degradation: geen blocking als query faalt
