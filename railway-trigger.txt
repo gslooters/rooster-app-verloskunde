@@ -1,5 +1,5 @@
-RAILWAY DEPLOY TRIGGER #96742
-Timestamp: 2025-12-02T19:15:00Z
-Commit: 131fbc79e136be4b08d79b0094f113dab0b7161d
-Fix: DRAAD96A - Property name mismatch database snake_case vs TypeScript camelCase
-Random: 96742
+RAILWAY DEPLOY TRIGGER #98457
+Timestamp: 2025-12-03T13:53:30Z
+Commit: a1dad09da1a79c3a8c19086f6c7fe4cc8129fb58
+Fix: DRAAD98D - Corrigeer services tabel naar service_types + actief kolom in solver route
+Random: 98457
