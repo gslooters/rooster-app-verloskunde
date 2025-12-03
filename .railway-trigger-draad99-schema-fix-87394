@@ -1,0 +1,17 @@
+Railway deployment trigger - Database Schema Fixes
+Draad: 99
+Timestamp: 1733220236000
+Random: 87394
+
+Deployment trigger voor:
+- Correcte database types (text/uuid i.p.v. int)
+- Employee veldnamen aangepast naar Supabase schema
+- Solver engine dictionary comprehension gefixed
+- Alle models conform Supabase database schema
+
+Changes committed:
+1. solver/models.py - Database types gecorrigeerd
+2. solver/solver_engine.py - Dictionary comprehension en veldnamen gefixed
+3. Cache-bust bestand aangemaakt
+
+Deploy now!
