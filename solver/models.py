@@ -30,27 +30,27 @@ class SolveStatus(str, Enum):
 
 
 class Employee(BaseModel):
-    """Medewerker informatie."""
-    id: int
-    name: str
-    team: TeamType
+    """Medewerker informatie - volgens Supabase employees tabel."""
+    id: str  # text in database
+    voornaam: str  # text in database
+    achternaam: str  # text in database
+    team: TeamType  # text in database
+    aantalwerkdagen: int  # integer in database
     structureel_nbh: Optional[Dict[str, List[str]]] = Field(
         default=None,
         description="Structurele niet-beschikbaarheid: {dag_code: [dagdelen]}"
     )
-    max_werkdagen: Optional[int] = Field(
-        default=None,
-        description="Max aantal werkdagen per week"
-    )
-    min_werkdagen: Optional[int] = Field(
-        default=None,
-        description="Min aantal werkdagen per week"
-    )
+    actief: bool = Field(default=True)
+    
+    @property
+    def name(self) -> str:
+        """Helper property voor volledige naam."""
+        return f"{self.voornaam} {self.achternaam}"
 
 
 class Service(BaseModel):
     """Dienst informatie."""
-    id: int
+    id: str  # uuid in database (als string)
     code: str
     naam: str
     dagdeel: Dagdeel
@@ -58,17 +58,17 @@ class Service(BaseModel):
 
 
 class EmployeeService(BaseModel):
-    """Bevoegdheid: welke medewerker mag welke dienst doen."""
-    employee_id: int
-    service_id: int
+    """Bevoegdheid: welke medewerker mag welke dienst doen - volgens employee_services tabel."""
+    employee_id: str  # text in database
+    service_id: str  # uuid in database (als string)
 
 
 class PreAssignment(BaseModel):
-    """Pre-planning: reeds ingeplande diensten (status > 0)."""
-    employee_id: int
+    """Pre-planning: reeds ingeplande diensten (status > 0) - volgens roster_assignments tabel."""
+    employee_id: str  # text in database
     date: date
     dagdeel: Dagdeel
-    service_id: int
+    service_id: str  # uuid in database (als string)
     status: int = Field(
         ge=1,
         description="Status: 1=ORT filled, 2=uit nacht, 3=handmatig, 4=definitief"
@@ -77,7 +77,7 @@ class PreAssignment(BaseModel):
 
 class SolveRequest(BaseModel):
     """Request body voor solve endpoint."""
-    roster_id: int
+    roster_id: str  # uuid in database (als string)
     start_date: date
     end_date: date
     employees: List[Employee]
@@ -96,11 +96,11 @@ class SolveRequest(BaseModel):
 
 class Assignment(BaseModel):
     """Resultaat: één assignment (medewerker → dienst op datum/dagdeel)."""
-    employee_id: int
+    employee_id: str  # text in database
     employee_name: str
     date: date
     dagdeel: Dagdeel
-    service_id: int
+    service_id: str  # uuid in database (als string)
     service_code: str
     confidence: float = Field(
         default=1.0,
@@ -115,11 +115,11 @@ class ConstraintViolation(BaseModel):
     constraint_type: str = Field(
         description="Bijv: 'bevoegdheid', 'beschikbaarheid', 'max_werkdagen'"
     )
-    employee_id: Optional[int] = None
+    employee_id: Optional[str] = None  # text in database
     employee_name: Optional[str] = None
     date: Optional[date] = None
     dagdeel: Optional[Dagdeel] = None
-    service_id: Optional[int] = None
+    service_id: Optional[str] = None  # uuid in database (als string)
     message: str = Field(description="Beschrijving van het probleem")
     severity: str = Field(
         default="warning",
@@ -132,7 +132,7 @@ class Suggestion(BaseModel):
     type: str = Field(
         description="Bijv: 'increase_max_werkdagen', 'add_bevoegdheid', 'hire_zzp'"
     )
-    employee_id: Optional[int] = None
+    employee_id: Optional[str] = None  # text in database
     employee_name: Optional[str] = None
     action: str = Field(description="Concrete actie die planner kan nemen")
     impact: str = Field(
@@ -143,7 +143,7 @@ class Suggestion(BaseModel):
 class SolveResponse(BaseModel):
     """Response van solve endpoint."""
     status: SolveStatus
-    roster_id: int
+    roster_id: str  # uuid in database (als string)
     assignments: List[Assignment] = Field(default_factory=list)
     solve_time_seconds: float
     
