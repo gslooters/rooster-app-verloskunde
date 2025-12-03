@@ -77,10 +77,11 @@ export async function POST(request: NextRequest) {
     
     // 4. Fetch employees - FIX DRAAD98A: gebruik voornaam + achternaam ipv naam
     // FIX DRAAD98B: aantalwerkdagen ipv max/min_werkdagen
+    // FIX DRAAD98C: actief ipv active (Nederlands schema)
     const { data: employees, error: empError } = await supabase
       .from('employees')
       .select('id, voornaam, achternaam, team, structureel_nbh, aantalwerkdagen')
-      .eq('active', true);
+      .eq('actief', true);
     
     if (empError) {
       console.error('[Solver API] Employees fetch error:', empError);
