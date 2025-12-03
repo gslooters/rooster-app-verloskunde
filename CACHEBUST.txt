@@ -1,17 +1,24 @@
 CACHE INVALIDATION TRIGGER
 ==========================
 
-Random Number: 53982
-Timestamp: 1732247444000
-Date: Fri Nov 22 2025 03:30:44 GMT+0000
+Random Number: 92847
+Timestamp: 1733220286000
+Date: Tue Dec 03 2025 10:44:46 GMT+0100
 
-Last Update: DRAAD42G routing fix
-Commit: dd5f0e4d22931128f7b2722e18acc91c72e7bc44
+Last Update: DRAAD99 Database Schema Fixes
+Commit: d6cc659e15ad7b7685847f1ff6fa91de52087b99
 
 DEPLOYMENT STATUS:
 - Railway auto-deploy: ACTIVE
 - Cache: INVALIDATED
 - Build: TRIGGERED
+
+CHANGES IN THIS DEPLOYMENT:
+- Fixed all database type mismatches (int->str for IDs)
+- Employee model: voornaam+achternaam, aantalwerkdagen
+- All models conform to Supabase schema
+- Dictionary comprehension bug fixed
+- solver_engine.py fully compatible with DB
 
 This file forces Railway to rebuild and deploy.
 Random number ensures unique commits.
