@@ -91,11 +91,11 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // 5. Fetch services
+    // 5. Fetch services - FIX DRAAD98D: service_types ipv services, actief ipv active
     const { data: services, error: svcError } = await supabase
-      .from('services')
+      .from('service_types')
       .select('id, code, naam, dagdeel, is_nachtdienst')
-      .eq('active', true);
+      .eq('actief', true);
     
     if (svcError) {
       console.error('[Solver API] Services fetch error:', svcError);
