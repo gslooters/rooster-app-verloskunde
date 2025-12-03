@@ -14,3 +14,8 @@ Verwacht resultaat:
 ✅ Correcte datum handling
 
 Deploy timestamp: 2025-12-03T00:48:53Z
+
+---
+⚠️ SUPERSEDED BY DRAAD98C
+Nieuwe fix: employees.active → actief
+Laatste commit: 73bcf0d70c7dbb50641d32429b8a3ef5bb862b40
