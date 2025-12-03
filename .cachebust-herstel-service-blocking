@@ -1,0 +1,37 @@
+# CACHE-BUST: Service Blocking Rules Herstel
+
+## Timestamp
+1733237145000
+
+## Build Trigger
+RANDOM: 458392
+
+## Reden
+HERSTEL: Service blocking rules implementatie ge-restored na foutieve verwijdering in DRAAD99B
+
+## Bestanden Gewijzigd
+1. lib/services/service-blocking-rules.ts (NIEUW - 444 regels)
+2. lib/services/preplanning-storage.ts (UPDATED - service blocking integratie)
+3. app/planning/design/preplanning/components/DienstSelectieModal.tsx (UPDATED - rosterId param)
+
+## Functionaliteit
+- Database query: service_blocking_rules tabel
+- Filter logic: applyServiceBlocks() op ServiceTypeWithTimes[]
+- UI integratie: beide filter modes (admin + normal)
+- Error handling: graceful degradation
+
+## Quality Assurance
+✅ TypeScript build succesvol
+✅ Database schema match (actief kolom)
+✅ Function signatures consistent
+✅ Error handling behouden
+✅ Logging toegevoegd
+✅ Backwards compatible
+
+## Deployment
+READY FOR RAILWAY BUILD
+
+Cache clients MUST reload:
+- preplanning-storage.ts exports changed
+- DienstSelectieModal component updated
+- New service-blocking-rules module added
