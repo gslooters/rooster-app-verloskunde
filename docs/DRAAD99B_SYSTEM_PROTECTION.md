@@ -135,9 +135,9 @@ export interface Dienst {
 
 ## Frontend Bescherming
 
-### 1. Verwijder Knop Verbergen
+### 1. Verwijder Knop Verbergen (DRAAD99B)
 
-**Locatie:** `app/services/types/page.tsx` (regel ~685)
+**Locatie:** `app/services/types/page.tsx` (oude logica)
 
 ```tsx
 {!dienst.is_system ? (
@@ -156,18 +156,46 @@ export interface Dienst {
 )}
 ```
 
-**Effect:**
-- DIO, DDO, DIA, DDA: Geen "Verwijderen" knop, alleen bericht
-- Andere diensten: Normale "Bewerken" en "Verwijderen" knoppen
+### 2. Verwijder Knop Verbergen & Bewerken-knop voor ALLE diensten (DRAAD99C)
 
-### 2. Code Veld Disabled
+**Nieuwe situatie (DRAAD99C):**
+
+- ALLE diensten (ook systeemdiensten) hebben nu een "Bewerken" knop
+- Alleen NIET-systeemdiensten hebben een "Verwijderen" knop
+
+```tsx
+<div className="flex gap-2 mt-auto">
+  <button 
+    onClick={() => openModal(dienst)} 
+    className="flex-1 px-3 py-2 bg-indigo-100 text-indigo-700 rounded-md hover:bg-indigo-200 transition-colors text-sm font-medium disabled:opacity-50"
+    disabled={!healthStatus.healthy || submitting}
+  >
+    Bewerken
+  </button>
+  {!dienst.is_system && (
+    <button 
+      onClick={() => handleDelete(dienst)} 
+      className="flex-1 px-3 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 transition-colors text-sm font-medium disabled:opacity-50"
+      disabled={!healthStatus.healthy || submitting}
+    >
+      Verwijderen
+    </button>
+  )}
+</div>
+```
+
+**Effect:**
+- DIO/DDO/DIA/DDA: wel bewerkbaar, niet verwijderbaar
+- Andere diensten: bewerkbaar én verwijderbaar
+
+### 3. Code Veld Disabled
 
 **Locatie:** `app/services/types/page.tsx` (regel ~565)
 
 ```tsx
 <input 
   type="text" 
-  value={formData.code}
+  value={formData.code} 
   disabled={editingDienst?.is_system || submitting}
   // ... andere props
 />
@@ -177,7 +205,7 @@ export interface Dienst {
 - Code veld is grijs en niet aanpasbaar bij bewerken van systeemdiensten
 - Voorkomt onbedoelde wijzigingen van DIO/DDO/DIA/DDA codes
 
-### 3. Toggle Tekst Correctie
+### 4. Toggle Tekst Correctie
 
 **Locatie:** `app/services/types/page.tsx` (regel ~695)
 
@@ -196,7 +224,7 @@ export interface Dienst {
 - DIO blokkeert alleen ochtend, DDO alleen middag, etc.
 - Accuratere beschrijving van functionaliteit
 
-### 4. Systeem Badge in UI
+### 5. Systeem Badge in UI
 
 ```tsx
 {dienst.is_system && (
@@ -212,6 +240,75 @@ export interface Dienst {
 
 ---
 
+## DRAAD99C UPDATE: Systeemdiensten Gedeeltelijk Bewerkbaar
+
+**Datum:** 2024-12-03
+
+### Wijziging
+
+Systeemdiensten zijn NU BEWERKBAAR, behalve voor 3 velden:
+
+| Veld | Systeemdienst | Normale Dienst | Reden |
+|------|---------------|----------------|-------|
+| Code | ❌ Disabled | ✅ Bewerkbaar | Code wordt gebruikt door automatische blokkering logica |
+| Actief | ❌ Disabled (altijd TRUE) | ✅ Bewerkbaar | Systeemdiensten moeten altijd beschikbaar zijn |
+| Blokkeert volgdag | ❌ Disabled (altijd TRUE) | ✅ Bewerkbaar | Systeemdiensten zijn specifiek voor blokkering |
+| Naam | ✅ Bewerkbaar | ✅ Bewerkbaar | Naam mag gewijzigd voor betere leesbaarheid |
+| Beschrijving | ✅ Bewerkbaar | ✅ Bewerkbaar | Beschrijving mag aangepast |
+| Begintijd/Eindtijd | ✅ Bewerkbaar | ✅ Bewerkbaar | Tijden mogen aangepast |
+| Kleur | ✅ Bewerkbaar | ✅ Bewerkbaar | Kleur mag gewijzigd |
+| Dienstwaarde | ✅ Bewerkbaar | ✅ Bewerkbaar | Waarde mag aangepast |
+| Planregels | ✅ Bewerkbaar | ✅ Bewerkbaar | Planregels mogen aangepast |
+| Team regels | ✅ Bewerkbaar | ✅ Bewerkbaar | Team regels mogen aangepast |
+
+### Frontend
+
+- Alle diensten hebben "Bewerken" knop
+- Alleen niet-systeemdiensten hebben "Verwijderen" knop
+- In bewerkscherm: Code, Actief, Blokkeert volgdag disabled voor systeemdiensten
+- Andere velden volledig bewerkbaar
+
+### Backend
+
+Extra validatie in `updateService()`:
+- Weigert code wijziging voor systeemdiensten
+- Weigert actief = false voor systeemdiensten
+- Weigert blokkeert_volgdag = false voor systeemdiensten
+- Force deze waarden als ze toch doorgegeven worden
+
+Code (vereenvoudigd):
+
+```ts
+export async function updateService(id: string, updates: Partial<Dienst>): Promise<Dienst> {
+  const currentService = await getServiceById(id);
+  if (!currentService) {
+    throw new Error('Dienst niet gevonden');
+  }
+
+  if (currentService.is_system) {
+    if (updates.code && updates.code.toUpperCase() !== currentService.code.toUpperCase()) {
+      throw new Error('Code van systeemdiensten kan niet gewijzigd worden');
+    }
+
+    if (typeof updates.actief === 'boolean' && updates.actief === false) {
+      throw new Error('Systeemdiensten moeten altijd actief blijven');
+    }
+
+    if (typeof updates.blokkeert_volgdag === 'boolean' && updates.blokkeert_volgdag === false) {
+      throw new Error('Systeemdiensten moeten altijd volgende dagdeel blokkeren');
+    }
+
+    updates.actief = true;
+    updates.blokkeert_volgdag = true;
+    updates.code = currentService.code;
+  }
+
+  // ... bestaande update logica
+}
+```
+
+---
+
 ## Backend Bescherming
 
 ### canDeleteService Check
@@ -220,24 +317,28 @@ export interface Dienst {
 
 ```typescript
 export async function canDeleteService(code: string): Promise<{ canDelete: boolean; reason?: string }> {
-  const service = await getServiceByCode(code);
-  
-  if (!service) {
-    return {
-      canDelete: false,
-      reason: 'Dienst niet gevonden'
-    };
+  try {
+    const upperCode = code.toUpperCase();
+    const service = await getServiceByCode(upperCode);
+    
+    if (!service) {
+      return {
+        canDelete: false,
+        reason: 'Dienst niet gevonden'
+      };
+    }
+    
+    if (service.is_system) {
+      return { 
+        canDelete: false, 
+        reason: 'Dit is een systeemdienst en kan niet verwijderd worden (DIO, DDO, DIA, DDA)' 
+      };
+    }
+    
+    // ... rest van checks
+  } catch (error) {
+    // ... error handling
   }
-  
-  // DRAAD99B: Check is_system vlag
-  if (service.is_system) {
-    return { 
-      canDelete: false, 
-      reason: 'Dit is een systeemdienst en kan niet verwijderd worden (DIO, DDO, DIA, DDA)' 
-    };
-  }
-  
-  // ... rest van checks
 }
 ```
 
@@ -332,12 +433,13 @@ Na SQL uitvoering + Railway deploy:
 **Frontend Checks:**
 1. Open `/services/types`
 2. Zoek DIO, DDO, DIA, DDA diensten
-3. Verifieer GEEN "Verwijderen" knop zichtbaar
-4. Klik "Bewerken" op DIO
-5. Verifieer Code veld is grijs/disabled
-6. Verifieer toggle tekst: "Blokkeert volgende dagdeel"
-7. Zoek andere dienst (bijv. ECH)
-8. Verifieer WEL "Verwijderen" knop zichtbaar
+3. Verifieer dat DIO/DDO/DIA/DDA GEEN "Verwijderen" knop hebben
+4. Verifieer dat DIO/DDO/DIA/DDA WEL een "Bewerken" knop hebben
+5. Klik "Bewerken" op DIO
+6. Verifieer Code veld is disabled (grijs)
+7. Verifieer Actief checkbox is disabled en aangevinkt
+8. Verifieer Blokkeert volgdag checkbox is disabled en aangevinkt
+9. Verifieer dat Naam/Beschrijving/Tijden/Kleur/Waarde/Planregels/Teamregels NIET disabled zijn
 
 **Database Checks:**
 ```sql
@@ -369,9 +471,8 @@ UPDATE service_types SET code = 'XXX' WHERE code = 'DIO';
 1. Open `/services/types`
 2. Zoek DIO dienst
 3. Verifieer GEEN "Verwijderen" knop
-4. Verifieer tekst "Systeemdienst - Niet bewerkbaar"
 
-**Verwacht:** ✅ Geen delete knop, alleen bericht
+**Verwacht:** ✅ Geen delete knop zichtbaar
 
 ---
 
@@ -505,7 +606,7 @@ UPDATE service_types SET is_system = true WHERE code IN ('DIO', 'DDO', 'DIA', 'D
 **DRAAD99A functie:**
 - Detecteert diensten met `blokkeert_volgdag = true`
 - Maakt automatisch DIO/DDO/DIA/DDA diensten aan
-- Plaats deze diensten in volgende dagdelen
+- Plaatst deze diensten in volgende dagdelen
 
 **DRAAD99B functie:**
 - Voorkomt dat DIO/DDO/DIA/DDA verwijderd worden
@@ -544,13 +645,14 @@ UPDATE service_types SET is_system = true WHERE code IN ('DIO', 'DDO', 'DIA', 'D
 
 ✅ **is_system kolom** toegevoegd aan database  
 ✅ **Database triggers** beschermen tegen DELETE en code wijziging  
-✅ **Frontend** verbergt verwijder knop en disabled code veld  
-✅ **Backend** controleert is_system bij delete operaties  
+✅ **Frontend** verbergt verwijder knop en disabled code veld voor systeemdiensten  
+✅ **DRAAD99C** maakt systeemdiensten gedeeltelijk bewerkbaar (naam, beschrijving, tijden, kleur, waarde, planregels, teamregels)  
+✅ **Backend** controleert is_system bij delete en update operaties  
 ✅ **Toggle tekst** gecorrigeerd naar "dagdeel" i.p.v. "dag"  
 ✅ **Backward compatible** met oude `system` veld  
 ✅ **Volledig gedocumenteerd** met test scenario's  
 
-**Systeemdiensten (DIO, DDO, DIA, DDA) zijn nu volledig beschermd tegen ongewenste wijzigingen!**
+**Systeemdiensten (DIO, DDO, DIA, DDA) zijn nu beschermd én gecontroleerd bewerkbaar!**
 
 ---
 
@@ -563,6 +665,8 @@ bb0f117 - DRAAD99B: Implementeer is_system bescherming in frontend
 0e9eab9 - DRAAD99B: Voeg is_system ondersteuning toe aan diensten-storage
 ee9330f - DRAAD99B: Cache-busting voor systeemdiensten bescherming
 0ea20e7 - DRAAD99B: Railway deployment trigger
+6e3c1d5 - DRAAD99C: Backend validatie voor systeemdiensten
+b946bd86 - DRAAD99C: Frontend ondersteuning voor systeemdiensten bewerken
 ```
 
 ---
