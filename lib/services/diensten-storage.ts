@@ -1,6 +1,7 @@
 // lib/services/diensten-storage.ts
 // ============================================================================
 // DRAAD30D-v2 - FIX: Uppercase code constraint + Optimistische health check
+// DRAAD99B - ADD: is_system ondersteuning voor systeemdiensten bescherming
 // ============================================================================
 import { Dienst, validateDienstwaarde, calculateDuration } from "../types/dienst";
 import { teamRegelsFromJSON, teamRegelsToJSON, DEFAULT_TEAM_REGELS } from '../validators/service';
@@ -39,6 +40,9 @@ const CACHE_KEY = "diensten_cache";
 const HEALTH_CHECK_KEY = "supabase_health_diensten";
 const HEALTH_CHECK_INTERVAL = 30000; // 30 seconden
 const SYSTEM_CODES = ['NB', '==='];
+
+// DRAAD99B: Nieuwe systeemdiensten voor automatische blokkering
+const SYSTEM_BLOCKING_CODES = ['DIO', 'DDO', 'DIA', 'DDA'];
 
 // ============================================================================
 // HEALTH CHECK - DRAAD30D FIX
@@ -154,7 +158,8 @@ function fromDatabase(row: any): Dienst {
     duur: row.duur ?? calculateDuration(row.begintijd || '08:00', row.eindtijd || '16:00'),
     kleur: row.kleur || '#10B981',
     dienstwaarde: row.dienstwaarde ?? 1,
-    system: row.system ?? false, // DEPRECATED
+    system: row.system ?? false, // DEPRECATED - behouden voor backward compatibility
+    is_system: row.is_system ?? false, // DRAAD99B: Nieuwe systeemdienst vlag
     actief: row.actief ?? true,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -179,7 +184,8 @@ function toDatabase(dienst: Partial<Dienst>) {
     duur: dienst.duur,
     kleur: dienst.kleur,
     dienstwaarde: dienst.dienstwaarde,
-    system: dienst.system, // DEPRECATED
+    system: dienst.system, // DEPRECATED - behouden voor backward compatibility
+    is_system: dienst.is_system, // DRAAD99B: Nieuwe systeemdienst vlag
     actief: dienst.actief,
     planregels: dienst.planregels || '',
     // ---- DRAAD30B: Nieuwe velden naar JSONB/boolean ----
@@ -395,13 +401,32 @@ export async function updateService(id: string, updates: Partial<Dienst>): Promi
 
 /**
  * Check if service can be deleted
+ * DRAAD99B: Check is_system vlag naast legacy system codes
  */
 export async function canDeleteService(code: string): Promise<{ canDelete: boolean; reason?: string }> {
   try {
     // DRAAD30D-v2: Force uppercase voor SYSTEM_CODES check
     const upperCode = code.toUpperCase();
     
-    // System codes cannot be deleted
+    // DRAAD99B: Haal service op om is_system te checken
+    const service = await getServiceByCode(upperCode);
+    
+    if (!service) {
+      return {
+        canDelete: false,
+        reason: 'Dienst niet gevonden'
+      };
+    }
+    
+    // DRAAD99B: Check is_system vlag (nieuwe manier)
+    if (service.is_system) {
+      return { 
+        canDelete: false, 
+        reason: 'Dit is een systeemdienst en kan niet verwijderd worden (DIO, DDO, DIA, DDA)' 
+      };
+    }
+    
+    // Legacy system codes kunnen ook niet verwijderd worden
     if (SYSTEM_CODES.includes(upperCode)) {
       return { 
         canDelete: false, 
@@ -576,5 +601,6 @@ export function subscribeToServiceChanges(callback: (services: Dienst[]) => void
 // ============================================================================
 
 export {
-  SYSTEM_CODES
+  SYSTEM_CODES,
+  SYSTEM_BLOCKING_CODES // DRAAD99B: Export voor gebruik in andere modules
 };
