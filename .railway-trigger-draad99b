@@ -1,21 +1,30 @@
-RAILWAY DEPLOY TRIGGER - DRAAD 99B
+RAILWAY DEPLOY TRIGGER - DRAAD 99B - SYSTEEMDIENSTEN BESCHERMING
 Datum: 2025-12-03
-Tijd: 11:29 CET
-Random: 82641
+Tijd: 22:38 CET
+Random: 37841629
 
 DEPLOY SCOPE:
-- Verwijderd: service-blocking-rules.ts
-- Updated: preplanning-storage.ts (removed imports and calls)
-- Cache bust: draad99b-cleanup
+- SQL migratie: is_system kolom + database triggers toegevoegd
+- Type definitie: is_system veld in Dienst interface
+- Frontend: verberg verwijder knop voor systeemdiensten
+- Frontend: disable code veld voor systeemdiensten  
+- Frontend: toggle tekst "blokkeert volgende dagdeel"
+- Frontend: alle .system vervangen door .is_system
+- Backend: is_system check in canDeleteService
+- Database mapping: is_system ondersteuning
+- Cache-busting: draad99b-system
 
 VALIDATIE NA DEPLOY:
 1. TypeScript compileert zonder errors
 2. app/services/types pagina laadt correct
-3. blokkeert_volgdag dropdown werkt normaal
-4. Geen console errors
-5. service_types.blokkeert_volgdag kolom bestaat nog
+3. DIO/DDO/DIA/DDA tonen GEEN "Verwijderen" knop
+4. Code veld is disabled bij bewerken DIO/DDO/DIA/DDA
+5. Toggle tekst toont "blokkeert volgende dagdeel"
+6. Andere diensten tonen WEL "Verwijderen" knop
 
 DATABASE:
-- Constraint records handmatig verwijderd via Supabase (door gebruiker)
-- service_types.blokkeert_volgdag kolom blijft bestaan
-- Geen schema wijzigingen
+- SQL migratie moet uitgevoerd worden door gebruiker
+- Bestand: supabase/migrations/20241203_add_system_flag.sql
+- Voegt is_system kolom toe
+- Markeert DIO, DDO, DIA, DDA als systeemdienst
+- Database triggers beschermen tegen ongewenste wijzigingen
