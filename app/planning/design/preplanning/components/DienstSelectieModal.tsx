@@ -1,5 +1,6 @@
 /**
  * DRAAD 90: Dienst Selectie Modal - Met Filtering op Dagdeel/Datum/Status
+ * HERSTEL: rosterId doorgeven aan getServicesForEmployee voor service blocking
  * 
  * Modal pop-up voor toewijzen/wijzigen van diensten aan cellen
  * Ondersteunt alle 4 statussen:
@@ -13,6 +14,10 @@
  * - Admin toggle om alle diensten te tonen (inclusief niet-toegestane)
  * - Visuele indicatie voor niet-toegestane diensten in admin modus
  * - rosterId wordt doorgegeven voor filtering query
+ * 
+ * HERSTEL:
+ * - rosterId nu ook doorgegeven aan getServicesForEmployee() (admin toggle)
+ * - Zorgt voor service blocking rules in beide modes
  * 
  * Features:
  * - Toont medewerker info, datum en dagdeel
@@ -89,7 +94,8 @@ export default function DienstSelectieModal({
       
       if (showAllServices) {
         // Admin modus: toon alle diensten (ongefilterd)
-        services = await getServicesForEmployee(cellData.employeeId);
+        // HERSTEL: Geef rosterId door voor service blocking check
+        services = await getServicesForEmployee(cellData.employeeId, cellData.rosterId);
         console.log('[DienstSelectieModal] Admin mode: loaded', services.length, 'services');
       } else {
         // Normale modus: filter op dagdeel/datum/status
