@@ -1,0 +1,7 @@
+{
+  "draad": "DRAAD98D",
+  "fix": "service_types tabel + actief kolom in solver route",
+  "timestamp": 1733238789000,
+  "commit": "8baf0a09ff8299355a1f07f05302748b9cfa9151",
+  "deployed": "2025-12-03T13:53:09Z"
+}
