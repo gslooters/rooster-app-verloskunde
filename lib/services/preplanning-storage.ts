@@ -7,21 +7,16 @@
  * DRAAD 79: getServicesForEmployee updated om ServiceTypeWithTimes te returnen
  * DRAAD 82: service_code verwijderd uit updateAssignmentStatus (kolom bestaat niet meer)
  * DRAAD 83: Fix service_code mapping - JOIN returnt object, geen array
- * DRAAD 89: Service blocking rules integratie
  * DRAAD 90: Added getServicesForEmployeeFiltered voor dagdeel/datum/status filtering
  * DRAAD 91: Fix TypeScript type error - type casting op regel 360
  * DRAAD 92: Fix status filtering - !== 'MAG_NIET' ipv === 'MAG', verwijder onjuist actief filter
+ * DRAAD 99B: Verwijderd service blocking rules (constraints disabled)
  */
 
 import { supabase } from '@/lib/supabase';
 import { PrePlanningAssignment, EmployeeWithServices, CellStatus, Dagdeel, ServiceTypeWithTimes } from '@/lib/types/preplanning';
 import { ServiceType } from '@/lib/types/service';
 import { getAllEmployees } from '@/lib/services/employees-storage';
-import { 
-  applyServiceBlockingRules, 
-  removeServiceBlockingRules,
-  getServiceBlockingProperties 
-} from './service-blocking-rules';
 
 /**
  * Haal alle PrePlanning assignments op voor een rooster periode
@@ -151,15 +146,9 @@ export async function savePrePlanningAssignment(
 /**
  * DRAAD 77: Nieuwe functie - Update assignment status
  * DRAAD 82: service_code VERWIJDERD - kolom bestaat niet meer in database schema
- * DRAAD 89: Service blocking rules integratie met Clean Slate strategie
+ * DRAAD 99B: Service blocking rules verwijderd (constraints zijn disabled)
  * 
  * Voor het wijzigen van cel status (leeg, dienst, geblokkeerd, NB)
- * 
- * CLEAN SLATE FLOW:
- * 1. Haal oude assignment op (indien aanwezig)
- * 2. Verwijder ALLE oude blokkeringen (indien service met blokkeer_volgdag)
- * 3. Update/create nieuwe assignment
- * 4. Pas nieuwe blokkeringen toe (indien service met blokkeer_volgdag)
  * 
  * @param rosterId - UUID van het rooster
  * @param employeeId - TEXT ID van de medewerker
@@ -167,7 +156,7 @@ export async function savePrePlanningAssignment(
  * @param dagdeel - Dagdeel (O/M/A)
  * @param status - Nieuwe status (0/1/2/3)
  * @param serviceId - UUID van service (alleen bij status 1)
- * @param rosterStartDate - Startdatum van rooster (voor periode validatie)
+ * @param rosterStartDate - Startdatum van rooster (voor periode validatie) - DEPRECATED
  * @returns Object met { success: boolean, warnings: string[] }
  */
 export async function updateAssignmentStatus(
@@ -196,22 +185,7 @@ export async function updateAssignmentStatus(
       serviceId = null;
     }
 
-    // DRAAD 89: CLEAN SLATE STAP 1 - Haal oude assignment op
-    const oldAssignment = await getAssignmentForDate(rosterId, employeeId, date, dagdeel);
-    
-    // DRAAD 89: CLEAN SLATE STAP 2 - Verwijder oude blokkeringen (indien aanwezig)
-    if (oldAssignment && oldAssignment.service_id) {
-      console.log('🧹 Clean Slate: Removing old blocking rules...');
-      await removeServiceBlockingRules(
-        rosterId,
-        employeeId,
-        date,
-        dagdeel,
-        oldAssignment.service_id
-      );
-    }
-    
-    // DRAAD 89: STAP 3 - Update/create assignment in database
+    // Update/create assignment in database
     const { error } = await supabase
       .from('roster_assignments')
       .upsert({
@@ -232,27 +206,6 @@ export async function updateAssignmentStatus(
     }
 
     console.log('✅ Assignment status updated successfully');
-
-    // DRAAD 89: STAP 4 - Pas nieuwe blokkeringen toe (alleen bij status 1 met service)
-    if (status === 1 && serviceId && rosterStartDate) {
-      console.log('🔒 Applying new blocking rules...');
-      const blockingResult = await applyServiceBlockingRules(
-        rosterId,
-        employeeId,
-        date,
-        dagdeel,
-        serviceId,
-        rosterStartDate
-      );
-      
-      // Verzamel warnings
-      if (blockingResult.warnings.length > 0) {
-        warnings.push(...blockingResult.warnings);
-        console.log('⚠️  Blocking warnings:', blockingResult.warnings);
-      }
-      
-      console.log(`📊 Applied ${blockingResult.blocksApplied.length} blocks`);
-    }
     
     return { success: true, warnings };
   } catch (error) {
@@ -437,7 +390,7 @@ export async function getServicesForEmployeeFiltered(
 /**
  * Verwijder een PrePlanning assignment (cel leeg maken)
  * DRAAD 77: Nu met dagdeel parameter
- * DRAAD 89: Verwijder ook blokkerings-regels
+ * DRAAD 99B: Service blocking rules verwijderd
  * 
  * @param rosterId - UUID van het rooster
  * @param employeeId - TEXT ID van de medewerker
@@ -453,21 +406,6 @@ export async function deletePrePlanningAssignment(
 ): Promise<boolean> {
   try {
     console.log('🗑️  Deleting PrePlanning assignment:', { rosterId, employeeId, date, dagdeel });
-    
-    // DRAAD 89: Haal assignment op om service_id te krijgen (voor blocking rules)
-    const assignment = await getAssignmentForDate(rosterId, employeeId, date, dagdeel);
-    
-    // DRAAD 89: Verwijder blokkerings-regels indien aanwezig
-    if (assignment && assignment.service_id) {
-      console.log('🔓 Removing blocking rules before delete...');
-      await removeServiceBlockingRules(
-        rosterId,
-        employeeId,
-        date,
-        dagdeel,
-        assignment.service_id
-      );
-    }
     
     // Delete assignment
     const { error } = await supabase
