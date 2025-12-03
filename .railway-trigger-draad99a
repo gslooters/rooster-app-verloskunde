@@ -1,0 +1,15 @@
+RAILWAY DEPLOYMENT TRIGGER - DRAAD 99A
+========================================
+
+Trigger ID: DRAAD99A-BLOKKERING-TRIGGER
+Timestamp: 1733256143000  
+Random: 847291
+Datum: 3 december 2025, 21:02 CET
+
+Implementatie:
+- PostgreSQL trigger: trg_roster_assignment_auto_blocking
+- Functie: trg_roster_assignment_status_management()
+- Migratie: supabase/migrations/20241203_trigger_roster_auto_blocking.sql
+- Documentation: docs/DRAAD99A_TRIGGER_IMPLEMENTATION.md
+
+Status: READY FOR DEPLOYMENT
