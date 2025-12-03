@@ -278,16 +278,16 @@ export default function ServiceTypesPage() {
         const totaalVerplicht = telVerplichteDagblokken(dienst.team_totaal_regels);
         
         return `
-        <div class="service ${dienst.system ? 'system-service' : ''}">
+        <div class="service ${dienst.is_system ? 'system-service' : ''}">
           <div class="service-header">
             <div class="color-box" style="background-color: ${dienst.kleur}"></div>
             ${dienst.code} - ${dienst.naam} 
-            ${dienst.system ? '(Systeemdienst)' : ''} 
+            ${dienst.is_system ? '(Systeemdienst)' : ''} 
             ${dienst.actief ? '' : '(Inactief)'}
           </div>
           <div class="service-time">Tijd: ${dienst.begintijd} - ${dienst.eindtijd} (${dienst.duur}u)</div>
           <div class="service-time">Waarde: ${dienst.dienstwaarde}</div>
-          ${dienst.blokkeert_volgdag ? '<div class="service-time">Blokkeert volgende dag: JA</div>' : ''}
+          ${dienst.blokkeert_volgdag ? '<div class="service-time">Blokkeert volgende dagdeel: JA</div>' : ''}
           <div class="service-description">
             <span class="field-label">Beschrijving:</span> ${dienst.beschrijving}
           </div>
@@ -418,7 +418,7 @@ export default function ServiceTypesPage() {
                     <div className="flex-1">
                       <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                         {dienst.naam}
-                        {dienst.system && (
+                        {dienst.is_system && (
                           <span className="px-2 py-0.5 rounded bg-gray-200 text-gray-700 text-xs font-medium">
                             SYSTEEM
                           </span>
@@ -432,7 +432,7 @@ export default function ServiceTypesPage() {
                         </div>
                         {dienst.blokkeert_volgdag && (
                           <div className="inline-block px-2 py-1 text-xs font-medium rounded-full bg-orange-100 text-orange-700">
-                            🚫 Blokkeert volgdag
+                            🚫 Blokkeert volgdagdeel
                           </div>
                         )}
                         {heeftTeamRegels && (
@@ -478,7 +478,7 @@ export default function ServiceTypesPage() {
                   )}
 
                   <div className="flex gap-2 mt-auto">
-                    {!dienst.system ? (
+                    {!dienst.is_system ? (
                       <>
                         <button 
                           onClick={() => openModal(dienst)} 
@@ -566,7 +566,7 @@ export default function ServiceTypesPage() {
                               placeholder="bijv. D, ND" 
                               maxLength={4} 
                               required 
-                              disabled={editingDienst?.system || submitting}
+                              disabled={editingDienst?.is_system || submitting}
                             />
                           </div>
                           <div>
@@ -580,7 +580,7 @@ export default function ServiceTypesPage() {
                               className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
                               placeholder="bijv. Dagdienst" 
                               required 
-                              disabled={editingDienst?.system || submitting}
+                              disabled={editingDienst?.is_system || submitting}
                             />
                           </div>
                         </div>
@@ -595,7 +595,7 @@ export default function ServiceTypesPage() {
                             className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
                             placeholder="Uitleg van de dienst" 
                             rows={2} 
-                            disabled={editingDienst?.system || submitting}
+                            disabled={editingDienst?.is_system || submitting}
                           />
                         </div>
 
@@ -609,7 +609,7 @@ export default function ServiceTypesPage() {
                             className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
                             placeholder="Bijv: na deze dienst altijd een Uitnacht inplannen" 
                             rows={2} 
-                            disabled={editingDienst?.system || submitting}
+                            disabled={editingDienst?.is_system || submitting}
                           />
                         </div>
 
@@ -626,7 +626,7 @@ export default function ServiceTypesPage() {
                                 setTimeout(handleTimeChange, 100); 
                               }} 
                               className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
-                              disabled={editingDienst?.system || submitting}
+                              disabled={editingDienst?.is_system || submitting}
                             />
                           </div>
                           <div>
@@ -641,7 +641,7 @@ export default function ServiceTypesPage() {
                                 setTimeout(handleTimeChange, 100); 
                               }} 
                               className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent" 
-                              disabled={editingDienst?.system || submitting}
+                              disabled={editingDienst?.is_system || submitting}
                             />
                           </div>
                         </div>
@@ -657,7 +657,7 @@ export default function ServiceTypesPage() {
                                 value={formData.kleur} 
                                 onChange={(e) => setFormData({...formData, kleur: e.target.value})} 
                                 className="w-12 h-12 rounded-lg border border-gray-300" 
-                                disabled={editingDienst?.system || submitting}
+                                disabled={editingDienst?.is_system || submitting}
                               />
                               <div 
                                 className="w-12 h-12 rounded-lg border border-gray-300 flex items-center justify-center text-white font-bold text-sm" 
@@ -680,7 +680,7 @@ export default function ServiceTypesPage() {
                               onChange={(e) => setFormData({...formData, dienstwaarde: parseFloat(e.target.value) || 0})} 
                               className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
                               required 
-                              disabled={editingDienst?.system || submitting}
+                              disabled={editingDienst?.is_system || submitting}
                             />
                           </div>
                         </div>
@@ -707,10 +707,10 @@ export default function ServiceTypesPage() {
                               checked={formData.blokkeert_volgdag} 
                               onChange={(e) => setFormData({...formData, blokkeert_volgdag: e.target.checked})} 
                               className="mr-2" 
-                              disabled={editingDienst?.system || submitting}
+                              disabled={editingDienst?.is_system || submitting}
                             />
                             <label htmlFor="blokkeert_volgdag" className="text-sm font-medium text-gray-700">
-                              🚫 Blokkeert volgende dag (bijv. na nachtdienst)
+                              🚫 Blokkeert volgende dagdeel (bijv. na nachtdienst)
                             </label>
                           </div>
                         </div>
@@ -756,7 +756,7 @@ export default function ServiceTypesPage() {
                                 teamRegels={formData.team_groen_regels}
                                 onChange={(regels) => handleTeamRegelsChange('groen', regels)}
                                 teamNaam="Groen"
-                                disabled={editingDienst?.system || submitting}
+                                disabled={editingDienst?.is_system || submitting}
                               />
                             </div>
 
@@ -768,7 +768,7 @@ export default function ServiceTypesPage() {
                                 teamRegels={formData.team_oranje_regels}
                                 onChange={(regels) => handleTeamRegelsChange('oranje', regels)}
                                 teamNaam="Oranje"
-                                disabled={editingDienst?.system || submitting}
+                                disabled={editingDienst?.is_system || submitting}
                               />
                             </div>
 
@@ -780,7 +780,7 @@ export default function ServiceTypesPage() {
                                 teamRegels={formData.team_totaal_regels}
                                 onChange={(regels) => handleTeamRegelsChange('totaal', regels)}
                                 teamNaam="Totaal"
-                                disabled={editingDienst?.system || submitting}
+                                disabled={editingDienst?.is_system || submitting}
                               />
                             </div>
                           </div>
@@ -813,7 +813,7 @@ export default function ServiceTypesPage() {
                     <button 
                       type="submit" 
                       className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled={editingDienst?.system || submitting}
+                      disabled={editingDienst?.is_system || submitting}
                     >
                       {submitting ? 'Bezig...' : (editingDienst ? 'Bijwerken' : 'Aanmaken')}
                     </button>
