@@ -1,0 +1,19 @@
+DRAAD 99B: VERWIJDEREN PLANREGELS - CONSTRAINT RECORDS CLEANUP
+Timestamp: 2025-12-03T11:29:00Z
+Random: 47289
+
+VERWIJDERD:
+- lib/services/service-blocking-rules.ts (pure constraint logic)
+- DRAAD_BLOKKEER_VOLGDAG_IMPLEMENTATION.md (bestaat niet meer)
+- Import statements in preplanning-storage.ts
+- Function calls naar removeServiceBlockingRules
+- Function calls naar applyServiceBlockingRules
+- Function calls naar getServiceBlockingProperties
+
+BEHOUDEN:
+- Database kolom: service_types.blokkeert_volgdag
+- TypeScript types: blokkeert_volgdag property
+- Frontend UI: blokkeert_volgdag form inputs
+- Geen database schema wijzigingen
+- Geen TypeScript type wijzigingen
+- Geen frontend wijzigingen
