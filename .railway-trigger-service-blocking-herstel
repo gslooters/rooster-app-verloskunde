@@ -1,0 +1,34 @@
+# Railway Deployment Trigger
+
+## Trigger ID
+782619
+
+## Timestamp
+2025-12-03T14:23:39Z (1733237219)
+
+## Reason
+FORCE REBUILD: Service blocking rules herstel deployment
+
+## Changes Summary
+- RESTORED: lib/services/service-blocking-rules.ts (444 lines)
+- UPDATED: lib/services/preplanning-storage.ts (service blocking integration)
+- UPDATED: app/planning/design/preplanning/components/DienstSelectieModal.tsx (rosterId param)
+- ADDED: .cachebust-herstel-service-blocking
+
+## Build Instructions
+1. Clean build required (nieuwe module)
+2. TypeScript recompile nodig
+3. Client bundles moeten regenerated
+
+## Expected Outcome
+✅ service-blocking-rules module beschikbaar
+✅ preplanning-storage exports updated
+✅ DienstSelectieModal correct functioning
+✅ Service blocking actief in UI
+
+## Verification
+- Railway build succesvol?
+- PrePlanning dienst selectie werkt?
+- Blokkerende diensten correct gefilterd?
+
+DEPLOY NOW
