@@ -1,27 +1,26 @@
 # Railway Auto-Deploy Trigger
 # Modify this file to trigger Railway deployment
 
-# DRAAD101 - PYTHON OR-TOOLS SOLVER SERVICE
-Build: 101-SOLVER
-Timestamp: 2025-12-04T15:37:00Z
-Random: 34889
+# DRAAD101 FIX - SOLVER SERVICE MET NIXPACKS CONFIG
+Build: 101-SOLVER-FIXED
+Timestamp: 2025-12-04T15:58:00Z
+Random: 78451
 
 Changes:
-- Added complete Python OR-Tools Solver Service (solver/main.py)
-- FastAPI REST API with CP-SAT solver integration
-- CORE 3 constraints implemented:
-  1. Max werkdagen per week
-  2. Structureel NBH
-  3. Service bevoegdheid
-- Added solver/requirements.txt (ortools, fastapi, uvicorn)
-- Added solver/Procfile for Railway deployment
-- Added solver/railway.json configuration
-- Added solver/README.md documentation
+- Added solver/nixpacks.toml (forces Python detection)
+- Added solver/.railwayignore (ignores root Next.js files)
+- Fixed: Railway now correctly detects solver/ as Python project
+- Updated: SOLVER_DEPLOYMENT_FIXED.md with corrected instructions
 
-Deployment: NIEUW - Python Solver Service
-Status: READY FOR RAILWAY SERVICE CREATION
+Deployment: FIXED - Python Solver Service
+Status: READY FOR CLEAN RAILWAY DEPLOYMENT
 
-VOLGENDE STAP:
-1. Maak nieuwe Railway service aan voor solver/
-2. Configureer SOLVER_SERVICE_URL in Next.js service
-3. Test end-to-end ORT flow
+INSTRUCTIES:
+1. Verwijder heartfelt-joy service (foutieve build)
+2. Maak nieuwe service met Root Directory = solver
+3. OF gebruik Railway CLI: railway up --root solver
+4. Verify logs: "Detected Python" (NIET "Detected Node")
+5. Generate public URL
+6. Configureer SOLVER_SERVICE_URL in Next.js
+
+See: SOLVER_DEPLOYMENT_FIXED.md voor complete guide
