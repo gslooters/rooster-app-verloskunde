@@ -1,1 +1,433 @@
-"""\nOR-Tools Solver Service\n\nFastAPI service die rooster optimalisatie uitvoert met Google OR-Tools CP-SAT solver.\nIntegratie met Next.js app via REST API.\n\nAuthors: Rooster App Team\nVersion: 1.0.0\nDate: 2025-12-04\n"""\n\nfrom fastapi import FastAPI, HTTPException\nfrom fastapi.middleware.cors import CORSMiddleware\nfrom pydantic import BaseModel, Field\nfrom typing import List, Dict, Optional, Literal\nfrom datetime import datetime, timedelta\nimport logging\n\n# OR-Tools imports\nfrom ortools.sat.python import cp_model\n\n# Configure logging\nlogging.basicConfig(\n    level=logging.INFO,\n    format='[%(asctime)s] %(levelname)s - %(message)s'\n)\nlogger = logging.getLogger(__name__)\n\n# FastAPI app\napp = FastAPI(\n    title=\"Rooster Solver Service\",\n    description=\"OR-Tools CP-SAT solver voor roosteroptimalisatie\",\n    version=\"1.0.0\"\n)\n\n# CORS middleware (accept Next.js app)\napp.add_middleware(\n    CORSMiddleware,\n    allow_origins=[\"*\"],  # In productie: specificeer Next.js URL\n    allow_credentials=True,\n    allow_methods=[\"*\"],\n    allow_headers=[\"*\"],\n)\n\n\n# ============================================================================\n# PYDANTIC MODELS (komen overeen met TypeScript types)\n# ============================================================================\n\nclass Employee(BaseModel):\n    id: int\n    name: str\n    team: Literal['maat', 'loondienst', 'overig']\n    structureel_nbh: Optional[Dict[str, List[str]]] = None  # {\"ma\": [\"O\", \"M\"]}\n    max_werkdagen: Optional[int] = None\n    min_werkdagen: Optional[int] = None\n\n\nclass Service(BaseModel):\n    id: int\n    code: str\n    naam: str\n    # DRAAD100C: is_nachtdienst removed (field does not exist in DB)\n\n\nclass EmployeeService(BaseModel):\n    employee_id: int\n    service_id: int\n\n\nclass PreAssignment(BaseModel):\n    employee_id: int\n    date: str  # ISO date\n    dagdeel: Literal['O', 'M', 'A']\n    service_id: int\n    status: int\n\n\nclass SolveRequest(BaseModel):\n    roster_id: int\n    start_date: str\n    end_date: str\n    employees: List[Employee]\n    services: List[Service]\n    employee_services: List[EmployeeService]\n    pre_assignments: List[PreAssignment]\n    timeout_seconds: int = Field(default=30, ge=1, le=300)\n\n\nclass Assignment(BaseModel):\n    employee_id: int\n    employee_name: str\n    date: str\n    dagdeel: Literal['O', 'M', 'A']\n    service_id: int\n    service_code: str\n    confidence: float = Field(ge=0.0, le=1.0)\n\n\nclass ConstraintViolation(BaseModel):\n    constraint_type: str\n    employee_id: Optional[int] = None\n    employee_name: Optional[str] = None\n    date: Optional[str] = None\n    dagdeel: Optional[str] = None\n    service_id: Optional[int] = None\n    message: str\n    severity: Literal['critical', 'warning', 'info']\n\n\nclass Suggestion(BaseModel):\n    type: str\n    employee_id: Optional[int] = None\n    employee_name: Optional[str] = None\n    action: str\n    impact: str\n\n\nclass SolveResponse(BaseModel):\n    status: Literal['optimal', 'feasible', 'infeasible', 'timeout', 'error']\n    roster_id: int\n    assignments: List[Assignment]\n    solve_time_seconds: float\n    total_assignments: int\n    total_slots: int\n    fill_percentage: float\n    violations: List[ConstraintViolation]\n    suggestions: List[Suggestion]\n    solver_metadata: Dict\n\n\n# ============================================================================\n# HEALTH CHECK ENDPOINTS\n# ============================================================================\n\n@app.get(\"/\")\nasync def root():\n    \"\"\"Health check root endpoint\"\"\"\n    return {\n        \"service\": \"Rooster Solver Service\",\n        \"status\": \"online\",\n        \"version\": \"1.0.0\",\n        \"solver\": \"Google OR-Tools CP-SAT\"\n    }\n\n\n@app.get(\"/health\")\nasync def health():\n    \"\"\"Detailed health check\"\"\"\n    return {\n        \"status\": \"healthy\",\n        \"timestamp\": datetime.utcnow().isoformat(),\n        \"ortools_available\": True\n    }\n\n\n# ============================================================================\n# SOLVER ENDPOINT\n# ============================================================================\n\n@app.post(\"/api/v1/solve-schedule\", response_model=SolveResponse)\nasync def solve_schedule(request: SolveRequest):\n    \"\"\"\n    Solve rooster met OR-Tools CP-SAT solver.\n    \n    Implementeert CORE 3 constraints:\n    1. Max werkdagen per week\n    2. Structureel NBH\n    3. Service bevoegdheid\n    \"\"\"\n    start_time = datetime.now()\n    \n    try:\n        logger.info(f\"[Solver] Start solving roster {request.roster_id}\")\n        logger.info(f\"[Solver] Periode: {request.start_date} - {request.end_date}\")\n        logger.info(f\"[Solver] {len(request.employees)} medewerkers, {len(request.services)} diensten\")\n        \n        # Parse dates\n        start_date = datetime.fromisoformat(request.start_date)\n        end_date = datetime.fromisoformat(request.end_date)\n        \n        # Generate date range\n        date_range = []\n        current_date = start_date\n        while current_date <= end_date:\n            date_range.append(current_date.date())\n            current_date += timedelta(days=1)\n        \n        logger.info(f\"[Solver] {len(date_range)} dagen te plannen\")\n        \n        # Create CP-SAT model\n        model = cp_model.CpModel()\n        \n        # ================================================================\n        # VARIABLES: assignment[employee, date, dagdeel, service]\n        # ================================================================\n        dagdelen = ['O', 'M', 'A']\n        assignments = {}\n        \n        for emp in request.employees:\n            for date in date_range:\n                for dagdeel in dagdelen:\n                    for svc in request.services:\n                        var_name = f\"assign_{emp.id}_{date}_{dagdeel}_{svc.id}\"\n                        assignments[(emp.id, date, dagdeel, svc.id)] = model.new_bool_var(var_name)\n        \n        logger.info(f\"[Solver] {len(assignments)} decision variables created\")\n        \n        # ================================================================\n        # CONSTRAINT 1: Eén dienst per medewerker per dagdeel\n        # ================================================================\n        for emp in request.employees:\n            for date in date_range:\n                for dagdeel in dagdelen:\n                    # Check if pre-assigned\n                    pre_assigned = any(\n                        pa.employee_id == emp.id and \n                        pa.date == str(date) and \n                        pa.dagdeel == dagdeel and\n                        pa.status > 0\n                        for pa in request.pre_assignments\n                    )\n                    \n                    if not pre_assigned:\n                        # Max 1 dienst per dagdeel\n                        model.add_at_most_one([\n                            assignments[(emp.id, date, dagdeel, svc.id)]\n                            for svc in request.services\n                        ])\n        \n        logger.info(\"[Solver] Constraint 1: Eén dienst per dagdeel - added\")\n        \n        # ================================================================\n        # CONSTRAINT 2: Service bevoegdheid\n        # ================================================================\n        # Medewerker mag alleen diensten doen waarvoor bevoegd\n        bevoegdheden = {}\n        for es in request.employee_services:\n            if es.employee_id not in bevoegdheden:\n                bevoegdheden[es.employee_id] = []\n            bevoegdheden[es.employee_id].append(es.service_id)\n        \n        for emp in request.employees:\n            emp_services = bevoegdheden.get(emp.id, [])\n            for date in date_range:\n                for dagdeel in dagdelen:\n                    for svc in request.services:\n                        if svc.id not in emp_services:\n                            # Niet bevoegd → mag niet assigned worden\n                            model.add(assignments[(emp.id, date, dagdeel, svc.id)] == 0)\n        \n        logger.info(\"[Solver] Constraint 2: Service bevoegdheid - added\")\n        \n        # ================================================================\n        # CONSTRAINT 3: Pre-assignments (status > 0)\n        # ================================================================\n        pre_count = 0\n        for pa in request.pre_assignments:\n            try:\n                pa_date = datetime.fromisoformat(pa.date).date()\n                if pa_date in date_range:\n                    # Force deze assignment\n                    model.add(assignments[(pa.employee_id, pa_date, pa.dagdeel, pa.service_id)] == 1)\n                    pre_count += 1\n            except Exception as e:\n                logger.warning(f\"[Solver] Pre-assignment parse error: {e}\")\n        \n        logger.info(f\"[Solver] Constraint 3: {pre_count} pre-assignments fixed\")\n        \n        # ================================================================\n        # CONSTRAINT 4: Max werkdagen per week (CORE 3)\n        # ================================================================\n        for emp in request.employees:\n            if emp.max_werkdagen:\n                # Bepaal weken in periode\n                week_starts = []\n                current = start_date\n                while current <= end_date:\n                    # Maandag van week\n                    monday = current - timedelta(days=current.weekday())\n                    if monday.date() not in week_starts:\n                        week_starts.append(monday.date())\n                    current += timedelta(days=7)\n                \n                # Voor elke week: max X werkdagen\n                for week_start in week_starts:\n                    week_dates = [\n                        week_start + timedelta(days=i)\n                        for i in range(7)\n                        if week_start + timedelta(days=i) in date_range\n                    ]\n                    \n                    # Tel dagen met MINSTENS 1 dienst\n                    day_worked_vars = []\n                    for date in week_dates:\n                        # Boolean: heeft deze dag minstens 1 dienst?\n                        day_worked = model.new_bool_var(f\"worked_{emp.id}_{date}\")\n                        \n                        # day_worked == 1 als ER MINSTENS 1 dienst is die dag\n                        all_assignments_day = [\n                            assignments[(emp.id, date, dagdeel, svc.id)]\n                            for dagdeel in dagdelen\n                            for svc in request.services\n                        ]\n                        model.add_max_equality(day_worked, all_assignments_day)\n                        day_worked_vars.append(day_worked)\n                    \n                    # Som van gewerkte dagen <= max_werkdagen\n                    if day_worked_vars:\n                        model.add(sum(day_worked_vars) <= emp.max_werkdagen)\n        \n        logger.info(\"[Solver] Constraint 4: Max werkdagen per week - added\")\n        \n        # ================================================================\n        # CONSTRAINT 5: Structureel NBH (CORE 3)\n        # ================================================================\n        for emp in request.employees:\n            if emp.structureel_nbh:\n                for date in date_range:\n                    weekday_nl = ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo'][date.weekday()]\n                    \n                    if weekday_nl in emp.structureel_nbh:\n                        blocked_dagdelen = emp.structureel_nbh[weekday_nl]\n                        \n                        for dagdeel in blocked_dagdelen:\n                            # Deze dagdeel is NBH → mag GEEN diensten\n                            for svc in request.services:\n                                model.add(assignments[(emp.id, date, dagdeel, svc.id)] == 0)\n        \n        logger.info(\"[Solver] Constraint 5: Structureel NBH - added\")\n        \n        # ================================================================\n        # OBJECTIVE: Maximize aantal assignments\n        # ================================================================\n        objective_vars = []\n        for emp in request.employees:\n            for date in date_range:\n                for dagdeel in dagdelen:\n                    for svc in request.services:\n                        objective_vars.append(assignments[(emp.id, date, dagdeel, svc.id)])\n        \n        model.maximize(sum(objective_vars))\n        \n        logger.info(\"[Solver] Objective: Maximize assignments\")\n        \n        # ================================================================\n        # SOLVE\n        # ================================================================\n        solver = cp_model.CpSolver()\n        solver.parameters.max_time_in_seconds = request.timeout_seconds\n        solver.parameters.log_search_progress = True\n        \n        logger.info(f\"[Solver] Starting CP-SAT solver (timeout: {request.timeout_seconds}s)...\")\n        status = solver.solve(model)\n        \n        solve_time = (datetime.now() - start_time).total_seconds()\n        \n        # ================================================================\n        # EXTRACT SOLUTION\n        # ================================================================\n        result_assignments = []\n        violations = []\n        suggestions = []\n        \n        if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:\n            logger.info(f\"[Solver] Solution found: {'OPTIMAL' if status == cp_model.OPTIMAL else 'FEASIBLE'}\")\n            \n            # Extract assignments\n            for emp in request.employees:\n                for date in date_range:\n                    for dagdeel in dagdelen:\n                        for svc in request.services:\n                            if solver.value(assignments[(emp.id, date, dagdeel, svc.id)]) == 1:\n                                result_assignments.append(Assignment(\n                                    employee_id=emp.id,\n                                    employee_name=emp.name,\n                                    date=str(date),\n                                    dagdeel=dagdeel,\n                                    service_id=svc.id,\n                                    service_code=svc.code,\n                                    confidence=1.0 if status == cp_model.OPTIMAL else 0.8\n                                ))\n            \n            status_str = 'optimal' if status == cp_model.OPTIMAL else 'feasible'\n        \n        elif status == cp_model.INFEASIBLE:\n            logger.warning(\"[Solver] INFEASIBLE - no solution possible\")\n            status_str = 'infeasible'\n            violations.append(ConstraintViolation(\n                constraint_type=\"infeasibility\",\n                message=\"Geen oplossing mogelijk met huidige constraints\",\n                severity=\"critical\"\n            ))\n        \n        else:\n            logger.warning(f\"[Solver] Status: {status}\")\n            status_str = 'timeout' if status == cp_model.UNKNOWN else 'error'\n        \n        # ================================================================\n        # STATISTICS\n        # ================================================================\n        total_slots = len(request.employees) * len(date_range) * len(dagdelen)\n        total_assignments = len(result_assignments)\n        fill_percentage = (total_assignments / total_slots * 100) if total_slots > 0 else 0.0\n        \n        logger.info(f\"[Solver] Completed in {solve_time:.2f}s\")\n        logger.info(f\"[Solver] Assignments: {total_assignments}/{total_slots} ({fill_percentage:.1f}%)\")\n        \n        return SolveResponse(\n            status=status_str,\n            roster_id=request.roster_id,\n            assignments=result_assignments,\n            solve_time_seconds=round(solve_time, 3),\n            total_assignments=total_assignments,\n            total_slots=total_slots,\n            fill_percentage=round(fill_percentage, 2),\n            violations=violations,\n            suggestions=suggestions,\n            solver_metadata={\n                \"solver\": \"CP-SAT\",\n                \"ortools_status\": str(status),\n                \"variables\": len(assignments),\n                \"timeout_seconds\": request.timeout_seconds\n            }\n        )\n    \n    except Exception as e:\n        logger.error(f\"[Solver] Error: {str(e)}\", exc_info=True)\n        raise HTTPException(status_code=500, detail=str(e))\n\n\nif __name__ == \"__main__\":\n    import uvicorn\n    uvicorn.run(app, host=\"0.0.0.0\", port=8000)\n
+"""OR-Tools Solver Service
+
+FastAPI service die rooster optimalisatie uitvoert met Google OR-Tools CP-SAT solver.
+Integratie met Next.js app via REST API.
+
+Authors: Rooster App Team
+Version: 1.0.0
+Date: 2025-12-04
+"""
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+from typing import List, Dict, Optional, Literal
+from datetime import datetime, timedelta
+import logging
+
+# OR-Tools imports
+from ortools.sat.python import cp_model
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# FastAPI app
+app = FastAPI(
+    title="Rooster Solver Service",
+    description="OR-Tools CP-SAT solver voor roosteroptimalisatie",
+    version="1.0.0"
+)
+
+# CORS middleware (accept Next.js app)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In productie: specificeer Next.js URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# ============================================================================
+# PYDANTIC MODELS (komen overeen met TypeScript types)
+# ============================================================================
+
+class Employee(BaseModel):
+    id: int
+    name: str
+    team: Literal['maat', 'loondienst', 'overig']
+    structureel_nbh: Optional[Dict[str, List[str]]] = None  # {"ma": ["O", "M"]}
+    max_werkdagen: Optional[int] = None
+    min_werkdagen: Optional[int] = None
+
+
+class Service(BaseModel):
+    id: int
+    code: str
+    naam: str
+    # DRAAD100C: is_nachtdienst removed (field does not exist in DB)
+
+
+class EmployeeService(BaseModel):
+    employee_id: int
+    service_id: int
+
+
+class PreAssignment(BaseModel):
+    employee_id: int
+    date: str  # ISO date
+    dagdeel: Literal['O', 'M', 'A']
+    service_id: int
+    status: int
+
+
+class SolveRequest(BaseModel):
+    roster_id: int
+    start_date: str
+    end_date: str
+    employees: List[Employee]
+    services: List[Service]
+    employee_services: List[EmployeeService]
+    pre_assignments: List[PreAssignment]
+    timeout_seconds: int = Field(default=30, ge=1, le=300)
+
+
+class Assignment(BaseModel):
+    employee_id: int
+    employee_name: str
+    date: str
+    dagdeel: Literal['O', 'M', 'A']
+    service_id: int
+    service_code: str
+    confidence: float = Field(ge=0.0, le=1.0)
+
+
+class ConstraintViolation(BaseModel):
+    constraint_type: str
+    employee_id: Optional[int] = None
+    employee_name: Optional[str] = None
+    date: Optional[str] = None
+    dagdeel: Optional[str] = None
+    service_id: Optional[int] = None
+    message: str
+    severity: Literal['critical', 'warning', 'info']
+
+
+class Suggestion(BaseModel):
+    type: str
+    employee_id: Optional[int] = None
+    employee_name: Optional[str] = None
+    action: str
+    impact: str
+
+
+class SolveResponse(BaseModel):
+    status: Literal['optimal', 'feasible', 'infeasible', 'timeout', 'error']
+    roster_id: int
+    assignments: List[Assignment]
+    solve_time_seconds: float
+    total_assignments: int
+    total_slots: int
+    fill_percentage: float
+    violations: List[ConstraintViolation]
+    suggestions: List[Suggestion]
+    solver_metadata: Dict
+
+
+# ============================================================================
+# HEALTH CHECK ENDPOINTS
+# ============================================================================
+
+@app.get("/")
+async def root():
+    """Health check root endpoint"""
+    return {
+        "service": "Rooster Solver Service",
+        "status": "online",
+        "version": "1.0.0",
+        "solver": "Google OR-Tools CP-SAT"
+    }
+
+
+@app.get("/health")
+async def health():
+    """Detailed health check"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "ortools_available": True
+    }
+
+
+# ============================================================================
+# SOLVER ENDPOINT
+# ============================================================================
+
+@app.post("/api/v1/solve-schedule", response_model=SolveResponse)
+async def solve_schedule(request: SolveRequest):
+    """
+    Solve rooster met OR-Tools CP-SAT solver.
+    
+    Implementeert CORE 3 constraints:
+    1. Max werkdagen per week
+    2. Structureel NBH
+    3. Service bevoegdheid
+    """
+    start_time = datetime.now()
+    
+    try:
+        logger.info(f"[Solver] Start solving roster {request.roster_id}")
+        logger.info(f"[Solver] Periode: {request.start_date} - {request.end_date}")
+        logger.info(f"[Solver] {len(request.employees)} medewerkers, {len(request.services)} diensten")
+        
+        # Parse dates
+        start_date = datetime.fromisoformat(request.start_date)
+        end_date = datetime.fromisoformat(request.end_date)
+        
+        # Generate date range
+        date_range = []
+        current_date = start_date
+        while current_date <= end_date:
+            date_range.append(current_date.date())
+            current_date += timedelta(days=1)
+        
+        logger.info(f"[Solver] {len(date_range)} dagen te plannen")
+        
+        # Create CP-SAT model
+        model = cp_model.CpModel()
+        
+        # ================================================================
+        # VARIABLES: assignment[employee, date, dagdeel, service]
+        # ================================================================
+        dagdelen = ['O', 'M', 'A']
+        assignments = {}
+        
+        for emp in request.employees:
+            for date in date_range:
+                for dagdeel in dagdelen:
+                    for svc in request.services:
+                        var_name = f"assign_{emp.id}_{date}_{dagdeel}_{svc.id}"
+                        assignments[(emp.id, date, dagdeel, svc.id)] = model.new_bool_var(var_name)
+        
+        logger.info(f"[Solver] {len(assignments)} decision variables created")
+        
+        # ================================================================
+        # CONSTRAINT 1: Eén dienst per medewerker per dagdeel
+        # ================================================================
+        for emp in request.employees:
+            for date in date_range:
+                for dagdeel in dagdelen:
+                    # Check if pre-assigned
+                    pre_assigned = any(
+                        pa.employee_id == emp.id and 
+                        pa.date == str(date) and 
+                        pa.dagdeel == dagdeel and
+                        pa.status > 0
+                        for pa in request.pre_assignments
+                    )
+                    
+                    if not pre_assigned:
+                        # Max 1 dienst per dagdeel
+                        model.add_at_most_one([
+                            assignments[(emp.id, date, dagdeel, svc.id)]
+                            for svc in request.services
+                        ])
+        
+        logger.info("[Solver] Constraint 1: Eén dienst per dagdeel - added")
+        
+        # ================================================================
+        # CONSTRAINT 2: Service bevoegdheid
+        # ================================================================
+        # Medewerker mag alleen diensten doen waarvoor bevoegd
+        bevoegdheden = {}
+        for es in request.employee_services:
+            if es.employee_id not in bevoegdheden:
+                bevoegdheden[es.employee_id] = []
+            bevoegdheden[es.employee_id].append(es.service_id)
+        
+        for emp in request.employees:
+            emp_services = bevoegdheden.get(emp.id, [])
+            for date in date_range:
+                for dagdeel in dagdelen:
+                    for svc in request.services:
+                        if svc.id not in emp_services:
+                            # Niet bevoegd -> mag niet assigned worden
+                            model.add(assignments[(emp.id, date, dagdeel, svc.id)] == 0)
+        
+        logger.info("[Solver] Constraint 2: Service bevoegdheid - added")
+        
+        # ================================================================
+        # CONSTRAINT 3: Pre-assignments (status > 0)
+        # ================================================================
+        pre_count = 0
+        for pa in request.pre_assignments:
+            try:
+                pa_date = datetime.fromisoformat(pa.date).date()
+                if pa_date in date_range:
+                    # Force deze assignment
+                    model.add(assignments[(pa.employee_id, pa_date, pa.dagdeel, pa.service_id)] == 1)
+                    pre_count += 1
+            except Exception as e:
+                logger.warning(f"[Solver] Pre-assignment parse error: {e}")
+        
+        logger.info(f"[Solver] Constraint 3: {pre_count} pre-assignments fixed")
+        
+        # ================================================================
+        # CONSTRAINT 4: Max werkdagen per week (CORE 3)
+        # ================================================================
+        for emp in request.employees:
+            if emp.max_werkdagen:
+                # Bepaal weken in periode
+                week_starts = []
+                current = start_date
+                while current <= end_date:
+                    # Maandag van week
+                    monday = current - timedelta(days=current.weekday())
+                    if monday.date() not in week_starts:
+                        week_starts.append(monday.date())
+                    current += timedelta(days=7)
+                
+                # Voor elke week: max X werkdagen
+                for week_start in week_starts:
+                    week_dates = [
+                        week_start + timedelta(days=i)
+                        for i in range(7)
+                        if week_start + timedelta(days=i) in date_range
+                    ]
+                    
+                    # Tel dagen met MINSTENS 1 dienst
+                    day_worked_vars = []
+                    for date in week_dates:
+                        # Boolean: heeft deze dag minstens 1 dienst?
+                        day_worked = model.new_bool_var(f"worked_{emp.id}_{date}")
+                        
+                        # day_worked == 1 als ER MINSTENS 1 dienst is die dag
+                        all_assignments_day = [
+                            assignments[(emp.id, date, dagdeel, svc.id)]
+                            for dagdeel in dagdelen
+                            for svc in request.services
+                        ]
+                        model.add_max_equality(day_worked, all_assignments_day)
+                        day_worked_vars.append(day_worked)
+                    
+                    # Som van gewerkte dagen <= max_werkdagen
+                    if day_worked_vars:
+                        model.add(sum(day_worked_vars) <= emp.max_werkdagen)
+        
+        logger.info("[Solver] Constraint 4: Max werkdagen per week - added")
+        
+        # ================================================================
+        # CONSTRAINT 5: Structureel NBH (CORE 3)
+        # ================================================================
+        for emp in request.employees:
+            if emp.structureel_nbh:
+                for date in date_range:
+                    weekday_nl = ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo'][date.weekday()]
+                    
+                    if weekday_nl in emp.structureel_nbh:
+                        blocked_dagdelen = emp.structureel_nbh[weekday_nl]
+                        
+                        for dagdeel in blocked_dagdelen:
+                            # Deze dagdeel is NBH -> mag GEEN diensten
+                            for svc in request.services:
+                                model.add(assignments[(emp.id, date, dagdeel, svc.id)] == 0)
+        
+        logger.info("[Solver] Constraint 5: Structureel NBH - added")
+        
+        # ================================================================
+        # OBJECTIVE: Maximize aantal assignments
+        # ================================================================
+        objective_vars = []
+        for emp in request.employees:
+            for date in date_range:
+                for dagdeel in dagdelen:
+                    for svc in request.services:
+                        objective_vars.append(assignments[(emp.id, date, dagdeel, svc.id)])
+        
+        model.maximize(sum(objective_vars))
+        
+        logger.info("[Solver] Objective: Maximize assignments")
+        
+        # ================================================================
+        # SOLVE
+        # ================================================================
+        solver = cp_model.CpSolver()
+        solver.parameters.max_time_in_seconds = request.timeout_seconds
+        solver.parameters.log_search_progress = True
+        
+        logger.info(f"[Solver] Starting CP-SAT solver (timeout: {request.timeout_seconds}s)...")
+        status = solver.solve(model)
+        
+        solve_time = (datetime.now() - start_time).total_seconds()
+        
+        # ================================================================
+        # EXTRACT SOLUTION
+        # ================================================================
+        result_assignments = []
+        violations = []
+        suggestions = []
+        
+        if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
+            logger.info(f"[Solver] Solution found: {'OPTIMAL' if status == cp_model.OPTIMAL else 'FEASIBLE'}")
+            
+            # Extract assignments
+            for emp in request.employees:
+                for date in date_range:
+                    for dagdeel in dagdelen:
+                        for svc in request.services:
+                            if solver.value(assignments[(emp.id, date, dagdeel, svc.id)]) == 1:
+                                result_assignments.append(Assignment(
+                                    employee_id=emp.id,
+                                    employee_name=emp.name,
+                                    date=str(date),
+                                    dagdeel=dagdeel,
+                                    service_id=svc.id,
+                                    service_code=svc.code,
+                                    confidence=1.0 if status == cp_model.OPTIMAL else 0.8
+                                ))
+            
+            status_str = 'optimal' if status == cp_model.OPTIMAL else 'feasible'
+        
+        elif status == cp_model.INFEASIBLE:
+            logger.warning("[Solver] INFEASIBLE - no solution possible")
+            status_str = 'infeasible'
+            violations.append(ConstraintViolation(
+                constraint_type="infeasibility",
+                message="Geen oplossing mogelijk met huidige constraints",
+                severity="critical"
+            ))
+        
+        else:
+            logger.warning(f"[Solver] Status: {status}")
+            status_str = 'timeout' if status == cp_model.UNKNOWN else 'error'
+        
+        # ================================================================
+        # STATISTICS
+        # ================================================================
+        total_slots = len(request.employees) * len(date_range) * len(dagdelen)
+        total_assignments = len(result_assignments)
+        fill_percentage = (total_assignments / total_slots * 100) if total_slots > 0 else 0.0
+        
+        logger.info(f"[Solver] Completed in {solve_time:.2f}s")
+        logger.info(f"[Solver] Assignments: {total_assignments}/{total_slots} ({fill_percentage:.1f}%)")
+        
+        return SolveResponse(
+            status=status_str,
+            roster_id=request.roster_id,
+            assignments=result_assignments,
+            solve_time_seconds=round(solve_time, 3),
+            total_assignments=total_assignments,
+            total_slots=total_slots,
+            fill_percentage=round(fill_percentage, 2),
+            violations=violations,
+            suggestions=suggestions,
+            solver_metadata={
+                "solver": "CP-SAT",
+                "ortools_status": str(status),
+                "variables": len(assignments),
+                "timeout_seconds": request.timeout_seconds
+            }
+        )
+    
+    except Exception as e:
+        logger.error(f"[Solver] Error: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
