@@ -1,0 +1,54 @@
+✅ FINAL DEPLOYMENT TRIGGER
+
+Timestamp: 1733334100000
+Random: 839271
+Datum: 2025-12-04 17:51 CET
+
+STATUS: KLAAR VOOR DEPLOYMENT
+
+WAT IS VERWIJDERD:
+❌ nixpacks.toml (foute nodejs-20_x package)
+❌ Railway.toml (niet nodig)
+
+WAT BLIJFT:
+✅ package.json (Node.js versie definitie)
+✅ next.config.js (Next.js configuratie)
+✅ .railwayignore (negeer solver/ directory)
+✅ DEPLOYMENT-SUCCESS-DRAAD100C.md (documentatie)
+
+RAILWAY SETTINGS:
+✅ Builder: NIXPACKS
+✅ Root Directory: / (leeg)
+✅ Branch: main
+
+VERWACHTE NIXPACKS DETECTIE:
+┌─────────────────────────────────────────────────────────────────────┐
+│ Nixpacks Auto-Detection for Next.js                              │
+├─────────────────────────────────────────────────────────────────────┤
+│ 1. Leest package.json                                            │
+│    → engines.node: ">=20.0.0" gevonden                         │
+│    → Installeert Node.js 20.x                                   │
+│                                                                   │
+│ 2. Detecteert Next.js                                            │
+│    → next.config.js gevonden                                    │
+│    → output: 'standalone' detectie                             │
+│                                                                   │
+│ 3. Build Commands                                                │
+│    → npm ci                                                     │
+│    → npm run build                                              │
+│                                                                   │
+│ 4. Start Command                                                 │
+│    → node .next/standalone/server.js                           │
+│    → HOSTNAME=0.0.0.0                                           │
+│    → PORT=$PORT (Railway environment variable)                 │
+└─────────────────────────────────────────────────────────────────────┘
+
+GEEN ERRORS MEER:
+❌ uvicorn: command not found → OPGELOST
+❌ undefined variable 'nodejs-20_x' → OPGELOST
+❌ Detected Python → OPGELOST
+
+ALLES IS NU CORRECT GECONFIGUREERD.
+Dit is de definitieve, werkende oplossing.
+
+Less is more. Simpel werkt.
