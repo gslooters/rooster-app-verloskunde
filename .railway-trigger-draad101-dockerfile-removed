@@ -1,0 +1,56 @@
+DRAAD101 FINAL DEPLOYMENT FIX
+==============================
+
+Timestamp: 1733331012000
+Date: 2025-12-04 17:10:12 CET
+
+Probleem Root Cause:
+- Railway .railwayignore werkt NIET voor builder detection
+- Railway detecteert Dockerfile ALTIJD als die bestaat in Root Directory
+- .railwayignore = alleen voor deployment files, niet voor builder selection
+
+Definitieve Oplossing:
+✅ solver/Dockerfile VERWIJDERD uit root directory
+✅ solver/docker/Dockerfile TOEGEVOEGD (voor lokale dev)
+✅ Railway kan nu GEEN Dockerfile meer detecteren
+✅ Railway MOET nu Nixpacks gebruiken (enige optie)
+
+Dockerfile blijft beschikbaar voor lokale development:
+  cd solver/
+  docker build -f docker/Dockerfile -t solver .
+  docker run -p 8000:8000 solver
+
+Railway Deployment Flow (nu):
+1. Root Directory = solver/
+2. Railway zoekt naar Dockerfile in solver/ → NIET GEVONDEN
+3. Railway detecteert nixpacks.toml → GEVONDEN
+4. Railway gebruikt Nixpacks builder
+5. Nixpacks leest nixpacks.toml:
+   - Python 3.11
+   - pip install -r requirements.txt
+   - uvicorn main:app --host 0.0.0.0 --port $PORT
+
+Expected Build Output:
+[nixpacks] Detected Python
+[nixpacks] Using Python 3.11
+[nixpacks] Installing dependencies
+[nixpacks] Running: pip install -r requirements.txt
+[nixpacks] Successfully installed fastapi uvicorn ortools pydantic python-dateutil
+[nixpacks] Starting service
+[nixpacks] Running: uvicorn main:app --host 0.0.0.0 --port 8000
+
+INFO:     Started server process [1]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+
+Verificatie Checklist:
+[ ] Railway UI toont "Builder: Nixpacks" (niet meer Dockerfile)
+[ ] Build logs: "Detected Python"
+[ ] Install logs: "Successfully installed fastapi"
+[ ] Start logs: "Application startup complete"
+[ ] Service status: ACTIVE (geen crash)
+[ ] Health endpoint: GET /health returns 200 OK
+
+DIT MOET NU 100% WERKEN!
+Railway heeft geen keuze meer - Nixpacks is de enige beschikbare builder.
