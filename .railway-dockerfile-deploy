@@ -1,0 +1,29 @@
+# Railway Dockerfile Deployment Trigger
+# DRAAD102C: Force Dockerfile build - abandon Nixpacks
+
+# Timestamp: 1733343006
+# Random: q8m4k9p2x7n5
+# Date: 2025-12-04T20:30:06Z
+
+# Critical changes:
+# - Dockerfile: Python 3.13.0-slim + Node 20-slim multi-stage
+# - railway.toml: builder = "DOCKERFILE"
+# - .dockerignore: Build optimization
+# - .nixpacks.toml: DELETED (conflicting config)
+
+# Expected outcome:
+# ✅ Python 3.13.0 exact version
+# ✅ pip always available in PATH
+# ✅ OR-Tools 9.14.6206 installs successfully
+# ✅ Next.js builds in stage 1
+# ✅ FastAPI serves static frontend + backend APIs
+# ✅ Health check on /health endpoint
+
+# Build strategy:
+# Stage 1: node:20-slim - Build Next.js static export
+# Stage 2: python:3.13.0-slim - FastAPI runtime + serve Next.js
+
+# This is deployment attempt #9
+# Previous 8 failures: Nixpacks Python 3.11 selection
+# Root cause: .nixpacks.toml ignored by Railway
+# Solution: Direct Dockerfile control
