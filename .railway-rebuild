@@ -1,6 +1,23 @@
-# Railway Rebuild Trigger - DRAAD102B
-# Timestamp: 1733341954
-# Fix: Force Python 3.13 deployment
-# Previous issue: Python 3.11 selected, pip not in PATH
-# Solution: .nixpacks.toml + package.json engines.python >= 3.13
-# Expected: Nixpacks detects python313, pip works, OR-Tools installs
+# Railway Rebuild Trigger - DRAAD102C
+# Timestamp: 1733343026
+# Random: x9k3m7p4q2n8
+# Date: 2025-12-04T20:30:26Z
+
+# CRITICAL PIVOT: Abandon Nixpacks, use Dockerfile
+# Previous attempts: 8 failures with Nixpacks Python 3.11
+# Root cause: .nixpacks.toml ignored by Railway Nixpacks v1.38.0
+
+# NEW APPROACH: Direct Dockerfile control
+# - Multi-stage build: Node 20 + Python 3.13
+# - Explicit python:3.13.0-slim base image
+# - No Nixpacks auto-detection issues
+# - Reproducible and transparent build process
+
+# Files changed:
+# + Dockerfile (NEW)
+# ~ railway.toml: builder = "DOCKERFILE"
+# + .dockerignore (NEW)
+# - .nixpacks.toml (DELETED)
+
+# Expected: 90% success rate
+# This is attempt #9
