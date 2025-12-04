@@ -4,20 +4,16 @@
 // DRAAD95E: Column name fix rosterid -> roster_id
 // DRAAD95F: Add missing isfixed property to RosterPlanningConstraint
 // DRAAD96A: Fix property name mismatch - database snake_case vs TypeScript camelCase
+// DRAAD103: Stap 1 - Verwijder 5 planregels (availability, teamdagblokrules, fairnessbalance, workloadmax, minserviceperperiod)
 
 export type ConstraintType =
   | 'coverageminimum'
-  | 'availability'
   | 'employeeservices'
   | 'preassignments'
-  | 'teamdagblokrules'
-  | 'workloadmax'
   | 'consecutiverest'
   | 'blocksnextday'
   | 'maxserviceperperiod'
-  | 'fairnessbalance'
-  | 'maxconsecutivework'
-  | 'minserviceperperiod';
+  | 'maxconsecutivework';
 
 // Prioriteit 1 = Kritiek, 2 = Hoog, 3 = Normaal, 4 = Laag
 export type ConstraintPriority = 1 | 2 | 3 | 4;
@@ -99,17 +95,13 @@ export const PRIORITY_COLORS: Record<ConstraintPriority, string> = {
 };
 
 // Labels per type constraint (NL)
+// DRAAD103: Stap 1 - 5 types verwijderd
 export const TYPE_LABELS: Record<ConstraintType, string> = {
   coverageminimum: 'Minimale bezetting',
-  availability: 'Beschikbaarheid',
   employeeservices: 'Bevoegdheden',
   preassignments: 'Pre-planning',
-  teamdagblokrules: 'Team dagblok regels',
-  workloadmax: 'Max. werkdagen',
   consecutiverest: 'Rustdag na nachtdienst',
   blocksnextday: 'Blokkeert volgdag',
   maxserviceperperiod: 'Max. dienst per periode',
-  fairnessbalance: 'Eerlijke verdeling',
   maxconsecutivework: 'Max. aaneengesloten werk',
-  minserviceperperiod: 'Min. dienst team',
 };
