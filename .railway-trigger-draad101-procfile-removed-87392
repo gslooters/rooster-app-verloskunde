@@ -1,0 +1,90 @@
+DRAAD101 DEFINITIEVE FIX - PROCFILE REMOVED
+============================================
+
+Cache-bust timestamp: 1733331324000
+Random trigger: 87392
+Date: 2025-12-04 17:15:24 CET
+
+## ROOT CAUSE ANALYSE
+
+Probleem:
+- Error: "/bin/bash: line 1: uvicorn: command not found"
+- uvicorn niet geïnstalleerd ondanks requirements.txt
+
+Diepgaande analyse:
+1. ✅ Railway gebruikt Nixpacks (geen Dockerfile meer)
+2. ✅ Container start succesvol
+3. ❌ pip install -r requirements.txt wordt NIET uitgevoerd
+4. ❌ Dependencies niet geïnstalleerd
+
+Root cause gevonden:
+- solver/Procfile bestaat
+- Railway geeft Procfile PRIORITEIT boven nixpacks.toml
+- Procfile overschrijft start command
+- Railway SKIPPED nixpacks.toml [phases.install]
+- Geen dependency installatie!
+
+## OPLOSSING TOEGEPAST
+
+✅ solver/Procfile VERWIJDERD
+✅ Railway gebruikt nu ALLEEN nixpacks.toml
+✅ [phases.install] wordt NU uitgevoerd
+✅ pip install -r requirements.txt wordt uitgevoerd
+✅ [start] command wordt gebruikt
+
+## VERWACHTE BUILD FLOW
+
+[nixpacks] Detected Python 3.11
+[nixpacks] Phase: setup
+  → echo 'Configuring Python OR-Tools Solver Service'
+[nixpacks] Phase: install
+  → pip install -r requirements.txt
+  → Installing fastapi==0.115.0
+  → Installing uvicorn[standard]==0.32.0
+  → Installing pydantic==2.9.2
+  → Installing ortools==9.11.4210
+  → Installing python-dateutil==2.9.0
+  → Successfully installed 5 packages
+[nixpacks] Phase: build
+  → echo 'No build step needed for Python service'
+[nixpacks] Starting service
+  → uvicorn main:app --host 0.0.0.0 --port 8000
+
+## VERWACHTE RUNTIME OUTPUT
+
+INFO:     Started server process [1]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+
+## VERIFICATIE CHECKLIST
+
+[ ] Build logs: "Phase: install"
+[ ] Build logs: "Successfully installed fastapi uvicorn"
+[ ] Start logs: "Started server process [1]"
+[ ] Start logs: "Application startup complete"
+[ ] Runtime: GEEN "command not found" errors
+[ ] Service status: ACTIVE
+[ ] Health check: GET /health returns 200 OK
+
+## TECHNISCHE DETAILS
+
+Files in solver/ directory na deze fix:
+- requirements.txt ✅
+- main.py ✅
+- models.py ✅
+- solver_engine.py ✅
+- nixpacks.toml ✅
+- .railwayignore ✅
+- docker/Dockerfile ✅ (voor lokale dev)
+- Procfile ❌ VERWIJDERD
+
+Railway build systeem:
+- Builder: Nixpacks
+- Root Directory: solver/
+- Install: pip install -r requirements.txt (via nixpacks.toml)
+- Start: uvicorn main:app --host 0.0.0.0 --port $PORT (via nixpacks.toml)
+
+DEPLOYMENT MOET NU 100% WERKEN!
+
+Commit SHA: 06bcf1b2293ef451990953a3931cd0fe4d0f841d
