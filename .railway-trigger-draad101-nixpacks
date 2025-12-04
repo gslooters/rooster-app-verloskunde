@@ -1,0 +1,36 @@
+DRAAD101 NIXPACKS FIX
+=====================
+
+Timestamp: 1733330636000
+Date: 2025-12-04 17:03:56 CET
+
+Probleem:
+- Railway kan Dockerfile niet vinden
+- Error: "Dockerfile `Dockerfile` does not exist"
+
+Root Cause:
+- railway.json forceerde DOCKERFILE builder
+- Maar rooster-app gebruikt NIXPACKS met succes
+- Solver service moet OOK Nixpacks gebruiken
+
+Fixes:
+1. ✅ railway.json VERWIJDERD
+2. ✅ nixpacks.toml staat al correct:
+   - Python 3.11
+   - pip install -r requirements.txt
+   - uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
+3. ✅ Dockerfile blijft behouden (voor lokale dev)
+
+Handmatige stap in Railway UI:
+⚠️  Settings → Build → Builder = NIXPACKS (niet Dockerfile!)
+
+Expected result:
+- Nixpacks detecteert Python 3.11
+- Installeert requirements.txt
+- Start uvicorn met correcte PORT
+- "Application startup complete" in logs
+
+Verificatie:
+1. Check Railway build logs: "Installing Python 3.11"
+2. Check install logs: "Successfully installed fastapi uvicorn ortools"
+3. Check start logs: "Uvicorn running on http://0.0.0.0:xxxx"
