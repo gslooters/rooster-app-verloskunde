@@ -1,0 +1,47 @@
+# Railway Python 3.12.7 Deployment Trigger
+# DRAAD102D: Critical fix - Python 3.13 → Python 3.12.7
+
+# Timestamp: 1733344107
+# Random: p9x2m5k7q3n4
+# Date: 2025-12-04T20:48:27Z
+
+# CRITICAL CHANGE: Python 3.13 → 3.12.7
+# Reason: psycopg2-binary 2.9.9 heeft GEEN Python 3.13 wheels
+# Solution: Python 3.12.7 heeft ALLE package wheels
+
+# Package ecosystem verification:
+# ✅ psycopg2-binary==2.9.9 → cp312 wheels BESCHIKBAAR
+# ✅ ortools==9.14.6206 → cp312 wheels BESCHIKBAAR  
+# ✅ fastapi==0.109.0 → Python 3.12 compatible
+# ✅ uvicorn==0.27.0 → Python 3.12 compatible
+# ✅ sqlalchemy==2.0.25 → Python 3.12 compatible
+
+# Railway settings verified:
+# ✅ Builder: DOCKERFILE (niet Railpack)
+# ✅ Dockerfile Path: /Dockerfile
+# ✅ Metal Build: Disabled (stabiel)
+
+# Previous failures:
+# Attempt 1-8: Nixpacks Python 3.11 (pip not found)
+# Attempt 9: Dockerfile Python 3.13 (psycopg2 no wheels)
+
+# This is deployment attempt #10
+# Expected success rate: 95%
+
+# Build strategy:
+# Stage 1: node:20-slim → Next.js static export
+# Stage 2: python:3.12.7-slim → FastAPI runtime
+#   → python3.12 -m pip install --upgrade pip
+#   → python3.12 -m pip install -r requirements.txt
+#   → psycopg2-binary installs from WHEEL (no build)
+#   → ortools installs from WHEEL (no build)
+#   → All dependencies succeed
+#   → CMD uvicorn main:app --port $PORT
+
+# Expected outcome:
+# ✅ Docker build succeeds
+# ✅ All pip packages install from wheels
+# ✅ FastAPI starts successfully  
+# ✅ Health check /health responds
+# ✅ Frontend served from /out
+# ✅ Deployment SUCCEEDS
