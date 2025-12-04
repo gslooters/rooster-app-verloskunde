@@ -3,6 +3,7 @@
 // DRAAD30D-v2 - FIX: Uppercase code constraint + Optimistische health check
 // DRAAD99B - ADD: is_system ondersteuning voor systeemdiensten bescherming
 // DRAAD99C - ADD: Systeemdiensten bewerkbaar maken (beperkt)
+// DRAAD100A - FIX: service_code → serviceid bug in canDeleteService()
 // ============================================================================
 import { Dienst, validateDienstwaarde, calculateDuration } from "../types/dienst";
 import { teamRegelsFromJSON, teamRegelsToJSON, DEFAULT_TEAM_REGELS } from '../validators/service';
@@ -434,6 +435,7 @@ export async function updateService(id: string, updates: Partial<Dienst>): Promi
 /**
  * Check if service can be deleted
  * DRAAD99B: Check is_system vlag naast legacy system codes
+ * DRAAD100A: FIX - Use serviceid (UUID) instead of service_code
  */
 export async function canDeleteService(code: string): Promise<{ canDelete: boolean; reason?: string }> {
   try {
@@ -466,11 +468,13 @@ export async function canDeleteService(code: string): Promise<{ canDelete: boole
       };
     }
     
-    // Check if service is used in any roster assignments
+    // DRAAD100A FIX: Check if service is used in any roster assignments
+    // ✅ CORRECT: Use serviceid (UUID FK) instead of service_code
+    // Database: rosterassignments.serviceid → servicetypes.id
     const { data: assignments, error } = await supabase
       .from('roster_assignments')
       .select('id')
-      .eq('service_code', upperCode)
+      .eq('serviceid', service.id) // ✅ FIXED: Use UUID instead of code
       .limit(1);
     
     if (error) {
