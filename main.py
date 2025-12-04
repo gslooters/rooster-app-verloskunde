@@ -1,9 +1,9 @@
 """FastAPI application serving Next.js frontend and providing backend APIs."""
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 import os
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -26,14 +26,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Health check endpoint for Railway
+
+# ============================================================
+# API ENDPOINTS - DEZE MOETEN EERST (VOOR CATCH-ALL)
+# ============================================================
+
 @app.get("/health")
 async def health_check():
+    """Health check endpoint for Railway."""
     return {"status": "healthy", "version": "3.0.0-railway"}
 
-# API endpoints
+
 @app.get("/api/version")
 async def get_version():
+    """Get API version info."""
     return {
         "version": "3.0.0-railway",
         "backend": "FastAPI",
@@ -41,10 +47,6 @@ async def get_version():
         "ortools": "9.14.6206"
     }
 
-
-# ============================================================
-# STAP 2: OR-TOOLS TEST ENDPOINT
-# ============================================================
 
 @app.get("/api/test-solver", response_class=HTMLResponse)
 async def test_solver():
@@ -164,13 +166,11 @@ async def test_solver():
                     --color-bob: #fff3e0;
                     --color-carol: #f3e5f5;
                 }}
-                
                 * {{
                     margin: 0;
                     padding: 0;
                     box-sizing: border-box;
                 }}
-                
                 body {{
                     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
                     background: var(--color-bg);
@@ -178,23 +178,19 @@ async def test_solver():
                     padding: 20px;
                     line-height: 1.6;
                 }}
-                
                 .container {{
                     max-width: 1000px;
                     margin: 0 auto;
                 }}
-                
                 .header {{
                     text-align: center;
                     margin-bottom: 40px;
                 }}
-                
                 .header h1 {{
                     font-size: 32px;
                     color: var(--color-success);
                     margin-bottom: 10px;
                 }}
-                
                 .badge {{
                     display: inline-block;
                     padding: 6px 12px;
@@ -205,33 +201,28 @@ async def test_solver():
                     font-size: 14px;
                     border: 1px solid rgba(33, 128, 133, 0.25);
                 }}
-                
                 .stats {{
                     display: grid;
                     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
                     gap: 20px;
                     margin-bottom: 40px;
                 }}
-                
                 .stat-card {{
                     background: var(--color-surface);
                     padding: 20px;
                     border-radius: 12px;
                     border: 1px solid var(--color-border);
                 }}
-                
                 .stat-card h3 {{
                     font-size: 14px;
                     color: rgba(19, 66, 82, 0.6);
                     margin-bottom: 8px;
                 }}
-                
                 .stat-card .value {{
                     font-size: 28px;
                     font-weight: 600;
                     color: var(--color-primary);
                 }}
-                
                 .rooster-table {{
                     background: var(--color-surface);
                     border-radius: 12px;
@@ -239,12 +230,10 @@ async def test_solver():
                     border: 1px solid var(--color-border);
                     margin-bottom: 40px;
                 }}
-                
                 table {{
                     width: 100%;
                     border-collapse: collapse;
                 }}
-                
                 th {{
                     background: var(--color-primary);
                     color: white;
@@ -252,31 +241,25 @@ async def test_solver():
                     text-align: left;
                     font-weight: 500;
                 }}
-                
                 td {{
                     padding: 16px;
                     border-bottom: 1px solid var(--color-border);
                 }}
-                
                 tr:last-child td {{
                     border-bottom: none;
                 }}
-                
                 .medewerker-alice {{ background: var(--color-alice); }}
                 .medewerker-bob {{ background: var(--color-bob); }}
                 .medewerker-carol {{ background: var(--color-carol); }}
-                
                 .shift-counts {{
                     background: var(--color-surface);
                     padding: 20px;
                     border-radius: 12px;
                     border: 1px solid var(--color-border);
                 }}
-                
                 .shift-counts h2 {{
                     margin-bottom: 16px;
                 }}
-                
                 .shift-count-item {{
                     display: flex;
                     justify-content: space-between;
@@ -284,7 +267,6 @@ async def test_solver():
                     margin-bottom: 8px;
                     border-radius: 8px;
                 }}
-                
                 .back-link {{
                     display: inline-block;
                     margin-top: 40px;
@@ -295,7 +277,6 @@ async def test_solver():
                     border-radius: 8px;
                     font-weight: 500;
                 }}
-                
                 .back-link:hover {{
                     background: #1a6a6e;
                 }}
@@ -312,7 +293,6 @@ async def test_solver():
                         <span class="badge">{result_status}</span>
                     </div>
                 </div>
-                
                 <div class="stats">
                     <div class="stat-card">
                         <h3>Oplosstatus</h3>
@@ -331,7 +311,6 @@ async def test_solver():
                         <div class="value">{num_dagen * num_diensten}</div>
                     </div>
                 </div>
-                
                 <div class="rooster-table">
                     <table>
                         <thead>
@@ -349,7 +328,6 @@ async def test_solver():
             middag = rooster[dag].get("Middag", "-")
             ochtend_class = f"medewerker-{ochtend.lower()}" if ochtend != "-" else ""
             middag_class = f"medewerker-{middag.lower()}" if middag != "-" else ""
-            
             html += f"""
                             <tr>
                                 <td><strong>{dag}</strong></td>
@@ -362,7 +340,6 @@ async def test_solver():
                         </tbody>
                     </table>
                 </div>
-                
                 <div class="shift-counts">
                     <h2>Diensten per Medewerker (Eerlijke Verdeling)</h2>
         """
@@ -378,12 +355,10 @@ async def test_solver():
         
         html += f"""
                 </div>
-                
                 <div style="text-align: center;">
                     <a href="/" class="back-link">← Terug naar Homepage</a>
                     <a href="/api/version" class="back-link" style="margin-left: 10px; background: rgba(33, 128, 133, 0.15); color: var(--color-primary);">API Info</a>
                 </div>
-                
                 <div style="margin-top: 40px; padding: 20px; background: #f0f9ff; border-radius: 8px; border-left: 4px solid var(--color-primary);">
                     <h3 style="margin-bottom: 10px;">✅ STAP 2 COMPLEET</h3>
                     <p style="color: rgba(19, 66, 82, 0.8);">
@@ -399,12 +374,11 @@ async def test_solver():
         </body>
         </html>
         """
-        
         return html
         
     else:
         # No solution found
-        html = f"""
+        return f"""
         <!DOCTYPE html>
         <html lang="nl">
         <head>
@@ -419,44 +393,59 @@ async def test_solver():
         </body>
         </html>
         """
-        return html
 
 
 # ============================================================
-# NEXT.JS STATIC FILES
+# NEXT.JS STATIC FILES - CATCH-ALL MOET LAATSTE ZIJN
 # ============================================================
 
-# Mount Next.js static files
 static_dir = Path("out")
+
 if static_dir.exists():
-    # Serve Next.js build output
+    # Mount Next.js static assets
     app.mount("/_next", StaticFiles(directory="out/_next"), name="nextjs")
-    app.mount("/static", StaticFiles(directory="out"), name="static")
     
-    # Catch-all route for Next.js pages
+    # Catch-all route for Next.js pages (MUST BE LAST!)
     @app.get("/{full_path:path}")
     async def serve_frontend(full_path: str):
-        # Try to serve the requested file
+        """Serve Next.js static files. This route catches everything not matched above."""
+        # Skip API routes - they're handled above
+        if full_path.startswith("api/"):
+            return JSONResponse(
+                status_code=404,
+                content={"detail": f"API endpoint /{full_path} not found"}
+            )
+        
         file_path = static_dir / full_path
         
         # If it's a file, serve it
         if file_path.is_file():
             return FileResponse(file_path)
         
-        # If it's a directory or doesn't exist, try index.html
+        # If it's a directory, try index.html
         index_path = static_dir / full_path / "index.html"
         if index_path.exists():
             return FileResponse(index_path)
         
         # Fallback to root index.html (SPA fallback)
-        return FileResponse(static_dir / "index.html")
+        root_index = static_dir / "index.html"
+        if root_index.exists():
+            return FileResponse(root_index)
+        
+        # If nothing exists, 404
+        return JSONResponse(
+            status_code=404,
+            content={"detail": "Page not found"}
+        )
 else:
     @app.get("/")
     async def root():
         return {
-            "message": "Frontend not built yet. Run 'npm run build' first.",
-            "backend_status": "operational"
+            "message": "Frontend not built yet.",
+            "backend_status": "operational",
+            "test_endpoint": "/api/test-solver"
         }
+
 
 if __name__ == "__main__":
     import uvicorn
