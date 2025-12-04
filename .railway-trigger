@@ -1,15 +1,14 @@
-# Railway Deployment Trigger
+# Railway Auto-Deploy Trigger
+# Modify this file to trigger Railway deployment
 
-Timestamp: 2025-12-02T22:32:00Z
-Draad: 97B
-Fix: Module resolution error voor @/lib/supabase/server
+# DRAAD100B - ORT CRITICAL BUGFIXES
+Build: 100B
+Timestamp: 2025-12-04T10:01:45Z
+Random: 45821
 
-## Changes:
-1. Created lib/supabase/server.ts with async createClient() export
-2. Bumped package.json version to 0.1.1-draad97b.1733182260000
-3. Fixed import path mismatch in app/api/roster/solve/route.ts
+Changes:
+- Removed service_types.dagdeel from query (column does not exist)
+- Removed dagdeel from Service TypeScript interface
+- Fixed employee_services.service_code via JOIN with service_types
 
-## Expected Result:
-Successful Next.js build without module resolution errors
-
-Cache-bust: 1733182320
+Deployment: CRITICAL - ORT crash fixes
