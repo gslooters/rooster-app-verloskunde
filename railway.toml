@@ -1,7 +1,15 @@
+# DRAAD102C: Railway configuration met Dockerfile builder
+# Force Dockerfile in plaats van Nixpacks voor Python 3.13 garantie
+
 [build]
-builder = "NIXPACKS"
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "uvicorn main:app --host 0.0.0.0 --port $PORT"
+# Start command is nu in Dockerfile CMD, maar Railway kan overschrijven indien nodig
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
+
+# Health check configuratie
+healthcheckPath = "/health"
+healthcheckTimeout = 100
