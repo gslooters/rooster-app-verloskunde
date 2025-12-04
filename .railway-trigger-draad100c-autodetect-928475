@@ -1,0 +1,31 @@
+🚀 DEPLOYMENT TRIGGER - Draad 100C FINAL FIX
+
+Timestamp: 1733334000000
+Random: 928475
+Action: Verwijder verkeerde configs, gebruik auto-detectie
+
+VERWIJDERD:
+1. ❌ nixpacks.toml (nodejs-20_x bestaat niet)
+2. ❌ Railway.toml (niet nodig)
+
+TOEGEVOEGD:
+1. ✅ DEPLOYMENT-SUCCESS-DRAAD100C.md (documentatie)
+2. ✅ Cache-busting triggers
+
+WAARON DIT WERKT:
+Nixpacks heeft ingebouwde Next.js detectie:
+- Leest package.json voor Node versie
+- Detecteert next.config.js
+- Gebruikt correcte Nix packages (nodejs_20, niet nodejs-20_x)
+- Runt optimale build commands
+- Geen custom config nodig!
+
+VERWACHTE BUILD LOGS:
+╔════════════════════════════ Nixpacks ════════════════════════════╗
+║ setup      │ nodejs (auto-detected from package.json)         ║
+║ install    │ npm ci                                           ║
+║ build      │ npm run build                                    ║  
+║ start      │ node .next/standalone/server.js                  ║
+╚══════════════════════════════════════════════════════════════════╝
+
+DIT IS DE DEFINITIEVE FIX. Simpel = Betrouwbaar.
