@@ -1,0 +1,14 @@
+🚀 DEPLOYMENT TRIGGER - Draad 100B Critical Fix
+
+Timestamp: 1733333400000
+Random: 847392
+Action: Force Next.js deployment configuration
+
+Changes:
+1. ✅ nixpacks.toml created
+2. ✅ .railwayignore created
+3. ✅ Railway.toml created
+4. ✅ Cache-busting triggers updated
+
+Expected outcome:
+Railway will now correctly detect and deploy as Next.js application.

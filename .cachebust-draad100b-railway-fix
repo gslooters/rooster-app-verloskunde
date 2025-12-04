@@ -1,0 +1,19 @@
+🔥 CRITICAL DEPLOYMENT FIX - Draad 100B
+
+Timestamp: 1733333400000
+Random: 847392
+
+PROBLEEM:
+- Railway detecteerde Python in plaats van Next.js
+- uvicorn: command not found errors
+- Deployment faalde bij container start
+
+OPLOSSING:
+- nixpacks.toml: Force Node.js 20.x detection
+- .railwayignore: Ignore solver/ Python directory
+- Railway.toml: Backup deployment configuration
+
+VERWACHT:
+✅ Next.js build succesvol
+✅ Standalone server start op PORT 3000
+✅ Geen Python/uvicorn errors meer

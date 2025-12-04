@@ -1,4 +1,31 @@
-.next
-node_modules
-*.log
-.DS_Store
+# 🔥 CRITICAL: Ignore Python solver directory
+# Prevents Railway from detecting this as a Python project
+
+# Python solver (separate service, not part of main Next.js app)
+solver/
+*.py
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Development files
+.git/
+.github/
+node_modules/
+.next/
+.env.local
+.env.*.local
+
+# Documentation
+*.md
+DOCS/
+
+# Cache-busting files (not needed in production)
+.cachebust*
+.railway-trigger*
+.railway-deploy*
+.railway-rollback*
+.railway-rebuild*
+.railway-emergency*
+.railway-force*
+.railway-cache-bust*
