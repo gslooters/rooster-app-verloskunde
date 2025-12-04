@@ -1,0 +1,21 @@
+# Railway MINIMAL Deployment
+# Timestamp: 1733346463
+# Random: x7q2k9m4p8n5
+
+# STRATEGIE WIJZIGING:
+# ❌ VERWIJDERD: Alle Next.js code
+# ❌ VERWIJDERD: StaticFiles mounting
+# ❌ VERWIJDERD: Catch-all routes
+# ❌ VERWIJDERD: CORS middleware
+# ❌ VERWIJDERD: Complexe routing
+
+# ✅ BEHOUDEN: Alleen essentials
+# - FastAPI basics
+# - OR-Tools test endpoint
+# - Simpele HTML output
+# - Health check
+
+# Totaal: 130 regels (was 400+)
+
+# Test: /api/test-solver
+# Expected: HTML met rooster
