@@ -12,6 +12,7 @@
  * DRAAD 92: Fix status filtering - !== 'MAG_NIET' ipv === 'MAG', verwijder onjuist actief filter
  * DRAAD 99B: Verwijderd service blocking rules (constraints disabled)
  * HERSTEL: Service blocking rules ge-integreerd in getServicesForEmployee + getServicesForEmployeeFiltered
+ * DRAAD 100B: FIX getEmployeeServiceCodes - resolve service_code via JOIN met service_types
  */
 
 import { supabase } from '@/lib/supabase';
@@ -511,6 +512,9 @@ export async function deletePrePlanningAssignment(
 
 /**
  * Haal alle dienst codes op die een medewerker kan uitvoeren
+ * DRAAD 100B: FIX - resolve service_code via JOIN met service_types
+ * employee_services tabel heeft GEEN service_code kolom
+ * 
  * @param employeeId - TEXT ID van de medewerker
  * @returns Array van service codes
  */
@@ -518,9 +522,15 @@ export async function getEmployeeServiceCodes(employeeId: string): Promise<strin
   try {
     console.log('🔍 Getting service codes for employee:', employeeId);
     
+    // FIX DRAAD100B: JOIN met service_types om code op te halen
     const { data, error } = await supabase
       .from('employee_services')
-      .select('service_code')
+      .select(`
+        service_id,
+        service_types (
+          code
+        )
+      `)
       .eq('employee_id', employeeId);
 
     if (error) {
@@ -528,7 +538,11 @@ export async function getEmployeeServiceCodes(employeeId: string): Promise<strin
       return [];
     }
 
-    const codes = data?.map(item => item.service_code) || [];
+    // FIX DRAAD100B: Extract codes uit JOIN resultaat
+    const codes = (data || [])
+      .filter((item: any) => item.service_types?.code)
+      .map((item: any) => item.service_types.code);
+    
     console.log(`✅ Found ${codes.length} service codes for employee ${employeeId}:`, codes);
     return codes;
   } catch (error) {
