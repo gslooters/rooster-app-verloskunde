@@ -1,14 +1,1 @@
-# Python dependencies voor Rooster Solver
-
-# FastAPI framework
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-pydantic==2.5.3
-python-multipart==0.0.6
-
-# Google OR-Tools CP-SAT
-ortools==9.8.3296
-
-# Utilities
-python-dateutil==2.8.2
-pytz==2023.3
+# Python OR-Tools Solver Service - Dependencies\n# Date: 2025-12-04\n\nfastapi==0.115.0\nuvicorn[standard]==0.32.0\npydantic==2.9.2\nortools==9.11.4210\npython-dateutil==2.9.0\n
