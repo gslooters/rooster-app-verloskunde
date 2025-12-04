@@ -1,0 +1,7 @@
+DRAAD100B - ORT CRITICAL BUGFIXES
+Timestamp: 2025-12-04T10:01:30Z
+Random: 78294
+Fixes:
+- service_types.dagdeel removed (column does not exist)
+- Service interface dagdeel removed (assignment data, not service_type data)
+- employee_services.service_code resolved via JOIN with service_types
