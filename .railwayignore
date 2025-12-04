@@ -28,3 +28,7 @@ __pycache__/
 
 # Next.js build output (wordt herbouwd)
 .next/
+
+# Ignore Next.js standalone during Railway detection
+.next/standalone/
+out/
