@@ -1,0 +1,3 @@
+Railway Deploy Trigger: 8447291
+DRAAD100A: Critical bug fixed - service_code → serviceid
+Deze fix beschermt data integriteit door correct te checken of diensten in gebruik zijn.

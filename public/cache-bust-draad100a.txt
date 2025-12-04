@@ -1,0 +1,4 @@
+DRAAD100A Critical Bugfix Deployment
+Timestamp: 1733306522000
+Bugfix: service_code → serviceid in canDeleteService()
+Dit bestand triggert cache invalidatie voor de kritieke fix.
