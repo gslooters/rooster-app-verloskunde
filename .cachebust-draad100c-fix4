@@ -1,0 +1,11 @@
+DRAAD100C FIX 4/4 DEPLOYMENT
+
+Timestamp: 2025-12-04T14:11:30Z
+Random: 78492034
+
+Fix: Verwijder is_nachtdienst blocker
+- Services query: SELECT zonder is_nachtdienst
+- Services mapping: geen is_nachtdienst property
+- TypeScript: Service interface zonder is_nachtdienst
+
+Dit deblokkert ORT services fetch
