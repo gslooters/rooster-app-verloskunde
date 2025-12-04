@@ -23,11 +23,12 @@ export interface Employee {
 // Service
 // FIX DRAAD100B: VERWIJDER dagdeel - dit is assignment data, NIET service_types data
 // dagdeel zit in PreAssignment interface waar het thuishoort
+// FIX DRAAD100C: VERWIJDER is_nachtdienst - kolom bestaat NIET in service_types tabel
 export interface Service {
   id: number;
   code: string;
   naam: string;
-  is_nachtdienst: boolean;
+  // DRAAD100C: is_nachtdienst removed (field does not exist in DB)
 }
 
 // Employee-Service bevoegdheid
