@@ -1,0 +1,40 @@
+Railway Deploy Trigger - Draad 100C Virtual Environment Fix
+==============================================================
+
+Timestamp: 2025-12-04T17:36:40Z (1733335000)
+Reden: pip command not found - missing Python virtual environment
+
+Probleemanalyse:
+================
+❌ Error: /bin/bash: line 1: pip: command not found
+❌ Nixpacks installeert Python maar geen pip in PATH
+❌ Virtual environment ontbreekt
+
+Oplossing:
+==========
+✅ providers = ["python"] als EERSTE regel (forceert Python detectie)
+✅ Setup phase: python3 -m venv /opt/venv
+✅ Install phase: pip via venv activation
+✅ Start command: uvicorn via venv
+
+Verwacht build proces:
+=======================
+[Setup]   → python3 -m venv /opt/venv
+[Install] → . /opt/venv/bin/activate && pip install -r requirements.txt
+          → fastapi==0.115.0 ✓
+          → uvicorn[standard]==0.32.0 ✓
+          → pydantic==2.9.2 ✓
+          → ortools==9.11.4210 ✓
+          → python-dateutil==2.9.0 ✓
+[Build]   → No build needed
+[Start]   → . /opt/venv/bin/activate && uvicorn main:app
+
+Deployment verificatie:
+========================
+1. Check logs: pip install succesvol
+2. Check startup: uvicorn running
+3. Test: curl https://[url]/health
+4. Verwacht: {"status": "healthy"}
+
+Commit SHA: 2b7c8a05742e59755cabd107038ebb4ce3cb8b11
+Cache bust: 1733335000
