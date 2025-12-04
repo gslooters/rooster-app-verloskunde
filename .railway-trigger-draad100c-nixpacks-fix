@@ -1,0 +1,21 @@
+Railway Deploy Trigger - Draad 100C Nixpacks Fix
+=================================================
+
+Timestamp: 2025-12-04T17:31:00Z
+Reden: Syntax error fix in solver/nixpacks.toml
+
+Probleem:
+- providers was map instead of array
+- Nixpacks parse error: "invalid type: map, expected a sequence"
+
+Oplossing:
+- Gewijzigd van: [providers] python = "3.11"
+- Naar: providers = ["python"]
+
+Verwacht resultaat:
+✅ Nixpacks detecteert Python correct
+✅ pip install -r requirements.txt
+✅ Service start met uvicorn
+✅ Health check succesvol
+
+Commit: 49da705562c6b05e8e9abee0f429be6830aa22ee
