@@ -14,7 +14,7 @@ psycopg2-binary==2.9.9
 sqlalchemy==2.0.25
 
 # For future solver integration
-ortools==9.8.3296
+ortools==9.14.6206  # Updated for Python 3.13 compatibility
 
 # Utilities
 pydantic==2.5.3
