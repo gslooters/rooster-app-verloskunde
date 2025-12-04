@@ -1,0 +1,34 @@
+# Railway Route Fix Deployment
+# FIX: API routes voorrang boven catch-all
+
+# Timestamp: 1733345572
+# Random: m4k8p7x2n5q9
+# Date: 2025-12-04T21:12:52Z
+
+# PROBLEEM:
+# Catch-all route /{full_path:path} onderschept ALLE requests
+# Inclusief /api/test-solver → 404 error
+
+# OPLOSSING:
+# 1. API routes VOOR catch-all definiëren
+# 2. In catch-all: skip api/ prefix
+# 3. Expliciete 404 voor onbekende API routes
+
+# Route volgorde (KRITIEK):
+# 1. /health
+# 2. /api/version  
+# 3. /api/test-solver
+# 4. /_next static mount
+# 5. /{full_path:path} catch-all (LAATSTE)
+
+# Expected behavior:
+# ✅ /api/test-solver → OR-Tools HTML
+# ✅ /api/version → JSON response
+# ✅ /health → JSON response
+# ✅ / → Next.js index.html
+# ✅ /404-onbekend → Next.js fallback
+
+# Test URL:
+# https://rooster-app-verloskunde-production.up.railway.app/api/test-solver
+
+# Success: OR-Tools pagina met rooster tabel
