@@ -1,6 +1,9 @@
--- DRAAD 103 Stap 2: Verwijder 5 planregels uit database
+-- DRAAD 103 Stap 2 (GECORRIGEERD): Verwijder 5 planregels uit database
 -- Datum: 2024-12-05
 -- Beschrijving: Verwijder constraint types die nooit functioneel zijn geweest
+--
+-- SITUATIE: Alleen planning_constraints tabel heeft 8 records
+--            Alle andere tabellen (roster_*) zijn leeg
 --
 -- Te verwijderen types:
 -- 1. availability (Beschikbaarheid)
@@ -20,8 +23,8 @@
 
 BEGIN;
 
--- Stap 1: Verwijder alle constraints met deze types uit roster_planning_constraint
-DELETE FROM roster_planning_constraint
+-- Stap 1: Verwijder records uit planning_constraints tabel
+DELETE FROM planning_constraints
 WHERE type IN (
   'availability',
   'teamdagblokrules',
@@ -30,22 +33,12 @@ WHERE type IN (
   'minserviceperperiod'
 );
 
--- Stap 2: Verwijder alle base constraints met deze types uit planning_constraint
-DELETE FROM planning_constraint
-WHERE type IN (
-  'availability',
-  'teamdagblokrules',
-  'fairnessbalance',
-  'workloadmax',
-  'minserviceperperiod'
-);
+-- Stap 2: Update type constraint (CHECK) voor planning_constraints tabel
+ALTER TABLE planning_constraints
+DROP CONSTRAINT IF EXISTS planning_constraints_type_check;
 
--- Stap 3: Update type constraint (CHECK) voor planning_constraint tabel
-ALTER TABLE planning_constraint
-DROP CONSTRAINT IF EXISTS planning_constraint_type_check;
-
-ALTER TABLE planning_constraint
-ADD CONSTRAINT planning_constraint_type_check
+ALTER TABLE planning_constraints
+ADD CONSTRAINT planning_constraints_type_check
 CHECK (type IN (
   'coverageminimum',
   'employeeservices',
@@ -56,12 +49,13 @@ CHECK (type IN (
   'maxconsecutivework'
 ));
 
--- Stap 4: Update type constraint (CHECK) voor roster_planning_constraint tabel
-ALTER TABLE roster_planning_constraint
-DROP CONSTRAINT IF EXISTS roster_planning_constraint_type_check;
+-- Stap 3: Update type constraint (CHECK) voor roster_planning_constraints tabel
+-- (Ook updaten voor toekomstig gebruik, ook al is tabel nu leeg)
+ALTER TABLE roster_planning_constraints
+DROP CONSTRAINT IF EXISTS roster_planning_constraints_type_check;
 
-ALTER TABLE roster_planning_constraint
-ADD CONSTRAINT roster_planning_constraint_type_check
+ALTER TABLE roster_planning_constraints
+ADD CONSTRAINT roster_planning_constraints_type_check
 CHECK (type IN (
   'coverageminimum',
   'employeeservices',
@@ -75,16 +69,30 @@ CHECK (type IN (
 -- Log wijzigingen
 DO $$
 DECLARE
-  pc_deleted INTEGER;
-  rpc_deleted INTEGER;
+  deleted_count INTEGER;
 BEGIN
-  -- Tel verwijderde rijen
-  GET DIAGNOSTICS pc_deleted = ROW_COUNT;
+  -- Tel hoeveel records verwijderd zijn
+  SELECT COUNT(*) INTO deleted_count
+  FROM planning_constraints
+  WHERE type IN (
+    'availability',
+    'teamdagblokrules',
+    'fairnessbalance',
+    'workloadmax',
+    'minserviceperperiod'
+  );
   
   RAISE NOTICE 'DRAAD 103: 5 constraint types verwijderd';
-  RAISE NOTICE 'Constraints verwijderd uit planning_constraint en roster_planning_constraint';
+  RAISE NOTICE 'Verwijderde records uit planning_constraints: %', deleted_count;
   RAISE NOTICE 'Type CHECK constraints aangepast voor beide tabellen';
   RAISE NOTICE 'Overgebleven types: 7 (was 12)';
 END $$;
 
 COMMIT;
+
+-- Verificatie query (voer NA de migration uit):
+-- SELECT type, COUNT(*) as aantal 
+-- FROM planning_constraints 
+-- GROUP BY type 
+-- ORDER BY type;
+-- Verwacht: Alleen 7 types, totaal max 8 records
