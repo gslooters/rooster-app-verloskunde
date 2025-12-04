@@ -1,14 +1,16 @@
 # Railway Auto-Deploy Trigger
 # Modify this file to trigger Railway deployment
 
-# DRAAD100B - ORT CRITICAL BUGFIXES
-Build: 100B
-Timestamp: 2025-12-04T10:01:45Z
-Random: 45821
+# DRAAD100C - FIX 4/4: VERWIJDER IS_NACHTDIENST BLOCKER
+Build: 100C-FIX4
+Timestamp: 2025-12-04T14:11:35Z
+Random: 89274
 
 Changes:
-- Removed service_types.dagdeel from query (column does not exist)
-- Removed dagdeel from Service TypeScript interface
-- Fixed employee_services.service_code via JOIN with service_types
+- Removed service_types.is_nachtdienst from SELECT query (column does not exist)
+- Removed is_nachtdienst from services mapping in route.ts
+- Removed is_nachtdienst from Service TypeScript interface
+- Added comment: "DRAAD100C: is_nachtdienst removed (field does not exist in DB)"
 
-Deployment: CRITICAL - ORT crash fixes
+Deployment: CRITICAL - Fixes ORT services fetch blocker
+Status: READY FOR CORE 3 CONSTRAINTS IMPLEMENTATION
