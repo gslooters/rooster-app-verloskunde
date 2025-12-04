@@ -1,388 +1,176 @@
-"""FastAPI application serving Next.js frontend and providing backend APIs."""
+"""Minimale FastAPI app - ALLEEN OR-Tools test."""
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse
-import os
-from pathlib import Path
+from fastapi.responses import HTMLResponse
 from datetime import datetime
-
-# OR-Tools import
 from ortools.sat.python import cp_model
 
-app = FastAPI(
-    title="Rooster App Verloskunde",
-    description="Planning application for healthcare practice",
-    version="3.0.0-railway"
-)
-
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app = FastAPI(title="Rooster Solver Test")
 
 
-# ============================================================
-# API ENDPOINTS
-# ============================================================
+@app.get("/")
+async def root():
+    return {
+        "app": "Rooster Solver",
+        "status": "online",
+        "test": "/api/test-solver"
+    }
+
 
 @app.get("/health")
-async def health_check():
-    """Health check endpoint for Railway."""
-    return {"status": "healthy", "version": "3.0.0-railway"}
-
-
-@app.get("/api/version")
-async def get_version():
-    """Get API version info."""
-    return {
-        "version": "3.0.0-railway",
-        "backend": "FastAPI",
-        "frontend": "Next.js Static Export",
-        "ortools": "9.14.6206"
-    }
+async def health():
+    return {"status": "healthy"}
 
 
 @app.get("/api/test-solver", response_class=HTMLResponse)
 async def test_solver():
-    """
-    Test OR-Tools CP-SAT solver met een simpel rooster probleem.
+    """OR-Tools test met 3 medewerkers, 5 dagen, 2 diensten."""
     
-    Scenario:
-    - 3 medewerkers (Alice, Bob, Carol)
-    - 5 dagen (Maandag t/m Vrijdag)
-    - 2 diensten per dag (Ochtend, Middag)
-    """
-    
-    # Data setup
     medewerkers = ["Alice", "Bob", "Carol"]
-    dagen = ["Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag"]
-    diensten = ["Ochtend", "Middag"]
+    dagen = ["Ma", "Di", "Wo", "Do", "Vr"]
+    diensten = ["Och", "Mid"]
     
-    num_medewerkers = len(medewerkers)
-    num_dagen = len(dagen)
-    num_diensten = len(diensten)
+    n_m = len(medewerkers)
+    n_d = len(dagen)
+    n_s = len(diensten)
     
-    # Create CP-SAT model
     model = cp_model.CpModel()
     
-    # Decision variables
     shifts = {}
-    for m in range(num_medewerkers):
-        for d in range(num_dagen):
-            for s in range(num_diensten):
-                shifts[(m, d, s)] = model.NewBoolVar(f'shift_m{m}_d{d}_s{s}')
+    for m in range(n_m):
+        for d in range(n_d):
+            for s in range(n_s):
+                shifts[(m, d, s)] = model.NewBoolVar(f's_{m}_{d}_{s}')
     
-    # Constraint 1: Elke dienst door precies 1 medewerker
-    for d in range(num_dagen):
-        for s in range(num_diensten):
-            model.Add(sum(shifts[(m, d, s)] for m in range(num_medewerkers)) == 1)
+    # Elke dienst precies 1 medewerker
+    for d in range(n_d):
+        for s in range(n_s):
+            model.Add(sum(shifts[(m, d, s)] for m in range(n_m)) == 1)
     
-    # Constraint 2: Max 1 dienst per dag per medewerker
-    for m in range(num_medewerkers):
-        for d in range(num_dagen):
-            model.Add(sum(shifts[(m, d, s)] for s in range(num_diensten)) <= 1)
+    # Max 1 dienst per dag per medewerker
+    for m in range(n_m):
+        for d in range(n_d):
+            model.Add(sum(shifts[(m, d, s)] for s in range(n_s)) <= 1)
     
-    # Constraint 3: Eerlijke verdeling
-    shifts_per_medewerker = []
-    for m in range(num_medewerkers):
-        shifts_count = model.NewIntVar(0, num_dagen * num_diensten, f'shifts_count_m{m}')
-        model.Add(shifts_count == sum(
-            shifts[(m, d, s)] 
-            for d in range(num_dagen) 
-            for s in range(num_diensten)
-        ))
-        shifts_per_medewerker.append(shifts_count)
-    
-    max_shifts = model.NewIntVar(0, num_dagen * num_diensten, 'max_shifts')
-    min_shifts = model.NewIntVar(0, num_dagen * num_diensten, 'min_shifts')
-    model.AddMaxEquality(max_shifts, shifts_per_medewerker)
-    model.AddMinEquality(min_shifts, shifts_per_medewerker)
-    
-    diff = model.NewIntVar(0, num_dagen * num_diensten, 'diff')
-    model.Add(diff == max_shifts - min_shifts)
-    model.Minimize(diff)
-    
-    # Solve
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = 10.0
+    solver.parameters.max_time_in_seconds = 5.0
     
-    start_time = datetime.now()
+    start = datetime.now()
     status = solver.Solve(model)
-    solve_time = (datetime.now() - start_time).total_seconds()
+    tijd = (datetime.now() - start).total_seconds()
     
-    # Build result
-    if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-        result_status = "OPTIMAL" if status == cp_model.OPTIMAL else "FEASIBLE"
+    if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
+        result = "OPTIMAL" if status == cp_model.OPTIMAL else "FEASIBLE"
         
-        # Build rooster
         rooster = {}
-        for d in range(num_dagen):
+        for d in range(n_d):
             rooster[dagen[d]] = {}
-            for s in range(num_diensten):
-                for m in range(num_medewerkers):
+            for s in range(n_s):
+                for m in range(n_m):
                     if solver.Value(shifts[(m, d, s)]) == 1:
                         rooster[dagen[d]][diensten[s]] = medewerkers[m]
         
-        # Count shifts
-        shift_counts = {}
-        for m in range(num_medewerkers):
-            count = sum(
+        counts = {}
+        for m in range(n_m):
+            counts[medewerkers[m]] = sum(
                 solver.Value(shifts[(m, d, s)]) 
-                for d in range(num_dagen) 
-                for s in range(num_diensten)
+                for d in range(n_d) for s in range(n_s)
             )
-            shift_counts[medewerkers[m]] = count
         
-        # Generate HTML
         html = f"""
 <!DOCTYPE html>
-<html lang="nl">
+<html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OR-Tools Test - GESLAAGD ✅</title>
+    <title>OR-Tools Test ✅</title>
     <style>
-        :root {{
-            --color-bg: #fcfcf9;
-            --color-surface: #fffffe;
-            --color-primary: #218085;
-            --color-text: #134252;
-            --color-border: rgba(94, 82, 64, 0.2);
-            --color-alice: #e3f2fd;
-            --color-bob: #fff3e0;
-            --color-carol: #f3e5f5;
-        }}
-        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         body {{
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: var(--color-bg);
-            color: var(--color-text);
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
             padding: 20px;
-            line-height: 1.6;
+            background: #f5f5f5;
         }}
-        .container {{ max-width: 1000px; margin: 0 auto; }}
-        .header {{ text-align: center; margin-bottom: 40px; }}
-        .header h1 {{ font-size: 32px; color: var(--color-primary); margin-bottom: 10px; }}
-        .badge {{
-            display: inline-block;
-            padding: 6px 12px;
-            background: rgba(33, 128, 133, 0.15);
-            color: var(--color-primary);
-            border-radius: 20px;
-            font-weight: 500;
-            font-size: 14px;
-            border: 1px solid rgba(33, 128, 133, 0.25);
+        h1 {{ color: #218085; }}
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            margin: 20px 0;
         }}
-        .stats {{
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 40px;
-        }}
-        .stat-card {{
-            background: var(--color-surface);
-            padding: 20px;
-            border-radius: 12px;
-            border: 1px solid var(--color-border);
-        }}
-        .stat-card h3 {{ font-size: 14px; color: rgba(19, 66, 82, 0.6); margin-bottom: 8px; }}
-        .stat-card .value {{ font-size: 28px; font-weight: 600; color: var(--color-primary); }}
-        .rooster-table {{
-            background: var(--color-surface);
-            border-radius: 12px;
-            overflow: hidden;
-            border: 1px solid var(--color-border);
-            margin-bottom: 40px;
-        }}
-        table {{ width: 100%; border-collapse: collapse; }}
-        th {{
-            background: var(--color-primary);
-            color: white;
-            padding: 16px;
-            text-align: left;
-            font-weight: 500;
-        }}
-        td {{ padding: 16px; border-bottom: 1px solid var(--color-border); }}
-        tr:last-child td {{ border-bottom: none; }}
-        .medewerker-alice {{ background: var(--color-alice); }}
-        .medewerker-bob {{ background: var(--color-bob); }}
-        .medewerker-carol {{ background: var(--color-carol); }}
-        .shift-counts {{
-            background: var(--color-surface);
-            padding: 20px;
-            border-radius: 12px;
-            border: 1px solid var(--color-border);
-        }}
-        .shift-counts h2 {{ margin-bottom: 16px; }}
-        .shift-count-item {{
-            display: flex;
-            justify-content: space-between;
+        th, td {{
+            border: 1px solid #ddd;
             padding: 12px;
-            margin-bottom: 8px;
-            border-radius: 8px;
+            text-align: left;
         }}
-        .back-link {{
-            display: inline-block;
-            margin-top: 40px;
-            padding: 12px 24px;
-            background: var(--color-primary);
-            color: white;
-            text-decoration: none;
-            border-radius: 8px;
-            font-weight: 500;
-        }}
-        .back-link:hover {{ background: #1a6a6e; }}
+        th {{ background: #218085; color: white; }}
+        .success {{ color: #218085; font-weight: bold; }}
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>✅ OR-Tools Test GESLAAGD!</h1>
-            <p style="margin-top: 10px; color: rgba(19, 66, 82, 0.7);">
-                Google OR-Tools CP-SAT Solver werkt perfect met Railway deployment
-            </p>
-            <div style="margin-top: 20px;">
-                <span class="badge">{result_status}</span>
-            </div>
-        </div>
-        <div class="stats">
-            <div class="stat-card">
-                <h3>Oplosstatus</h3>
-                <div class="value">{result_status}</div>
-            </div>
-            <div class="stat-card">
-                <h3>Oplostijd</h3>
-                <div class="value">{solve_time:.3f}s</div>
-            </div>
-            <div class="stat-card">
-                <h3>Medewerkers</h3>
-                <div class="value">{num_medewerkers}</div>
-            </div>
-            <div class="stat-card">
-                <h3>Totaal Diensten</h3>
-                <div class="value">{num_dagen * num_diensten}</div>
-            </div>
-        </div>
-        <div class="rooster-table">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Dag</th>
-                        <th>Ochtend</th>
-                        <th>Middag</th>
-                    </tr>
-                </thead>
-                <tbody>
-        """
+    <h1>✅ OR-Tools Test GESLAAGD!</h1>
+    <p class="success">Status: {result}</p>
+    <p>Oplostijd: {tijd:.3f} seconden</p>
+    
+    <h2>Rooster</h2>
+    <table>
+        <tr>
+            <th>Dag</th>
+            <th>Ochtend</th>
+            <th>Middag</th>
+        </tr>"""
         
         for dag in dagen:
-            ochtend = rooster[dag].get("Ochtend", "-")
-            middag = rooster[dag].get("Middag", "-")
-            ochtend_class = f"medewerker-{ochtend.lower()}" if ochtend != "-" else ""
-            middag_class = f"medewerker-{middag.lower()}" if middag != "-" else ""
+            och = rooster[dag].get("Och", "-")
+            mid = rooster[dag].get("Mid", "-")
             html += f"""
-                    <tr>
-                        <td><strong>{dag}</strong></td>
-                        <td class="{ochtend_class}">{ochtend}</td>
-                        <td class="{middag_class}">{middag}</td>
-                    </tr>
-            """
+        <tr>
+            <td><b>{dag}</b></td>
+            <td>{och}</td>
+            <td>{mid}</td>
+        </tr>"""
         
         html += """
-                </tbody>
-            </table>
-        </div>
-        <div class="shift-counts">
-            <h2>Diensten per Medewerker</h2>
-        """
+    </table>
+    
+    <h2>Diensten per Medewerker</h2>
+    <table>
+        <tr>
+            <th>Medewerker</th>
+            <th>Aantal</th>
+        </tr>"""
         
-        for medewerker, count in shift_counts.items():
-            medewerker_class = f"medewerker-{medewerker.lower()}"
+        for name, count in counts.items():
             html += f"""
-            <div class="shift-count-item {medewerker_class}">
-                <span><strong>{medewerker}</strong></span>
-                <span>{count} diensten</span>
-            </div>
-            """
+        <tr>
+            <td>{name}</td>
+            <td>{count}</td>
+        </tr>"""
         
-        html += f"""
-        </div>
-        <div style="text-align: center;">
-            <a href="/api/version" class="back-link">API Info</a>
-        </div>
-        <div style="margin-top: 40px; padding: 20px; background: #f0f9ff; border-radius: 8px; border-left: 4px solid var(--color-primary);">
-            <h3 style="margin-bottom: 10px;">✅ STAP 2 COMPLEET</h3>
-            <p style="color: rgba(19, 66, 82, 0.8);">
-                <strong>Wat is getest:</strong><br>
-                • OR-Tools CP-SAT solver draait succesvol<br>
-                • Constraints worden correct toegepast<br>
-                • Oplossing is {result_status.lower()}<br>
-                • HTML rendering werkt<br><br>
-                <strong>Volgende stap:</strong> STAP 3 - Supabase database
-            </p>
-        </div>
-    </div>
+        html += """
+    </table>
+    <p><a href="/">← Terug</a> | <a href="/health">Health</a></p>
 </body>
 </html>
         """
         return html
-        
+    
     else:
         return f"""
 <!DOCTYPE html>
-<html lang="nl">
-<head>
-    <meta charset="UTF-8">
-    <title>OR-Tools Test - Geen Oplossing</title>
-</head>
-<body style="font-family: sans-serif; padding: 40px; text-align: center;">
-    <h1 style="color: #c0152f;">❌ Geen Oplossing Gevonden</h1>
-    <p>Solver status: {status}</p>
-    <p>Oplostijd: {solve_time:.3f} seconden</p>
-    <a href="/api/version" style="display: inline-block; margin-top: 20px; padding: 10px 20px; background: #218085; color: white; text-decoration: none; border-radius: 5px;">API Info</a>
+<html>
+<head><title>Fout</title></head>
+<body>
+    <h1>Geen oplossing</h1>
+    <p>Status: {status}</p>
+    <p>Tijd: {tijd:.3f}s</p>
 </body>
 </html>
         """
 
 
-# ============================================================
-# STATIC FILES (ALLEEN ALS out/ BESTAAT)
-# ============================================================
-
-static_dir = Path("out")
-
-if static_dir.exists():
-    # Mount Next.js static assets
-    try:
-        app.mount("/_next", StaticFiles(directory="out/_next"), name="nextjs")
-    except Exception:
-        pass  # _next folder might not exist
-    
-    # Serve root index.html for /
-    @app.get("/")
-    async def serve_root():
-        index_file = static_dir / "index.html"
-        if index_file.exists():
-            return FileResponse(index_file)
-        return {"message": "Frontend built but index.html not found", "api_test": "/api/test-solver"}
-else:
-    @app.get("/")
-    async def root():
-        return {
-            "message": "Rooster App Backend",
-            "status": "operational",
-            "test_endpoint": "/api/test-solver",
-            "api_docs": "/docs"
-        }
-
-
 if __name__ == "__main__":
     import uvicorn
+    import os
     port = int(os.getenv("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
