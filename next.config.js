@@ -18,21 +18,19 @@ const nextConfig = {
   swcMinify: true,
   compress: true,
   
-  // 🔥 Output config voor Railway deployment
-  output: 'standalone',
+  // 🔥 NEW: Export static HTML (FastAPI will serve)
+  output: 'export',
   
-  // 🔥 Server configuration for Railway
-  serverRuntimeConfig: {
-    // Deze worden NIET blootgesteld aan client
-  },
-  publicRuntimeConfig: {
-    // Deze zijn beschikbaar op client EN server
+  // 🔥 Disable image optimization for static export
+  images: {
+    unoptimized: true,
   },
   
-  // 🔥 EXPERIMENTAL: Settings for Next.js 14.2.33
-  experimental: {
-    outputFileTracingRoot: undefined,
-  },
+  // 🔥 Base path (if needed for routing)
+  // basePath: '',
+  
+  // 🔥 Trailing slash for cleaner URLs
+  trailingSlash: true,
   
   // 🔥 Webpack configuratie
   webpack: (config, { dev, isServer }) => {
