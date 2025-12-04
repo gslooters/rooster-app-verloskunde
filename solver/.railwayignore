@@ -1,5 +1,8 @@
 # Railway Ignore File voor Solver Service
-# Alles BUITEN solver/ directory negeren
+# Force Railway to use NIXPACKS builder (not Dockerfile)
+
+# CRITICAL: Ignore Dockerfile so Railway uses Nixpacks
+Dockerfile
 
 # Ignore root Next.js files
 ../.next
@@ -19,5 +22,4 @@
 !requirements.txt
 !main.py
 !Procfile
-!railway.json
 !nixpacks.toml
