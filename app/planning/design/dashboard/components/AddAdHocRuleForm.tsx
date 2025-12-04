@@ -1,5 +1,6 @@
 // AddAdHocRuleForm: Form voor nieuwe ad-hoc regels
 // DRAAD95D: Rooster-specifieke Planregels UI Implementatie
+// DRAAD103: Stap 3 - Update constraint types lijst (5 verwijderd)
 'use client';
 
 import { ConstraintType, TYPE_LABELS } from '@/lib/types/planning-constraint';
@@ -11,19 +12,15 @@ interface AddAdHocRuleFormProps {
   onCancel: () => void;
 }
 
+// DRAAD103: 7 overgebleven constraint types (was 12)
 const CONSTRAINT_TYPES: ConstraintType[] = [
   'coverageminimum',
-  'availability',
   'employeeservices',
   'preassignments',
-  'teamdagblokrules',
-  'workloadmax',
   'consecutiverest',
   'blocksnextday',
   'maxserviceperperiod',
-  'fairnessbalance',
-  'maxconsecutivework',
-  'minserviceperperiod'
+  'maxconsecutivework'
 ];
 
 export default function AddAdHocRuleForm({
@@ -32,7 +29,7 @@ export default function AddAdHocRuleForm({
   onCancel
 }: AddAdHocRuleFormProps) {
   const [naam, setNaam] = useState('');
-  const [type, setType] = useState<ConstraintType>('workloadmax');
+  const [type, setType] = useState<ConstraintType>('consecutiverest');
   const [beschrijving, setBeschrijving] = useState('');
   const [parameters, setParameters] = useState('{\n  \n}');
   const [priority, setPriority] = useState<1 | 2 | 3 | 4>(3);
