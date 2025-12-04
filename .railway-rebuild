@@ -1,4 +1,6 @@
-ROLLBACK-50fb7e2-1732551600
-Force rebuild na rollback
-Target: Werkende deployment 50bfb705
-Datum: 2025-11-25 16:26:40 CET
+# Railway Rebuild Trigger - DRAAD102B
+# Timestamp: 1733341954
+# Fix: Force Python 3.13 deployment
+# Previous issue: Python 3.11 selected, pip not in PATH
+# Solution: .nixpacks.toml + package.json engines.python >= 3.13
+# Expected: Nixpacks detects python313, pip works, OR-Tools installs
