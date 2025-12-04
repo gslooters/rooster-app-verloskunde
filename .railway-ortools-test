@@ -1,0 +1,45 @@
+# Railway OR-Tools Test Deployment
+# STAP 2: Test of OR-Tools CP-SAT solver werkt
+
+# Timestamp: 1733345267
+# Random: x5p8k2m9q7n4
+# Date: 2025-12-04T21:07:47Z
+
+# DEPLOYMENT #12: OR-Tools Test
+
+# Nieuwe functionaliteit:
+# + /api/test-solver endpoint
+#   - Test OR-Tools CP-SAT solver
+#   - 3 medewerkers (Alice, Bob, Carol)
+#   - 5 dagen (Ma-Vr)
+#   - 2 diensten per dag (Ochtend, Middag)
+#   - Constraints: elke dienst bezet, max 1 per dag
+#   - Optimize: eerlijke verdeling
+#   - HTML output met mooie styling
+
+# Expected behavior:
+# ✅ OR-Tools importeert correct
+# ✅ CP-SAT model wordt gecreëerd
+# ✅ Constraints worden toegepast
+# ✅ Solver vindt optimale oplossing
+# ✅ HTML wordt gerenderd met rooster
+# ✅ Perplexity design system kleuren
+
+# Test URL:
+# https://rooster-app-verloskunde-production.up.railway.app/api/test-solver
+
+# Success criteria:
+# - Status: OPTIMAL of FEASIBLE
+# - Oplostijd: < 1 seconde
+# - Alle diensten toegewezen
+# - Eerlijke verdeling (max 1 dienst verschil)
+# - HTML toont kleurgecodeerde tabel
+
+# Dit bewijst:
+# ✅ Python 3.12.7 werkt
+# ✅ OR-Tools 9.14.6206 werkt
+# ✅ CP-SAT solver werkt
+# ✅ HTML rendering werkt
+# ✅ FastAPI endpoints werken
+
+# Klaar voor STAP 3: Supabase database integratie
