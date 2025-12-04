@@ -11,7 +11,8 @@
 
 # next.js
 /.next/
-/out/
+# DRAAD101: /out/ NIET NEGEREN - Railway heeft dit nodig!
+# /out/
 
 # production
 /build
@@ -34,3 +35,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
