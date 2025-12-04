@@ -1,17 +1,27 @@
 # Nixpacks Configuration voor Python Solver Service
-# Railway deployment configuration
+# Railway deployment - CORRECTE Python setup
 
+# Providers MOET als eerste - forceert Python detectie
+providers = ["python"]
+
+# Setup phase - maak virtual environment met pip
 [phases.setup]
-cmds = ["echo 'Configuring Python OR-Tools Solver Service'"]
+cmds = [
+    "python3 -m venv /opt/venv",
+    "echo 'Python venv created at /opt/venv'"
+]
 
+# Install phase - gebruik pip vanuit venv
 [phases.install]
-cmds = ["pip install -r requirements.txt"]
+cmds = [
+    ". /opt/venv/bin/activate && pip install --upgrade pip",
+    ". /opt/venv/bin/activate && pip install -r requirements.txt"
+]
 
+# Build phase - niet nodig voor Python
 [phases.build]
 cmds = ["echo 'No build step needed for Python service'"]
 
+# Start command - gebruik Python vanuit venv
 [start]
-cmd = "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"
-
-# Provider configuration - MOET een array zijn, geen map!
-providers = ["python"]
+cmd = ". /opt/venv/bin/activate && uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"
