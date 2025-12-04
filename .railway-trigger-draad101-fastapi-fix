@@ -1,0 +1,36 @@
+DRAAD101 HOTFIX - Railway Deployment Fix
+=========================================
+
+Trigger timestamp: 1733330221000
+Date: 2025-12-04 16:57:01 CET
+
+Probleem:
+- ModuleNotFoundError: No module named 'fastapi'
+- Railway service 'vibrant-emotion' crasht bij startup
+
+Root Cause Analysis:
+1. FastAPI staat WEL in requirements.txt
+2. MAAR: Dockerfile CMD was 'python main.py' ipv uvicorn
+3. Railway Root Directory mogelijk niet ingesteld op 'solver/'
+
+Fixes Applied:
+1. ✅ solver/railway.json toegevoegd (correct Railway config)
+2. ✅ solver/Dockerfile CMD gewijzigd naar: uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
+3. ✅ Healthcheck fix: urllib ipv requests (dependency reduction)
+4. ✅ Deze cache-bust trigger voor nieuwe Railway deployment
+
+Verificatie Required:
+- Railway dashboard → Service 'vibrant-emotion' → Settings → Root Directory moet zijn: solver
+- Als niet ingesteld: handmatig instellen via Railway UI
+
+Expected Result:
+- Uvicorn start correct met Railway PORT variable
+- FastAPI module wordt gevonden
+- Service start succesvol op https://[service-url]
+- Health endpoint bereikbaar: GET /health
+
+Next Steps:
+1. Check Railway deployment logs
+2. Verify "Application startup complete" in logs
+3. Test health endpoint: curl https://[railway-url]/health
+4. Update Next.js SOLVER_SERVICE_URL environment variable
