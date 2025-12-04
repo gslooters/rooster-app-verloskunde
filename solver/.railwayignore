@@ -1,0 +1,23 @@
+# Railway Ignore File voor Solver Service
+# Alles BUITEN solver/ directory negeren
+
+# Ignore root Next.js files
+../.next
+../node_modules
+../package.json
+../package-lock.json
+../.env*
+
+# Ignore andere directories
+../app
+../lib
+../components
+../public
+../scripts
+
+# Keep only solver/ contents
+!requirements.txt
+!main.py
+!Procfile
+!railway.json
+!nixpacks.toml

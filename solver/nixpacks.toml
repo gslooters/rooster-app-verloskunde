@@ -1,11 +1,18 @@
+# Nixpacks Configuration voor Python Solver Service
+# Dit forceert Railway om dit als Python project te behandelen
+
 [phases.setup]
-nixPkgs = ["python311", "gcc", "g++"]
+cmds = ["echo 'Configuring Python OR-Tools Solver Service'"]
 
 [phases.install]
-cmds = [
-  "pip install --upgrade pip",
-  "pip install -r requirements.txt"
-]
+cmds = ["pip install -r requirements.txt"]
+
+[phases.build]
+cmds = ["echo 'No build step needed for Python service'"]
 
 [start]
-cmd = "python main.py"
+cmd = "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"
+
+# Expliciet: dit is een Python project
+[providers]
+python = "3.11"
