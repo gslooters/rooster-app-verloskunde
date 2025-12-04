@@ -1,6 +1,7 @@
 """FastAPI application serving Next.js frontend and providing backend APIs."""
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 import os
@@ -10,6 +11,15 @@ app = FastAPI(
     title="Rooster App Verloskunde",
     description="Planning application for healthcare practice",
     version="3.0.0-railway"
+)
+
+# CORS middleware - allow all origins for now (configure for production)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production: specify exact domains
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Health check endpoint for Railway
