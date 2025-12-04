@@ -93,9 +93,10 @@ export async function POST(request: NextRequest) {
     
     // 5. Fetch services - FIX DRAAD98D: service_types ipv services, actief ipv active
     // FIX DRAAD100B: VERWIJDER dagdeel - kolom bestaat NIET in service_types
+    // FIX DRAAD100C: VERWIJDER is_nachtdienst - kolom bestaat NIET in service_types
     const { data: services, error: svcError } = await supabase
       .from('service_types')
-      .select('id, code, naam, is_nachtdienst')
+      .select('id, code, naam')
       .eq('actief', true);
     
     if (svcError) {
@@ -138,6 +139,7 @@ export async function POST(request: NextRequest) {
     // 8. Transform naar solver input format - FIX DRAAD98A: samenvoegen voornaam + achternaam
     // FIX DRAAD98B: aantalwerkdagen mapping
     // FIX DRAAD100B: VERWIJDER dagdeel uit services mapping - komt van assignment, niet van service_type
+    // FIX DRAAD100C: VERWIJDER is_nachtdienst uit services mapping - field bestaat niet in DB
     const solverRequest: SolveRequest = {
       roster_id,
       start_date: roster.start_date,
@@ -153,8 +155,8 @@ export async function POST(request: NextRequest) {
       services: (services || []).map(svc => ({
         id: svc.id,
         code: svc.code,
-        naam: svc.naam,
-        is_nachtdienst: svc.is_nachtdienst || false
+        naam: svc.naam
+        // DRAAD100C: is_nachtdienst verwijderd - field bestaat niet in service_types
       })),
       employee_services: (empServices || []).map(es => ({
         employee_id: es.employee_id,
