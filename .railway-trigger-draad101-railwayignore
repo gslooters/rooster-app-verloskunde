@@ -1,0 +1,46 @@
+DRAAD101 FINAL FIX - RAILWAY NIXPACKS FORCED
+=============================================
+
+Timestamp: 1733330827000
+Date: 2025-12-04 17:07:07 CET
+
+Probleem:
+- Railway UI toont "Dockerfile - Automatically Detected"
+- Geen dropdown om builder te wijzigen
+- Railway prioriteert Dockerfile boven Nixpacks
+
+Oplossing:
+✅ solver/.railwayignore aangepast:
+   - Added: "Dockerfile" to ignore list
+   - Railway kan Dockerfile nu NIET meer detecteren
+   - Zal automatisch terugvallen op NIXPACKS
+
+Waarom dit werkt:
+1. Railway detecteert builders in deze volgorde:
+   a. Dockerfile (hoogste prioriteit)
+   b. Nixpacks (fallback als geen Dockerfile)
+2. Door Dockerfile te ignoren via .railwayignore:
+   - Railway slaat Dockerfile over
+   - Detecteert nixpacks.toml
+   - Gebruikt Nixpacks builder automatisch
+
+Dockerfile blijft beschikbaar:
+- Voor lokale development: docker build -t solver .
+- Voor debugging: docker run -p 8000:8000 solver
+- Railway ziet het alleen niet meer
+
+Expected Railway Behavior:
+1. Nieuwe deployment wordt getriggerd
+2. Build logs tonen: "Using Nixpacks"
+3. Installeert Python 3.11
+4. pip install -r requirements.txt
+5. Start: uvicorn main:app --host 0.0.0.0 --port $PORT
+
+Verificatie:
+- Railway UI moet nu tonen: "Builder: Nixpacks" (of "Meta")
+- Build logs: "Setting up Python 3.11"
+- Install logs: "Successfully installed fastapi uvicorn ortools"
+- Start logs: "Application startup complete"
+
+GEEN VERDERE HANDMATIGE STAPPEN NODIG!
+Railway auto-deployment start binnen 30 seconden.
