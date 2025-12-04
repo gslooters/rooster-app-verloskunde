@@ -1,0 +1,41 @@
+# Railway FINAL FIX Deployment
+# DEFINITIEVE OPLOSSING: Verwijder Next.js catch-all routing
+
+# Timestamp: 1733346193
+# Random: p2x9m5k8q7n4
+# Date: 2025-12-04T21:23:13Z
+
+# PROBLEEM ANALYSE:
+# 1. Next.js static export bevat GEEN /api routes
+# 2. Catch-all route zoekt /api/test-solver in out/ folder
+# 3. Bestaat niet → 404
+# 4. Railway detecteert crash → restart loop
+
+# OPLOSSING:
+# ❌ VERWIJDERD: FastAPI catch-all /{full_path:path}
+# ✅ BEHOUDEN: Expliciete API routes
+# ✅ BEHOUDEN: Alleen / voor root index.html
+# ✅ TOEGEVOEGD: Try/except voor _next mount
+
+# Nieuwe structuur:
+# /health → FastAPI JSON
+# /api/version → FastAPI JSON
+# /api/test-solver → FastAPI HTML (OR-Tools)
+# / → Next.js index.html (als bestaat)
+# Alle andere routes → NIET AFGEHANDELD (default 404)
+
+# Waarom dit werkt:
+# - API routes zijn NIET afhankelijk van Next.js
+# - Geen routing conflict
+# - Geen catch-all die alles onderschept
+# - OR-Tools test volledig zelfstandig
+
+# Test URLs:
+# ✅ https://[railway-url]/api/test-solver
+# ✅ https://[railway-url]/api/version
+# ✅ https://[railway-url]/health
+# ✅ https://[railway-url]/ (Next.js if exists)
+
+# Expected: GEEN restart loop
+# Expected: API routes werken perfect
+# Expected: OR-Tools pagina laadt
