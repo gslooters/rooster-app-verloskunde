@@ -1,16 +1,27 @@
 # Railway Auto-Deploy Trigger
 # Modify this file to trigger Railway deployment
 
-# DRAAD100C - FIX 4/4: VERWIJDER IS_NACHTDIENST BLOCKER
-Build: 100C-FIX4
-Timestamp: 2025-12-04T14:11:35Z
-Random: 89274
+# DRAAD101 - PYTHON OR-TOOLS SOLVER SERVICE
+Build: 101-SOLVER
+Timestamp: 2025-12-04T15:37:00Z
+Random: 34889
 
 Changes:
-- Removed service_types.is_nachtdienst from SELECT query (column does not exist)
-- Removed is_nachtdienst from services mapping in route.ts
-- Removed is_nachtdienst from Service TypeScript interface
-- Added comment: "DRAAD100C: is_nachtdienst removed (field does not exist in DB)"
+- Added complete Python OR-Tools Solver Service (solver/main.py)
+- FastAPI REST API with CP-SAT solver integration
+- CORE 3 constraints implemented:
+  1. Max werkdagen per week
+  2. Structureel NBH
+  3. Service bevoegdheid
+- Added solver/requirements.txt (ortools, fastapi, uvicorn)
+- Added solver/Procfile for Railway deployment
+- Added solver/railway.json configuration
+- Added solver/README.md documentation
 
-Deployment: CRITICAL - Fixes ORT services fetch blocker
-Status: READY FOR CORE 3 CONSTRAINTS IMPLEMENTATION
+Deployment: NIEUW - Python Solver Service
+Status: READY FOR RAILWAY SERVICE CREATION
+
+VOLGENDE STAP:
+1. Maak nieuwe Railway service aan voor solver/
+2. Configureer SOLVER_SERVICE_URL in Next.js service
+3. Test end-to-end ORT flow
