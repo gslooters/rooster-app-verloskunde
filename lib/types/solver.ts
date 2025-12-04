@@ -21,11 +21,12 @@ export interface Employee {
 }
 
 // Service
+// FIX DRAAD100B: VERWIJDER dagdeel - dit is assignment data, NIET service_types data
+// dagdeel zit in PreAssignment interface waar het thuishoort
 export interface Service {
   id: number;
   code: string;
   naam: string;
-  dagdeel: Dagdeel;
   is_nachtdienst: boolean;
 }
 
