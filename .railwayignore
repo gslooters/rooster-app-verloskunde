@@ -1,23 +1,14 @@
-# 🔥 CRITICAL: Ignore Python solver directory
-# Prevents Railway from detecting this as a Python project
-
-# Python solver (separate service, not part of main Next.js app)
-solver/
-*.py
-__pycache__/
-*.pyc
-.pytest_cache/
+# DRAAD101: Railway Template Setup
+# Python is nu de MAIN runtime (FastAPI backend)
 
 # Development files
 .git/
 .github/
 node_modules/
-.next/
 .env.local
 .env.*.local
 
 # Documentation
-*.md
 DOCS/
 
 # Cache-busting files (not needed in production)
@@ -29,3 +20,11 @@ DOCS/
 .railway-emergency*
 .railway-force*
 .railway-cache-bust*
+
+# Python cache (maar niet .py files!)
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Next.js build output (wordt herbouwd)
+.next/
