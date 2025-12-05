@@ -3,6 +3,13 @@
  * 
  * Deze types komen overeen met de Pydantic models in solver/models.py
  * Zorgt voor type-safety tussen Next.js en Python service.
+ * 
+ * DRAAD106: Status semantiek:
+ * - Status 0 + NULL: Beschikbaar slot
+ * - Status 0 + service_id: ORT voorlopig (hint)
+ * - Status 1 + service_id: Fixed (handmatig of gefinaliseerd)
+ * - Status 2 + NULL: Geblokkeerd door DIA/DDA/DIO/DDO
+ * - Status 3 + NULL: Structureel NBH
  */
 
 // Enums
@@ -21,24 +28,19 @@ export interface Employee {
 }
 
 // Service
-// FIX DRAAD100B: VERWIJDER dagdeel - dit is assignment data, NIET service_types data
-// dagdeel zit in PreAssignment interface waar het thuishoort
-// FIX DRAAD100C: VERWIJDER is_nachtdienst - kolom bestaat NIET in service_types tabel
 export interface Service {
   id: number;
   code: string;
   naam: string;
-  // DRAAD100C: is_nachtdienst removed (field does not exist in DB)
 }
 
-// Employee-Service bevoegdheid (legacy - nu vervangen door RosterEmployeeService)
+// Employee-Service bevoegdheid (legacy)
 export interface EmployeeService {
   employee_id: number;
   service_id: number;
 }
 
-// DRAAD105: RosterEmployeeService - bevoegdheid met aantal en actief status
-// Bron: roster_employee_services tabel
+// DRAAD105: RosterEmployeeService
 export interface RosterEmployeeService {
   roster_id: number;
   employee_id: number;
@@ -47,25 +49,75 @@ export interface RosterEmployeeService {
   actief: boolean;     // Alleen actieve bevoegdheden toewijzen (harde eis)
 }
 
-// Pre-assignment (status > 0)
+// ============================================================================
+// DRAAD106: NIEUWE TYPES VOOR STATUS SEMANTIEK
+// ============================================================================
+
+/**
+ * Status 1: Handmatig gepland of gefinaliseerd, MOET worden gerespecteerd.
+ */
+export interface FixedAssignment {
+  employee_id: number;
+  date: string; // ISO date string
+  dagdeel: Dagdeel;
+  service_id: number;
+}
+
+/**
+ * Status 2, 3: Niet beschikbaar voor ORT.
+ * - Status 2: Geblokkeerd door DIA/DDA/DIO/DDO (automatisch)
+ * - Status 3: Structureel NBH (handmatig)
+ */
+export interface BlockedSlot {
+  employee_id: number;
+  date: string; // ISO date string
+  dagdeel: Dagdeel;
+  status: 2 | 3;
+  blocked_by_service_id?: number; // Voor status 2
+}
+
+/**
+ * Status 0 + service_id: Hint van vorige ORT run.
+ */
+export interface SuggestedAssignment {
+  employee_id: number;
+  date: string; // ISO date string
+  dagdeel: Dagdeel;
+  service_id: number;
+}
+
+/**
+ * Pre-assignment (DEPRECATED - gebruik FixedAssignment + BlockedSlot)
+ */
 export interface PreAssignment {
   employee_id: number;
   date: string; // ISO date string
   dagdeel: Dagdeel;
   service_id: number;
-  status: number; // 1=ORT, 2=uit nacht, 3=handmatig, 4=definitief
+  status: number; // 1=Fixed, 2=Blocked, 3=Structureel NBH
 }
 
+// ============================================================================
+// SOLVE REQUEST & RESPONSE
+// ============================================================================
+
 // Solve Request (naar Python service)
-// DRAAD105: Gebruik roster_employee_services ipv employee_services
 export interface SolveRequest {
   roster_id: number;
   start_date: string; // ISO date
   end_date: string; // ISO date
   employees: Employee[];
   services: Service[];
-  roster_employee_services: RosterEmployeeService[];  // DRAAD105: vervangen
-  pre_assignments: PreAssignment[];
+  roster_employee_services: RosterEmployeeService[];  // DRAAD105
+  
+  // DRAAD106: Nieuwe velden (preferred)
+  fixed_assignments?: FixedAssignment[];      // Status 1: MOET respecteren
+  blocked_slots?: BlockedSlot[];              // Status 2, 3: MAG NIET gebruiken
+  suggested_assignments?: SuggestedAssignment[]; // Status 0 + service_id: Hints
+  
+  // DEPRECATED: Backwards compatibility
+  pre_assignments?: PreAssignment[];
+  
   timeout_seconds: number;
 }
 
