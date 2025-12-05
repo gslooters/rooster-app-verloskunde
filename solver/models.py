@@ -6,6 +6,10 @@ DRAAD106: Status semantiek duidelijk gedefinieerd:
 - Status 1 + service_id: Fixed (handmatig of gefinaliseerd, ORT MOET respecteren)
 - Status 2 + NULL: Geblokkeerd door DIA/DDA/DIO/DDO (ORT MAG NIET gebruiken)
 - Status 3 + NULL: Structureel NBH (ORT MAG NOOIT aanraken)
+
+DRAAD108: Bezetting realiseren constraint toegevoegd:
+- ExactStaffing model voor roster_period_staffing_dagdelen integratie
+- Exact aantal medewerkers per dienst/dagdeel/team afdwingen
 """
 
 from pydantic import BaseModel, Field, validator
@@ -159,6 +163,41 @@ class PreAssignment(BaseModel):
 
 
 # ============================================================================
+# DRAAD108: NIEUWE MODELLEN VOOR BEZETTING REALISEREN
+# ============================================================================
+
+class ExactStaffing(BaseModel):
+    """DRAAD108: Exacte bezetting per dienst/dagdeel/team uit roster_period_staffing_dagdelen.
+    
+    Logica:
+    - aantal > 0: ORT MOET exact dit aantal plannen (min=max tegelijk)
+    - aantal = 0: ORT MAG NIET plannen (verboden)
+    
+    Team mapping:
+    - 'TOT' → alle medewerkers (geen filter)
+    - 'GRO' → employees.team = 'maat'
+    - 'ORA' → employees.team = 'loondienst'
+    
+    Priority: HARD CONSTRAINT (is_fixed: true)
+    """
+    date: date
+    dagdeel: Dagdeel  # 'O', 'M', 'A'
+    service_id: str  # UUID als string
+    team: str = Field(
+        description="Team scope: 'TOT' (totaal), 'GRO' (groen/maat), 'ORA' (oranje/loondienst)"
+    )  # 'TOT', 'GRO', 'ORA'
+    exact_aantal: int = Field(
+        ge=0,
+        le=9,
+        description="Exact aantal medewerkers vereist (0=verboden, >0=exact aantal)"
+    )
+    is_system_service: bool = Field(
+        default=False,
+        description="Voor prioritering: systeemdiensten eerst (DIO, DIA, DDO, DDA)"
+    )
+
+
+# ============================================================================
 # SOLVE REQUEST & RESPONSE
 # ============================================================================
 
@@ -167,6 +206,7 @@ class SolveRequest(BaseModel):
     
     DRAAD105: Gebruikt roster_employee_services ipv employee_services
     DRAAD106: Splitst pre_assignments in fixed, blocked, suggested
+    DRAAD108: Voegt exact_staffing toe voor bezetting realiseren
     """
     roster_id: str  # uuid in database (als string)
     start_date: date
@@ -187,6 +227,12 @@ class SolveRequest(BaseModel):
     suggested_assignments: List[SuggestedAssignment] = Field(
         default_factory=list,
         description="Status 0 + service_id: Hints (optioneel)"
+    )
+    
+    # DRAAD108: Nieuwe veld voor exacte bezetting
+    exact_staffing: List[ExactStaffing] = Field(
+        default_factory=list,
+        description="DRAAD108: Exacte bezetting eisen per dienst/dagdeel/team"
     )
     
     # DEPRECATED: Backwards compatibility
