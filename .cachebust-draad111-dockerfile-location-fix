@@ -1,0 +1,19 @@
+# DRAAD111 DEFINITIEVE FIX - Dockerfile Locatie
+
+ROOT CAUSE OPGELOST:
+- Dockerfile verplaatst naar solver/Dockerfile (correcte locatie)
+- Railway.json aangemaakt in solver/ directory
+- Oude solver/docker/Dockerfile verwijderd
+- Configuratie conflict opgelost
+
+TIMESTAMP: 1733433600004
+RANDOM: 847293
+DRAAD: 111
+STATUS: DEFINITIEF
+
+Expected result:
+- Railway detecteert Dockerfile op correcte locatie
+- Build succesvol met Dockerfile
+- Container start met CMD: uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
+- Health check succesvol
+- Service ONLINE
