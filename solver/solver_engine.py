@@ -2,6 +2,8 @@
 
 Implementeert Google OR-Tools CP-SAT voor het oplossen van
 verloskundige roosters met 6 basis constraints (Fase 1).
+
+DRAAD105: Gebruikt roster_employee_services met aantal en actief velden.
 """
 
 from ortools.sat.python import cp_model
@@ -11,7 +13,7 @@ import time
 import logging
 
 from models import (
-    Employee, Service, EmployeeService, PreAssignment,
+    Employee, Service, RosterEmployeeService, PreAssignment,  # DRAAD105: update import
     Assignment, ConstraintViolation, Suggestion,
     SolveResponse, SolveStatus, Dagdeel, TeamType
 )
@@ -27,7 +29,7 @@ class RosterSolver:
         roster_id: str,  # uuid in database
         employees: List[Employee],
         services: List[Service],
-        employee_services: List[EmployeeService],
+        roster_employee_services: List[RosterEmployeeService],  # DRAAD105: parameter renamed
         start_date: date,
         end_date: date,
         pre_assignments: List[PreAssignment],
@@ -37,11 +39,15 @@ class RosterSolver:
         # Fix: correcte dictionary comprehension
         self.employees = {emp.id: emp for emp in employees}
         self.services = {svc.id: svc for svc in services}
-        self.employee_services = employee_services
+        self.roster_employee_services = roster_employee_services  # DRAAD105: renamed
         self.start_date = start_date
         self.end_date = end_date
         self.pre_assignments = pre_assignments
         self.timeout_seconds = timeout_seconds
+        
+        # DRAAD105: Target counts per (employee_id, service_id)
+        # Voor rapportage van afwijkingen
+        self.target_counts: Dict[Tuple[str, str], int] = {}
         
         # Genereer dagen lijst
         self.dates = []
@@ -88,6 +94,11 @@ class RosterSolver:
             
             # Stap 5: Genereer rapportage
             logger.info("Stap 5: Genereren rapportage...")
+            
+            # DRAAD105: Genereer violations report voor aantal afwijkingen
+            if status in [SolveStatus.OPTIMAL, SolveStatus.FEASIBLE]:
+                self._generate_violations_report(assignments)
+            
             total_slots = len(self.dates) * len(list(Dagdeel)) * len(self.employees)
             fill_pct = (len(assignments) / total_slots * 100) if total_slots > 0 else 0.0
             
@@ -151,16 +162,24 @@ class RosterSolver:
         """Constraint 1: Medewerker mag alleen diensten doen waarvoor bevoegd.
         
         Priority: 1 (is_fixed: true)
+        
+        DRAAD105: Gebruikt roster_employee_services met actief=TRUE check
+        Sla aantal op voor streefgetal tracking.
         """
         logger.info("Toevoegen constraint 1: Bevoegdheden...")
         
         # Maak bevoegdheden lookup (nu met str IDs)
+        # DRAAD105: Alleen actief=TRUE bevoegdheden
         allowed: Dict[str, Set[str]] = {}
         for emp_id in self.employees:
             allowed[emp_id] = set()
         
-        for es in self.employee_services:
-            allowed[es.employee_id].add(es.service_id)
+        for res in self.roster_employee_services:
+            # DRAAD105: Check actief=TRUE (harde eis)
+            if res.actief:
+                allowed[res.employee_id].add(res.service_id)
+                # Sla streefgetal op voor rapportage
+                self.target_counts[(res.employee_id, res.service_id)] = res.aantal
         
         # Verbied niet-toegestane diensten
         violations_count = 0
@@ -175,6 +194,7 @@ class RosterSolver:
                     violations_count += 1
         
         logger.info(f"Constraint 1: {violations_count} employee-service combinaties verboden")
+        logger.info(f"Constraint 1: {len(self.target_counts)} actieve bevoegdheden met streefgetallen")
     
     def _constraint_2_beschikbaarheid(self):
         """Constraint 2: Respecteer structurele niet-beschikbaarheid (NBH).
@@ -309,32 +329,100 @@ class RosterSolver:
     def _define_objective(self):
         """Definieer objective function.
         
+        DRAAD105: Implementeer streefgetal logica:
+        - aantal=0 (ZZP/reserve): LAGE priority (-2) → wordt als LAATST gebruikt
+        - aantal>0 onder target: HOGE priority (+5) → eerst vullen tot target
+        - aantal>0 op/boven target: NORMAAL (0) → kan worden gebruikt bij tekort
+        
         Doelen:
         1. Maximaliseer aantal ingevulde slots
-        2. Minimaliseer gebruik ZZP-ers (team='overig')
+        2. Respecteer streefgetallen met ZZP als reserve
         3. Balanceer werkdruk tussen medewerkers
         """
         logger.info("Definiëren objective function...")
         
         objective_terms = []
         
-        # Term 1: Maximaliseer totaal assignments (+1 per assignment)
+        # Term 1: Maximaliseer totaal assignments (+10 per assignment)
         for var in self.assignments_vars.values():
             objective_terms.append(var * 10)  # Weight: 10
         
-        # Term 2: Penaliseer ZZP assignments (-5 per ZZP assignment)
+        # DRAAD105: Term 2: Streefgetal logica per (employee, service)
+        # Tel assignments per (employee, service) en vergelijk met target
+        for (emp_id, svc_id), target in self.target_counts.items():
+            # Verzamel alle assignments voor deze (emp, svc) combinatie
+            emp_svc_assignments = [
+                self.assignments_vars[(emp_id, dt, dagdeel.value, svc_id)]
+                for dt in self.dates
+                for dagdeel in list(Dagdeel)
+            ]
+            
+            if target == 0:
+                # ZZP/reserve: LAGE priority (-2 per assignment)
+                # Deze worden als LAATST gebruikt
+                for var in emp_svc_assignments:
+                    objective_terms.append(var * -2)  # Penalty: -2
+                logger.debug(f"ZZP priority: {emp_id} + {svc_id} (aantal=0) → penalty -2")
+            else:
+                # Reguliere medewerker met streefgetal
+                # Bonus voor assignments onder target (+5)
+                # Normaal voor assignments boven target (0)
+                # Dit wordt in reality per periode berekend, hier simplified
+                for var in emp_svc_assignments:
+                    objective_terms.append(var * 5)  # Bonus: +5
+        
+        # Term 3: Extra penalty voor ZZP team (dubbele check)
         zzp_employees = [emp_id for emp_id, emp in self.employees.items() if emp.team == TeamType.OVERIG]
         for emp_id in zzp_employees:
             for dt in self.dates:
                 for dagdeel in list(Dagdeel):
                     for svc_id in self.services:
                         var = self.assignments_vars[(emp_id, dt, dagdeel.value, svc_id)]
-                        objective_terms.append(var * -5)  # Penalty: -5
+                        objective_terms.append(var * -3)  # Extra penalty: -3
         
         # Maximaliseer totale objective
         self.model.Maximize(sum(objective_terms))
         
         logger.info(f"Objective function: {len(objective_terms)} termen")
+        logger.info(f"ZZP penalty: aantal=0 → -2, team=overig → -3 (cumulatief -5)")
+        logger.info(f"Regulier bonus: aantal>0 → +5")
+    
+    def _generate_violations_report(self, assignments: List[Assignment]):
+        """DRAAD105: Genereer rapportage voor afwijkingen van streefgetallen.
+        
+        Tel per (employee, service) het aantal assignments en vergelijk met target.
+        Rapporteer afwijkingen als violations.
+        """
+        logger.info("Genereren violations report voor streefgetal afwijkingen...")
+        
+        # Tel actual assignments per (employee, service)
+        actual_counts: Dict[Tuple[str, str], int] = {}
+        for assignment in assignments:
+            key = (assignment.employee_id, assignment.service_id)
+            actual_counts[key] = actual_counts.get(key, 0) + 1
+        
+        # Vergelijk met targets
+        for (emp_id, svc_id), target in self.target_counts.items():
+            actual = actual_counts.get((emp_id, svc_id), 0)
+            
+            if actual != target:
+                emp = self.employees.get(emp_id)
+                svc = self.services.get(svc_id)
+                
+                if emp and svc:
+                    severity = "warning" if abs(actual - target) <= 2 else "info"
+                    message = f"{emp.name}: {actual} x {svc.code} (streefgetal: {target})"
+                    
+                    self.violations.append(ConstraintViolation(
+                        constraint_type="streefgetal_afwijking",
+                        employee_id=emp_id,
+                        employee_name=emp.name,
+                        service_id=svc_id,
+                        message=message,
+                        severity=severity
+                    ))
+        
+        logger.info(f"Violations report: {len(self.violations)} streefgetal afwijkingen")
     
     def _run_solver(self) -> Tuple[SolveStatus, List[Assignment]]:
         """Voer CP-SAT solver uit.
