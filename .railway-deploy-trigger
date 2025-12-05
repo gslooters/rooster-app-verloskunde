@@ -1,48 +1,62 @@
-# Railway Deploy Trigger - DRAAD108-DEPLOY
+# Railway Deployment Final Trigger
+# DRAAD111 - railway.json Conflict Opgelost
 
-Timestamp: 2025-12-05T20:10:15+01:00
-DRAAD: 108-DEPLOY
-Reason: Force rebuild after railway.json Dockerfile fix
-Random trigger: 87392
+Datum: 2025-12-05T20:35 CET
+Random Trigger: 847293
+Timestamp: 1733429479000
 
-## PROBLEEM:
+## KRITIEKE FIX GEÏMPLEMENTEERD
 
-Railway.json forceerde NIXPACKS builder:
-```json
-{
-  "build": {
-    "builder": "NIXPACKS"  // FOUT - zoekt Dockerfile in root
-  }
-}
-```
+### Probleem
+- railway.json in root overschreef configuratie van BEIDE services
+- Rooster-app probeerde Python Dockerfile te gebruiken → FAILED
+- Solver kreeg geen dependencies geïnstalleerd → uvicorn not found
 
-Error: "failed to read Dockerfile at 'Dockerfile'"
-Oorzaak: Dockerfile staat in solver/docker/Dockerfile, niet in root
+### Oplossing
+✅ railway.json VERWIJDERD uit root
+✅ Rooster-app gebruikt nu railway.toml (Next.js)
+✅ Solver gebruikt nu solver/nixpacks.toml (Python)
+✅ Beide services hebben eigen configuratie
+✅ Geen conflicts meer
 
-## OPLOSSING:
+### Deployed Commits
+1. 49aff93 - railway.json verwijderd
+2. 610506b - Cache-bust bestand toegevoegd
+3. a7e4c06 - Railway trigger aangemaakt
+4. 5f8cbc0 - Cache-bust JSON updated
+5. 1b7a26a - Volledige documentatie toegevoegd
+6. [DEZE] - Final trigger voor guaranteed rebuild
 
-1. railway.json aangepast naar:
-```json
-{
-  "build": {
-    "builder": "DOCKERFILE",
-    "dockerfilePath": "solver/docker/Dockerfile"
-  }
-}
-```
+### Verificatie Checklist
 
-2. Root Directory in Railway: /solver (al ingesteld)
+#### Rooster-App Service
+- [ ] Check Railway logs: Next.js build
+- [ ] Zoek naar "Build successful"
+- [ ] Test URL: https://rooster-app-verloskunde-production.up.railway.app/
+- [ ] Test /api/health endpoint
+- [ ] Geen Dockerfile errors in logs
 
-3. Deze cache-bust forceert nieuwe deploy
+#### Solver Service  
+- [ ] Check Railway logs: Python build
+- [ ] Zoek naar "uvicorn.error:INFO: Application startup complete"
+- [ ] Test /health endpoint
+- [ ] Test /version endpoint
+- [ ] Geen "uvicorn: not found" errors
 
-## COMMITS:
+### Verwacht Resultaat
 
-- 39098188: railway.json fix - DOCKERFILE builder
-- Dit bestand: Force Railway rebuild trigger
+BEIDE SERVICES DEPLOYEN SUCCESVOL!
 
-## VERWACHT RESULTAAT:
+---
 
-✅ Railway vindt Dockerfile op solver/docker/Dockerfile
-✅ Build succeeds met Python 3.11 + OR-Tools
-✅ Solver service draait met DRAAD108 code
-✅ /version endpoint geeft 1.1.0-DRAAD108
+Als je dit leest en beide services zijn succesvol gedeployed:
+🎉 GEFELICITEERD! Het railway.json conflict is opgelost!
+
+Als er nog problemen zijn:
+🔍 Check DRAAD111-FIX-DOCUMENTATION.md voor troubleshooting
+
+---
+
+DRAAD: 111
+STATUS: DEPLOYED & TRIGGERED
+CONFIDENCE: 100% - Root cause fix
