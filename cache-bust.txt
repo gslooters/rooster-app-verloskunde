@@ -1,0 +1,14 @@
+# Railway Cache-Busting File
+# Updated: 2025-12-05T23:21:15+01:00
+# Purpose: Trigger deployment na Dockerfile verbosity fix
+
+DRAAD112: Verbose pip install + uvicorn verification
+Timestamp: 1733436075000
+Random: 851734
+
+Expected in build logs:
+- pip install -v output (detailed)
+- uvicorn --version verification
+- Exact error if pip fails
+
+DRAAD112-DIAGNOSTIC-BUILD
