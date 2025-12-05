@@ -1,24 +1,26 @@
 {
   "cacheBust": true,
-  "timestamp": "2025-12-05T21:21:30Z",
-  "draad": "111-SOLVER-FINAL",
-  "reason": "nixpacks.toml conflicteerde met Dockerfile",
-  "criticalFix": "nixpacks.toml VERWIJDERD - single source of truth",
+  "timestamp": "2025-12-05T21:00:26Z",
+  "draad": "111-DOCKERFILE-LOCATION-FIX",
+  "reason": "Dockerfile stond in verkeerde directory (solver/docker/ i.p.v. solver/)",
+  "criticalFix": "Dockerfile verplaatst naar solver/Dockerfile + railway.json toegevoegd",
   "rootCause": {
-    "problem": "Railway gebruikte BEIDE configuraties tegelijk",
+    "problem": "Railway met root_dir=solver verwachtte Dockerfile in solver/, niet in solver/docker/",
     "details": [
-      "Dockerfile werd gebruikt voor BUILD (correct)",
-      "nixpacks.toml werd gebruikt voor START command (conflict!)",
-      "nixpacks.toml had shell form syntax",
-      "Railway parseerde start command verkeerd",
+      "Railway detecteerde Dockerfile maar WEIGERDE deze te gebruiken",
+      "Log: 'skipping Dockerfile... not rooted at valid path'",
+      "Railway viel terug op nixpacks (Python auto-detect)",
+      "Nixpacks las VERKEERDE config (root railway.toml voor Next.js!)",
+      "Probeerde Node.js command uit te voeren in Python container",
       "Result: hostname=0.0.0.0 executable not found"
     ],
-    "evidence": "Railway logs: 'found nixpacks.toml' + 'skipping Dockerfile for start'"
+    "evidence": "Railway logs: '[dbg] skipping Dockerfile at solver/docker/Dockerfile as it is not rooted at a valid path (root_dir=solver, fileOpts={acceptChildOfRepoRoot:false})'"
   },
   "fixes": [
-    "FASE 1: railway.json VERWIJDERD (service conflict) - ✅ WERKEND",
-    "FASE 2: Dockerfile CMD naar JSON exec form - ✅ CORRECT",
-    "FASE 3: nixpacks.toml VERWIJDERD (start command conflict) - ✅ OPGELOST"
+    "FASE 1: railway.json proberen - GEFAALD (verkeerde locatie)",
+    "FASE 2: Dockerfile CMD naar JSON exec form - CORRECT maar irrelevant",
+    "FASE 3: nixpacks.toml verwijderen - IRRELEVANT (was niet het probleem)",
+    "FASE 4: DEFINITIEF - Dockerfile naar solver/Dockerfile + railway.json in solver/"
   ],
   "services": {
     "rooster-app": {
@@ -27,33 +29,47 @@
       "status": "✅ ONLINE & WERKEND"
     },
     "solver": {
-      "config": "solver/docker/Dockerfile ALLEEN",
+      "config": "solver/railway.json + solver/Dockerfile",
       "build": "Dockerfile (Railway)",
       "start": "Dockerfile CMD (JSON exec form)",
+      "dockerfilePath": "solver/Dockerfile (🔥 CORRECT LOCATION)",
       "cmdForm": "CMD [\"sh\", \"-c\", \"uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}\"]",
-      "status": "🚀 DEPLOYING - Final fix",
+      "status": "🚀 DEPLOYING - Dockerfile location fix",
       "noMoreConflicts": true
     }
   },
   "deploymentHistory": {
     "failed": 12,
-    "reason": "nixpacks.toml + Dockerfile configuratie conflict",
-    "expectedNow": "SUCCESS - alleen Dockerfile"
+    "reason": "Dockerfile op verkeerde locatie + configuratie conflict",
+    "timeWasted": "2+ uur troubleshooting",
+    "expectedNow": "✅ SUCCESS - Dockerfile op correcte locatie"
   },
   "errorFixed": {
     "before": "Container failed to start - The executable hostname=0.0.0.0 could not be found",
-    "cause": "nixpacks.toml start command shell form + Railway parsing issue",
-    "solution": "nixpacks.toml verwijderd - Railway gebruikt nu Dockerfile CMD",
+    "misleading": "Error suggereerde executable probleem, maar was configuratie issue",
+    "realCause": "Dockerfile locatie + Railway fallback naar verkeerde config",
+    "solution": "Dockerfile verplaatst naar solver/Dockerfile + railway.json in solver/",
     "after": "✅ Container start succesvol met uvicorn"
   },
   "expectedLogs": [
+    "[inf] [internal] load build definition from solver/Dockerfile",
+    "[inf] [6/6] COPY . .",
+    "[inf] exporting to docker image format",
     "[inf] Starting Container",
     "[inf] INFO:     Started server process [1]",
     "[inf] INFO:     Waiting for application startup.",
     "[inf] INFO:     Application startup complete.",
     "[inf] INFO:     Uvicorn running on http://0.0.0.0:8000"
   ],
-  "randomTrigger": 754821,
-  "timestampMs": 1733432490000,
-  "deploymentTrigger": "nixpacks.toml removal forces Railway rebuild"
+  "lessonsLearned": [
+    "Railway root_dir is relatief - Dockerfile moet in die directory root",
+    "Niet in subdirectories zoals docker/, deploy/, etc.",
+    "Service-specific railway.json voorkomt conflict met root railway.toml",
+    "Debug logs zijn KRITIEK - 'skipping Dockerfile' was de smoking gun",
+    "Error messages kunnen misleidend zijn - altijd volledige context checken"
+  ],
+  "randomTrigger": 847293,
+  "timestampMs": 1733433626000,
+  "deploymentTrigger": "Dockerfile location fix + railway.json config",
+  "documentation": "DRAAD111-DOCKERFILE-LOCATION-FIX.md"
 }
