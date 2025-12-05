@@ -58,9 +58,35 @@ class Service(BaseModel):
 
 
 class EmployeeService(BaseModel):
-    """Bevoegdheid: welke medewerker mag welke dienst doen - volgens employee_services tabel."""
+    """Bevoegdheid: welke medewerker mag welke dienst doen - volgens employee_services tabel.
+    
+    LEGACY - Vervangen door RosterEmployeeService (DRAAD105)
+    """
     employee_id: str  # text in database
     service_id: str  # uuid in database (als string)
+
+
+class RosterEmployeeService(BaseModel):
+    """DRAAD105: Bevoegdheid per roster met streefaantal en actieve status.
+    
+    Bron: roster_employee_services tabel
+    - roster_id: uuid (als string)
+    - employee_id: text in database
+    - service_id: uuid in database (als string)
+    - aantal: integer - streefgetal (min=max tegelijk), 0=ZZP/reserve
+    - actief: boolean - alleen TRUE mag worden toegewezen (harde eis)
+    """
+    roster_id: str  # uuid in database (als string)
+    employee_id: str  # text in database
+    service_id: str  # uuid in database (als string)
+    aantal: int = Field(
+        ge=0,
+        description="Streefaantal: min=max tegelijk. 0=ZZP/reserve (lagere priority)"
+    )
+    actief: bool = Field(
+        default=True,
+        description="Alleen actieve bevoegdheden (TRUE) mogen worden toegewezen"
+    )
 
 
 class PreAssignment(BaseModel):
@@ -76,13 +102,16 @@ class PreAssignment(BaseModel):
 
 
 class SolveRequest(BaseModel):
-    """Request body voor solve endpoint."""
+    """Request body voor solve endpoint.
+    
+    DRAAD105: Gebruikt roster_employee_services ipv employee_services
+    """
     roster_id: str  # uuid in database (als string)
     start_date: date
     end_date: date
     employees: List[Employee]
     services: List[Service]
-    employee_services: List[EmployeeService]
+    roster_employee_services: List[RosterEmployeeService]  # DRAAD105: vervangen
     pre_assignments: List[PreAssignment] = Field(default_factory=list)
     timeout_seconds: int = Field(default=30, ge=5, le=300)
     
