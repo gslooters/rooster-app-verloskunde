@@ -1,0 +1,18 @@
+# DRAAD111 Cache-Busting
+
+Datum: 2025-12-05T20:31 CET
+Timestamp: 1733429479000
+Random: 847293
+
+FIX UITGEVOERD:
+- railway.json VERWIJDERD uit root
+- Dit veroorzaakte conflict tussen Rooster-app en Solver services
+- Nu gebruikt elke service zijn eigen configuratie:
+  * Rooster-app: railway.toml (Next.js)
+  * Solver: solver/nixpacks.toml (Python)
+
+VERWACHT RESULTAAT:
+- Rooster-app deployt correct met Next.js
+- Solver deployt correct met Python/Nixpacks
+- Geen "uvicorn not found" errors meer
+- Geen "requirements.txt not found" errors meer
