@@ -1,0 +1,21 @@
+# Railway Deployment Trigger - DRAAD111 Dockerfile Fix
+
+DEPLOYMENT TRIGGER voor Solver service
+
+CHANGES:
+- Dockerfile verplaatst naar correcte locatie
+- Railway.json configuratie toegevoegd
+- Oude Dockerfile verwijderd
+- DEPLOY.md updated
+
+EXPECTED:
+✅ Railway vindt Dockerfile op solver/Dockerfile
+✅ Build succesvol met Dockerfile
+✅ Container start met uvicorn
+✅ Health check /health succesvol
+✅ Service ONLINE
+
+TIMESTAMP: 1733433600005
+RANDOM: 847293
+DRAAD: 111
+STATUS: DEFINITIEVE FIX
