@@ -5,7 +5,8 @@ Integratie met Next.js app via REST API.
 
 Authors: Rooster App Team
 Version: 1.0.0
-Date: 2025-12-04
+Date: 2025-12-05
+DRAAD105: Gebruikt roster_employee_services met aantal en actief velden
 """
 
 from fastapi import FastAPI, HTTPException
@@ -62,9 +63,19 @@ class Service(BaseModel):
     # DRAAD100C: is_nachtdienst removed (field does not exist in DB)
 
 
+# LEGACY - Vervangen door RosterEmployeeService (DRAAD105)
 class EmployeeService(BaseModel):
     employee_id: int
     service_id: int
+
+
+# DRAAD105: RosterEmployeeService met aantal en actief
+class RosterEmployeeService(BaseModel):
+    roster_id: int
+    employee_id: int
+    service_id: int
+    aantal: int = Field(ge=0, description="Streefgetal (0=ZZP/reserve)")
+    actief: bool = Field(default=True, description="Alleen TRUE mag toegewezen worden")
 
 
 class PreAssignment(BaseModel):
@@ -81,7 +92,7 @@ class SolveRequest(BaseModel):
     end_date: str
     employees: List[Employee]
     services: List[Service]
-    employee_services: List[EmployeeService]
+    roster_employee_services: List[RosterEmployeeService]  # DRAAD105: renamed
     pre_assignments: List[PreAssignment]
     timeout_seconds: int = Field(default=30, ge=1, le=300)
 
@@ -162,10 +173,13 @@ async def solve_schedule(request: SolveRequest):
     """
     Solve rooster met OR-Tools CP-SAT solver.
     
+    DRAAD105: Implementeert bevoegdheden via roster_employee_services.
+    Alleen actief=TRUE bevoegdheden mogen worden toegewezen.
+    
     Implementeert CORE 3 constraints:
     1. Max werkdagen per week
     2. Structureel NBH
-    3. Service bevoegdheid
+    3. Service bevoegdheid (met actief check)
     """
     start_time = datetime.now()
     
@@ -173,6 +187,7 @@ async def solve_schedule(request: SolveRequest):
         logger.info(f"[Solver] Start solving roster {request.roster_id}")
         logger.info(f"[Solver] Periode: {request.start_date} - {request.end_date}")
         logger.info(f"[Solver] {len(request.employees)} medewerkers, {len(request.services)} diensten")
+        logger.info(f"[Solver] {len(request.roster_employee_services)} actieve bevoegdheden")
         
         # Parse dates
         start_date = datetime.fromisoformat(request.start_date)
@@ -230,14 +245,17 @@ async def solve_schedule(request: SolveRequest):
         logger.info("[Solver] Constraint 1: Eén dienst per dagdeel - added")
         
         # ================================================================
-        # CONSTRAINT 2: Service bevoegdheid
+        # CONSTRAINT 2: Service bevoegdheid (DRAAD105)
         # ================================================================
-        # Medewerker mag alleen diensten doen waarvoor bevoegd
+        # DRAAD105: Gebruik roster_employee_services met actief=TRUE filter
+        # Medewerker mag alleen diensten doen waarvoor bevoegd EN actief=TRUE
         bevoegdheden = {}
-        for es in request.employee_services:
-            if es.employee_id not in bevoegdheden:
-                bevoegdheden[es.employee_id] = []
-            bevoegdheden[es.employee_id].append(es.service_id)
+        for res in request.roster_employee_services:
+            # DRAAD105: Check actief=TRUE (harde eis)
+            if res.actief:
+                if res.employee_id not in bevoegdheden:
+                    bevoegdheden[res.employee_id] = []
+                bevoegdheden[res.employee_id].append(res.service_id)
         
         for emp in request.employees:
             emp_services = bevoegdheden.get(emp.id, [])
@@ -245,10 +263,10 @@ async def solve_schedule(request: SolveRequest):
                 for dagdeel in dagdelen:
                     for svc in request.services:
                         if svc.id not in emp_services:
-                            # Niet bevoegd -> mag niet assigned worden
+                            # Niet bevoegd OF niet actief -> mag niet assigned worden
                             model.add(assignments[(emp.id, date, dagdeel, svc.id)] == 0)
         
-        logger.info("[Solver] Constraint 2: Service bevoegdheid - added")
+        logger.info(f"[Solver] Constraint 2: Service bevoegdheid (actief=TRUE) - {len(bevoegdheden)} employees met bevoegdheden")
         
         # ================================================================
         # CONSTRAINT 3: Pre-assignments (status > 0)
