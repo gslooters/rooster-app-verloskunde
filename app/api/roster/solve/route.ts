@@ -19,7 +19,7 @@ import type {
   SolveResponse,
   Employee,
   Service,
-  EmployeeService,
+  RosterEmployeeService,  // DRAAD105: update import
   PreAssignment
 } from '@/lib/types/solver';
 
@@ -107,14 +107,18 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // 6. Fetch employee-service bevoegdheden
-    const { data: empServices, error: esError } = await supabase
+    // 6. DRAAD105: Fetch roster-employee-service bevoegdheden met aantal en actief
+    // Bron: roster_employee_services tabel
+    // SELECT: roster_id, employee_id, service_id, aantal, actief
+    // FILTER: actief=TRUE (harde eis)
+    const { data: rosterEmpServices, error: resError } = await supabase
       .from('roster_employee_services')
-      .select('employee_id, service_id')
-      .eq('roster_id', roster_id);
+      .select('roster_id, employee_id, service_id, aantal, actief')
+      .eq('roster_id', roster_id)
+      .eq('actief', true);  // DRAAD105: alleen actieve bevoegdheden
     
-    if (esError) {
-      console.error('[Solver API] Employee-services fetch error:', esError);
+    if (resError) {
+      console.error('[Solver API] Roster-employee-services fetch error:', resError);
       return NextResponse.json(
         { error: 'Fout bij ophalen bevoegdheden' },
         { status: 500 }
@@ -134,12 +138,13 @@ export async function POST(request: NextRequest) {
       // Niet-fataal, doorgaan zonder pre-assignments
     }
     
-    console.log(`[Solver API] Data verzameld: ${employees?.length || 0} medewerkers, ${services?.length || 0} diensten, ${empServices?.length || 0} bevoegdheden, ${preAssignments?.length || 0} pre-assignments`);
+    console.log(`[Solver API] Data verzameld: ${employees?.length || 0} medewerkers, ${services?.length || 0} diensten, ${rosterEmpServices?.length || 0} bevoegdheden (actief), ${preAssignments?.length || 0} pre-assignments`);
     
     // 8. Transform naar solver input format - FIX DRAAD98A: samenvoegen voornaam + achternaam
     // FIX DRAAD98B: aantalwerkdagen mapping
     // FIX DRAAD100B: VERWIJDER dagdeel uit services mapping - komt van assignment, niet van service_type
     // FIX DRAAD100C: VERWIJDER is_nachtdienst uit services mapping - field bestaat niet in DB
+    // DRAAD105: roster_employee_services mapping met aantal en actief velden
     const solverRequest: SolveRequest = {
       roster_id,
       start_date: roster.start_date,
@@ -158,9 +163,13 @@ export async function POST(request: NextRequest) {
         naam: svc.naam
         // DRAAD100C: is_nachtdienst verwijderd - field bestaat niet in service_types
       })),
-      employee_services: (empServices || []).map(es => ({
-        employee_id: es.employee_id,
-        service_id: es.service_id
+      // DRAAD105: roster_employee_services mapping
+      roster_employee_services: (rosterEmpServices || []).map(res => ({
+        roster_id: res.roster_id,
+        employee_id: res.employee_id,
+        service_id: res.service_id,
+        aantal: res.aantal,
+        actief: res.actief
       })),
       pre_assignments: (preAssignments || []).map(pa => ({
         employee_id: pa.employee_id,
