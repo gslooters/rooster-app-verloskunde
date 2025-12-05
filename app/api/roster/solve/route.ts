@@ -9,13 +9,19 @@
  * - Respecteer status 1 (fixed), status 2/3 (blocked)
  * - Roster status: draft → in_progress
  * 
+ * DRAAD108: Exacte Bezetting Realiseren
+ * - Fetch roster_period_staffing_dagdelen data
+ * - Transform naar exact_staffing format
+ * - Send naar solver voor constraint 7 (exacte bezetting)
+ * 
  * Flow:
  * 1. Fetch roster data from Supabase
  * 2. Transform to solver input format (fixed + blocked split)
- * 3. Call Python solver service (Railway)
- * 4. Write solution to status 0 slots (UPSERT)
- * 5. Update roster status → 'in_progress'
- * 6. Store solver metadata
+ * 3. DRAAD108: Fetch exact staffing requirements
+ * 4. Call Python solver service (Railway)
+ * 5. Write solution to status 0 slots (UPSERT)
+ * 6. Update roster status → 'in_progress'
+ * 7. Store solver metadata
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -161,9 +167,67 @@ export async function POST(request: NextRequest) {
       console.error('[Solver API] Suggested assignments fetch error:', suggestedError);
     }
     
-    console.log(`[Solver API] Data verzameld: ${employees?.length || 0} medewerkers, ${services?.length || 0} diensten, ${rosterEmpServices?.length || 0} bevoegdheden (actief), ${fixedData?.length || 0} fixed, ${blockedData?.length || 0} blocked, ${suggestedData?.length || 0} suggested`);
+    // ============================================================
+    // 10. DRAAD108: Fetch exacte bezetting eisen
+    // ============================================================
+    console.log('[DRAAD108] Ophalen exacte bezetting...');
     
-    // 10. Transform naar solver input format
+    const { data: staffingData, error: staffingError } = await supabase
+      .from('roster_period_staffing_dagdelen')
+      .select(`
+        id,
+        dagdeel,
+        team,
+        aantal,
+        roster_period_staffing!inner(
+          date,
+          service_id,
+          roster_id,
+          service_types!inner(
+            id,
+            code,
+            is_system
+          )
+        )
+      `)
+      .eq('roster_period_staffing.roster_id', roster_id)
+      .gt('aantal', 0);  // Alleen aantal > 0 (aantal = 0 wordt NIET gestuurd)
+    
+    if (staffingError) {
+      console.error('[DRAAD108] Exacte bezetting fetch error:', staffingError);
+      // Niet fataal - solver blijft werken zonder constraint 7
+    }
+    
+    // Transform naar exact_staffing format
+    const exact_staffing = (staffingData || []).map(row => ({
+      date: row.roster_period_staffing.date,
+      dagdeel: row.dagdeel as 'O' | 'M' | 'A',
+      service_id: row.roster_period_staffing.service_id,
+      team: row.team as 'TOT' | 'GRO' | 'ORA',
+      exact_aantal: row.aantal,
+      is_system_service: row.roster_period_staffing.service_types.is_system
+    }));
+    
+    // Log statistieken
+    const systemCount = exact_staffing.filter(e => e.is_system_service).length;
+    const totCount = exact_staffing.filter(e => e.team === 'TOT').length;
+    const groCount = exact_staffing.filter(e => e.team === 'GRO').length;
+    const oraCount = exact_staffing.filter(e => e.team === 'ORA').length;
+    
+    console.log('[DRAAD108] Exacte bezetting transform compleet:');
+    console.log(`  - Totaal eisen: ${exact_staffing.length}`);
+    console.log(`  - Systeemdiensten (DIO/DIA/DDO/DDA): ${systemCount}`);
+    console.log(`  - Team TOT: ${totCount}`);
+    console.log(`  - Team GRO: ${groCount}`);
+    console.log(`  - Team ORA: ${oraCount}`);
+    
+    // ============================================================
+    // END DRAAD108
+    // ============================================================
+    
+    console.log(`[Solver API] Data verzameld: ${employees?.length || 0} medewerkers, ${services?.length || 0} diensten, ${rosterEmpServices?.length || 0} bevoegdheden (actief), ${fixedData?.length || 0} fixed, ${blockedData?.length || 0} blocked, ${suggestedData?.length || 0} suggested, ${exact_staffing.length} exacte bezetting (DRAAD108)`);
+    
+    // 11. Transform naar solver input format
     const solverRequest: SolveRequest = {
       roster_id,
       start_date: roster.start_date,
@@ -207,12 +271,14 @@ export async function POST(request: NextRequest) {
         dagdeel: sa.dagdeel as 'O' | 'M' | 'A',
         service_id: sa.service_id
       })),
+      // DRAAD108: NIEUW - Exacte bezetting
+      exact_staffing,
       timeout_seconds: 30
     };
     
-    console.log(`[Solver API] Solver request voorbereid, aanroepen ${SOLVER_URL}/api/v1/solve-schedule...`);
+    console.log(`[Solver API] Solver request voorbereid (DRAAD108: ${exact_staffing.length} bezetting eisen), aanroepen ${SOLVER_URL}/api/v1/solve-schedule...`);
     
-    // 11. Call Python solver service
+    // 12. Call Python solver service
     const solverResponse = await fetch(`${SOLVER_URL}/api/v1/solve-schedule`, {
       method: 'POST',
       headers: {
@@ -235,7 +301,21 @@ export async function POST(request: NextRequest) {
     
     console.log(`[Solver API] Solver voltooid: status=${solverResult.status}, assignments=${solverResult.total_assignments}, tijd=${solverResult.solve_time_seconds}s`);
     
-    // 12. DRAAD106: Write assignments naar database (status 0)
+    // DRAAD108: Log bezetting violations
+    const bezettingViolations = (solverResult.violations || []).filter(
+      v => v.constraint_type === 'bezetting_realiseren'
+    );
+    
+    if (bezettingViolations.length > 0) {
+      console.warn(`[DRAAD108] ${bezettingViolations.length} bezetting violations:`);
+      bezettingViolations.slice(0, 5).forEach(v => {
+        console.warn(`  - ${v.message}`);
+      });
+    } else if (exact_staffing.length > 0) {
+      console.log('[DRAAD108] ✅ Alle bezetting eisen voldaan!');
+    }
+    
+    // 13. DRAAD106: Write assignments naar database (status 0)
     if (solverResult.status === 'optimal' || solverResult.status === 'feasible') {
       // DRAAD106: Reset ORT voorlopige planning (status 0 + service_id → NULL)
       const { error: resetError } = await supabase
@@ -279,7 +359,7 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    // 13. DRAAD106: Update roster status: draft → in_progress (NIET naar final!)
+    // 14. DRAAD106: Update roster status: draft → in_progress (NIET naar final!)
     const { error: updateError } = await supabase
       .from('roosters')
       .update({
@@ -294,13 +374,13 @@ export async function POST(request: NextRequest) {
       console.log(`[Solver API] Roster status updated: draft → in_progress`);
     }
     
-    // 14. Store solver run metadata (optioneel)
+    // 15. Store solver run metadata (optioneel)
     // TODO: Implementeer solver_runs tabel voor history tracking
     
     const totalTime = Date.now() - startTime;
     console.log(`[Solver API] Voltooid in ${totalTime}ms`);
     
-    // 15. Return response
+    // 16. Return response
     return NextResponse.json({
       success: true,
       roster_id,
@@ -312,6 +392,10 @@ export async function POST(request: NextRequest) {
         solve_time_seconds: solverResult.solve_time_seconds,
         violations: solverResult.violations,
         suggestions: solverResult.suggestions
+      },
+      draad108: {
+        exact_staffing_count: exact_staffing.length,
+        bezetting_violations: bezettingViolations.length
       },
       total_time_ms: totalTime
     });
