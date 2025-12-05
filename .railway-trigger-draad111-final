@@ -1,0 +1,26 @@
+# Railway Deployment Trigger - DRAAD111 FINAL FIX
+
+Random: 754821
+Timestamp: 1733432490000
+Datum: 2025-12-05T21:21 CET
+
+## ROOT CAUSE OPGELOST
+
+🔥 PROBLEEM: nixpacks.toml + Dockerfile configuratie conflict
+✅ OPLOSSING: nixpacks.toml verwijderd
+
+## VERWACHT RESULTAAT
+
+Solver deployment:
+- BUILD: ✅ SUCCESS (Dockerfile)
+- START: ✅ SUCCESS (Dockerfile CMD - JSON exec form)
+- LOGS: Uvicorn startup messages
+- STATUS: Container ONLINE
+
+## EINDSTAND
+
+- Rooster-app: ✅ WERKEND
+- Solver: 🚀 DEPLOYING (verwacht werkend)
+
+Single source of truth: Dockerfile voor Solver
+Geen conflicterende configuraties meer!
