@@ -4,6 +4,7 @@ Implementeert Google OR-Tools CP-SAT voor het oplossen van
 verloskundige roosters met 6 basis constraints (Fase 1).
 
 DRAAD105: Gebruikt roster_employee_services met aantal en actief velden.
+DRAAD106: Status semantiek - fixed_assignments (status 1) en blocked_slots (status 2,3).
 """
 
 from ortools.sat.python import cp_model
@@ -13,7 +14,9 @@ import time
 import logging
 
 from models import (
-    Employee, Service, RosterEmployeeService, PreAssignment,  # DRAAD105: update import
+    Employee, Service, RosterEmployeeService,
+    FixedAssignment, BlockedSlot, SuggestedAssignment,  # DRAAD106: nieuwe imports
+    PreAssignment,  # DEPRECATED maar backwards compatible
     Assignment, ConstraintViolation, Suggestion,
     SolveResponse, SolveStatus, Dagdeel, TeamType
 )
@@ -29,24 +32,53 @@ class RosterSolver:
         roster_id: str,  # uuid in database
         employees: List[Employee],
         services: List[Service],
-        roster_employee_services: List[RosterEmployeeService],  # DRAAD105: parameter renamed
+        roster_employee_services: List[RosterEmployeeService],  # DRAAD105
         start_date: date,
         end_date: date,
-        pre_assignments: List[PreAssignment],
+        # DRAAD106: Nieuwe parameters
+        fixed_assignments: List[FixedAssignment],
+        blocked_slots: List[BlockedSlot],
+        suggested_assignments: List[SuggestedAssignment] = None,
+        # DEPRECATED: backwards compatibility
+        pre_assignments: List[PreAssignment] = None,
         timeout_seconds: int = 30
     ):
         self.roster_id = roster_id
-        # Fix: correcte dictionary comprehension
         self.employees = {emp.id: emp for emp in employees}
         self.services = {svc.id: svc for svc in services}
-        self.roster_employee_services = roster_employee_services  # DRAAD105: renamed
+        self.roster_employee_services = roster_employee_services
         self.start_date = start_date
         self.end_date = end_date
-        self.pre_assignments = pre_assignments
         self.timeout_seconds = timeout_seconds
         
+        # DRAAD106: Nieuwe constraint data
+        self.fixed_assignments = fixed_assignments or []
+        self.blocked_slots = blocked_slots or []
+        self.suggested_assignments = suggested_assignments or []
+        
+        # DEPRECATED: Backwards compatibility met pre_assignments
+        if pre_assignments:
+            logger.warning("pre_assignments is DEPRECATED, gebruik fixed_assignments + blocked_slots")
+            # Converteer pre_assignments naar nieuwe modellen
+            for pa in pre_assignments:
+                if pa.status == 1:
+                    # Status 1 → FixedAssignment
+                    self.fixed_assignments.append(FixedAssignment(
+                        employee_id=pa.employee_id,
+                        date=pa.date,
+                        dagdeel=pa.dagdeel,
+                        service_id=pa.service_id
+                    ))
+                elif pa.status in [2, 3]:
+                    # Status 2, 3 → BlockedSlot
+                    self.blocked_slots.append(BlockedSlot(
+                        employee_id=pa.employee_id,
+                        date=pa.date,
+                        dagdeel=pa.dagdeel,
+                        status=pa.status
+                    ))
+        
         # DRAAD105: Target counts per (employee_id, service_id)
-        # Voor rapportage van afwijkingen
         self.target_counts: Dict[Tuple[str, str], int] = {}
         
         # Genereer dagen lijst
@@ -58,7 +90,6 @@ class RosterSolver:
         
         # Model en variabelen
         self.model = cp_model.CpModel()
-        # Type hints: employee_id en service_id zijn nu str
         self.assignments_vars: Dict[Tuple[str, date, str, str], cp_model.IntVar] = {}
         
         # Tracking
@@ -66,36 +97,26 @@ class RosterSolver:
         self.suggestions: List[Suggestion] = []
     
     def solve(self) -> SolveResponse:
-        """Voer volledige solve uit.
-        
-        Returns:
-            SolveResponse met alle resultaten
-        """
+        """Voer volledige solve uit."""
         start_time = time.time()
         
         try:
-            # Stap 1: Maak decision variables
             logger.info("Stap 1: Aanmaken decision variables...")
             self._create_variables()
             
-            # Stap 2: Pas constraints toe
             logger.info("Stap 2: Toevoegen constraints...")
             self._apply_constraints()
             
-            # Stap 3: Definieer objective function
             logger.info("Stap 3: Definiëren objective function...")
             self._define_objective()
             
-            # Stap 4: Solve
             logger.info("Stap 4: Solver uitvoeren...")
             status, assignments = self._run_solver()
             
             solve_time = time.time() - start_time
             
-            # Stap 5: Genereer rapportage
             logger.info("Stap 5: Genereren rapportage...")
             
-            # DRAAD105: Genereer violations report voor aantal afwijkingen
             if status in [SolveStatus.OPTIMAL, SolveStatus.FEASIBLE]:
                 self._generate_violations_report(assignments)
             
@@ -115,7 +136,9 @@ class RosterSolver:
                 solver_metadata={
                     "dates_count": len(self.dates),
                     "employees_count": len(self.employees),
-                    "services_count": len(self.services)
+                    "services_count": len(self.services),
+                    "fixed_assignments_count": len(self.fixed_assignments),
+                    "blocked_slots_count": len(self.blocked_slots)
                 }
             )
             
@@ -134,11 +157,7 @@ class RosterSolver:
             )
     
     def _create_variables(self):
-        """Maak decision variables aan.
-        
-        Voor elke (employee, date, dagdeel, service) combinatie:
-        assignments[emp_id, date, dagdeel, svc_id] = 0/1
-        """
+        """Maak decision variables aan."""
         for emp_id in self.employees:
             for dt in self.dates:
                 for dagdeel in list(Dagdeel):
@@ -150,43 +169,46 @@ class RosterSolver:
         logger.info(f"Aangemaakt: {len(self.assignments_vars)} decision variables")
     
     def _apply_constraints(self):
-        """Pas alle 6 Fase 1 constraints toe."""
+        """Pas alle constraints toe.
+        
+        DRAAD106: Nieuwe constraint volgorde:
+        1. Bevoegdheden
+        2. Beschikbaarheid
+        3A. Fixed assignments (status 1) - NIEUW
+        3B. Blocked slots (status 2, 3) - NIEUW
+        4. Een dienst per dagdeel
+        5. Max werkdagen
+        6. ZZP minimalisatie (via objective)
+        """
         self._constraint_1_bevoegdheden()
         self._constraint_2_beschikbaarheid()
-        self._constraint_3_pre_assignments()
+        self._constraint_3a_fixed_assignments()  # DRAAD106: NIEUW
+        self._constraint_3b_blocked_slots()      # DRAAD106: NIEUW
         self._constraint_4_een_dienst_per_dagdeel()
         self._constraint_5_max_werkdagen()
-        self._constraint_6_zzp_minimalisatie()
+        # Constraint 6 ZZP minimalisatie via _define_objective()
     
     def _constraint_1_bevoegdheden(self):
         """Constraint 1: Medewerker mag alleen diensten doen waarvoor bevoegd.
         
         Priority: 1 (is_fixed: true)
-        
         DRAAD105: Gebruikt roster_employee_services met actief=TRUE check
-        Sla aantal op voor streefgetal tracking.
         """
         logger.info("Toevoegen constraint 1: Bevoegdheden...")
         
-        # Maak bevoegdheden lookup (nu met str IDs)
-        # DRAAD105: Alleen actief=TRUE bevoegdheden
-        allowed: Dict[str, Set[str]] = {}
-        for emp_id in self.employees:
-            allowed[emp_id] = set()
+        # Maak bevoegdheden lookup
+        allowed: Dict[str, Set[str]] = {emp_id: set() for emp_id in self.employees}
         
         for res in self.roster_employee_services:
-            # DRAAD105: Check actief=TRUE (harde eis)
-            if res.actief:
+            if res.actief:  # DRAAD105: alleen actief=TRUE
                 allowed[res.employee_id].add(res.service_id)
-                # Sla streefgetal op voor rapportage
                 self.target_counts[(res.employee_id, res.service_id)] = res.aantal
         
         # Verbied niet-toegestane diensten
         violations_count = 0
-        for emp_id, emp in self.employees.items():
+        for emp_id in self.employees:
             for svc_id in self.services:
                 if svc_id not in allowed[emp_id]:
-                    # Niet bevoegd → verbieden
                     for dt in self.dates:
                         for dagdeel in list(Dagdeel):
                             var = self.assignments_vars[(emp_id, dt, dagdeel.value, svc_id)]
@@ -194,13 +216,9 @@ class RosterSolver:
                     violations_count += 1
         
         logger.info(f"Constraint 1: {violations_count} employee-service combinaties verboden")
-        logger.info(f"Constraint 1: {len(self.target_counts)} actieve bevoegdheden met streefgetallen")
     
     def _constraint_2_beschikbaarheid(self):
-        """Constraint 2: Respecteer structurele niet-beschikbaarheid (NBH).
-        
-        Priority: 1 (is_fixed: true)
-        """
+        """Constraint 2: Respecteer structurele niet-beschikbaarheid (NBH)."""
         logger.info("Toevoegen constraint 2: Beschikbaarheid...")
         
         dag_codes = ["ma", "di", "wo", "do", "vr", "za", "zo"]
@@ -216,54 +234,71 @@ class RosterSolver:
                     nb_dagdelen = emp.structureel_nbh[dag_code]
                     
                     for dagdeel_str in nb_dagdelen:
-                        # Verbied alle diensten in dit dagdeel
                         for svc_id in self.services:
                             var = self.assignments_vars[(emp_id, dt, dagdeel_str, svc_id)]
                             self.model.Add(var == 0)
         
         logger.info("Constraint 2: Beschikbaarheid toegepast")
     
-    def _constraint_3_pre_assignments(self):
-        """Constraint 3: Pre-planning (status > 0) NIET overschrijven.
+    def _constraint_3a_fixed_assignments(self):
+        """Constraint 3A: Respecteer status 1 (fixed assignments).
         
-        Priority: 1 (is_fixed: true)
+        DRAAD106: NIEUW - vervangt oude _constraint_3_pre_assignments
+        
+        Status 1 = Handmatig gepland of gefinaliseerd
+        ORT MOET deze exact overnemen (HARD CONSTRAINT).
         """
-        logger.info("Toevoegen constraint 3: Pre-assignments...")
+        logger.info("Toevoegen constraint 3A: Fixed assignments...")
         
-        # Verzamel alle pre-assigned slots (nu met str IDs)
-        pre_slots: Set[Tuple[str, date, str]] = set()
-        
-        for pa in self.pre_assignments:
-            pre_slots.add((pa.employee_id, pa.date, pa.dagdeel.value))
-            
+        for fa in self.fixed_assignments:
             # Force deze assignment
             var = self.assignments_vars.get(
-                (pa.employee_id, pa.date, pa.dagdeel.value, pa.service_id)
+                (fa.employee_id, fa.date, fa.dagdeel.value, fa.service_id)
             )
-            if var:
-                self.model.Add(var == 1)
-        
-        # Verbied andere diensten in pre-assigned slots
-        for (emp_id, dt, dagdeel_str) in pre_slots:
-            assigned_svc = None
-            for pa in self.pre_assignments:
-                if pa.employee_id == emp_id and pa.date == dt and pa.dagdeel.value == dagdeel_str:
-                    assigned_svc = pa.service_id
-                    break
             
-            if assigned_svc:
+            if var:
+                self.model.Add(var == 1)  # MOET toegewezen
+                
+                # Verbied andere diensten in dit slot
                 for svc_id in self.services:
-                    if svc_id != assigned_svc:
-                        var = self.assignments_vars[(emp_id, dt, dagdeel_str, svc_id)]
-                        self.model.Add(var == 0)
+                    if svc_id != fa.service_id:
+                        other_var = self.assignments_vars[
+                            (fa.employee_id, fa.date, fa.dagdeel.value, svc_id)
+                        ]
+                        self.model.Add(other_var == 0)
+            else:
+                logger.warning(f"Fixed assignment var not found: {fa}")
         
-        logger.info(f"Constraint 3: {len(self.pre_assignments)} pre-assignments gefixeerd")
+        logger.info(f"Constraint 3A: {len(self.fixed_assignments)} fixed assignments gefixeerd")
+    
+    def _constraint_3b_blocked_slots(self):
+        """Constraint 3B: Respecteer status 2, 3 (blocked slots).
+        
+        DRAAD106: NIEUW - vervangt oude _constraint_3_pre_assignments
+        
+        Status 2 = Geblokkeerd door DIA/DDA/DIO/DDO
+        Status 3 = Structureel NBH
+        
+        ORT MAG NIET plannen in deze slots voor ENIGE dienst (HARD CONSTRAINT).
+        """
+        logger.info("Toevoegen constraint 3B: Blocked slots...")
+        
+        for bs in self.blocked_slots:
+            # Block ALLE services voor dit slot
+            for svc_id in self.services:
+                var = self.assignments_vars.get(
+                    (bs.employee_id, bs.date, bs.dagdeel.value, svc_id)
+                )
+                
+                if var:
+                    self.model.Add(var == 0)  # MAG NIET toegewezen
+                else:
+                    logger.warning(f"Blocked slot var not found: {bs}")
+        
+        logger.info(f"Constraint 3B: {len(self.blocked_slots)} blocked slots verboden")
     
     def _constraint_4_een_dienst_per_dagdeel(self):
-        """Constraint 4: Medewerker mag max 1 dienst per dagdeel.
-        
-        Priority: 1 (is_fixed: true)
-        """
+        """Constraint 4: Medewerker mag max 1 dienst per dagdeel."""
         logger.info("Toevoegen constraint 4: Een dienst per dagdeel...")
         
         for emp_id in self.employees:
@@ -273,84 +308,53 @@ class RosterSolver:
                         self.assignments_vars[(emp_id, dt, dagdeel.value, svc_id)]
                         for svc_id in self.services
                     ]
-                    # Som van alle diensten in dit slot <= 1
                     self.model.Add(sum(vars_for_slot) <= 1)
         
         logger.info("Constraint 4: Een dienst per dagdeel toegepast")
     
     def _constraint_5_max_werkdagen(self):
-        """Constraint 5: Respecteer aantalwerkdagen per week.
-        
-        Priority: 2 (is_fixed: false) - kan warnings geven
-        """
+        """Constraint 5: Respecteer aantalwerkdagen per week."""
         logger.info("Toevoegen constraint 5: Max werkdagen...")
         
-        # Voor Fase 1: tel totale werkdagen over gehele periode
-        # (vereenvoudiging - later per week)
-        
         for emp_id, emp in self.employees.items():
-            # Fix: gebruik aantalwerkdagen i.p.v. max_werkdagen
             max_werkdagen = emp.aantalwerkdagen
             
-            # Tel dagen waarop medewerker >=1 dienst heeft
             werkdagen_vars = []
             for dt in self.dates:
-                # Bool var: werkt deze dag?
                 dag_var = self.model.NewBoolVar(f"werkdag_{emp_id}_{dt}")
                 
-                # dag_var = 1 als er >=1 dienst is op deze dag
                 diensten_dag = [
                     self.assignments_vars[(emp_id, dt, dagdeel.value, svc_id)]
                     for dagdeel in list(Dagdeel)
                     for svc_id in self.services
                 ]
                 
-                # Als sum(diensten_dag) > 0 → dag_var = 1
                 self.model.Add(sum(diensten_dag) > 0).OnlyEnforceIf(dag_var)
                 self.model.Add(sum(diensten_dag) == 0).OnlyEnforceIf(dag_var.Not())
                 
                 werkdagen_vars.append(dag_var)
             
-            # Constraint: totaal aantal werkdagen <= max
-            max_dagen = max_werkdagen * len(self.dates) // 7  # Schaling naar periode
+            max_dagen = max_werkdagen * len(self.dates) // 7
             self.model.Add(sum(werkdagen_vars) <= max(max_dagen, 1))
         
         logger.info("Constraint 5: Max werkdagen toegepast")
     
-    def _constraint_6_zzp_minimalisatie(self):
-        """Constraint 6: Minimaliseer gebruik van ZZP-ers (team='overig').
-        
-        Priority: 3 - via objective function
-        Dit wordt afgehandeld in _define_objective()
-        """
-        logger.info("Constraint 6: ZZP minimalisatie (via objective)")
-        pass
-    
     def _define_objective(self):
         """Definieer objective function.
         
-        DRAAD105: Implementeer streefgetal logica:
-        - aantal=0 (ZZP/reserve): LAGE priority (-2) → wordt als LAATST gebruikt
-        - aantal>0 onder target: HOGE priority (+5) → eerst vullen tot target
-        - aantal>0 op/boven target: NORMAAL (0) → kan worden gebruikt bij tekort
-        
-        Doelen:
-        1. Maximaliseer aantal ingevulde slots
-        2. Respecteer streefgetallen met ZZP als reserve
-        3. Balanceer werkdruk tussen medewerkers
+        DRAAD105: Streefgetal logica met ZZP als reserve
+        DRAAD106: Suggested assignments optioneel (Optie C: ignored)
         """
         logger.info("Definiëren objective function...")
         
         objective_terms = []
         
-        # Term 1: Maximaliseer totaal assignments (+10 per assignment)
+        # Term 1: Maximaliseer totaal assignments
         for var in self.assignments_vars.values():
-            objective_terms.append(var * 10)  # Weight: 10
+            objective_terms.append(var * 10)
         
-        # DRAAD105: Term 2: Streefgetal logica per (employee, service)
-        # Tel assignments per (employee, service) en vergelijk met target
+        # DRAAD105: Term 2: Streefgetal logica
         for (emp_id, svc_id), target in self.target_counts.items():
-            # Verzamel alle assignments voor deze (emp, svc) combinatie
             emp_svc_assignments = [
                 self.assignments_vars[(emp_id, dt, dagdeel.value, svc_id)]
                 for dt in self.dates
@@ -358,50 +362,40 @@ class RosterSolver:
             ]
             
             if target == 0:
-                # ZZP/reserve: LAGE priority (-2 per assignment)
-                # Deze worden als LAATST gebruikt
+                # ZZP/reserve: LAGE priority
                 for var in emp_svc_assignments:
-                    objective_terms.append(var * -2)  # Penalty: -2
-                logger.debug(f"ZZP priority: {emp_id} + {svc_id} (aantal=0) → penalty -2")
+                    objective_terms.append(var * -2)
             else:
-                # Reguliere medewerker met streefgetal
-                # Bonus voor assignments onder target (+5)
-                # Normaal voor assignments boven target (0)
-                # Dit wordt in reality per periode berekend, hier simplified
+                # Regulier: HOGE priority
                 for var in emp_svc_assignments:
-                    objective_terms.append(var * 5)  # Bonus: +5
+                    objective_terms.append(var * 5)
         
-        # Term 3: Extra penalty voor ZZP team (dubbele check)
+        # Term 3: Extra penalty voor ZZP team
         zzp_employees = [emp_id for emp_id, emp in self.employees.items() if emp.team == TeamType.OVERIG]
         for emp_id in zzp_employees:
             for dt in self.dates:
                 for dagdeel in list(Dagdeel):
                     for svc_id in self.services:
                         var = self.assignments_vars[(emp_id, dt, dagdeel.value, svc_id)]
-                        objective_terms.append(var * -3)  # Extra penalty: -3
+                        objective_terms.append(var * -3)
         
-        # Maximaliseer totale objective
+        # DRAAD106: Suggested assignments (Optie C: ignored)
+        # We negeren hints volledig - solver plant vanaf scratch
+        # Dit is de simpelste aanpak en werkt prima
+        
         self.model.Maximize(sum(objective_terms))
         
         logger.info(f"Objective function: {len(objective_terms)} termen")
-        logger.info(f"ZZP penalty: aantal=0 → -2, team=overig → -3 (cumulatief -5)")
-        logger.info(f"Regulier bonus: aantal>0 → +5")
     
     def _generate_violations_report(self, assignments: List[Assignment]):
-        """DRAAD105: Genereer rapportage voor afwijkingen van streefgetallen.
+        """DRAAD105: Rapportage voor streefgetal afwijkingen."""
+        logger.info("Genereren violations report...")
         
-        Tel per (employee, service) het aantal assignments en vergelijk met target.
-        Rapporteer afwijkingen als violations.
-        """
-        logger.info("Genereren violations report voor streefgetal afwijkingen...")
-        
-        # Tel actual assignments per (employee, service)
         actual_counts: Dict[Tuple[str, str], int] = {}
         for assignment in assignments:
             key = (assignment.employee_id, assignment.service_id)
             actual_counts[key] = actual_counts.get(key, 0) + 1
         
-        # Vergelijk met targets
         for (emp_id, svc_id), target in self.target_counts.items():
             actual = actual_counts.get((emp_id, svc_id), 0)
             
@@ -421,15 +415,9 @@ class RosterSolver:
                         message=message,
                         severity=severity
                     ))
-        
-        logger.info(f"Violations report: {len(self.violations)} streefgetal afwijkingen")
     
     def _run_solver(self) -> Tuple[SolveStatus, List[Assignment]]:
-        """Voer CP-SAT solver uit.
-        
-        Returns:
-            (status, assignments lijst)
-        """
+        """Voer CP-SAT solver uit."""
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = self.timeout_seconds
         solver.parameters.log_search_progress = False
@@ -437,7 +425,6 @@ class RosterSolver:
         logger.info(f"Starten solver (timeout: {self.timeout_seconds}s)...")
         status_code = solver.Solve(self.model)
         
-        # Map status
         if status_code == cp_model.OPTIMAL:
             solve_status = SolveStatus.OPTIMAL
         elif status_code == cp_model.FEASIBLE:
@@ -450,7 +437,6 @@ class RosterSolver:
         logger.info(f"Solver status: {solve_status.value}")
         logger.info(f"Solve time: {solver.WallTime()}s")
         
-        # Extract assignments
         assignments = []
         if status_code in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
             for (emp_id, dt, dagdeel_str, svc_id), var in self.assignments_vars.items():
@@ -458,10 +444,9 @@ class RosterSolver:
                     emp = self.employees[emp_id]
                     svc = self.services[svc_id]
                     
-                    # Fix: gebruik employee.name property
                     assignments.append(Assignment(
                         employee_id=emp_id,
-                        employee_name=emp.name,  # Dit gebruikt de @property
+                        employee_name=emp.name,
                         date=dt,
                         dagdeel=Dagdeel(dagdeel_str),
                         service_id=svc_id,
