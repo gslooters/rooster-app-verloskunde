@@ -1,0 +1,27 @@
+# DRAAD111 SOLVER Cache-Busting
+
+Datum: 2025-12-05T20:57 CET
+Timestamp: 1733431073000
+Random: 982471
+
+SOLVER FIX UITGEVOERD:
+- Dockerfile CMD geüpdatet naar JSON exec form
+- Van: CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
+- Naar: CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+
+WAAROOM DEZE FIX:
+- Railway waarschuwde: JSONArgsRecommended
+- Shell form interpreteerde hostname=0.0.0.0 als executable
+- JSON exec form met sh -c wrapper voorkomt dit
+- Environment variable expansion werkt correct
+
+VERWACHT RESULTAAT:
+✅ Container start succesvol
+✅ uvicorn draait op 0.0.0.0:${PORT}
+✅ Geen "executable not found" errors meer
+✅ Health check werkt
+
+VERIFICATIE:
+- Railway logs: "Application startup complete"
+- curl https://[solver-url]/health
+- curl https://[solver-url]/version
