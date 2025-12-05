@@ -31,10 +31,20 @@ export interface Service {
   // DRAAD100C: is_nachtdienst removed (field does not exist in DB)
 }
 
-// Employee-Service bevoegdheid
+// Employee-Service bevoegdheid (legacy - nu vervangen door RosterEmployeeService)
 export interface EmployeeService {
   employee_id: number;
   service_id: number;
+}
+
+// DRAAD105: RosterEmployeeService - bevoegdheid met aantal en actief status
+// Bron: roster_employee_services tabel
+export interface RosterEmployeeService {
+  roster_id: number;
+  employee_id: number;
+  service_id: number;
+  aantal: number;      // Streefgetal: min=max, 0=ZZP/reserve
+  actief: boolean;     // Alleen actieve bevoegdheden toewijzen (harde eis)
 }
 
 // Pre-assignment (status > 0)
@@ -47,13 +57,14 @@ export interface PreAssignment {
 }
 
 // Solve Request (naar Python service)
+// DRAAD105: Gebruik roster_employee_services ipv employee_services
 export interface SolveRequest {
   roster_id: number;
   start_date: string; // ISO date
   end_date: string; // ISO date
   employees: Employee[];
   services: Service[];
-  employee_services: EmployeeService[];
+  roster_employee_services: RosterEmployeeService[];  // DRAAD105: vervangen
   pre_assignments: PreAssignment[];
   timeout_seconds: number;
 }
