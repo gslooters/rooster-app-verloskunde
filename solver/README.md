@@ -1,1 +1,216 @@
-# Python OR-Tools Solver Service\n\n## Overzicht\n\nFastAPI service voor roosteroptimalisatie met Google OR-Tools CP-SAT solver.\n\n## Kenmerken\n\n- **Solver**: Google OR-Tools CP-SAT 9.11\n- **Framework**: FastAPI 0.115\n- **Server**: Uvicorn (ASGI)\n- **CORE 3 Constraints**:\n  1. Max werkdagen per week\n  2. Structureel NBH (Niet Beschikbaar Houden)\n  3. Service bevoegdheid\n\n## API Endpoints\n\n### Health Check\n```\nGET /\nGET /health\n```\n\n### Solve Schedule\n```\nPOST /api/v1/solve-schedule\n```\n\n**Request Body**: Zie `SolveRequest` model in `main.py`\n\n**Response**: Optimale/feasible roosteroplossing met assignments\n\n## Lokaal Draaien\n\n```bash\ncd solver\npip install -r requirements.txt\nuvicorn main:app --reload --port 8000\n```\n\n## Railway Deployment\n\n### Automatisch (via GitHub):\n1. Push naar main branch\n2. Railway detecteert `solver/` directory\n3. Bouwt Python service met Nixpacks\n4. Start met Procfile command\n\n### Handmatig (via Railway CLI):\n```bash\nrailway link [project-id]\nrailway up\n```\n\n## Environment Variables\n\nGeen environment variables vereist voor de solver service zelf.\n\n**Next.js app moet WEL instellen**:\n```\nSOLVER_SERVICE_URL=https://solver-xyz.railway.app\n```\n\n## Performance\n\n- **Timeout**: Configureerbaar (default 30s, max 300s)\n- **Complexity**: O(employees × days × dagdelen × services)\n- **Example**: 13 medewerkers, 35 dagen, 3 dagdelen, 9 diensten = ~12,285 variabelen\n\n## Logging\n\nAlle solver runs worden gelogd in Railway:\n- Constraints toegevoegd\n- Solve time\n- Solution status\n- Assignments gegenereerd\n\n## Troubleshooting\n\n### Service start niet\n- Check Railway logs voor Python errors\n- Verify `requirements.txt` dependencies\n- Ensure port ${PORT} is used\n\n### Timeout errors\n- Verhoog `timeout_seconds` in request\n- Reduceer complexiteit (minder dagen/diensten)\n- Check constraints voor conflicts\n\n### INFEASIBLE solutions\n- Te strikte constraints (NBH + max werkdagen)\n- Onvoldoende bevoegdheden\n- Te veel pre-assignments\n\n## Versie\n\n**1.0.0** - DRAAD101\n- Initieële implementatie\n- CORE 3 constraints\n- FastAPI REST API\n- Railway deployment ready\n
+# Rooster Solver Service
+
+Python FastAPI service voor het optimaliseren van verloskundige roosters met Google OR-Tools CP-SAT.
+
+## ⚠️ BELANGRIJKE DEPLOYMENT INFORMATIE
+
+### Railway Configuratie
+
+**GEBRUIK ALLEEN DOCKERFILE - GEEN NIXPACKS!**
+
+❌ **NIET doen:** nixpacks.toml toevoegen  
+✅ **WEL doen:** Dockerfile gebruiken (zoals nu)
+
+**Waarom?**
+- Railway gebruikt nixpacks.toml voor START command (als aanwezig)
+- Dockerfile CMD wordt dan GENEGEERD
+- Result: "hostname=0.0.0.0 executable not found" errors
+- We hadden 12 mislukte deployments door dit conflict!
+
+**Zie:** [DRAAD111-FINAL-NIXPACKS-REMOVAL.md](../DRAAD111-FINAL-NIXPACKS-REMOVAL.md)
+
+## Features (Fase 1 - PoC)
+
+✅ **Basis constraint solving:**
+- Min/max shifts per medewerker
+- Gelijke verdeling van diensten
+- Basic feasibility checks
+
+✅ **REST API:**
+- POST /solve - Optimize schedule
+- GET /health - Health check
+- GET /version - Service version
+
+✅ **Production ready:**
+- Docker containerization
+- Health checks
+- Error handling
+- CORS configured
+
+## Tech Stack
+
+- **Python:** 3.11
+- **Framework:** FastAPI
+- **Solver:** Google OR-Tools CP-SAT
+- **Deployment:** Railway (Dockerfile)
+
+## API Endpoints
+
+### POST /solve
+
+Optimize a schedule based on constraints.
+
+**Request:**
+```json
+{
+  "employees": [
+    {"id": "emp1", "name": "Anna"},
+    {"id": "emp2", "name": "Bert"}
+  ],
+  "period": {
+    "start_date": "2025-01-01",
+    "end_date": "2025-01-31"
+  },
+  "constraints": {
+    "min_shifts_per_employee": 10,
+    "max_shifts_per_employee": 15,
+    "required_coverage": {"2025-01-01": 2}
+  },
+  "timeout_seconds": 30
+}
+```
+
+**Response:**
+```json
+{
+  "status": "OPTIMAL",
+  "assignments": [
+    {"employee_id": "emp1", "date": "2025-01-01", "shift_type": "day"},
+    {"employee_id": "emp2", "date": "2025-01-01", "shift_type": "night"}
+  ],
+  "statistics": {
+    "total_shifts": 62,
+    "solve_time_seconds": 2.4
+  }
+}
+```
+
+### GET /health
+
+Health check endpoint.
+
+**Response:**
+```json
+{
+  "status": "healthy",
+  "timestamp": "2025-12-05T21:21:30Z",
+  "service": "rooster-solver",
+  "version": "1.0.0-fase1"
+}
+```
+
+### GET /version
+
+Service version information.
+
+## Local Development
+
+### Requirements
+
+- Python 3.11+
+- pip
+
+### Setup
+
+```bash
+cd solver/
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### Run
+
+```bash
+uvicorn main:app --reload --port 8000
+```
+
+API beschikbaar op: http://localhost:8000
+
+### Test
+
+```bash
+curl http://localhost:8000/health
+curl http://localhost:8000/version
+```
+
+## Docker
+
+### Build
+
+```bash
+cd solver/
+docker build -f docker/Dockerfile -t rooster-solver .
+```
+
+### Run
+
+```bash
+docker run -p 8000:8000 rooster-solver
+```
+
+## Railway Deployment
+
+**Zie:** [DEPLOY.md](DEPLOY.md) voor gedetailleerde instructies.
+
+**Quick setup:**
+
+1. Railway project: https://railway.com/project/90165889-1a50-4236-aefe-b1e1ae44dc7f
+2. New Service → GitHub Repo → `gslooters/rooster-app-verloskunde`
+3. Root Directory: `solver`
+4. Build Method: **Dockerfile** (⚠️ KRITIEK: geen nixpacks!)
+5. Environment variables: `PORT=8000`
+6. Deploy!
+
+**Railway gebruikt automatisch:**
+- `solver/docker/Dockerfile` voor build
+- Dockerfile `CMD` voor container start
+- Health check op `/health`
+
+## Project Structure
+
+```
+solver/
+├── docker/
+│   └── Dockerfile          # Railway deployment config
+├── main.py                 # FastAPI application
+├── models.py               # Pydantic models
+├── solver_engine.py        # OR-Tools constraint solver
+├── requirements.txt        # Python dependencies
+├── README.md               # This file
+└── DEPLOY.md               # Deployment instructions
+```
+
+## Dependencies
+
+- `fastapi` - Web framework
+- `uvicorn` - ASGI server
+- `pydantic` - Data validation
+- `ortools` - Constraint solver
+- `python-dotenv` - Environment variables
+
+## Next Steps (Fase 2)
+
+📅 **Geplande features:**
+
+- [ ] Complex constraint types (consecutive shifts, preferences)
+- [ ] Multi-week scheduling
+- [ ] Employee preferences integration
+- [ ] Shift swap optimization
+- [ ] Historical data analysis
+- [ ] Performance monitoring
+
+## Support
+
+**Issues?** Check:
+
+1. [DEPLOY.md](DEPLOY.md) - Deployment guide
+2. [DRAAD111-FINAL-NIXPACKS-REMOVAL.md](../DRAAD111-FINAL-NIXPACKS-REMOVAL.md) - Common issues
+3. Railway logs in dashboard
+4. Health endpoint: `curl https://[solver-url]/health`
+
+---
+
+**Status:** Production Ready (Fase 1)  
+**Version:** 1.0.0-fase1  
+**Last Updated:** 5 december 2025
