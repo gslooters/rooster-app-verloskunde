@@ -199,14 +199,20 @@ export async function POST(request: NextRequest) {
     }
     
     // Transform naar exact_staffing format
-    const exact_staffing = (staffingData || []).map(row => ({
-      date: row.roster_period_staffing.date,
-      dagdeel: row.dagdeel as 'O' | 'M' | 'A',
-      service_id: row.roster_period_staffing.service_id,
-      team: row.team as 'TOT' | 'GRO' | 'ORA',
-      exact_aantal: row.aantal,
-      is_system_service: row.roster_period_staffing.service_types.is_system
-    }));
+    // DRAAD108: Supabase returnt nested relations als arrays
+    const exact_staffing = (staffingData || []).map(row => {
+      const rps = Array.isArray(row.roster_period_staffing) ? row.roster_period_staffing[0] : row.roster_period_staffing;
+      const st = Array.isArray(rps?.service_types) ? rps.service_types[0] : rps?.service_types;
+      
+      return {
+        date: rps?.date || '',
+        dagdeel: row.dagdeel as 'O' | 'M' | 'A',
+        service_id: rps?.service_id || '',
+        team: row.team as 'TOT' | 'GRO' | 'ORA',
+        exact_aantal: row.aantal,
+        is_system_service: st?.is_system || false
+      };
+    }).filter(item => item.date && item.service_id);  // Filter incomplete records
     
     // Log statistieken
     const systemCount = exact_staffing.filter(e => e.is_system_service).length;
