@@ -14,9 +14,14 @@
 **Belangrijke instellingen:**
 
 - **Root Directory:** `solver`
-- **Build Method:** Dockerfile
-- **Dockerfile Path:** `Dockerfile`
-- **Start Command:** `python main.py`
+- **Build Method:** Dockerfile (auto-detect)
+- **Dockerfile Path:** `Dockerfile` (🔥 MOET in solver/ root staan, niet in submap!)
+- **Start Command:** (LEEG LATEN - CMD uit Dockerfile wordt gebruikt)
+
+**⚠️ KRITIEK (DRAAD111 fix):**
+- Dockerfile MOET `solver/Dockerfile` zijn (niet `solver/docker/Dockerfile`)
+- Railway met `root_dir=solver` zoekt naar `Dockerfile` relatief aan die root
+- `railway.json` in `solver/` directory voorkomt conflict met root `railway.toml`
 
 ### Stap 3: Environment Variables
 
@@ -32,7 +37,7 @@ LOG_LEVEL=INFO
 - **Health Check Path:** `/health`
 - **Health Check Timeout:** 100 seconds
 - **Restart Policy:** ON_FAILURE
-- **Max Retries:** 3
+- **Max Retries:** 10
 
 ### Stap 5: Deploy
 
@@ -52,9 +57,9 @@ Verwachte response:
 ```json
 {
   "status": "healthy",
-  "timestamp": "2025-12-02T23:10:00Z",
+  "timestamp": "2025-12-05T20:55:00Z",
   "service": "rooster-solver",
-  "version": "1.0.0-fase1"
+  "version": "1.1.0-DRAAD108"
 }
 ```
 
@@ -89,19 +94,39 @@ SOLVER_SERVICE_URL=http://rooster-solver.railway.internal:8000
 FROM python:3.11-slim
 ```
 
-### Service Crash
+### Service Crash bij Startup
 
-**Probleem:** Service crasht bij startup
+**Probleem:** Container start niet
 
 **Debug:**
-1. Check Railway logs
-2. Zoek naar traceback
-3. Controleer dependencies in requirements.txt
+1. Check Railway logs voor Python tracebacks
+2. Verifieer dat Dockerfile op correcte locatie staat: `solver/Dockerfile`
+3. Check dat `railway.json` in `solver/` directory staat
 4. Test lokaal met Docker:
    ```bash
+   cd solver/
    docker build -t solver .
    docker run -p 8000:8000 solver
    ```
+
+### "executable hostname=0.0.0.0 not found" Error
+
+**Probleem:** Railway probeert verkeerd startcommando uit te voeren
+
+**Oplossing (DRAAD111 fix):**
+- Verifieer dat `solver/railway.json` bestaat
+- Check dat `dockerfilePath` in railway.json correct is: `"Dockerfile"`
+- Zorg dat Railway Settings → Start Command LEEG is
+- Dockerfile CMD wordt dan automatisch gebruikt
+
+### Dockerfile wordt niet gevonden
+
+**Probleem:** Railway zegt "skipping Dockerfile... not rooted at valid path"
+
+**Oplossing:**
+- Dockerfile MOET in `solver/Dockerfile` staan (niet in submap)
+- Railway root directory is ingesteld op `solver`
+- Dockerfile path in `railway.json` moet `"Dockerfile"` zijn (relatief)
 
 ### Timeout Issues
 
@@ -112,7 +137,7 @@ FROM python:3.11-slim
 timeout_seconds: 60
 ```
 
-En update Railway health check timeout.
+En update Railway health check timeout naar 100s.
 
 ### CORS Errors
 
@@ -185,6 +210,57 @@ git push origin main
 
 ---
 
-**Status:** Ready for deployment  
-**Fase:** 1 - PoC  
-**Datum:** 2 december 2025
+## DRAAD111 - Lessons Learned
+
+### Root Cause: Dockerfile Locatie
+
+**Probleem:**
+- Dockerfile stond in `solver/docker/Dockerfile` (te diep genest)
+- Railway met `root_dir=solver` zoekt naar `solver/Dockerfile`
+- Railway logs: "skipping Dockerfile... not rooted at valid path"
+
+**Oplossing:**
+- Dockerfile verplaatst naar `solver/Dockerfile`
+- `railway.json` aangemaakt in `solver/` met correcte config
+- Dit voorkomt conflict met root `railway.toml` (Next.js config)
+
+### Configuratie Scheiding
+
+**Monorepo Setup:**
+```
+rooster-app-verloskunde/
+├── railway.toml          ← Next.js app configuratie
+└── solver/
+    ├── railway.json      ← Solver service configuratie
+    ├── Dockerfile        ← MOET HIER staan!
+    ├── main.py
+    └── requirements.txt
+```
+
+**Belangrijk:**
+- Elke service heeft eigen configuratie
+- Root `railway.toml` geldt NIET voor Solver service
+- Solver leest `solver/railway.json` voor eigen config
+
+### Key Takeaways
+
+1. **Railway Root Directory is relatief**
+   - `root_dir=solver` → zoekt `Dockerfile` in die directory
+   - NIET in submappen zoals `docker/`
+
+2. **Configuratie Prioriteit**
+   - Service-specific `railway.json` > root `railway.toml`
+   - Start Command in Settings > Dockerfile CMD
+   - Laat Start Command LEEG om Dockerfile CMD te gebruiken
+
+3. **Debug Log Signalen**
+   - "skipping Dockerfile" → verkeerde locatie
+   - "not rooted at valid path" → file te diep genest
+   - "executable not found" → vaak verkeerde startcommand config
+
+---
+
+**Status:** Production Ready  
+**Fase:** DRAAD108 - Exacte bezetting  
+**Datum:** 5 december 2025  
+**Fix:** DRAAD111 - Dockerfile locatie probleem opgelost
