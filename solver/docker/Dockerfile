@@ -1,7 +1,7 @@
 # Dockerfile voor Python FastAPI Solver Service
-# Voor LOKALE DEVELOPMENT - Railway gebruikt Nixpacks!
+# Voor Railway Deployment met Dockerfile builder
 # 
-# Gebruik:
+# Gebruik lokaal:
 #   cd solver/
 #   docker build -f docker/Dockerfile -t solver .
 #   docker run -p 8000:8000 solver
@@ -38,5 +38,7 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
 
-# Use uvicorn with PORT variable
-CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
+# 🔥 CRITICAL: Use JSON exec form with sh -c for environment variable expansion
+# This prevents "hostname=0.0.0.0 executable not found" errors
+# Railway best practice: JSON args recommended for CMD
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
