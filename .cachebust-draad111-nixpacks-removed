@@ -1,0 +1,7 @@
+# Cache-bust voor DRAAD111 nixpacks.toml removal
+Timestamp: 1733432490000
+Random: 754821
+Datum: 2025-12-05T21:21 CET
+
+Fix: Solver deployment door nixpacks.toml conflict te verwijderen
+Railway zal nu alleen Dockerfile gebruiken voor build EN start
