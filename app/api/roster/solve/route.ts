@@ -34,7 +34,8 @@ import type {
   RosterEmployeeService,
   FixedAssignment,  // DRAAD106: nieuw
   BlockedSlot,      // DRAAD106: nieuw
-  SuggestedAssignment  // DRAAD106: nieuw
+  SuggestedAssignment,  // DRAAD106: nieuw
+  ExactStaffing  // DRAAD108: nieuw
 } from '@/lib/types/solver';
 
 const SOLVER_URL = process.env.SOLVER_SERVICE_URL || 'http://localhost:8000';
