@@ -1,13 +1,29 @@
 {
   "cacheBust": true,
-  "timestamp": "2025-11-27T16:32:45Z",
-  "draad": "63B",
-  "reason": "TypeScript cached error - code is correct",
+  "timestamp": "2025-12-05T20:32:50Z",
+  "draad": "111",
+  "reason": "railway.json conflict - overschreef beide services",
+  "criticalFix": "railway.json REMOVED from root",
   "fixes": [
-    "WeekDagdelenClient.tsx: No dienstCode/dienstNaam",
-    "tsconfig.json: incremental=false",
-    ".railway-deploy-trigger: Updated",
-    "This file: Final cache invalidation"
+    "railway.json: VERWIJDERD (veroorzaakte service conflict)",
+    "Rooster-app: gebruikt railway.toml voor Next.js",
+    "Solver: gebruikt solver/nixpacks.toml voor Python",
+    "Beide services hebben nu eigen configuratie",
+    "Geen Dockerfile conflict meer"
   ],
-  "expectedResult": "BUILD SUCCESS - TypeScript compiles correctly"
+  "services": {
+    "rooster-app": {
+      "config": "railway.toml",
+      "build": "Nixpacks (Next.js)",
+      "status": "Should deploy correctly now"
+    },
+    "solver": {
+      "config": "solver/nixpacks.toml",
+      "build": "Nixpacks (Python)",
+      "status": "Should deploy correctly now"
+    }
+  },
+  "expectedResult": "BOTH SERVICES BUILD SUCCESS - No more conflicts",
+  "randomTrigger": 847293,
+  "timestampMs": 1733429479000
 }
