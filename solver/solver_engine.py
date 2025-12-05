@@ -1,21 +1,23 @@
 """CP-SAT Solver Engine voor roosterplanning.
 
 Implementeert Google OR-Tools CP-SAT voor het oplossen van
-verloskundige roosters met 6 basis constraints (Fase 1).
+verloskundige roosters met 8 basis constraints.
 
 DRAAD105: Gebruikt roster_employee_services met aantal en actief velden.
 DRAAD106: Status semantiek - fixed_assignments (status 1) en blocked_slots (status 2,3).
+DRAAD108: Bezetting realiseren - exact aantal per dienst/dagdeel/team + systeemdienst exclusiviteit.
 """
 
 from ortools.sat.python import cp_model
-from typing import List, Dict, Set, Tuple
+from typing import List, Dict, Set, Tuple, Optional
 from datetime import date, timedelta
 import time
 import logging
 
 from models import (
     Employee, Service, RosterEmployeeService,
-    FixedAssignment, BlockedSlot, SuggestedAssignment,  # DRAAD106: nieuwe imports
+    FixedAssignment, BlockedSlot, SuggestedAssignment,  # DRAAD106
+    ExactStaffing,  # DRAAD108: NIEUW
     PreAssignment,  # DEPRECATED maar backwards compatible
     Assignment, ConstraintViolation, Suggestion,
     SolveResponse, SolveStatus, Dagdeel, TeamType
@@ -39,6 +41,8 @@ class RosterSolver:
         fixed_assignments: List[FixedAssignment],
         blocked_slots: List[BlockedSlot],
         suggested_assignments: List[SuggestedAssignment] = None,
+        # DRAAD108: NIEUW - exacte bezetting
+        exact_staffing: List[ExactStaffing] = None,
         # DEPRECATED: backwards compatibility
         pre_assignments: List[PreAssignment] = None,
         timeout_seconds: int = 30
@@ -51,18 +55,19 @@ class RosterSolver:
         self.end_date = end_date
         self.timeout_seconds = timeout_seconds
         
-        # DRAAD106: Nieuwe constraint data
+        # DRAAD106: Constraint data
         self.fixed_assignments = fixed_assignments or []
         self.blocked_slots = blocked_slots or []
         self.suggested_assignments = suggested_assignments or []
         
+        # DRAAD108: NIEUW - exacte bezetting data
+        self.exact_staffing = exact_staffing or []
+        
         # DEPRECATED: Backwards compatibility met pre_assignments
         if pre_assignments:
             logger.warning("pre_assignments is DEPRECATED, gebruik fixed_assignments + blocked_slots")
-            # Converteer pre_assignments naar nieuwe modellen
             for pa in pre_assignments:
                 if pa.status == 1:
-                    # Status 1 → FixedAssignment
                     self.fixed_assignments.append(FixedAssignment(
                         employee_id=pa.employee_id,
                         date=pa.date,
@@ -70,7 +75,6 @@ class RosterSolver:
                         service_id=pa.service_id
                     ))
                 elif pa.status in [2, 3]:
-                    # Status 2, 3 → BlockedSlot
                     self.blocked_slots.append(BlockedSlot(
                         employee_id=pa.employee_id,
                         date=pa.date,
@@ -138,7 +142,8 @@ class RosterSolver:
                     "employees_count": len(self.employees),
                     "services_count": len(self.services),
                     "fixed_assignments_count": len(self.fixed_assignments),
-                    "blocked_slots_count": len(self.blocked_slots)
+                    "blocked_slots_count": len(self.blocked_slots),
+                    "exact_staffing_count": len(self.exact_staffing)  # DRAAD108
                 }
             )
             
@@ -171,22 +176,30 @@ class RosterSolver:
     def _apply_constraints(self):
         """Pas alle constraints toe.
         
-        DRAAD106: Nieuwe constraint volgorde:
+        DRAAD106: Constraints 1-6
+        DRAAD108: Constraints 7-8 (NIEUW)
+        
         1. Bevoegdheden
         2. Beschikbaarheid
-        3A. Fixed assignments (status 1) - NIEUW
-        3B. Blocked slots (status 2, 3) - NIEUW
+        3A. Fixed assignments (status 1)
+        3B. Blocked slots (status 2, 3)
         4. Een dienst per dagdeel
         5. Max werkdagen
         6. ZZP minimalisatie (via objective)
+        7. DRAAD108: Exact bezetting realiseren
+        8. DRAAD108: Systeemdienst exclusiviteit (DIO XOR DDO, DIA XOR DDA)
         """
         self._constraint_1_bevoegdheden()
         self._constraint_2_beschikbaarheid()
-        self._constraint_3a_fixed_assignments()  # DRAAD106: NIEUW
-        self._constraint_3b_blocked_slots()      # DRAAD106: NIEUW
+        self._constraint_3a_fixed_assignments()
+        self._constraint_3b_blocked_slots()
         self._constraint_4_een_dienst_per_dagdeel()
         self._constraint_5_max_werkdagen()
-        # Constraint 6 ZZP minimalisatie via _define_objective()
+        # Constraint 6: ZZP minimalisatie via _define_objective()
+        
+        # DRAAD108: NIEUWE CONSTRAINTS
+        self._constraint_7_exact_staffing()  # NIEUW
+        self._constraint_8_system_service_exclusivity()  # NIEUW
     
     def _constraint_1_bevoegdheden(self):
         """Constraint 1: Medewerker mag alleen diensten doen waarvoor bevoegd.
@@ -243,15 +256,12 @@ class RosterSolver:
     def _constraint_3a_fixed_assignments(self):
         """Constraint 3A: Respecteer status 1 (fixed assignments).
         
-        DRAAD106: NIEUW - vervangt oude _constraint_3_pre_assignments
-        
-        Status 1 = Handmatig gepland of gefinaliseerd
+        DRAAD106: Status 1 = Handmatig gepland of gefinaliseerd
         ORT MOET deze exact overnemen (HARD CONSTRAINT).
         """
         logger.info("Toevoegen constraint 3A: Fixed assignments...")
         
         for fa in self.fixed_assignments:
-            # Force deze assignment
             var = self.assignments_vars.get(
                 (fa.employee_id, fa.date, fa.dagdeel.value, fa.service_id)
             )
@@ -274,11 +284,7 @@ class RosterSolver:
     def _constraint_3b_blocked_slots(self):
         """Constraint 3B: Respecteer status 2, 3 (blocked slots).
         
-        DRAAD106: NIEUW - vervangt oude _constraint_3_pre_assignments
-        
-        Status 2 = Geblokkeerd door DIA/DDA/DIO/DDO
-        Status 3 = Structureel NBH
-        
+        DRAAD106: Status 2/3 = Geblokkeerd
         ORT MAG NIET plannen in deze slots voor ENIGE dienst (HARD CONSTRAINT).
         """
         logger.info("Toevoegen constraint 3B: Blocked slots...")
@@ -339,11 +345,120 @@ class RosterSolver:
         
         logger.info("Constraint 5: Max werkdagen toegepast")
     
+    def _constraint_7_exact_staffing(self):
+        """Constraint 7: Exacte bezetting per dienst/dagdeel/team respecteren.
+        
+        DRAAD108: Implementeert roster_period_staffing_dagdelen logica
+        
+        - aantal > 0: EXACT dit aantal plannen (niet >=, maar ==)
+        - aantal = 0: MAG NIET plannen (verboden)
+        
+        Priority: HARD (is_fixed: true)
+        Team filtering: TOT=allen, GRO=maat, ORA=loondienst
+        """
+        logger.info("Toevoegen constraint 7: Bezetting realiseren...")
+        
+        if not self.exact_staffing:
+            logger.info("Constraint 7: Geen exact_staffing data, skip")
+            return
+        
+        for staffing in self.exact_staffing:
+            # Bepaal eligible medewerkers voor dit team
+            if staffing.team == 'GRO':
+                eligible_emps = [e for e in self.employees.values() 
+                               if e.team == TeamType.MAAT]
+            elif staffing.team == 'ORA':
+                eligible_emps = [e for e in self.employees.values() 
+                               if e.team == TeamType.LOONDIENST]
+            elif staffing.team == 'TOT':
+                eligible_emps = list(self.employees.values())
+            else:
+                logger.warning(f"Unknown team: {staffing.team}")
+                continue
+            
+            # Verzamel assignments voor dit specifieke slot
+            slot_assignments = []
+            for emp in eligible_emps:
+                var_key = (emp.id, staffing.date, staffing.dagdeel.value, staffing.service_id)
+                if var_key in self.assignments_vars:
+                    slot_assignments.append(self.assignments_vars[var_key])
+            
+            if not slot_assignments:
+                logger.warning(f"No eligible employees for exact staffing: {staffing}")
+                continue
+            
+            if staffing.exact_aantal == 0:
+                # VERBODEN - mag niet worden ingepland
+                for var in slot_assignments:
+                    self.model.Add(var == 0)
+                logger.debug(f"Verboden: {staffing.service_id} op {staffing.date} {staffing.dagdeel.value} team {staffing.team}")
+            else:
+                # EXACT aantal vereist (min=max tegelijk)
+                self.model.Add(sum(slot_assignments) == staffing.exact_aantal)
+                logger.debug(f"Exact {staffing.exact_aantal}: {staffing.service_id} op {staffing.date} {staffing.dagdeel.value} team {staffing.team}")
+        
+        logger.info(f"Constraint 7: {len(self.exact_staffing)} exacte bezetting eisen toegevoegd")
+    
+    def _constraint_8_system_service_exclusivity(self):
+        """Constraint 8: DIO XOR DDO, DIA XOR DDA op zelfde dag.
+        
+        DRAAD108: Systeemdiensten sluiten elkaar uit per dag.
+        """
+        logger.info("Toevoegen constraint 8: Systeemdienst exclusiviteit...")
+        
+        # Haal service IDs op
+        DIO_id = self.get_service_id_by_code('DIO')
+        DDO_id = self.get_service_id_by_code('DDO')
+        DIA_id = self.get_service_id_by_code('DIA')
+        DDA_id = self.get_service_id_by_code('DDA')
+        
+        if not all([DIO_id, DDO_id, DIA_id, DDA_id]):
+            logger.warning("Niet alle systeemdiensten gevonden, skip constraint 8")
+            return
+        
+        constraint_count = 0
+        for emp_id in self.employees:
+            for dt in self.dates:
+                # DIO XOR DDO (ochtend)
+                dio_var = self.assignments_vars.get((emp_id, dt, 'O', DIO_id))
+                ddo_var = self.assignments_vars.get((emp_id, dt, 'O', DDO_id))
+                
+                if dio_var and ddo_var:
+                    self.model.Add(dio_var + ddo_var <= 1)
+                    constraint_count += 1
+                
+                # DIA XOR DDA (avond)
+                dia_var = self.assignments_vars.get((emp_id, dt, 'A', DIA_id))
+                dda_var = self.assignments_vars.get((emp_id, dt, 'A', DDA_id))
+                
+                if dia_var and dda_var:
+                    self.model.Add(dia_var + dda_var <= 1)
+                    constraint_count += 1
+        
+        logger.info(f"Constraint 8: {constraint_count} systeemdienst exclusiviteit constraints toegevoegd")
+    
+    def get_service_id_by_code(self, code: str) -> Optional[str]:
+        """Helper method: vind service ID by code.
+        
+        DRAAD108: Nodig voor systeemdienst logica.
+        
+        Args:
+            code: Service code (bijv. 'DIO', 'DIA')
+        
+        Returns:
+            Service ID (UUID string) of None
+        """
+        for svc_id, svc in self.services.items():
+            if svc.code == code:
+                return svc_id
+        return None
+    
     def _define_objective(self):
         """Definieer objective function.
         
         DRAAD105: Streefgetal logica met ZZP als reserve
         DRAAD106: Suggested assignments optioneel (Optie C: ignored)
+        DRAAD108: NIEUW - Bonus voor 24-uurs wachtdienst koppeling (DIO+DIA, DDO+DDA)
         """
         logger.info("Definiëren objective function...")
         
@@ -379,9 +494,34 @@ class RosterSolver:
                         var = self.assignments_vars[(emp_id, dt, dagdeel.value, svc_id)]
                         objective_terms.append(var * -3)
         
-        # DRAAD106: Suggested assignments (Optie C: ignored)
-        # We negeren hints volledig - solver plant vanaf scratch
-        # Dit is de simpelste aanpak en werkt prima
+        # DRAAD108: Term 4 - Bonus voor 24-uurs wachtdienst koppeling (SOFT)
+        DIO_id = self.get_service_id_by_code('DIO')
+        DIA_id = self.get_service_id_by_code('DIA')
+        DDO_id = self.get_service_id_by_code('DDO')
+        DDA_id = self.get_service_id_by_code('DDA')
+        
+        if all([DIO_id, DIA_id, DDO_id, DDA_id]):
+            for emp_id in self.employees:
+                for dt in self.dates:
+                    # DIO + DIA koppeling (grote bonus)
+                    dio_var = self.assignments_vars.get((emp_id, dt, 'O', DIO_id))
+                    dia_var = self.assignments_vars.get((emp_id, dt, 'A', DIA_id))
+                    
+                    if dio_var and dia_var:
+                        koppel_var = self.model.NewBoolVar(f"dio_dia_koppel_{emp_id}_{dt}")
+                        self.model.Add(dio_var + dia_var == 2).OnlyEnforceIf(koppel_var)
+                        self.model.Add(dio_var + dia_var < 2).OnlyEnforceIf(koppel_var.Not())
+                        objective_terms.append(koppel_var * 500)  # Hoge bonus
+                    
+                    # DDO + DDA koppeling (grote bonus)
+                    ddo_var = self.assignments_vars.get((emp_id, dt, 'O', DDO_id))
+                    dda_var = self.assignments_vars.get((emp_id, dt, 'A', DDA_id))
+                    
+                    if ddo_var and dda_var:
+                        koppel_var = self.model.NewBoolVar(f"ddo_dda_koppel_{emp_id}_{dt}")
+                        self.model.Add(ddo_var + dda_var == 2).OnlyEnforceIf(koppel_var)
+                        self.model.Add(ddo_var + dda_var < 2).OnlyEnforceIf(koppel_var.Not())
+                        objective_terms.append(koppel_var * 500)
         
         self.model.Maximize(sum(objective_terms))
         
