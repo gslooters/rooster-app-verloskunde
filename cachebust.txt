@@ -1,6 +1,7 @@
-1732384987
-Last update: 2025-11-23T19:03:07+01:00
-Build trigger: DRAAD1F4 date-fns-tz upgrade
-Compatibility: date-fns@4.1.0 + date-fns-tz@3.2.0 ✅
-Railway rebuild #5 - CRITICAL FIX
-Fix: Correct dependency versions (3.x compatible)
+1733427022
+Last update: 2025-12-05T20:10:22+01:00
+Build trigger: DRAAD108-DEPLOY railway.json Dockerfile fix
+Change: NIXPACKS → DOCKERFILE builder
+Path: solver/docker/Dockerfile
+Railway rebuild - CRITICAL DEPLOYMENT FIX
+Expected: Solver v1.1.0-DRAAD108 with OR-Tools constraints 7 & 8
