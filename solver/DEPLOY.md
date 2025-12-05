@@ -18,10 +18,11 @@
 - **Dockerfile Path:** `Dockerfile` (🔥 MOET in solver/ root staan, niet in submap!)
 - **Start Command:** (LEEG LATEN - CMD uit Dockerfile wordt gebruikt)
 
-**⚠️ KRITIEK (DRAAD111 fix):**
+**⚠️ KRITIEK (DRAAD111 fixes):**
 - Dockerfile MOET `solver/Dockerfile` zijn (niet `solver/docker/Dockerfile`)
 - Railway met `root_dir=solver` zoekt naar `Dockerfile` relatief aan die root
 - `railway.json` in `solver/` directory voorkomt conflict met root `railway.toml`
+- **NOOIT `.railwayignore` gebruiken die Dockerfile blokkeert!**
 
 ### Stap 3: Environment Variables
 
@@ -102,12 +103,39 @@ FROM python:3.11-slim
 1. Check Railway logs voor Python tracebacks
 2. Verifieer dat Dockerfile op correcte locatie staat: `solver/Dockerfile`
 3. Check dat `railway.json` in `solver/` directory staat
-4. Test lokaal met Docker:
+4. **VERIFIEER dat `.railwayignore` Dockerfile NIET blokkeert!**
+5. Test lokaal met Docker:
    ```bash
    cd solver/
    docker build -t solver .
    docker run -p 8000:8000 solver
    ```
+
+### "Dockerfile does not exist" Error
+
+**Probleem:** Railway kan Dockerfile niet vinden (DRAAD111 root cause)
+
+**Mogelijke oorzaken:**
+1. Dockerfile staat in verkeerde directory (moet `solver/Dockerfile` zijn)
+2. **`.railwayignore` bevat "Dockerfile" ignore regel**
+3. `railway.json` heeft verkeerd `dockerfilePath`
+
+**Oplossing:**
+1. Verifieer `solver/Dockerfile` bestaat:
+   ```bash
+   ls -la solver/Dockerfile
+   ```
+2. **Check `.railwayignore` - mag GEEN "Dockerfile" bevatten!**
+3. Check `solver/railway.json`:
+   ```json
+   {
+     "build": {
+       "builder": "DOCKERFILE",
+       "dockerfilePath": "Dockerfile"
+     }
+   }
+   ```
+4. Railway Settings → Start Command moet LEEG zijn
 
 ### "executable hostname=0.0.0.0 not found" Error
 
@@ -212,7 +240,7 @@ git push origin main
 
 ## DRAAD111 - Lessons Learned
 
-### Root Cause: Dockerfile Locatie
+### Root Cause 1: Dockerfile Locatie
 
 **Probleem:**
 - Dockerfile stond in `solver/docker/Dockerfile` (te diep genest)
@@ -223,6 +251,23 @@ git push origin main
 - Dockerfile verplaatst naar `solver/Dockerfile`
 - `railway.json` aangemaakt in `solver/` met correcte config
 - Dit voorkomt conflict met root `railway.toml` (Next.js config)
+
+### Root Cause 2: .railwayignore Blokkade (🔥 KRITIEK)
+
+**Probleem:**
+- `solver/.railwayignore` bevatte regel: `Dockerfile`
+- Dit blokkeerde Railway om Dockerfile te detecteren
+- Railway error: "Dockerfile does not exist" (letterlijk waar!)
+- Ignore files hebben VOORRANG boven railway.json configuratie
+
+**Oplossing:**
+- `.railwayignore` VOLLEDIG VERWIJDERD
+- Dockerfile nu zichtbaar voor Railway
+- Railway kan nu Dockerfile detecteren en gebruiken
+
+**⚠️ WARNING:**
+Gebruik NOOIT `.railwayignore` met "Dockerfile" ignore regel als je Dockerfile deployment wilt!
+Ignore files hebben absolute voorrang - Railway controleert ze VOOR alles.
 
 ### Configuratie Scheiding
 
@@ -241,6 +286,7 @@ rooster-app-verloskunde/
 - Elke service heeft eigen configuratie
 - Root `railway.toml` geldt NIET voor Solver service
 - Solver leest `solver/railway.json` voor eigen config
+- **GEEN `.railwayignore` die essentiële files blokkeert!**
 
 ### Key Takeaways
 
@@ -248,19 +294,39 @@ rooster-app-verloskunde/
    - `root_dir=solver` → zoekt `Dockerfile` in die directory
    - NIET in submappen zoals `docker/`
 
-2. **Configuratie Prioriteit**
+2. **Ignore Files Hebben Voorrang**
+   - `.railwayignore` wordt EERST gecontroleerd
+   - Ignored files zijn ONZICHTBAAR voor Railway
+   - Zelfs als `railway.json` ze specificeert!
+
+3. **Configuratie Prioriteit**
+   - `.railwayignore` > `railway.json` > `railway.toml`
    - Service-specific `railway.json` > root `railway.toml`
    - Start Command in Settings > Dockerfile CMD
    - Laat Start Command LEEG om Dockerfile CMD te gebruiken
 
-3. **Debug Log Signalen**
-   - "skipping Dockerfile" → verkeerde locatie
+4. **Debug Log Signalen**
+   - "skipping Dockerfile" → verkeerde locatie OF ignored
    - "not rooted at valid path" → file te diep genest
+   - "Dockerfile does not exist" → check .railwayignore EERST!
    - "executable not found" → vaak verkeerde startcommand config
+
+### Preventie Checklist
+
+Voor nieuwe Railway deployments:
+
+- [ ] Dockerfile in correcte locatie (service root directory)
+- [ ] railway.json in service directory (als monorepo)
+- [ ] **Check .railwayignore - mag GEEN essentiële files blokkeren**
+- [ ] Start Command in Railway Settings is LEEG (gebruik Dockerfile CMD)
+- [ ] Test lokaal met Docker build eerst
+- [ ] Check Railway logs voor "skipping" of "ignored" berichten
 
 ---
 
 **Status:** Production Ready  
 **Fase:** DRAAD108 - Exacte bezetting  
 **Datum:** 5 december 2025  
-**Fix:** DRAAD111 - Dockerfile locatie probleem opgelost
+**Fixes:**  
+- DRAAD111-1: Dockerfile locatie probleem opgelost  
+- DRAAD111-2: .railwayignore blokkade verwijderd (🔥 KRITIEK)
