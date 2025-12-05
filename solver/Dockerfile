@@ -20,9 +20,16 @@ RUN apt-get update && apt-get install -y \
 # Copy requirements first (voor Docker layer caching)
 COPY requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies with VERBOSE output
+# DRAAD112: -v flag voor zichtbare pip errors
+RUN pip install --no-cache-dir --upgrade pip -v && \
+    echo "=== INSTALLING REQUIREMENTS ===" && \
+    pip install --no-cache-dir -r requirements.txt -v && \
+    echo "=== VERIFYING UVICORN ===" && \
+    which uvicorn && \
+    uvicorn --version && \
+    echo "=== UVICORN VERIFIED ===" || \
+    (echo "ERROR: uvicorn not found after pip install!" && exit 1)
 
 # Copy application code
 COPY . .
@@ -30,6 +37,7 @@ COPY . .
 # Environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8000
+ENV PATH="/usr/local/bin:${PATH}"
 
 # Expose port
 EXPOSE 8000
@@ -38,7 +46,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
 
-# 🔥 CRITICAL: Use JSON exec form with sh -c for environment variable expansion
-# This prevents "hostname=0.0.0.0 executable not found" errors
-# Railway best practice: JSON args recommended for CMD
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# DRAAD112: Direct uvicorn call (not via sh -c)
+# Railway sets PORT env var automatically
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
