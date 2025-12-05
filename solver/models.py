@@ -1,7 +1,15 @@
-"""Pydantic models voor API input/output validatie."""
+"""Pydantic models voor API input/output validatie.
+
+DRAAD106: Status semantiek duidelijk gedefinieerd:
+- Status 0 + NULL: Beschikbaar slot (ORT mag plannen)
+- Status 0 + service_id: ORT voorlopig (hint, mag wijzigen)
+- Status 1 + service_id: Fixed (handmatig of gefinaliseerd, ORT MOET respecteren)
+- Status 2 + NULL: Geblokkeerd door DIA/DDA/DIO/DDO (ORT MAG NIET gebruiken)
+- Status 3 + NULL: Structureel NBH (ORT MAG NOOIT aanraken)
+"""
 
 from pydantic import BaseModel, Field, validator
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 from datetime import date
 from enum import Enum
 
@@ -89,30 +97,104 @@ class RosterEmployeeService(BaseModel):
     )
 
 
+# ============================================================================
+# DRAAD106: NIEUWE MODELLEN VOOR STATUS SEMANTIEK
+# ============================================================================
+
+class FixedAssignment(BaseModel):
+    """Status 1: Handmatig gepland of gefinaliseerd, MOET worden gerespecteerd.
+    
+    ORT gedrag: HARD CONSTRAINT - moet exact worden overgenomen.
+    """
+    employee_id: str
+    date: date
+    dagdeel: Dagdeel
+    service_id: str
+
+
+class BlockedSlot(BaseModel):
+    """Status 2, 3: Niet beschikbaar voor ORT.
+    
+    - Status 2: Geblokkeerd door DIA/DDA/DIO/DDO dienst (automatisch)
+    - Status 3: Structureel NBH (handmatig of systeem)
+    
+    ORT gedrag: HARD CONSTRAINT - mag NIET worden gebruikt voor ENIGE dienst.
+    """
+    employee_id: str
+    date: date
+    dagdeel: Dagdeel
+    status: Literal[2, 3]
+    blocked_by_service_id: Optional[str] = Field(
+        default=None,
+        description="Voor status 2: welke dienst veroorzaakt blokkering"
+    )
+
+
+class SuggestedAssignment(BaseModel):
+    """Status 0 + service_id: Hint van vorige ORT run.
+    
+    ORT gedrag: SOFT CONSTRAINT (optioneel) - preference maar geen harde eis.
+    Wordt gebruikt als warm-start of volledig genegeerd (Optie C).
+    """
+    employee_id: str
+    date: date
+    dagdeel: Dagdeel
+    service_id: str
+
+
 class PreAssignment(BaseModel):
-    """Pre-planning: reeds ingeplande diensten (status > 0) - volgens roster_assignments tabel."""
+    """Pre-planning: reeds ingeplande diensten (status > 0).
+    
+    DEPRECATED (DRAAD106): Gebruik FixedAssignment + BlockedSlot + SuggestedAssignment.
+    Behouden voor backwards compatibility.
+    """
     employee_id: str  # text in database
     date: date
     dagdeel: Dagdeel
     service_id: str  # uuid in database (als string)
     status: int = Field(
         ge=1,
-        description="Status: 1=ORT filled, 2=uit nacht, 3=handmatig, 4=definitief"
+        description="Status: 1=Fixed, 2=Blocked, 3=Structureel NBH"
     )
 
+
+# ============================================================================
+# SOLVE REQUEST & RESPONSE
+# ============================================================================
 
 class SolveRequest(BaseModel):
     """Request body voor solve endpoint.
     
     DRAAD105: Gebruikt roster_employee_services ipv employee_services
+    DRAAD106: Splitst pre_assignments in fixed, blocked, suggested
     """
     roster_id: str  # uuid in database (als string)
     start_date: date
     end_date: date
     employees: List[Employee]
     services: List[Service]
-    roster_employee_services: List[RosterEmployeeService]  # DRAAD105: vervangen
-    pre_assignments: List[PreAssignment] = Field(default_factory=list)
+    roster_employee_services: List[RosterEmployeeService]  # DRAAD105
+    
+    # DRAAD106: Nieuwe velden (preferred)
+    fixed_assignments: List[FixedAssignment] = Field(
+        default_factory=list,
+        description="Status 1: MOET worden gerespecteerd"
+    )
+    blocked_slots: List[BlockedSlot] = Field(
+        default_factory=list,
+        description="Status 2, 3: MAG NIET worden gebruikt"
+    )
+    suggested_assignments: List[SuggestedAssignment] = Field(
+        default_factory=list,
+        description="Status 0 + service_id: Hints (optioneel)"
+    )
+    
+    # DEPRECATED: Backwards compatibility
+    pre_assignments: List[PreAssignment] = Field(
+        default_factory=list,
+        description="DEPRECATED - Gebruik fixed_assignments + blocked_slots"
+    )
+    
     timeout_seconds: int = Field(default=30, ge=5, le=300)
     
     @validator('end_date')

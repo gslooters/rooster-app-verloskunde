@@ -3,11 +3,17 @@
  * 
  * Integreert Next.js app met Python OR-Tools solver service.
  * 
+ * DRAAD106: Pre-planning Behouden
+ * - Reset alleen ORT voorlopige planning (status 0 + service_id → NULL)
+ * - Schrijf ORT output naar status 0 (voorlopig)
+ * - Respecteer status 1 (fixed), status 2/3 (blocked)
+ * - Roster status: draft → in_progress
+ * 
  * Flow:
  * 1. Fetch roster data from Supabase
- * 2. Transform to solver input format
+ * 2. Transform to solver input format (fixed + blocked split)
  * 3. Call Python solver service (Railway)
- * 4. Write solution to roster_assignments
+ * 4. Write solution to status 0 slots (UPSERT)
  * 5. Update roster status → 'in_progress'
  * 6. Store solver metadata
  */
@@ -19,8 +25,10 @@ import type {
   SolveResponse,
   Employee,
   Service,
-  RosterEmployeeService,  // DRAAD105: update import
-  PreAssignment
+  RosterEmployeeService,
+  FixedAssignment,  // DRAAD106: nieuw
+  BlockedSlot,      // DRAAD106: nieuw
+  SuggestedAssignment  // DRAAD106: nieuw
 } from '@/lib/types/solver';
 
 const SOLVER_URL = process.env.SOLVER_SERVICE_URL || 'http://localhost:8000';
@@ -65,7 +73,7 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Validatie: alleen 'draft' roosters mogen ORT gebruiken
+    // DRAAD106: Validatie - alleen 'draft' roosters mogen ORT gebruiken
     if (roster.status !== 'draft') {
       return NextResponse.json(
         { error: `Roster status is '${roster.status}', moet 'draft' zijn voor ORT` },
@@ -75,9 +83,7 @@ export async function POST(request: NextRequest) {
     
     console.log(`[Solver API] Roster gevonden: ${roster.naam}, periode ${roster.start_date} - ${roster.end_date}`);
     
-    // 4. Fetch employees - FIX DRAAD98A: gebruik voornaam + achternaam ipv naam
-    // FIX DRAAD98B: aantalwerkdagen ipv max/min_werkdagen
-    // FIX DRAAD98C: actief ipv active (Nederlands schema)
+    // 4. Fetch employees
     const { data: employees, error: empError } = await supabase
       .from('employees')
       .select('id, voornaam, achternaam, team, structureel_nbh, aantalwerkdagen')
@@ -91,9 +97,7 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // 5. Fetch services - FIX DRAAD98D: service_types ipv services, actief ipv active
-    // FIX DRAAD100B: VERWIJDER dagdeel - kolom bestaat NIET in service_types
-    // FIX DRAAD100C: VERWIJDER is_nachtdienst - kolom bestaat NIET in service_types
+    // 5. Fetch services
     const { data: services, error: svcError } = await supabase
       .from('service_types')
       .select('id, code, naam')
@@ -107,15 +111,12 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // 6. DRAAD105: Fetch roster-employee-service bevoegdheden met aantal en actief
-    // Bron: roster_employee_services tabel
-    // SELECT: roster_id, employee_id, service_id, aantal, actief
-    // FILTER: actief=TRUE (harde eis)
+    // 6. DRAAD105: Fetch roster-employee-service bevoegdheden
     const { data: rosterEmpServices, error: resError } = await supabase
       .from('roster_employee_services')
       .select('roster_id, employee_id, service_id, aantal, actief')
       .eq('roster_id', roster_id)
-      .eq('actief', true);  // DRAAD105: alleen actieve bevoegdheden
+      .eq('actief', true);
     
     if (resError) {
       console.error('[Solver API] Roster-employee-services fetch error:', resError);
@@ -125,33 +126,51 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // 7. Fetch pre-assignments (status > 0)
-    // FIX DRAAD98B: date ipv datum
-    const { data: preAssignments, error: paError } = await supabase
+    // 7. DRAAD106: Fetch fixed assignments (status 1)
+    const { data: fixedData, error: fixedError } = await supabase
       .from('roster_assignments')
-      .select('employee_id, date, dagdeel, service_id, status')
+      .select('employee_id, date, dagdeel, service_id')
       .eq('roster_id', roster_id)
-      .gt('status', 0);
+      .eq('status', 1);
     
-    if (paError) {
-      console.error('[Solver API] Pre-assignments fetch error:', paError);
-      // Niet-fataal, doorgaan zonder pre-assignments
+    if (fixedError) {
+      console.error('[Solver API] Fixed assignments fetch error:', fixedError);
     }
     
-    console.log(`[Solver API] Data verzameld: ${employees?.length || 0} medewerkers, ${services?.length || 0} diensten, ${rosterEmpServices?.length || 0} bevoegdheden (actief), ${preAssignments?.length || 0} pre-assignments`);
+    // 8. DRAAD106: Fetch blocked slots (status 2, 3)
+    const { data: blockedData, error: blockedError } = await supabase
+      .from('roster_assignments')
+      .select('employee_id, date, dagdeel, status')
+      .eq('roster_id', roster_id)
+      .in('status', [2, 3]);
     
-    // 8. Transform naar solver input format - FIX DRAAD98A: samenvoegen voornaam + achternaam
-    // FIX DRAAD98B: aantalwerkdagen mapping
-    // FIX DRAAD100B: VERWIJDER dagdeel uit services mapping - komt van assignment, niet van service_type
-    // FIX DRAAD100C: VERWIJDER is_nachtdienst uit services mapping - field bestaat niet in DB
-    // DRAAD105: roster_employee_services mapping met aantal en actief velden
+    if (blockedError) {
+      console.error('[Solver API] Blocked slots fetch error:', blockedError);
+    }
+    
+    // 9. DRAAD106: Fetch suggested assignments (status 0 + service_id)
+    // Optioneel - alleen voor warm-start hints
+    const { data: suggestedData, error: suggestedError } = await supabase
+      .from('roster_assignments')
+      .select('employee_id, date, dagdeel, service_id')
+      .eq('roster_id', roster_id)
+      .eq('status', 0)
+      .not('service_id', 'is', null);
+    
+    if (suggestedError) {
+      console.error('[Solver API] Suggested assignments fetch error:', suggestedError);
+    }
+    
+    console.log(`[Solver API] Data verzameld: ${employees?.length || 0} medewerkers, ${services?.length || 0} diensten, ${rosterEmpServices?.length || 0} bevoegdheden (actief), ${fixedData?.length || 0} fixed, ${blockedData?.length || 0} blocked, ${suggestedData?.length || 0} suggested`);
+    
+    // 10. Transform naar solver input format
     const solverRequest: SolveRequest = {
       roster_id,
       start_date: roster.start_date,
       end_date: roster.end_date,
       employees: (employees || []).map(emp => ({
         id: emp.id,
-        name: `${emp.voornaam} ${emp.achternaam}`.trim(), // FIX: voornaam + achternaam
+        name: `${emp.voornaam} ${emp.achternaam}`.trim(),
         team: emp.team as 'maat' | 'loondienst' | 'overig',
         structureel_nbh: emp.structureel_nbh || undefined,
         max_werkdagen: emp.aantalwerkdagen || undefined,
@@ -161,9 +180,7 @@ export async function POST(request: NextRequest) {
         id: svc.id,
         code: svc.code,
         naam: svc.naam
-        // DRAAD100C: is_nachtdienst verwijderd - field bestaat niet in service_types
       })),
-      // DRAAD105: roster_employee_services mapping
       roster_employee_services: (rosterEmpServices || []).map(res => ({
         roster_id: res.roster_id,
         employee_id: res.employee_id,
@@ -171,19 +188,31 @@ export async function POST(request: NextRequest) {
         aantal: res.aantal,
         actief: res.actief
       })),
-      pre_assignments: (preAssignments || []).map(pa => ({
-        employee_id: pa.employee_id,
-        date: pa.date,
-        dagdeel: pa.dagdeel as 'O' | 'M' | 'A',
-        service_id: pa.service_id,
-        status: pa.status
+      // DRAAD106: Nieuwe velden
+      fixed_assignments: (fixedData || []).map(fa => ({
+        employee_id: fa.employee_id,
+        date: fa.date,
+        dagdeel: fa.dagdeel as 'O' | 'M' | 'A',
+        service_id: fa.service_id
+      })),
+      blocked_slots: (blockedData || []).map(bs => ({
+        employee_id: bs.employee_id,
+        date: bs.date,
+        dagdeel: bs.dagdeel as 'O' | 'M' | 'A',
+        status: bs.status as 2 | 3
+      })),
+      suggested_assignments: (suggestedData || []).map(sa => ({
+        employee_id: sa.employee_id,
+        date: sa.date,
+        dagdeel: sa.dagdeel as 'O' | 'M' | 'A',
+        service_id: sa.service_id
       })),
       timeout_seconds: 30
     };
     
     console.log(`[Solver API] Solver request voorbereid, aanroepen ${SOLVER_URL}/api/v1/solve-schedule...`);
     
-    // 9. Call Python solver service
+    // 11. Call Python solver service
     const solverResponse = await fetch(`${SOLVER_URL}/api/v1/solve-schedule`, {
       method: 'POST',
       headers: {
@@ -206,52 +235,55 @@ export async function POST(request: NextRequest) {
     
     console.log(`[Solver API] Solver voltooid: status=${solverResult.status}, assignments=${solverResult.total_assignments}, tijd=${solverResult.solve_time_seconds}s`);
     
-    // 10. Write assignments naar database (alleen status=0 slots)
+    // 12. DRAAD106: Write assignments naar database (status 0)
     if (solverResult.status === 'optimal' || solverResult.status === 'feasible') {
-      // Delete oude ORT assignments (status=1) voor deze roster
-      const { error: deleteError } = await supabase
+      // DRAAD106: Reset ORT voorlopige planning (status 0 + service_id → NULL)
+      const { error: resetError } = await supabase
         .from('roster_assignments')
-        .delete()
+        .update({ service_id: null })
         .eq('roster_id', roster_id)
-        .eq('status', 1);
+        .eq('status', 0)
+        .not('service_id', 'is', null);
       
-      if (deleteError) {
-        console.error('[Solver API] Fout bij verwijderen oude ORT assignments:', deleteError);
+      if (resetError) {
+        console.error('[Solver API] Fout bij reset ORT voorlopige planning:', resetError);
       }
       
-      // Insert nieuwe assignments (status=1)
-      // FIX DRAAD98B: date ipv datum, verwijder created_at (DB heeft default)
+      // DRAAD106: Insert nieuwe assignments (status 0, niet status 1!)
       const assignmentsToInsert = solverResult.assignments.map(a => ({
         roster_id,
         employee_id: a.employee_id,
         date: a.date,
         dagdeel: a.dagdeel,
         service_id: a.service_id,
-        status: 1 // ORT-gegenereerd
+        status: 0  // DRAAD106: Voorlopig! Wordt status 1 na finalize
       }));
       
       if (assignmentsToInsert.length > 0) {
-        const { error: insertError } = await supabase
+        // DRAAD106: Use UPSERT voor bestaande status 0 records
+        const { error: upsertError } = await supabase
           .from('roster_assignments')
-          .insert(assignmentsToInsert);
+          .upsert(assignmentsToInsert, {
+            onConflict: 'roster_id,employee_id,date,dagdeel'
+          });
         
-        if (insertError) {
-          console.error('[Solver API] Fout bij insert assignments:', insertError);
+        if (upsertError) {
+          console.error('[Solver API] Fout bij upsert assignments:', upsertError);
           return NextResponse.json(
             { error: 'Fout bij opslaan oplossing' },
             { status: 500 }
           );
         }
         
-        console.log(`[Solver API] ${assignmentsToInsert.length} assignments opgeslagen`);
+        console.log(`[Solver API] ${assignmentsToInsert.length} assignments opgeslagen (status 0)`);
       }
     }
     
-    // 11. Update roster status: draft → in_progress
+    // 13. DRAAD106: Update roster status: draft → in_progress (NIET naar final!)
     const { error: updateError } = await supabase
       .from('roosters')
       .update({
-        status: 'in_progress',
+        status: 'in_progress',  // DRAAD106: in_progress, niet final
         updated_at: new Date().toISOString()
       })
       .eq('id', roster_id);
@@ -262,13 +294,13 @@ export async function POST(request: NextRequest) {
       console.log(`[Solver API] Roster status updated: draft → in_progress`);
     }
     
-    // 12. Store solver run metadata (optioneel - nieuwe tabel)
+    // 14. Store solver run metadata (optioneel)
     // TODO: Implementeer solver_runs tabel voor history tracking
     
     const totalTime = Date.now() - startTime;
     console.log(`[Solver API] Voltooid in ${totalTime}ms`);
     
-    // 13. Return response
+    // 15. Return response
     return NextResponse.json({
       success: true,
       roster_id,
