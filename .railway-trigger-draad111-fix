@@ -1,0 +1,46 @@
+# Railway Deployment Trigger - DRAAD111
+
+Datum: 2025-12-05T20:32 CET
+Timestamp: 1733429479000
+Random trigger: 847293
+
+## KRITIEKE FIX GEÏMPLEMENTEERD
+
+Probleem opgelost:
+- railway.json in root verwijderd
+- Dit bestand overschreef configuratie van BEIDE services
+- Veroorzaakte deployment failures
+
+## NIEUWE CONFIGURATIE
+
+### Rooster-App Service:
+- Config: railway.toml (root)
+- Build: Nixpacks voor Next.js
+- Start: node .next/standalone/server.js
+
+### Solver Service:
+- Config: solver/nixpacks.toml
+- Build: Nixpacks voor Python
+- Start: uvicorn main:app
+
+## VERWACHT RESULTAAT
+
+Rooster-app:
+✅ Next.js build succesvol
+✅ Geen Dockerfile errors
+✅ Deploys naar Railway Metal
+
+Solver:
+✅ Python/FastAPI build succesvol  
+✅ uvicorn correct geïnstalleerd
+✅ Geen requirements.txt not found errors
+
+## VERIFICATIE STAPPEN
+
+1. Check Railway logs voor beide services
+2. Rooster-app: https://rooster-app-verloskunde-production.up.railway.app/
+3. Solver: Check solver service URL
+4. Test /health endpoints
+
+DRAAD: 111
+STATUS: DEPLOYED
