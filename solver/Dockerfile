@@ -20,16 +20,19 @@ RUN apt-get update && apt-get install -y \
 # Copy requirements first (voor Docker layer caching)
 COPY requirements.txt .
 
-# Install Python dependencies with VERBOSE output
-# DRAAD112: -v flag voor zichtbare pip errors
+# Install Python dependencies
+# DRAAD113: --root-user-action=ignore voor pip 25.3 compatibility
+# Docker containers MOETEN als root draaien - dit is safe in container context
 RUN pip install --no-cache-dir --upgrade pip -v && \
     echo "=== INSTALLING REQUIREMENTS ===" && \
-    pip install --no-cache-dir -r requirements.txt -v && \
-    echo "=== VERIFYING UVICORN ===" && \
+    pip install --no-cache-dir --root-user-action=ignore -r requirements.txt -v && \
+    echo "=== VERIFYING INSTALLATIONS ===" && \
+    python -c "import fastapi; print(f'✓ FastAPI {fastapi.__version__}')" && \
+    python -c "import uvicorn; print(f'✓ Uvicorn {uvicorn.__version__}')" && \
+    python -c "import ortools; print(f'✓ OR-Tools {ortools.__version__}')" && \
     which uvicorn && \
     uvicorn --version && \
-    echo "=== UVICORN VERIFIED ===" || \
-    (echo "ERROR: uvicorn not found after pip install!" && exit 1)
+    echo "=== ALL DEPENDENCIES VERIFIED ==="
 
 # Copy application code
 COPY . .
@@ -42,10 +45,9 @@ ENV PATH="/usr/local/bin:${PATH}"
 # Expose port
 EXPOSE 8000
 
-# Health check - removed requests dependency
+# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
 
-# DRAAD112: Direct uvicorn call (not via sh -c)
-# Railway sets PORT env var automatically
+# Start uvicorn server
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
