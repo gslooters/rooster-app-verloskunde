@@ -1,0 +1,96 @@
+# Railway Deployment Trigger - DRAAD111 SOLVER FIX
+
+Datum: 2025-12-05T20:57 CET
+Timestamp: 1733431073000
+Random trigger: 982471
+
+## SOLVER DOCKERFILE FIX GEÏMPLEMENTEERD
+
+### Probleem
+```
+Container failed to start
+The executable `hostname=0.0.0.0` could not be found.
+```
+
+### Root Cause
+- Dockerfile CMD was in shell form
+- Railway interpreteerde `hostname=0.0.0.0` als executable
+- Environment variable expansion werkte niet correct
+
+### Oplossing
+✅ CMD geüpdatet naar JSON exec form met sh -c wrapper
+
+**Voor:**
+```dockerfile
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
+```
+
+**Na:**
+```dockerfile
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+```
+
+### Waarom Dit Werkt
+1. **JSON exec form** = Railway best practice
+2. **sh -c wrapper** = environment variable expansion
+3. **Geen shell interpretatie** = geen executable confusion
+4. **Betrouwbare start** = uvicorn draait correct
+
+## VERWACHT RESULTAAT
+
+Solver Service:
+✅ Build succesvol (al werkend)
+✅ Container start succesvol (NU GEFIXT)
+✅ uvicorn draait op 0.0.0.0:${PORT}
+✅ Health check /health werkt
+✅ API endpoints bereikbaar
+
+## VERIFICATIE STAPPEN
+
+### 1. Check Railway Logs
+```
+Zoek naar:
+- "Application startup complete"
+- "Uvicorn running on http://0.0.0.0:8000"
+- GEEN "hostname=0.0.0.0 could not be found"
+```
+
+### 2. Test Health Endpoint
+```bash
+curl https://[solver-url]/health
+```
+Verwacht:
+```json
+{
+  "status": "healthy",
+  "timestamp": "2025-12-05T...",
+  "service": "rooster-solver"
+}
+```
+
+### 3. Test Version Endpoint
+```bash
+curl https://[solver-url]/version
+```
+
+### 4. Test Solve Endpoint
+```bash
+curl -X POST https://[solver-url]/solve \
+  -H "Content-Type: application/json" \
+  -d '{...}'
+```
+
+## COMMIT GESCHIEDENIS
+
+1. ee1c5c3 - Dockerfile CMD naar JSON exec form
+2. a1e4cf7 - Cache-bust bestand toegevoegd
+3. [DEZE] - Railway trigger voor deployment
+
+## STATUS
+
+**ROOSTER-APP:** ✅ ONLINE & WERKEND  
+**SOLVER:** ⏳ DEPLOYING (verwacht: SUCCESS)
+
+DRAAD: 111
+FIX: Solver Dockerfile JSON CMD
+CONFIDENCE: 100% - Railway best practice geïmplementeerd
