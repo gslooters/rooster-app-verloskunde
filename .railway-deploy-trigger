@@ -1,54 +1,48 @@
-# Railway Deploy Trigger - DRAAD63B
+# Railway Deploy Trigger - DRAAD108-DEPLOY
 
-Timestamp: 2025-11-27T16:29:00Z
-DRAAD: 63B - CACHE BUG FIX
-Reason: Force clean rebuild door cached TypeScript error
-Random trigger: 7819
+Timestamp: 2025-12-05T20:10:15+01:00
+DRAAD: 108-DEPLOY
+Reason: Force rebuild after railway.json Dockerfile fix
+Random trigger: 87392
 
 ## PROBLEEM:
 
-Railway build gebruikt OUDE cache met foutieve code:
-```
-Property 'dienstCode' does not exist on type 'DagdeelAssignment'
+Railway.json forceerde NIXPACKS builder:
+```json
+{
+  "build": {
+    "builder": "NIXPACKS"  // FOUT - zoekt Dockerfile in root
+  }
+}
 ```
 
-MAAR: Deze code bestaat NIET MEER in de huidige versie!
+Error: "failed to read Dockerfile at 'Dockerfile'"
+Oorzaak: Dockerfile staat in solver/docker/Dockerfile, niet in root
 
 ## OPLOSSING:
 
-1. WeekDagdelenClient.tsx is AL CORRECT:
-   - Regel 128-130: Gebruikt alleen serviceId
-   - Geen assignment.dienstCode meer
-   - Geen assignment.dienstNaam meer
-   - Alleen: serviceId + getDienstNaam() mapping
+1. railway.json aangepast naar:
+```json
+{
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "solver/docker/Dockerfile"
+  }
+}
+```
 
-2. Force CLEAN rebuild zonder cache
+2. Root Directory in Railway: /solver (al ingesteld)
 
-3. DagdeelAssignment type heeft:
-   - team: string ✅
-   - aantal: number ✅
-   - status: string ✅
-   - serviceId?: string ✅
-   - GEEN dienstCode ❌
-   - GEEN dienstNaam ❌
+3. Deze cache-bust forceert nieuwe deploy
 
-## COMMITS AL GEDAAN:
+## COMMITS:
 
-- 74b0eda: TypeScript fix applied
-- f1136c8: Cache bust attempt 1
-- b8c3a1d: Cache bust attempt 2
-- ef22a62: Cache bust attempt 3
-
-## DEZE TRIGGER:
-
-Dummy file update om Railway te forceren:
-- Nieuwe SHA
-- Nieuwe timestamp
-- MOET clean rebuild doen
-- GEEN cached node_modules/TypeScript cache gebruiken
+- 39098188: railway.json fix - DOCKERFILE builder
+- Dit bestand: Force Railway rebuild trigger
 
 ## VERWACHT RESULTAAT:
 
-✅ Build succeeds without TypeScript errors
-✅ Code compileert correct (want code is al correct)
-✅ Deployment slaagt
+✅ Railway vindt Dockerfile op solver/docker/Dockerfile
+✅ Build succeeds met Python 3.11 + OR-Tools
+✅ Solver service draait met DRAAD108 code
+✅ /version endpoint geeft 1.1.0-DRAAD108
