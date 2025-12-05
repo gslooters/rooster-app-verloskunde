@@ -1,14 +1,18 @@
 # Railway Cache-Busting File
-# Updated: 2025-12-05T23:21:15+01:00
-# Purpose: Trigger deployment na Dockerfile verbosity fix
+# Updated: 2025-12-05T23:28:09+01:00
+# Purpose: Trigger deployment na pip 25.3 root-user-action fix
 
-DRAAD112: Verbose pip install + uvicorn verification
-Timestamp: 1733436075000
-Random: 851734
+DRAAD113: pip install --root-user-action=ignore fix
+Timestamp: 1733436489000
+Random: 963847
 
 Expected in build logs:
-- pip install -v output (detailed)
-- uvicorn --version verification
-- Exact error if pip fails
+- Long installation (30-60 seconds)
+- Downloading: fastapi, uvicorn, pydantic, ortools, python-dateutil
+- Verification:
+  ✓ FastAPI 0.115.0
+  ✓ Uvicorn 0.32.0
+  ✓ OR-Tools 9.11.4210
+- === ALL DEPENDENCIES VERIFIED ===
 
-DRAAD112-DIAGNOSTIC-BUILD
+DRAAD113-PIP-FIX
