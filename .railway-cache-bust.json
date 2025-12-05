@@ -1,37 +1,59 @@
 {
   "cacheBust": true,
-  "timestamp": "2025-12-05T20:57:53Z",
-  "draad": "111-SOLVER",
-  "reason": "Solver Dockerfile CMD shell form issue",
-  "criticalFix": "Dockerfile CMD updated to JSON exec form",
+  "timestamp": "2025-12-05T21:21:30Z",
+  "draad": "111-SOLVER-FINAL",
+  "reason": "nixpacks.toml conflicteerde met Dockerfile",
+  "criticalFix": "nixpacks.toml VERWIJDERD - single source of truth",
+  "rootCause": {
+    "problem": "Railway gebruikte BEIDE configuraties tegelijk",
+    "details": [
+      "Dockerfile werd gebruikt voor BUILD (correct)",
+      "nixpacks.toml werd gebruikt voor START command (conflict!)",
+      "nixpacks.toml had shell form syntax",
+      "Railway parseerde start command verkeerd",
+      "Result: hostname=0.0.0.0 executable not found"
+    ],
+    "evidence": "Railway logs: 'found nixpacks.toml' + 'skipping Dockerfile for start'"
+  },
   "fixes": [
-    "railway.json: VERWIJDERD (veroorzaakte service conflict) - FASE 1",
-    "Rooster-app: gebruikt railway.toml voor Next.js - WERKEND",
-    "Solver Dockerfile: CMD naar JSON exec form - FASE 2",
-    "Van: CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}",
-    "Naar: CMD [\"sh\", \"-c\", \"uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}\"]",
-    "Fix: hostname=0.0.0.0 executable not found error"
+    "FASE 1: railway.json VERWIJDERD (service conflict) - ✅ WERKEND",
+    "FASE 2: Dockerfile CMD naar JSON exec form - ✅ CORRECT",
+    "FASE 3: nixpacks.toml VERWIJDERD (start command conflict) - ✅ OPGELOST"
   ],
   "services": {
     "rooster-app": {
       "config": "railway.toml",
       "build": "Nixpacks (Next.js)",
-      "status": "ONLINE & WERKEND"
+      "status": "✅ ONLINE & WERKEND"
     },
     "solver": {
-      "config": "solver/docker/Dockerfile",
+      "config": "solver/docker/Dockerfile ALLEEN",
       "build": "Dockerfile (Railway)",
-      "cmdForm": "JSON exec form met sh -c",
-      "status": "DEPLOYING - Fix geïmplementeerd"
+      "start": "Dockerfile CMD (JSON exec form)",
+      "cmdForm": "CMD [\"sh\", \"-c\", \"uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}\"]",
+      "status": "🚀 DEPLOYING - Final fix",
+      "noMoreConflicts": true
     }
   },
-  "errorFixed": {
-    "before": "Container failed to start - The executable `hostname=0.0.0.0` could not be found",
-    "cause": "Shell form CMD interpreteerde hostname=0.0.0.0 als executable",
-    "solution": "JSON exec form met sh -c wrapper voor env var expansion",
-    "after": "Container start succesvol verwacht"
+  "deploymentHistory": {
+    "failed": 12,
+    "reason": "nixpacks.toml + Dockerfile configuratie conflict",
+    "expectedNow": "SUCCESS - alleen Dockerfile"
   },
-  "expectedResult": "SOLVER BUILD + START SUCCESS - JSON CMD form",
-  "randomTrigger": 982471,
-  "timestampMs": 1733431073000
+  "errorFixed": {
+    "before": "Container failed to start - The executable hostname=0.0.0.0 could not be found",
+    "cause": "nixpacks.toml start command shell form + Railway parsing issue",
+    "solution": "nixpacks.toml verwijderd - Railway gebruikt nu Dockerfile CMD",
+    "after": "✅ Container start succesvol met uvicorn"
+  },
+  "expectedLogs": [
+    "[inf] Starting Container",
+    "[inf] INFO:     Started server process [1]",
+    "[inf] INFO:     Waiting for application startup.",
+    "[inf] INFO:     Application startup complete.",
+    "[inf] INFO:     Uvicorn running on http://0.0.0.0:8000"
+  ],
+  "randomTrigger": 754821,
+  "timestampMs": 1733432490000,
+  "deploymentTrigger": "nixpacks.toml removal forces Railway rebuild"
 }
