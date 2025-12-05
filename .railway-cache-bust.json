@@ -1,29 +1,37 @@
 {
   "cacheBust": true,
-  "timestamp": "2025-12-05T20:32:50Z",
-  "draad": "111",
-  "reason": "railway.json conflict - overschreef beide services",
-  "criticalFix": "railway.json REMOVED from root",
+  "timestamp": "2025-12-05T20:57:53Z",
+  "draad": "111-SOLVER",
+  "reason": "Solver Dockerfile CMD shell form issue",
+  "criticalFix": "Dockerfile CMD updated to JSON exec form",
   "fixes": [
-    "railway.json: VERWIJDERD (veroorzaakte service conflict)",
-    "Rooster-app: gebruikt railway.toml voor Next.js",
-    "Solver: gebruikt solver/nixpacks.toml voor Python",
-    "Beide services hebben nu eigen configuratie",
-    "Geen Dockerfile conflict meer"
+    "railway.json: VERWIJDERD (veroorzaakte service conflict) - FASE 1",
+    "Rooster-app: gebruikt railway.toml voor Next.js - WERKEND",
+    "Solver Dockerfile: CMD naar JSON exec form - FASE 2",
+    "Van: CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}",
+    "Naar: CMD [\"sh\", \"-c\", \"uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}\"]",
+    "Fix: hostname=0.0.0.0 executable not found error"
   ],
   "services": {
     "rooster-app": {
       "config": "railway.toml",
       "build": "Nixpacks (Next.js)",
-      "status": "Should deploy correctly now"
+      "status": "ONLINE & WERKEND"
     },
     "solver": {
-      "config": "solver/nixpacks.toml",
-      "build": "Nixpacks (Python)",
-      "status": "Should deploy correctly now"
+      "config": "solver/docker/Dockerfile",
+      "build": "Dockerfile (Railway)",
+      "cmdForm": "JSON exec form met sh -c",
+      "status": "DEPLOYING - Fix geïmplementeerd"
     }
   },
-  "expectedResult": "BOTH SERVICES BUILD SUCCESS - No more conflicts",
-  "randomTrigger": 847293,
-  "timestampMs": 1733429479000
+  "errorFixed": {
+    "before": "Container failed to start - The executable `hostname=0.0.0.0` could not be found",
+    "cause": "Shell form CMD interpreteerde hostname=0.0.0.0 als executable",
+    "solution": "JSON exec form met sh -c wrapper voor env var expansion",
+    "after": "Container start succesvol verwacht"
+  },
+  "expectedResult": "SOLVER BUILD + START SUCCESS - JSON CMD form",
+  "randomTrigger": 982471,
+  "timestampMs": 1733431073000
 }
