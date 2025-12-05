@@ -10,6 +10,9 @@
  * - Status 1 + service_id: Fixed (handmatig of gefinaliseerd)
  * - Status 2 + NULL: Geblokkeerd door DIA/DDA/DIO/DDO
  * - Status 3 + NULL: Structureel NBH
+ * 
+ * DRAAD108: Bezetting realiseren:
+ * - ExactStaffing interface voor exacte bezetting per dienst/dagdeel/team
  */
 
 // Enums
@@ -98,6 +101,33 @@ export interface PreAssignment {
 }
 
 // ============================================================================
+// DRAAD108: NIEUWE TYPES VOOR BEZETTING REALISEREN
+// ============================================================================
+
+/**
+ * DRAAD108: Exacte bezetting per dienst/dagdeel/team uit roster_period_staffing_dagdelen.
+ * 
+ * Logica:
+ * - exact_aantal > 0: ORT MOET exact dit aantal plannen (min=max tegelijk)
+ * - exact_aantal = 0: ORT MAG NIET plannen (verboden)
+ * 
+ * Team mapping:
+ * - 'TOT' → alle medewerkers (geen filter)
+ * - 'GRO' → employees.team = 'maat'
+ * - 'ORA' → employees.team = 'loondienst'
+ * 
+ * Priority: HARD CONSTRAINT (is_fixed: true in solver)
+ */
+export interface ExactStaffing {
+  date: string;  // ISO date string
+  dagdeel: Dagdeel;  // 'O', 'M', 'A'
+  service_id: string;  // UUID als string
+  team: 'TOT' | 'GRO' | 'ORA';  // Team scope
+  exact_aantal: number;  // 0-9: exact aantal vereist (0=verboden, >0=exact aantal)
+  is_system_service: boolean;  // Voor prioritering: systeemdiensten eerst (DIO, DIA, DDO, DDA)
+}
+
+// ============================================================================
 // SOLVE REQUEST & RESPONSE
 // ============================================================================
 
@@ -114,6 +144,9 @@ export interface SolveRequest {
   fixed_assignments?: FixedAssignment[];      // Status 1: MOET respecteren
   blocked_slots?: BlockedSlot[];              // Status 2, 3: MAG NIET gebruiken
   suggested_assignments?: SuggestedAssignment[]; // Status 0 + service_id: Hints
+  
+  // DRAAD108: Nieuwe veld voor exacte bezetting
+  exact_staffing?: ExactStaffing[];  // Exacte bezetting eisen per dienst/dagdeel/team
   
   // DEPRECATED: Backwards compatibility
   pre_assignments?: PreAssignment[];
