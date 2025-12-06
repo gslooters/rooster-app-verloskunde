@@ -1,14 +1,21 @@
-DRAAD112 - Railway Force Rebuild Trigger
-Timestamp: 2025-12-06T02:42:00Z
+DRAAD112 + DRAAD117 - Railway Force Rebuild Trigger
+Timestamp: 2025-12-06T17:37:25Z
+Random: 8473629
 
 Dit bestand forceert Railway om:
 1. Repository opnieuw te klonen
 2. Cache te clearen
 3. Dockerfile op correcte locatie te vinden
+4. DRAAD117 schema changes deployen
 
-Configuratie:
+Configuatie:
 - Root Directory: solver (zonder leading slash)
 - Dockerfile Path: Dockerfile (zonder leading slash)
 - Branch: main
 
 Dit triggert automatisch een nieuwe deployment met verse repository clone.
+
+DRAD117: Schema cleanup
+- Employee.aantalwerkdagen verwijderd
+- Service.dagdeel verwijderd
+- Constraint 5 (max werkdagen) verwijderd
