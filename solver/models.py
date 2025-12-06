@@ -22,7 +22,7 @@ DRAD118A: INFEASIBLE handling met Bottleneck Analysis
 - Status STAYS 'draft' when INFEASIBLE (not 'in_progress')
 """
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, ConfigDict
 from typing import List, Optional, Dict, Any, Literal
 from datetime import date
 from enum import Enum
@@ -188,6 +188,11 @@ class PreAssignment(BaseModel):
 class ExactStaffing(BaseModel):
     """DRAAD108: Exacte bezetting per dienst/dagdeel/team uit roster_period_staffing_dagdelen.
     
+    DRAAD120: Pydantic alias for backward compatibility
+    - Database veld: 'aantal'
+    - Model veld: 'exact_aantal' (internally)
+    - Accepts both field names via populate_by_name=True
+    
     Logica:
     - aantal > 0: ORT MOET exact dit aantal plannen (min=max tegelijk)
     - aantal = 0: ORT MAG NIET plannen (verboden)
@@ -206,6 +211,7 @@ class ExactStaffing(BaseModel):
         description="Team scope: 'TOT' (totaal), 'GRO' (groen/maat), 'ORA' (oranje/loondienst)"
     )  # 'TOT', 'GRO', 'ORA'
     exact_aantal: int = Field(
+        alias='aantal',
         ge=0,
         le=9,
         description="Exact aantal medewerkers vereist (0=verboden, >0=exact aantal)"
@@ -214,6 +220,8 @@ class ExactStaffing(BaseModel):
         default=False,
         description="Voor prioritering: systeemdiensten eerst (DIO, DIA, DDO, DDA)"
     )
+    
+    model_config = ConfigDict(populate_by_name=True)
 
 
 # ============================================================================
