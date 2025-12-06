@@ -1,13 +1,17 @@
 """Pydantic models voor API input/output validatie.
 
-DRAAD106: Status semantiek duidelijk gedefinieerd:
+DRAD117: Schema cleanup - removed Employee.aantalwerkdagen + Service.dagdeel
+- Only pure Solver constraints remain (bevoegdheid, beschikbaarheid, fixed/blocked, exact bezetting)
+- Planning metadata moved out of schema
+
+DRAD106: Status semantiek duidelijk gedefinieerd:
 - Status 0 + NULL: Beschikbaar slot (ORT mag plannen)
 - Status 0 + service_id: ORT voorlopig (hint, mag wijzigen)
 - Status 1 + service_id: Fixed (handmatig of gefinaliseerd, ORT MOET respecteren)
 - Status 2 + NULL: Geblokkeerd door DIA/DDA/DIO/DDO (ORT MAG NIET gebruiken)
 - Status 3 + NULL: Structureel NBH (ORT MAG NOOIT aanraken)
 
-DRAAD108: Bezetting realiseren constraint toegevoegd:
+DRAD108: Bezetting realiseren constraint toegevoegd:
 - ExactStaffing model voor roster_period_staffing_dagdelen integratie
 - Exact aantal medewerkers per dienst/dagdeel/team afdwingen
 """
@@ -42,12 +46,17 @@ class SolveStatus(str, Enum):
 
 
 class Employee(BaseModel):
-    """Medewerker informatie - volgens Supabase employees tabel."""
+    """Medewerker informatie - DRAAD117 schema cleanup.
+    
+    DRAAD117: Removed aantalwerkdagen (planning metadata, not Solver constraint).
+    Constraint sources:
+    - RosterEmployeeService.aantal: streefgetal per dienst
+    - ExactStaffing: exact bezetting per date/dagdeel/team/service
+    """
     id: str  # text in database
     voornaam: str  # text in database
     achternaam: str  # text in database
     team: TeamType  # text in database
-    aantalwerkdagen: int  # integer in database
     structureel_nbh: Optional[Dict[str, List[str]]] = Field(
         default=None,
         description="Structurele niet-beschikbaarheid: {dag_code: [dagdelen]}"
@@ -61,12 +70,16 @@ class Employee(BaseModel):
 
 
 class Service(BaseModel):
-    """Dienst informatie."""
+    """Dienst informatie - DRAAD117 schema cleanup.
+    
+    DRAAD117: Removed dagdeel (data already in ExactStaffing via dagdeel field).
+    Constraint sources:
+    - ExactStaffing: bezetting per date/dagdeel/team/service
+    """
     id: str  # uuid in database (als string)
     code: str
     naam: str
-    dagdeel: Dagdeel
-    is_nachtdienst: bool = False
+    is_nachtdienst: bool = Field(default=False)
 
 
 class EmployeeService(BaseModel):
@@ -204,6 +217,7 @@ class ExactStaffing(BaseModel):
 class SolveRequest(BaseModel):
     """Request body voor solve endpoint.
     
+    DRAAD117: Schema cleanup - only pure Solver constraints
     DRAAD105: Gebruikt roster_employee_services ipv employee_services
     DRAAD106: Splitst pre_assignments in fixed, blocked, suggested
     DRAAD108: Voegt exact_staffing toe voor bezetting realiseren
@@ -270,7 +284,7 @@ class Assignment(BaseModel):
 class ConstraintViolation(BaseModel):
     """Constraint die niet gehaald kon worden."""
     constraint_type: str = Field(
-        description="Bijv: 'bevoegdheid', 'beschikbaarheid', 'max_werkdagen'"
+        description="Bijv: 'bevoegdheid', 'beschikbaarheid'"
     )
     employee_id: Optional[str] = None  # text in database
     employee_name: Optional[str] = None
@@ -287,7 +301,7 @@ class ConstraintViolation(BaseModel):
 class Suggestion(BaseModel):
     """Prescriptive suggestie voor planner."""
     type: str = Field(
-        description="Bijv: 'increase_max_werkdagen', 'add_bevoegdheid', 'hire_zzp'"
+        description="Bijv: 'add_bevoegdheid', 'hire_zzp'"
     )
     employee_id: Optional[str] = None  # text in database
     employee_name: Optional[str] = None
