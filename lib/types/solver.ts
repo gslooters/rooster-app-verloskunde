@@ -18,6 +18,12 @@
  * - voornaam/achternaam als separate velden (niet gecombineerd)
  * - team mapped van employees.dienstverband (niet employees.team)
  * - max_werkdagen verwijderd (niet nodig voor solver)
+ * 
+ * DRAAD118A: INFEASIBLE handling met Bottleneck Analysis:
+ * - BottleneckItem: per-service capacity analysis
+ * - BottleneckSuggestion: actionable recommendations
+ * - BottleneckReport: complete analysis when INFEASIBLE
+ * - FeasibleSummary: summary when FEASIBLE
  */
 
 // Enums
@@ -134,6 +140,66 @@ export interface ExactStaffing {
 }
 
 // ============================================================================
+// DRAAD118A: BOTTLENECK ANALYSIS TYPES FOR INFEASIBLE HANDLING
+// ============================================================================
+
+/**
+ * DRAAD118A: Per-dienst capacity analysis voor Bottleneck Report.
+ * 
+ * Analyse van nodig vs beschikbaar per dienst over hele periode.
+ */
+export interface BottleneckItem {
+  service_id: string;
+  service_code: string;
+  service_naam: string;
+  nodig: number;              // Totaal benodigde capaciteit
+  beschikbaar: number;        // Totaal beschikbare capaciteit
+  tekort: number;             // Capaciteits tekort: max(0, nodig - beschikbaar)
+  tekort_percentage: number;  // Tekort als % van benodigde
+  is_system_service: boolean; // DRAAD118A: Kritieke systeemdiensten → ROOD in UI
+  severity: 'critical' | 'high' | 'medium';  // Prioriteit
+}
+
+/**
+ * DRAAD118A: Actionable advice voor planner to resolve bottleneck.
+ */
+export interface BottleneckSuggestion {
+  type: 'increase_capability' | 'reduce_requirement' | 'hire_temp';
+  service_code: string;
+  action: string;      // Concrete, human-readable actie
+  impact: string;      // Expected impact
+  priority: number;    // 1-10: prioriteit voor planner
+}
+
+/**
+ * DRAAD118A: Complete analysis when solver returns INFEASIBLE.
+ * 
+ * Status 'draft' stays (NOT changed to 'in_progress').
+ * Frontend shows this report on BottleneckAnalysisScreen.
+ */
+export interface BottleneckReport {
+  total_capacity_needed: number;    // Sum of all nodig values
+  total_capacity_available: number; // Sum of all beschikbaar values
+  total_shortage: number;           // Sum of all tekort values
+  shortage_percentage: number;      // (shortage / needed) × 100
+  bottlenecks: BottleneckItem[];    // Per-service analysis, sorted by shortage DESC
+  critical_count: number;           // Count of CRITICAL bottlenecks
+  suggestions: BottleneckSuggestion[];  // Actionable recommendations
+}
+
+/**
+ * DRAAD118A: Summary when solver returns FEASIBLE.
+ * 
+ * Shown on FeasibleSummaryScreen before entering plan view.
+ * Status changes to 'in_progress' at this point.
+ */
+export interface FeasibleSummary {
+  total_services_scheduled: number;  // Number of assignments made by solver
+  coverage_percentage: number;       // Fill rate: (assignments / slots) × 100
+  unfilled_slots: number;            // Available slots without assignment
+}
+
+// ============================================================================
 // SOLVE REQUEST & RESPONSE
 // ============================================================================
 
@@ -193,16 +259,24 @@ export interface Suggestion {
 }
 
 // Solve Response (van Python service)
+// DRAAD118A: CRITICAL CHANGE - Response structure depends on solver_status
 export interface SolveResponse {
   status: SolveStatus;
   roster_id: string;
-  assignments: Assignment[];
+  assignments: Assignment[];  // Empty [] when INFEASIBLE
   solve_time_seconds: number;
   
   // Statistieken
   total_assignments: number;
   total_slots: number;
   fill_percentage: number;
+  
+  // DRAAD118A: Conditionele velden
+  /** Present only when FEASIBLE/OPTIMAL (not INFEASIBLE) */
+  summary?: FeasibleSummary;
+  
+  /** Present only when INFEASIBLE - full analysis of capacity shortfalls */
+  bottleneck_report?: BottleneckReport;
   
   // Rapportage
   violations: ConstraintViolation[];
@@ -213,11 +287,30 @@ export interface SolveResponse {
 }
 
 // API Response (van Next.js route)
+// DRAAD118A: Two response patterns based on solver outcome
 export interface SolverApiResponse {
   success: boolean;
   roster_id: string;
+  
+  // Path A: FEASIBLE/OPTIMAL
+  // solver_result contains:
+  //   - status: 'feasible' | 'optimal'
+  //   - assignments: [...]
+  //   - summary: { total_services_scheduled, coverage_percentage, unfilled_slots }
+  //   - bottleneck_report: null
+  
+  // Path B: INFEASIBLE
+  // solver_result contains:
+  //   - status: 'infeasible'
+  //   - assignments: []
+  //   - summary: null
+  //   - bottleneck_report: { bottlenecks, critical_count, suggestions, ... }
+  
   solver_result: {
     status: SolveStatus;
+    assignments: Assignment[];
+    summary?: FeasibleSummary | null;
+    bottleneck_report?: BottleneckReport | null;
     total_assignments: number;
     total_slots: number;
     fill_percentage: number;
@@ -225,5 +318,6 @@ export interface SolverApiResponse {
     violations: ConstraintViolation[];
     suggestions: Suggestion[];
   };
+  
   total_time_ms: number;
 }
