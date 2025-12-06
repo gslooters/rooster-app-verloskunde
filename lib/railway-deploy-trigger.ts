@@ -1,2 +1,2 @@
-// Railway deploy trigger - DRAAD 97E: Import fix service-blocking-rules
-export const DEPLOY_TRIGGER = 1733238867000;
+// Railway deploy trigger - DRAAD115: Solver2 data mapping fix
+export const DEPLOY_TRIGGER = 1733057565000; // DRAAD115 solver mapping fix deployment
