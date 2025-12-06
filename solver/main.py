@@ -9,6 +9,7 @@ Date: 2025-12-05
 DRAAD105: Gebruikt roster_employee_services met aantal en actief velden
 DRAAD106: Status semantiek - fixed_assignments en blocked_slots
 DRAAD108: Exacte bezetting realiseren via exact_staffing parameter
+DRAAD113: Production CORS security - specificeer rooster-app domain
 """
 
 from fastapi import FastAPI, HTTPException
@@ -38,14 +39,29 @@ app = FastAPI(
     version="1.1.0-DRAAD108"
 )
 
-# CORS middleware (accept Next.js app)
+# ============================================================================
+# CORS middleware configuration (DRAAD113: Production-ready)
+# ============================================================================
+
+# DRAAD113: Production CORS security
+# Specificeer EXACT which origins mag access hebben tot solver API
+ALLOWED_ORIGINS = [
+    # Rooster-app production
+    "https://rooster-app-verloskunde.up.railway.app",
+    # Rooster-app development (local testing)
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In productie: specificeer Next.js URL
+    allow_origins=ALLOWED_ORIGINS,  # DRAAD113: Secure - only rooster-app
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],  # Only needed methods
+    allow_headers=["Content-Type", "Authorization"],  # Only needed headers
 )
+
+logger.info(f"[CORS] Initialized with allowed origins: {ALLOWED_ORIGINS}")
 
 
 # ============================================================================
