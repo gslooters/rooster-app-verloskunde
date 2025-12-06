@@ -1,11 +1,12 @@
 """CP-SAT Solver Engine voor roosterplanning.
 
 Implementeert Google OR-Tools CP-SAT voor het oplossen van
-verloskundige roosters met 8 basis constraints.
+verloskundige roosters met 6 basis constraints.
 
-DRAAD105: Gebruikt roster_employee_services met aantal en actief velden.
-DRAAD106: Status semantiek - fixed_assignments (status 1) en blocked_slots (status 2,3).
-DRAAD108: Bezetting realiseren - exact aantal per dienst/dagdeel/team + systeemdienst exclusiviteit.
+DRAD117: Removed constraint 5 (max werkdagen/week) - planning metadata, not Solver constraint
+DRAD108: Bezetting realiseren - exact aantal per dienst/dagdeel/team + systeemdienst exclusiviteit.
+DRAD106: Status semantiek - fixed_assignments (status 1) en blocked_slots (status 2,3).
+DRAD105: Gebruikt roster_employee_services met aantal en actief velden.
 """
 
 from ortools.sat.python import cp_model
@@ -176,26 +177,25 @@ class RosterSolver:
     def _apply_constraints(self):
         """Pas alle constraints toe.
         
-        DRAAD106: Constraints 1-6
-        DRAAD108: Constraints 7-8 (NIEUW)
+        DRAAD117: Removed constraint 5 (max werkdagen/week)
+        DRAAD108: Constraints 7-8
+        DRAAD106: Constraints 1-4
         
-        1. Bevoegdheden
-        2. Beschikbaarheid
-        3A. Fixed assignments (status 1)
-        3B. Blocked slots (status 2, 3)
-        4. Een dienst per dagdeel
-        5. Max werkdagen
-        6. ZZP minimalisatie (via objective)
-        7. DRAAD108: Exact bezetting realiseren
-        8. DRAAD108: Systeemdienst exclusiviteit (DIO XOR DDO, DIA XOR DDA)
+        1. Bevoegdheden (HARD)
+        2. Beschikbaarheid (HARD)
+        3A. Fixed assignments (status 1, HARD)
+        3B. Blocked slots (status 2, 3, HARD)
+        4. Een dienst per dagdeel (HARD)
+        6. ZZP minimalisatie (via objective, SOFT)
+        7. Exact bezetting realiseren (HARD)
+        8. Systeemdienst exclusiviteit (HARD)
         """
         self._constraint_1_bevoegdheden()
         self._constraint_2_beschikbaarheid()
         self._constraint_3a_fixed_assignments()
         self._constraint_3b_blocked_slots()
         self._constraint_4_een_dienst_per_dagdeel()
-        self._constraint_5_max_werkdagen()
-        # Constraint 6: ZZP minimalisatie via _define_objective()
+        # DRAAD117: Removed constraint 5 (max werkdagen/week)
         
         # DRAAD108: NIEUWE CONSTRAINTS
         self._constraint_7_exact_staffing()  # NIEUW
@@ -318,33 +318,6 @@ class RosterSolver:
         
         logger.info("Constraint 4: Een dienst per dagdeel toegepast")
     
-    def _constraint_5_max_werkdagen(self):
-        """Constraint 5: Respecteer aantalwerkdagen per week."""
-        logger.info("Toevoegen constraint 5: Max werkdagen...")
-        
-        for emp_id, emp in self.employees.items():
-            max_werkdagen = emp.aantalwerkdagen
-            
-            werkdagen_vars = []
-            for dt in self.dates:
-                dag_var = self.model.NewBoolVar(f"werkdag_{emp_id}_{dt}")
-                
-                diensten_dag = [
-                    self.assignments_vars[(emp_id, dt, dagdeel.value, svc_id)]
-                    for dagdeel in list(Dagdeel)
-                    for svc_id in self.services
-                ]
-                
-                self.model.Add(sum(diensten_dag) > 0).OnlyEnforceIf(dag_var)
-                self.model.Add(sum(diensten_dag) == 0).OnlyEnforceIf(dag_var.Not())
-                
-                werkdagen_vars.append(dag_var)
-            
-            max_dagen = max_werkdagen * len(self.dates) // 7
-            self.model.Add(sum(werkdagen_vars) <= max(max_dagen, 1))
-        
-        logger.info("Constraint 5: Max werkdagen toegepast")
-    
     def _constraint_7_exact_staffing(self):
         """Constraint 7: Exacte bezetting per dienst/dagdeel/team respecteren.
         
@@ -458,7 +431,7 @@ class RosterSolver:
         
         DRAAD105: Streefgetal logica met ZZP als reserve
         DRAAD106: Suggested assignments optioneel (Optie C: ignored)
-        DRAAD108: NIEUW - Bonus voor 24-uurs wachtdienst koppeling (DIO+DIA, DDO+DDA)
+        DRAAD108: Bonus voor 24-uurs wachtdienst koppeling (DIO+DIA, DDO+DDA)
         """
         logger.info("Definiëren objective function...")
         
