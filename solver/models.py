@@ -14,6 +14,12 @@ DRAD106: Status semantiek duidelijk gedefinieerd:
 DRAD108: Bezetting realiseren constraint toegevoegd:
 - ExactStaffing model voor roster_period_staffing_dagdelen integratie
 - Exact aantal medewerkers per dienst/dagdeel/team afdwingen
+
+DRAD118A: INFEASIBLE handling met Bottleneck Analysis
+- BottleneckItem: Per service capacity analysis
+- BottleneckSuggestion: Actionable recommendations
+- BottleneckReport: Complete analysis when INFEASIBLE
+- Status STAYS 'draft' when INFEASIBLE (not 'in_progress')
 """
 
 from pydantic import BaseModel, Field, validator
@@ -211,6 +217,91 @@ class ExactStaffing(BaseModel):
 
 
 # ============================================================================
+# DRAAD118A: BOTTLENECK ANALYSIS VOOR INFEASIBLE HANDLING
+# ============================================================================
+
+class BottleneckItem(BaseModel):
+    """DRAAD118A: Per-dienst capacity analysis voor Bottleneck Report.
+    
+    Analyse van nodig vs beschikbaar per dienst over hele periode.
+    """
+    service_id: str
+    service_code: str
+    service_naam: str
+    nodig: int = Field(
+        description="Totaal benodigde capaciteit (sum over alle date/dagdeel/team)"
+    )
+    beschikbaar: int = Field(
+        description="Totaal beschikbare capaciteit (aantal bevoegde medewerkers × aantal slots)"
+    )
+    tekort: int = Field(
+        description="Capaciteits tekort: max(0, nodig - beschikbaar)"
+    )
+    tekort_percentage: float = Field(
+        ge=0.0,
+        le=100.0,
+        description="Tekort als % van benodigde: (tekort / nodig) × 100"
+    )
+    is_system_service: bool = Field(
+        default=False,
+        description="DRAAD118A: Kritieke systeemdiensten (DIO/DIA/DDO/DDA) → ROOD in UI"
+    )
+    severity: Literal["critical", "high", "medium"] = Field(
+        description="Prioriteit: CRITICAL=system service of >50% tekort, HIGH=>30%, MEDIUM=rest"
+    )
+
+
+class BottleneckSuggestion(BaseModel):
+    """DRAAD118A: Actionable advice voor planner to resolve bottleneck."""
+    type: Literal["increase_capability", "reduce_requirement", "hire_temp"] = Field(
+        description="Type actie: mogelijkheden uitbreiden, norm verlagen, of temp inhuren"
+    )
+    service_code: str
+    action: str = Field(
+        description="Concrete, human-readable actie bijv 'Voeg 3 medewerkers toe aan Echo' of 'Verlaag Ochtend spreekuur van 44 naar 27'"
+    )
+    impact: str = Field(
+        description="Expected impact, bijv 'Dekt 60% van tekort' of 'Lost probleem volledig op'"
+    )
+    priority: int = Field(
+        ge=1,
+        le=10,
+        description="Prioriteit voor planner: 10=most urgent, 1=nice-to-have"
+    )
+
+
+class BottleneckReport(BaseModel):
+    """DRAAD118A: Complete analysis when solver returns INFEASIBLE.
+    
+    Status 'draft' stays (NOT changed to 'in_progress').
+    Frontend shows this report on BottleneckAnalysisScreen with tabel + graphs + suggestions.
+    """
+    total_capacity_needed: int = Field(
+        description="Sum of all nodig values"
+    )
+    total_capacity_available: int = Field(
+        description="Sum of all beschikbaar values"
+    )
+    total_shortage: int = Field(
+        description="Sum of all tekort values = needed - available"
+    )
+    shortage_percentage: float = Field(
+        ge=0.0,
+        le=100.0,
+        description="(total_shortage / total_needed) × 100"
+    )
+    bottlenecks: List[BottleneckItem] = Field(
+        description="Per-service analysis, sorted by tekort DESC"
+    )
+    critical_count: int = Field(
+        description="Number of CRITICAL bottlenecks (system services or >50% tekort)"
+    )
+    suggestions: List[BottleneckSuggestion] = Field(
+        description="Actionable recommendations for planner"
+    )
+
+
+# ============================================================================
 # SOLVE REQUEST & RESPONSE
 # ============================================================================
 
@@ -221,6 +312,7 @@ class SolveRequest(BaseModel):
     DRAAD105: Gebruikt roster_employee_services ipv employee_services
     DRAAD106: Splitst pre_assignments in fixed, blocked, suggested
     DRAAD108: Voegt exact_staffing toe voor bezetting realiseren
+    DRAAD118A: Verwacht bottleneck_report in response bij INFEASIBLE
     """
     roster_id: str  # uuid in database (als string)
     start_date: date
@@ -301,7 +393,7 @@ class ConstraintViolation(BaseModel):
 class Suggestion(BaseModel):
     """Prescriptive suggestie voor planner."""
     type: str = Field(
-        description="Bijv: 'add_bevoegdheid', 'hire_zzp'"
+        description="Bijj: 'add_bevoegdheid', 'hire_zzp'"
     )
     employee_id: Optional[str] = None  # text in database
     employee_name: Optional[str] = None
@@ -311,8 +403,48 @@ class Suggestion(BaseModel):
     )
 
 
+class FeasibleSummary(BaseModel):
+    """DRAAD118A: Brief summary when solver returns FEASIBLE.
+    
+    Shown on FeasibleSummaryScreen before entering plan view.
+    Status changes to 'in_progress' at this point.
+    """
+    total_services_scheduled: int = Field(
+        description="Number of assignments made by solver"
+    )
+    coverage_percentage: float = Field(
+        ge=0.0,
+        le=100.0,
+        description="Fill rate: (assignments / total slots) × 100"
+    )
+    unfilled_slots: int = Field(
+        description="Number of available slots without assignment"
+    )
+
+
 class SolveResponse(BaseModel):
-    """Response van solve endpoint."""
+    """Response van solve endpoint.
+    
+    DRAAD118A: CRITICAL CHANGE - Response structure depends on solver_status:
+    
+    IF FEASIBLE/OPTIMAL:
+      - status: 'feasible' / 'optimal'
+      - assignments: list of Assignment objects
+      - summary: FeasibleSummary with stats
+      - bottleneck_report: None or empty
+      → Frontend: Show FeasibleSummary, then go to plan view
+      → Backend (route.ts): Change rooster status to 'in_progress'
+    
+    IF INFEASIBLE:
+      - status: 'infeasible'
+      - assignments: [] (empty - no plan made)
+      - summary: None
+      - bottleneck_report: BottleneckReport with detailed analysis
+      → Frontend: Show BottleneckAnalysisScreen with report
+      → Backend (route.ts): Keep rooster status as 'draft' (DO NOT change!)
+    
+    DRAAD106: Respecteer fixed, blocked, suggested assignments
+    """
     status: SolveStatus
     roster_id: str  # uuid in database (als string)
     assignments: List[Assignment] = Field(default_factory=list)
@@ -322,6 +454,16 @@ class SolveResponse(BaseModel):
     total_assignments: int = 0
     total_slots: int = 0
     fill_percentage: float = 0.0
+    
+    # DRAAD118A: NIEUW - Conditioneel veld
+    summary: Optional[FeasibleSummary] = Field(
+        default=None,
+        description="Present only when FEASIBLE/OPTIMAL (not INFEASIBLE)"
+    )
+    bottleneck_report: Optional[BottleneckReport] = Field(
+        default=None,
+        description="Present only when INFEASIBLE - full analysis of capacity shortfalls"
+    )
     
     # Rapportage (Level 2 + 3)
     violations: List[ConstraintViolation] = Field(default_factory=list)
