@@ -22,6 +22,12 @@
  * - Use employees.dienstverband with mapping (not employees.team)
  * - Remove max_werkdagen field (not needed for solver)
  * 
+ * DRAAD121: Database Constraint Fix
+ * - FIXED: status=0 + service_id violation
+ * - status=0 MUST have service_id=NULL (empty slots only)
+ * - Solver suggestions stored separately for UI hints
+ * - Reset logic prevents upsert conflicts
+ * 
  * Flow:
  * 1. Fetch roster data from Supabase
  * 2. Transform to solver input format (fixed + blocked split)
@@ -30,7 +36,8 @@
  * 5. DRAAD118A: Check solver status
  *    → FEASIBLE: Write assignments, update status
  *    → INFEASIBLE: Skip, return bottleneck_report
- * 6. Return appropriate response
+ * 6. DRAAD121: Write with correct status/service_id combinations
+ * 7. Return appropriate response
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -395,46 +402,49 @@ export async function POST(request: NextRequest) {
       // ======== PATH A: FEASIBLE/OPTIMAL - WRITE ASSIGNMENTS & UPDATE STATUS ========
       console.log(`[DRAAD118A] Solver returned FEASIBLE - processing assignments...`);
       
-      // 13A. DRAAD106: Write assignments naar database (status 0)
-      // DRAAD106: Reset ORT voorlopige planning (status 0 + service_id → NULL)
-      const { error: resetError } = await supabase
+      // 13A. DRAAD121: Delete old ORT assignments (status 0) to prevent upsert conflicts
+      console.log('[DRAAD121] Removing old ORT assignments (status=0) to prevent upsert conflicts...');
+      const { error: deleteError } = await supabase
         .from('roster_assignments')
-        .update({ service_id: null })
+        .delete()
         .eq('roster_id', roster_id)
-        .eq('status', 0)
-        .not('service_id', 'is', null);
+        .eq('status', 0);
       
-      if (resetError) {
-        console.error('[Solver API] Fout bij reset ORT voorlopige planning:', resetError);
+      if (deleteError) {
+        console.error('[DRAAD121] Fout bij verwijderen oude assignments:', deleteError);
+      } else {
+        console.log('[DRAAD121] Old ORT assignments deleted successfully');
       }
       
-      // DRAAD106: Insert nieuwe assignments (status 0, niet status 1!)
+      // 13B. DRAAD121: FIXED - Insert neue assignments with status=0 + service_id=NULL
+      // This respects the database constraint:
+      // CHECK ((status = 0 AND service_id IS NULL) OR (status > 0 AND service_id IS NOT NULL))
+      console.log('[DRAAD121] Inserting new assignments with status=0 + service_id=NULL (empty slots)...');
       const assignmentsToInsert = solverResult.assignments.map(a => ({
         roster_id,
         employee_id: a.employee_id,
         date: a.date,
         dagdeel: a.dagdeel,
-        service_id: a.service_id,
-        status: 0  // DRAAD106: Voorlopig! Wordt status 1 na finalize
+        service_id: null,  // DRAAD121: FIX - NULL for status=0 (empty slots only)
+        status: 0,  // Voorlopig - hints for UI will use confidence
+        notes: `ORT suggestion: ${a.service_code}` // DRAAD121: Store solver suggestion in notes
       }));
       
       if (assignmentsToInsert.length > 0) {
-        // DRAAD106: Use UPSERT voor bestaande status 0 records
-        const { error: upsertError } = await supabase
+        // DRAAD121: Use INSERT (not UPSERT) since we deleted old records
+        const { error: insertError } = await supabase
           .from('roster_assignments')
-          .upsert(assignmentsToInsert, {
-            onConflict: 'roster_id,employee_id,date,dagdeel'
-          });
+          .insert(assignmentsToInsert);
         
-        if (upsertError) {
-          console.error('[Solver API] Fout bij upsert assignments:', upsertError);
+        if (insertError) {
+          console.error('[DRAAD121] Fout bij insert assignments:', insertError);
           return NextResponse.json(
             { error: 'Fout bij opslaan oplossing' },
             { status: 500 }
           );
         }
         
-        console.log(`[Solver API] ${assignmentsToInsert.length} assignments opgeslagen (status 0)`);
+        console.log(`[DRAAD121] ${assignmentsToInsert.length} assignments inserted (status=0, service_id=NULL) ✅`);
       }
       
       // 14A. DRAAD106 + DRAAD118A: Update roster status: draft → in_progress
@@ -483,6 +493,11 @@ export async function POST(request: NextRequest) {
         draad115: {
           employee_count: solverRequest.employees.length,
           mapping_info: 'voornaam/achternaam split, team mapped from dienstverband, max_werkdagen removed'
+        },
+        draad121: {
+          fix_applied: 'status=0 + service_id=NULL (database constraint compliant)',
+          assignments_method: 'INSERT (not UPSERT)',
+          solver_hints_stored_in: 'notes field for UI confidence display'
         },
         total_time_ms: totalTime
       });
