@@ -1,0 +1,6 @@
+DRAAD120 Railway Rebuild Trigger
+Timestamp: 2025-12-06T21:30:00 UTC
+Service: solver (Python FastAPI backend)
+Action: Full rebuild and redeploy (Python dependencies + source)
+Reason: Pydantic v2 ConfigDict import required for alias functionality
+Expected: < 3 minutes rebuild time
