@@ -7,6 +7,7 @@ DRAD117: Removed constraint 5 (max werkdagen/week) - planning metadata, not Solv
 DRAD108: Bezetting realiseren - exact aantal per dienst/dagdeel/team + systeemdienst exclusiviteit.
 DRAD106: Status semantiek - fixed_assignments (status 1) en blocked_slots (status 2,3).
 DRAD105: Gebruikt roster_employee_services met aantal en actief velden.
+DRAD118A: INFEASIBLE diagnosis met Bottleneck Analysis - capacity gap analysis per service.
 """
 
 from ortools.sat.python import cp_model
@@ -21,6 +22,7 @@ from models import (
     ExactStaffing,  # DRAAD108: NIEUW
     PreAssignment,  # DEPRECATED maar backwards compatible
     Assignment, ConstraintViolation, Suggestion,
+    BottleneckReport, BottleneckItem, BottleneckSuggestion,  # DRAAD118A: NIEUW
     SolveResponse, SolveStatus, Dagdeel, TeamType
 )
 
@@ -102,7 +104,10 @@ class RosterSolver:
         self.suggestions: List[Suggestion] = []
     
     def solve(self) -> SolveResponse:
-        """Voer volledige solve uit."""
+        """Voer volledige solve uit.
+        
+        DRAAD118A: If INFEASIBLE, generates bottleneck_report automatically.
+        """
         start_time = time.time()
         
         try:
@@ -128,6 +133,12 @@ class RosterSolver:
             total_slots = len(self.dates) * len(list(Dagdeel)) * len(self.employees)
             fill_pct = (len(assignments) / total_slots * 100) if total_slots > 0 else 0.0
             
+            # DRAAD118A: NIEUW - Bottleneck analysis voor INFEASIBLE
+            bottleneck_report = None
+            if status == SolveStatus.INFEASIBLE:
+                logger.info("[DRAAD118A] INFEASIBLE detected - generating bottleneck analysis...")
+                bottleneck_report = self.analyze_bottlenecks()
+            
             return SolveResponse(
                 status=status,
                 roster_id=self.roster_id,
@@ -138,6 +149,7 @@ class RosterSolver:
                 fill_percentage=round(fill_pct, 1),
                 violations=self.violations,
                 suggestions=self.suggestions,
+                bottleneck_report=bottleneck_report,  # DRAAD118A
                 solver_metadata={
                     "dates_count": len(self.dates),
                     "employees_count": len(self.employees),
@@ -534,6 +546,149 @@ class RosterSolver:
                         message=message,
                         severity=severity
                     ))
+    
+    # ========================================================================
+    # DRAAD118A: BOTTLENECK ANALYSIS FOR INFEASIBLE DIAGNOSIS
+    # ========================================================================
+    
+    def analyze_bottlenecks(self) -> BottleneckReport:
+        """DRAAD118A: Analyse capacity gaps for INFEASIBLE roster.
+        
+        Returns comprehensive BottleneckReport with:
+        1. Per-service analysis: nodig vs beschikbaar vs tekort
+        2. Severity classification (CRITICAL/HIGH/MEDIUM)
+        3. Actionable suggestions for planner
+        
+        Called automatically when solver_status == INFEASIBLE.
+        """
+        logger.info("[DRAAD118A] analyze_bottlenecks() START")
+        
+        bottleneck_items: Dict[str, BottleneckItem] = {}
+        
+        # Step 1: Per-service analysis
+        for svc_id, service in self.services.items():
+            # Calculate NEEDED capacity (sum of exact_staffing for this service)
+            nodig = 0
+            for staffing in self.exact_staffing:
+                if staffing.service_id == svc_id and staffing.exact_aantal > 0:
+                    nodig += staffing.exact_aantal
+            
+            if nodig == 0:
+                continue  # Skip services not mentioned in exact_staffing
+            
+            # Calculate AVAILABLE capacity (bevoegde medewerkers × slots)
+            beschikbaar = 0
+            bevoegde_emps = set()
+            
+            for res in self.roster_employee_services:
+                if res.service_id == svc_id and res.actief:
+                    bevoegde_emps.add(res.employee_id)
+            
+            # For each eligible employee, count available slots
+            for emp_id in bevoegde_emps:
+                # Count slots not blocked
+                available_slots = 0
+                for dt in self.dates:
+                    for dagdeel in list(Dagdeel):
+                        # Check if this slot is available
+                        is_blocked = any(
+                            bs.employee_id == emp_id and bs.date == dt and bs.dagdeel == dagdeel
+                            for bs in self.blocked_slots
+                        )
+                        if not is_blocked:
+                            available_slots += 1
+                
+                beschikbaar += available_slots
+            
+            # Calculate shortage
+            tekort = max(0, nodig - beschikbaar)
+            tekort_pct = (tekort / nodig * 100) if nodig > 0 else 0.0
+            
+            # Determine severity
+            is_system = service.code in ['DIO', 'DIA', 'DDO', 'DDA']
+            if is_system or tekort_pct > 50:
+                severity = "critical"
+            elif tekort_pct > 30:
+                severity = "high"
+            else:
+                severity = "medium"
+            
+            bottleneck_items[svc_id] = BottleneckItem(
+                service_id=svc_id,
+                service_code=service.code,
+                service_naam=service.naam,
+                nodig=nodig,
+                beschikbaar=beschikbaar,
+                tekort=tekort,
+                tekort_percentage=round(tekort_pct, 1),
+                is_system_service=is_system,
+                severity=severity
+            )
+        
+        # Step 2: Sort by severity, then by tekort descending
+        severity_order = {"critical": 0, "high": 1, "medium": 2}
+        sorted_items = sorted(
+            bottleneck_items.values(),
+            key=lambda x: (severity_order[x.severity], -x.tekort)
+        )
+        
+        critical_count = sum(1 for item in sorted_items if item.severity == "critical")
+        
+        # Step 3: Generate suggestions
+        suggestions = self._generate_bottleneck_suggestions(sorted_items)
+        
+        # Step 4: Calculate totals
+        total_needed = sum(item.nodig for item in sorted_items)
+        total_available = sum(item.beschikbaar for item in sorted_items)
+        total_shortage = sum(item.tekort for item in sorted_items)
+        shortage_pct = (total_shortage / total_needed * 100) if total_needed > 0 else 0.0
+        
+        report = BottleneckReport(
+            total_capacity_needed=total_needed,
+            total_capacity_available=total_available,
+            total_shortage=total_shortage,
+            shortage_percentage=round(shortage_pct, 1),
+            bottlenecks=sorted_items,
+            critical_count=critical_count,
+            suggestions=suggestions
+        )
+        
+        logger.info(f"[DRAAD118A] analyze_bottlenecks() COMPLETE: {critical_count} CRITICAL, {shortage_pct:.1f}% shortage")
+        return report
+    
+    def _generate_bottleneck_suggestions(self, items: List[BottleneckItem]) -> List[BottleneckSuggestion]:
+        """DRAAD118A: Generate actionable suggestions to resolve bottlenecks."""
+        suggestions = []
+        
+        for item in items:
+            if item.tekort == 0:
+                continue  # No shortage, skip
+            
+            # Suggestion 1: Increase capability
+            suggestion_1 = BottleneckSuggestion(
+                type="increase_capability",
+                service_code=item.service_code,
+                action=f"Voeg {item.tekort} medewerker(s) toe als bevoegd voor {item.service_naam}",
+                impact=f"Dekt 100% van tekort ({item.tekort} plaatsen)",
+                priority=10 if item.severity == "critical" else (8 if item.severity == "high" else 5)
+            )
+            suggestions.append(suggestion_1)
+            
+            # Suggestion 2: Reduce requirement
+            reduction = max(1, int(item.nodig * 0.2))  # Reduce by 20% minimum
+            suggestion_2 = BottleneckSuggestion(
+                type="reduce_requirement",
+                service_code=item.service_code,
+                action=f"Verlaag norm {item.service_naam} van {item.nodig} naar {item.nodig - reduction}",
+                impact=f"Reduceert tekort met {reduction} plaatsen ({int(reduction/item.tekort*100) if item.tekort > 0 else 0}%)",
+                priority=7 if item.severity == "critical" else (5 if item.severity == "high" else 3)
+            )
+            suggestions.append(suggestion_2)
+        
+        # Sort by priority descending
+        suggestions.sort(key=lambda x: -x.priority)
+        
+        return suggestions
     
     def _run_solver(self) -> Tuple[SolveStatus, List[Assignment]]:
         """Voer CP-SAT solver uit."""
