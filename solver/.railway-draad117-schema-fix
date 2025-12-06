@@ -1,0 +1,22 @@
+# DRAAD117: SCHEMA FIX + CONSTRAINT 5 REMOVAL
+# Timestamp: 2025-12-06T17:37:00Z
+# Cache bust: 1733500620
+
+## Changes
+- Remove Employee.aantalwerkdagen (planning metadata)
+- Remove Service.dagdeel (data in ExactStaffing)
+- Remove Constraint 5 (max werkdagen/week - irrelevant for verloskunde)
+
+## Constraints Remaining
+1. Bevoegdheden (HARD)
+2. Beschikbaarheid (HARD)
+3A. Fixed assignments (HARD)
+3B. Blocked slots (HARD)
+4. Een dienst per dagdeel (HARD)
+6. ZZP minimalisatie (SOFT, via objective)
+7. Exact bezetting realiseren (HARD)
+8. Systeemdienst exclusiviteit (HARD)
+
+## Impact
+Only pure Solver constraints remain. No fake defaults needed.
+Planregels stay correct (no irrelevant data).
