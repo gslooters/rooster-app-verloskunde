@@ -1,0 +1,6 @@
+SOLVER2 Railway Path Fix - 2025-12-06T13:33:15Z
+Commit: 91b5d698fa43086cd3591f60d14905cba6c4349e
+Fix: dockerfilePath updated from 'Dockerfile' to 'solver/Dockerfile'
+Issue: Path mismatch was causing build failure
+Expected: Railway will now correctly find solver/Dockerfile
+Status: READY FOR DEPLOY
