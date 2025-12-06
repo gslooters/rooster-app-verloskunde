@@ -3,11 +3,14 @@
  * 
  * Integreert Next.js app met Python OR-Tools solver service.
  * 
+ * DRAAD118A: INFEASIBLE Handling - Conditional Status Update
+ * - IF FEASIBLE/OPTIMAL: Write assignments, status → in_progress
+ * - IF INFEASIBLE: Skip assignments, status stays 'draft', return bottleneck_report
+ * 
  * DRAAD106: Pre-planning Behouden
  * - Reset alleen ORT voorlopige planning (status 0 + service_id → NULL)
  * - Schrijf ORT output naar status 0 (voorlopig)
  * - Respecteer status 1 (fixed), status 2/3 (blocked)
- * - Roster status: draft → in_progress
  * 
  * DRAAD108: Exacte Bezetting Realiseren
  * - Fetch roster_period_staffing_dagdelen data
@@ -24,9 +27,10 @@
  * 2. Transform to solver input format (fixed + blocked split)
  * 3. DRAAD108: Fetch exact staffing requirements
  * 4. Call Python solver service (Railway)
- * 5. Write solution to status 0 slots (UPSERT)
- * 6. Update roster status → 'in_progress'
- * 7. Store solver metadata
+ * 5. DRAAD118A: Check solver status
+ *    → FEASIBLE: Write assignments, update status
+ *    → INFEASIBLE: Skip, return bottleneck_report
+ * 6. Return appropriate response
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -60,7 +64,40 @@ const dienstverbandMapping: Record<string, 'maat' | 'loondienst' | 'overig'> = {
 /**
  * POST /api/roster/solve
  * 
+ * DRAAD118A: Response structure depends on solver_status
+ * 
  * Body: { roster_id: number }
+ * 
+ * Response (FEASIBLE/OPTIMAL):
+ * {
+ *   success: true,
+ *   roster_id: uuid,
+ *   solver_result: {
+ *     status: 'feasible' | 'optimal',
+ *     assignments: [...],
+ *     summary: { total_services_scheduled, coverage_percentage, unfilled_slots },
+ *     bottleneck_report: null,
+ *     total_assignments, fill_percentage, etc.
+ *   }
+ * }
+ * 
+ * Response (INFEASIBLE):
+ * {
+ *   success: true,
+ *   roster_id: uuid,
+ *   solver_result: {
+ *     status: 'infeasible',
+ *     assignments: [],
+ *     summary: null,
+ *     bottleneck_report: {
+ *       bottlenecks: [...],
+ *       critical_count: N,
+ *       suggestions: [...],
+ *       shortage_percentage: X%
+ *     },
+ *     total_assignments: 0
+ *   }
+ * }
  */
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
@@ -350,8 +387,15 @@ export async function POST(request: NextRequest) {
       console.log('[DRAAD108] ✅ Alle bezetting eisen voldaan!');
     }
     
-    // 13. DRAAD106: Write assignments naar database (status 0)
+    // ============================================================
+    // DRAAD118A: CONDITIONAL HANDLING BASED ON SOLVER STATUS
+    // ============================================================
+    
     if (solverResult.status === 'optimal' || solverResult.status === 'feasible') {
+      // ======== PATH A: FEASIBLE/OPTIMAL - WRITE ASSIGNMENTS & UPDATE STATUS ========
+      console.log(`[DRAAD118A] Solver returned FEASIBLE - processing assignments...`);
+      
+      // 13A. DRAAD106: Write assignments naar database (status 0)
       // DRAAD106: Reset ORT voorlopige planning (status 0 + service_id → NULL)
       const { error: resetError } = await supabase
         .from('roster_assignments')
@@ -392,52 +436,106 @@ export async function POST(request: NextRequest) {
         
         console.log(`[Solver API] ${assignmentsToInsert.length} assignments opgeslagen (status 0)`);
       }
-    }
-    
-    // 14. DRAAD106: Update roster status: draft → in_progress (NIET naar final!)
-    const { error: updateError } = await supabase
-      .from('roosters')
-      .update({
-        status: 'in_progress',  // DRAAD106: in_progress, niet final
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', roster_id);
-    
-    if (updateError) {
-      console.error('[Solver API] Fout bij update roster status:', updateError);
+      
+      // 14A. DRAAD106 + DRAAD118A: Update roster status: draft → in_progress
+      // ONLY for FEASIBLE/OPTIMAL (NOT INFEASIBLE)
+      const { error: updateError } = await supabase
+        .from('roosters')
+        .update({
+          status: 'in_progress',  // DRAAD118A: Only update when FEASIBLE!
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', roster_id);
+      
+      if (updateError) {
+        console.error('[Solver API] Fout bij update roster status:', updateError);
+      } else {
+        console.log(`[DRAAD118A] Roster status updated: draft → in_progress`);
+      }
+      
+      const totalTime = Date.now() - startTime;
+      console.log(`[Solver API] Voltooid in ${totalTime}ms`);
+      
+      // 16A. Return FEASIBLE response with assignments + summary
+      return NextResponse.json({
+        success: true,
+        roster_id,
+        solver_result: {
+          status: solverResult.status,
+          assignments: solverResult.assignments,
+          summary: {
+            total_services_scheduled: solverResult.total_assignments,
+            coverage_percentage: solverResult.fill_percentage,
+            unfilled_slots: solverResult.total_slots - solverResult.total_assignments
+          },
+          bottleneck_report: null,  // Not present for FEASIBLE
+          total_assignments: solverResult.total_assignments,
+          total_slots: solverResult.total_slots,
+          fill_percentage: solverResult.fill_percentage,
+          solve_time_seconds: solverResult.solve_time_seconds,
+          violations: solverResult.violations,
+          suggestions: solverResult.suggestions
+        },
+        draad108: {
+          exact_staffing_count: exact_staffing.length,
+          bezetting_violations: bezettingViolations.length
+        },
+        draad115: {
+          employee_count: solverRequest.employees.length,
+          mapping_info: 'voornaam/achternaam split, team mapped from dienstverband, max_werkdagen removed'
+        },
+        total_time_ms: totalTime
+      });
+      
+    } else if (solverResult.status === 'infeasible') {
+      // ======== PATH B: INFEASIBLE - SKIP ASSIGNMENTS, KEEP STATUS draft ========
+      console.log(`[DRAAD118A] Solver returned INFEASIBLE - skipping assignments, status stays 'draft'`);
+      console.log(`[DRAAD118A] Bottleneck report present: ${solverResult.bottleneck_report ? 'YES' : 'NO'}`);
+      
+      // NO database writes! Status stays 'draft'
+      
+      const totalTime = Date.now() - startTime;
+      console.log(`[Solver API] INFEASIBLE handling completed in ${totalTime}ms`);
+      
+      // 16B. Return INFEASIBLE response with bottleneck_report
+      return NextResponse.json({
+        success: true,
+        roster_id,
+        solver_result: {
+          status: solverResult.status,
+          assignments: [],  // Empty - no solution
+          summary: null,  // Not present for INFEASIBLE
+          bottleneck_report: solverResult.bottleneck_report,  // Full analysis
+          total_assignments: 0,
+          total_slots: solverResult.total_slots,
+          fill_percentage: 0.0,
+          solve_time_seconds: solverResult.solve_time_seconds,
+          violations: solverResult.violations,
+          suggestions: solverResult.suggestions
+        },
+        draad118a: {
+          status_action: 'NO_CHANGE - roster status stays draft',
+          bottleneck_severity: solverResult.bottleneck_report?.critical_count || 0,
+          total_shortage: solverResult.bottleneck_report?.total_shortage || 0,
+          shortage_percentage: solverResult.bottleneck_report?.shortage_percentage || 0
+        },
+        total_time_ms: totalTime
+      });
     } else {
-      console.log(`[Solver API] Roster status updated: draft → in_progress`);
+      // ======== PATH C: TIMEOUT/ERROR - NOT FEASIBLE/OPTIMAL/INFEASIBLE ========
+      console.log(`[DRAAD118A] Solver returned ${solverResult.status} - no database changes`);
+      
+      const totalTime = Date.now() - startTime;
+      return NextResponse.json({
+        success: false,
+        roster_id,
+        solver_result: solverResult,
+        error: `Solver status ${solverResult.status}`,
+        total_time_ms: totalTime
+      }, {
+        status: 500
+      });
     }
-    
-    // 15. Store solver run metadata (optioneel)
-    // TODO: Implementeer solver_runs tabel voor history tracking
-    
-    const totalTime = Date.now() - startTime;
-    console.log(`[Solver API] Voltooid in ${totalTime}ms`);
-    
-    // 16. Return response
-    return NextResponse.json({
-      success: true,
-      roster_id,
-      solver_result: {
-        status: solverResult.status,
-        total_assignments: solverResult.total_assignments,
-        total_slots: solverResult.total_slots,
-        fill_percentage: solverResult.fill_percentage,
-        solve_time_seconds: solverResult.solve_time_seconds,
-        violations: solverResult.violations,
-        suggestions: solverResult.suggestions
-      },
-      draad108: {
-        exact_staffing_count: exact_staffing.length,
-        bezetting_violations: bezettingViolations.length
-      },
-      draad115: {
-        employee_count: solverRequest.employees.length,
-        mapping_info: 'voornaam/achternaam split, team mapped from dienstverband, max_werkdagen removed'
-      },
-      total_time_ms: totalTime
-    });
     
   } catch (error: any) {
     console.error('[Solver API] Onverwachte fout:', error);
