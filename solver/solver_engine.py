@@ -258,6 +258,9 @@ class RosterSolver:
         
         DRAAD106: Status 1 = Handmatig gepland of gefinaliseerd
         ORT MOET deze exact overnemen (HARD CONSTRAINT).
+        
+        🔧 FIX DRAAD120: Replaced 'if var:' with 'if var is not None:'
+        CP-SAT IntVar cannot be evaluated as boolean - NotImplementedError
         """
         logger.info("Toevoegen constraint 3A: Fixed assignments...")
         
@@ -266,7 +269,7 @@ class RosterSolver:
                 (fa.employee_id, fa.date, fa.dagdeel.value, fa.service_id)
             )
             
-            if var:
+            if var is not None:  # 🔧 FIXED: was 'if var:'
                 self.model.Add(var == 1)  # MOET toegewezen
                 
                 # Verbied andere diensten in dit slot
@@ -286,6 +289,9 @@ class RosterSolver:
         
         DRAAD106: Status 2/3 = Geblokkeerd
         ORT MAG NIET plannen in deze slots voor ENIGE dienst (HARD CONSTRAINT).
+        
+        🔧 FIX DRAAD120: Replaced 'if var:' with 'if var is not None:'
+        CP-SAT IntVar cannot be evaluated as boolean - NotImplementedError
         """
         logger.info("Toevoegen constraint 3B: Blocked slots...")
         
@@ -296,7 +302,7 @@ class RosterSolver:
                     (bs.employee_id, bs.date, bs.dagdeel.value, svc_id)
                 )
                 
-                if var:
+                if var is not None:  # 🔧 FIXED: was 'if var:'
                     self.model.Add(var == 0)  # MAG NIET toegewezen
                 else:
                     logger.warning(f"Blocked slot var not found: {bs}")
@@ -396,7 +402,7 @@ class RosterSolver:
                 dio_var = self.assignments_vars.get((emp_id, dt, 'O', DIO_id))
                 ddo_var = self.assignments_vars.get((emp_id, dt, 'O', DDO_id))
                 
-                if dio_var and ddo_var:
+                if dio_var is not None and ddo_var is not None:  # 🔧 FIXED: was 'if dio_var and ddo_var:'
                     self.model.Add(dio_var + ddo_var <= 1)
                     constraint_count += 1
                 
@@ -404,7 +410,7 @@ class RosterSolver:
                 dia_var = self.assignments_vars.get((emp_id, dt, 'A', DIA_id))
                 dda_var = self.assignments_vars.get((emp_id, dt, 'A', DDA_id))
                 
-                if dia_var and dda_var:
+                if dia_var is not None and dda_var is not None:  # 🔧 FIXED: was 'if dia_var and dda_var:'
                     self.model.Add(dia_var + dda_var <= 1)
                     constraint_count += 1
         
@@ -480,7 +486,7 @@ class RosterSolver:
                     dio_var = self.assignments_vars.get((emp_id, dt, 'O', DIO_id))
                     dia_var = self.assignments_vars.get((emp_id, dt, 'A', DIA_id))
                     
-                    if dio_var and dia_var:
+                    if dio_var is not None and dia_var is not None:  # 🔧 FIXED: was 'if dio_var and dia_var:'
                         koppel_var = self.model.NewBoolVar(f"dio_dia_koppel_{emp_id}_{dt}")
                         self.model.Add(dio_var + dia_var == 2).OnlyEnforceIf(koppel_var)
                         self.model.Add(dio_var + dia_var < 2).OnlyEnforceIf(koppel_var.Not())
@@ -490,7 +496,7 @@ class RosterSolver:
                     ddo_var = self.assignments_vars.get((emp_id, dt, 'O', DDO_id))
                     dda_var = self.assignments_vars.get((emp_id, dt, 'A', DDA_id))
                     
-                    if ddo_var and dda_var:
+                    if ddo_var is not None and dda_var is not None:  # 🔧 FIXED: was 'if ddo_var and dda_var:'
                         koppel_var = self.model.NewBoolVar(f"ddo_dda_koppel_{emp_id}_{dt}")
                         self.model.Add(ddo_var + dda_var == 2).OnlyEnforceIf(koppel_var)
                         self.model.Add(ddo_var + dda_var < 2).OnlyEnforceIf(koppel_var.Not())
