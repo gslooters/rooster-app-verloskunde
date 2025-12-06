@@ -1,0 +1,90 @@
+🚀 RAILWAY DEPLOYMENT TRIGGER - DRAAD111E
+========================================
+
+✅ PROBLEEM OPGELOST:
+
+Root Cause:
+- Duplicate Dockerfiles: solver/Dockerfile EN solver/docker/Dockerfile
+- Railway railway.json verwacht: docker/Dockerfile (relatief aan solver/)
+- Railway vond BEIDE files → mogelijk verkeerde gebruikt
+
+Oplossing:
+- solver/Dockerfile VERWIJDERD (oude locatie)
+- solver/docker/Dockerfile BEHOUDEN (correcte locatie)
+- Railway heeft nu unieke match!
+
+📝 CONFIGURATIE VERIFICATIE:
+
+File Structuur:
+  solver/
+    ├── docker/
+    │   └── Dockerfile          ✓ CORRECT
+    ├── railway.json          ✓ CORRECT
+    ├── main.py
+    ├── requirements.txt
+    └── [andere Python files]
+
+Railway railway.json:
+  {
+    "build": {
+      "builder": "DOCKERFILE",
+      "dockerfilePath": "docker/Dockerfile"  ← Relatief aan solver/
+    }
+  }
+
+Fysieke Locatie:
+  repo-root/solver/docker/Dockerfile  ✓ EXISTS
+
+🎯 VERWACHTE BUILD OUTPUT:
+
+==> Detected Dockerfile at solver/docker/Dockerfile
+==> Building Docker image...
+==> FROM python:3.11-slim
+==> Installing gcc, g++ (OR-Tools dependencies)
+==> Installing pip packages:
+    - fastapi==0.115.0
+    - uvicorn[standard]==0.32.0
+    - ortools==9.11.4210
+    - pydantic==2.9.2
+==> Verifying installations... ✓
+==> Starting uvicorn server on 0.0.0.0:8000
+==> Health check /health: 200 OK
+==> Deployment successful!
+
+📦 SERVICE ENDPOINTS:
+
+Health Check:
+  GET https://[solver-url]/health
+  Response: { "status": "healthy", "service": "rooster-solver" }
+
+Version Info:
+  GET https://[solver-url]/version  
+  Response: { "version": "1.1.0-DRAAD108", "or_tools_version": "9.11.4210" }
+
+Solver API:
+  POST https://[solver-url]/api/v1/solve-schedule
+  Body: { roster_id, employees, services, ... }
+
+🔧 TROUBLESHOOTING:
+
+Als build nog faalt:
+1. Check Railway UI Settings:
+   - Root Directory = solver
+   - Build Method = Dockerfile (auto)
+   - Start Command = [LEEG]
+
+2. Check Railway Logs:
+   - "Dockerfile not found" → Cache issue, service restart
+   - "pip install failed" → requirements.txt syntax
+   - "uvicorn not found" → PATH issue, check Dockerfile
+
+3. Nuclear Option:
+   - Delete Solver service
+   - Create new service
+   - Point to gslooters/rooster-app-verloskunde
+   - Set Root Directory: solver
+   - Auto-detect Dockerfile
+
+---
+Generated: 2025-12-06T01:37:30+01:00
+DRAAD111E-FINAL-FIX
