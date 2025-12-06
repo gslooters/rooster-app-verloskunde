@@ -1,0 +1,19 @@
+# DRAAD113: Production CORS Security Fix
+# Date: 2025-12-06 15:34 UTC
+# Commit: d574324f41b4324abc2607e27bfbd03fc04223d9
+# 
+# Changes:
+# - Updated CORS allow_origins from ["*"] to specific domains
+# - Now only rooster-app-verloskunde.up.railway.app can access solver
+# - Added localhost for development
+# - Restricted HTTP methods to GET, POST, OPTIONS
+# - Restricted headers to Content-Type, Authorization
+# 
+# Impact:
+# - Production security hardening
+# - No breaking changes to rooster-app (already configured)
+# - Solver2 redeploy triggered automatically
+# - Cache-buster: 1733506442 (Date.now())
+
+# Railway auto-detects changes and redeploys
+# Monitor at: https://railway.app/project/90165889-1a50-4236-aefe-b1e1ae44dc7f
