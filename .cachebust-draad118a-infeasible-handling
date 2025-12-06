@@ -1,0 +1,18 @@
+DRAAD118A: INFEASIBLE Handling Phase 1 Backend
+Timestamp: 2025-12-06T20:27:16Z
+Commit: a21a0149efafe1e7360d4b8d33023c8e6b390e69
+
+Changes:
+- models.py: BottleneckAnalysis types added
+- solver_engine.py: analyze_bottlenecks() method implemented
+- Response structure: bottleneck_report field for INFEASIBLE cases
+- Status: Rooster stays 'draft' when INFEASIBLE (NOT 'in_progress')
+
+Frontend Impact (Phase 2):
+- route.ts: Conditional status update based on solver response
+- New: BottleneckAnalysisScreen component
+- New: FeasibleSummaryScreen component
+- Modified: planRooster handler in design page
+
+Build: Railway Docker container rebuild required
+Cache: Full invalidation recommended
