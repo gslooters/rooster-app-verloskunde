@@ -1,8 +1,8 @@
-# Railway Cache-Bust Trigger - Solver2 Baseline Fix
-# Date: 2025-12-06T12:59:55Z
+# Railway Cache-Bust Trigger - Solver2 Baseline & CORS Security
+# Date: 2025-12-06T15:34:15Z
 # Deployment Target: Solver2 service
 
-## Changes Applied:
+## Changes Applied - Solver2 Baseline Fix:
 1. ✅ Dockerfile: Python 3.11-slim → 3.12.7-slim
    - Reason: Python 3.12.7 proven working (rooster-app success)
    - Wheel compatibility: OR-Tools cp312 available
@@ -15,18 +15,31 @@
    - pydantic: 2.9.2 → 2.10.5 (latest stable)
    - Added numpy>=1.26.0 (OR-Tools dependency)
 
+## Changes Applied - DRAAD113 CORS Security:
+3. ✅ main.py: CORS configuration hardened (2025-12-06)
+   - BEFORE: allow_origins=["*"] (open to all)
+   - AFTER: allow_origins specific to rooster-app only
+   - Added: https://rooster-app-verloskunde.up.railway.app
+   - Added: localhost:3000 (development)
+   - Security: Restricted to GET, POST, OPTIONS methods
+   - Security: Restricted to Content-Type, Authorization headers
+   - Commit: d574324f41b4324abc2607e27bfbd03fc04223d9
+
 ## Testing Strategy:
-1. Railway detects this file
+1. Railway detects this file + main.py changes
 2. Invalidates build cache
 3. Rebuilds FROM python:3.12.7-slim
 4. pip install with modern OR-Tools
-5. Expected: ✅ SUCCESS
+5. Copies main.py with CORS hardening
+6. Expected: ✅ SUCCESS with proper CORS headers
 
 ## Rollback Plan:
 If fails, previous working version:
 - rooster-app serves as reference (Python 3.12.7 works)
 - OR-Tools wheels confirmed available on PyPI
+- CORS can revert to ["*"] if needed (less secure)
 
-Timestamp: 2025-12-06T12:59:55Z
-Deployment Attempt: Solver2-Baseline-Fix-1
-Random ID: 8837462910
+Timestamp: 2025-12-06T15:34:15Z
+Deployment Attempt: Solver2-CORS-Hardening-1
+Random ID: 4827361950
+Cache-Buster: .railway-cors-fix-20251206 (companion file)
