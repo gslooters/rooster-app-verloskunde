@@ -1,0 +1,14 @@
+DRAAD112 - Railway Force Rebuild Trigger
+Timestamp: 2025-12-06T02:42:00Z
+
+Dit bestand forceert Railway om:
+1. Repository opnieuw te klonen
+2. Cache te clearen
+3. Dockerfile op correcte locatie te vinden
+
+Configuratie:
+- Root Directory: solver (zonder leading slash)
+- Dockerfile Path: Dockerfile (zonder leading slash)
+- Branch: main
+
+Dit triggert automatisch een nieuwe deployment met verse repository clone.
