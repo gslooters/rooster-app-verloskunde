@@ -14,6 +14,11 @@
  * - Transform naar exact_staffing format
  * - Send naar solver voor constraint 7 (exacte bezetting)
  * 
+ * DRAAD115: Employee Data Mapping Fix
+ * - Split voornaam + achternaam (separate fields, not combined)
+ * - Use employees.dienstverband with mapping (not employees.team)
+ * - Remove max_werkdagen field (not needed for solver)
+ * 
  * Flow:
  * 1. Fetch roster data from Supabase
  * 2. Transform to solver input format (fixed + blocked split)
@@ -40,6 +45,17 @@ import type {
 
 const SOLVER_URL = process.env.SOLVER_SERVICE_URL || 'http://localhost:8000';
 const SOLVER_TIMEOUT = 35000; // 35s (solver heeft 30s intern)
+
+/**
+ * DRAAD115: Mapping for employees.dienstverband → solver team enum
+ * Database values: "Maat", "Loondienst", "ZZP" (capital first letter)
+ * Solver expects: "maat", "loondienst", "overig" (lowercase)
+ */
+const dienstverbandMapping: Record<string, 'maat' | 'loondienst' | 'overig'> = {
+  'Maat': 'maat',
+  'Loondienst': 'loondienst',
+  'ZZP': 'overig'
+};
 
 /**
  * POST /api/roster/solve
@@ -91,9 +107,10 @@ export async function POST(request: NextRequest) {
     console.log(`[Solver API] Roster gevonden: ${roster.naam}, periode ${roster.start_date} - ${roster.end_date}`);
     
     // 4. Fetch employees
+    // DRAAD115: Query now uses dienstverband instead of team, removes aantalwerkdagen
     const { data: employees, error: empError } = await supabase
       .from('employees')
-      .select('id, voornaam, achternaam, team, structureel_nbh, aantalwerkdagen')
+      .select('id, voornaam, achternaam, dienstverband, structureel_nbh')
       .eq('actief', true);
     
     if (empError) {
@@ -235,25 +252,30 @@ export async function POST(request: NextRequest) {
     console.log(`[Solver API] Data verzameld: ${employees?.length || 0} medewerkers, ${services?.length || 0} diensten, ${rosterEmpServices?.length || 0} bevoegdheden (actief), ${fixedData?.length || 0} fixed, ${blockedData?.length || 0} blocked, ${suggestedData?.length || 0} suggested, ${exact_staffing.length} exacte bezetting (DRAAD108)`);
     
     // 11. Transform naar solver input format
+    // DRAAD115: Split voornaam/achternaam, use dienstverband mapping, remove max_werkdagen
     const solverRequest: SolveRequest = {
-      roster_id,
+      roster_id: roster_id.toString(),
       start_date: roster.start_date,
       end_date: roster.end_date,
-      employees: (employees || []).map(emp => ({
-        id: emp.id,
-        name: `${emp.voornaam} ${emp.achternaam}`.trim(),
-        team: emp.team as 'maat' | 'loondienst' | 'overig',
-        structureel_nbh: emp.structureel_nbh || undefined,
-        max_werkdagen: emp.aantalwerkdagen || undefined,
-        min_werkdagen: undefined
-      })),
+      employees: (employees || []).map(emp => {
+        const mappedTeam = dienstverbandMapping[emp.dienstverband as keyof typeof dienstverbandMapping] || 'overig';
+        return {
+          id: emp.id,
+          voornaam: emp.voornaam,  // DRAAD115: split voornaam
+          achternaam: emp.achternaam,  // DRAAD115: split achternaam
+          team: mappedTeam,  // DRAAD115: mapped from dienstverband
+          structureel_nbh: emp.structureel_nbh || undefined,
+          min_werkdagen: undefined
+          // DRAAD115: removed max_werkdagen - not needed for solver
+        };
+      }),
       services: (services || []).map(svc => ({
         id: svc.id,
         code: svc.code,
         naam: svc.naam
       })),
       roster_employee_services: (rosterEmpServices || []).map(res => ({
-        roster_id: res.roster_id,
+        roster_id: res.roster_id.toString(),
         employee_id: res.employee_id,
         service_id: res.service_id,
         aantal: res.aantal,
@@ -282,6 +304,12 @@ export async function POST(request: NextRequest) {
       exact_staffing,
       timeout_seconds: 30
     };
+    
+    // DRAAD115: Log Employee sample for verification
+    if (solverRequest.employees.length > 0) {
+      console.log('[DRAAD115] Employee sample:', JSON.stringify(solverRequest.employees[0], null, 2));
+      console.log('[DRAAD115] Employee count:', solverRequest.employees.length);
+    }
     
     console.log(`[Solver API] Solver request voorbereid (DRAAD108: ${exact_staffing.length} bezetting eisen), aanroepen ${SOLVER_URL}/api/v1/solve-schedule...`);
     
@@ -403,6 +431,10 @@ export async function POST(request: NextRequest) {
       draad108: {
         exact_staffing_count: exact_staffing.length,
         bezetting_violations: bezettingViolations.length
+      },
+      draad115: {
+        employee_count: solverRequest.employees.length,
+        mapping_info: 'voornaam/achternaam split, team mapped from dienstverband, max_werkdagen removed'
       },
       total_time_ms: totalTime
     });
