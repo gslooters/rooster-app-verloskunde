@@ -1,0 +1,32 @@
+# Railway Cache-Bust Trigger - Solver2 Baseline Fix
+# Date: 2025-12-06T12:59:55Z
+# Deployment Target: Solver2 service
+
+## Changes Applied:
+1. ✅ Dockerfile: Python 3.11-slim → 3.12.7-slim
+   - Reason: Python 3.12.7 proven working (rooster-app success)
+   - Wheel compatibility: OR-Tools cp312 available
+   - psycopg2-binary cp312 available (if needed later)
+
+2. ✅ requirements.txt updates:
+   - ortools: 9.11.4210 → 9.14.6206 (modern, has wheels)
+   - fastapi: 0.115.0 → 0.115.6 (bug fixes)
+   - uvicorn[standard]: 0.32.0 → 0.34.0 (security updates)
+   - pydantic: 2.9.2 → 2.10.5 (latest stable)
+   - Added numpy>=1.26.0 (OR-Tools dependency)
+
+## Testing Strategy:
+1. Railway detects this file
+2. Invalidates build cache
+3. Rebuilds FROM python:3.12.7-slim
+4. pip install with modern OR-Tools
+5. Expected: ✅ SUCCESS
+
+## Rollback Plan:
+If fails, previous working version:
+- rooster-app serves as reference (Python 3.12.7 works)
+- OR-Tools wheels confirmed available on PyPI
+
+Timestamp: 2025-12-06T12:59:55Z
+Deployment Attempt: Solver2-Baseline-Fix-1
+Random ID: 8837462910
