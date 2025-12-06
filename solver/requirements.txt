@@ -1,1 +1,19 @@
-# Python OR-Tools Solver Service - Dependencies\n# Date: 2025-12-04\n\nfastapi==0.115.0\nuvicorn[standard]==0.32.0\npydantic==2.9.2\nortools==9.11.4210\npython-dateutil==2.9.0\n
+# Python OR-Tools Solver Service - Dependencies
+# Date: 2025-12-06
+# SOLVER2-FIX: Updated to Python 3.12.7 compatible wheels
+# DRAAD102D proven: Python 3.12.7 + ortools 9.14.6206 = SUCCESS
+
+# FastAPI & Web
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.6
+
+# Data handling
+pydantic==2.10.5
+python-dateutil==2.9.0
+
+# OR-Tools CP-SAT Solver (Python 3.12.7 cp312 wheels available)
+ortools==9.14.6206
+
+# Optional but recommended
+numpy>=1.26.0
