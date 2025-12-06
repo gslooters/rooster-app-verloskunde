@@ -13,6 +13,11 @@
  * 
  * DRAAD108: Bezetting realiseren:
  * - ExactStaffing interface voor exacte bezetting per dienst/dagdeel/team
+ * 
+ * DRAAD115: Employee mapping fix:
+ * - voornaam/achternaam als separate velden (niet gecombineerd)
+ * - team mapped van employees.dienstverband (niet employees.team)
+ * - max_werkdagen verwijderd (niet nodig voor solver)
  */
 
 // Enums
@@ -21,33 +26,34 @@ export type Dagdeel = 'O' | 'M' | 'A';
 export type SolveStatus = 'optimal' | 'feasible' | 'infeasible' | 'timeout' | 'error';
 
 // Employee
+// DRAAD115: Split voornaam/achternaam, use dienstverband mapping
 export interface Employee {
-  id: number;
-  name: string;
-  team: TeamType;
+  id: string;  // text in database
+  voornaam: string;  // DRAAD115: split
+  achternaam: string;  // DRAAD115: split
+  team: TeamType;  // mapped from dienstverband
   structureel_nbh?: Record<string, Dagdeel[]>; // { "ma": ["O", "M"], "di": ["A"] }
-  max_werkdagen?: number;
   min_werkdagen?: number;
 }
 
 // Service
 export interface Service {
-  id: number;
+  id: string;  // uuid in database
   code: string;
   naam: string;
 }
 
 // Employee-Service bevoegdheid (legacy)
 export interface EmployeeService {
-  employee_id: number;
-  service_id: number;
+  employee_id: string;
+  service_id: string;
 }
 
 // DRAAD105: RosterEmployeeService
 export interface RosterEmployeeService {
-  roster_id: number;
-  employee_id: number;
-  service_id: number;
+  roster_id: string;
+  employee_id: string;
+  service_id: string;
   aantal: number;      // Streefgetal: min=max, 0=ZZP/reserve
   actief: boolean;     // Alleen actieve bevoegdheden toewijzen (harde eis)
 }
@@ -60,10 +66,10 @@ export interface RosterEmployeeService {
  * Status 1: Handmatig gepland of gefinaliseerd, MOET worden gerespecteerd.
  */
 export interface FixedAssignment {
-  employee_id: number;
+  employee_id: string;
   date: string; // ISO date string
   dagdeel: Dagdeel;
-  service_id: number;
+  service_id: string;
 }
 
 /**
@@ -72,31 +78,31 @@ export interface FixedAssignment {
  * - Status 3: Structureel NBH (handmatig)
  */
 export interface BlockedSlot {
-  employee_id: number;
+  employee_id: string;
   date: string; // ISO date string
   dagdeel: Dagdeel;
   status: 2 | 3;
-  blocked_by_service_id?: number; // Voor status 2
+  blocked_by_service_id?: string; // Voor status 2
 }
 
 /**
  * Status 0 + service_id: Hint van vorige ORT run.
  */
 export interface SuggestedAssignment {
-  employee_id: number;
+  employee_id: string;
   date: string; // ISO date string
   dagdeel: Dagdeel;
-  service_id: number;
+  service_id: string;
 }
 
 /**
  * Pre-assignment (DEPRECATED - gebruik FixedAssignment + BlockedSlot)
  */
 export interface PreAssignment {
-  employee_id: number;
+  employee_id: string;
   date: string; // ISO date string
   dagdeel: Dagdeel;
-  service_id: number;
+  service_id: string;
   status: number; // 1=Fixed, 2=Blocked, 3=Structureel NBH
 }
 
@@ -133,7 +139,7 @@ export interface ExactStaffing {
 
 // Solve Request (naar Python service)
 export interface SolveRequest {
-  roster_id: number;
+  roster_id: string;
   start_date: string; // ISO date
   end_date: string; // ISO date
   employees: Employee[];
@@ -156,11 +162,11 @@ export interface SolveRequest {
 
 // Assignment (resultaat)
 export interface Assignment {
-  employee_id: number;
+  employee_id: string;
   employee_name: string;
   date: string; // ISO date
   dagdeel: Dagdeel;
-  service_id: number;
+  service_id: string;
   service_code: string;
   confidence: number; // 0.0 - 1.0
 }
@@ -168,11 +174,11 @@ export interface Assignment {
 // Constraint Violation
 export interface ConstraintViolation {
   constraint_type: string;
-  employee_id?: number;
+  employee_id?: string;
   employee_name?: string;
   date?: string; // ISO date
   dagdeel?: Dagdeel;
-  service_id?: number;
+  service_id?: string;
   message: string;
   severity: 'critical' | 'warning' | 'info';
 }
@@ -180,7 +186,7 @@ export interface ConstraintViolation {
 // Suggestion (prescriptive)
 export interface Suggestion {
   type: string;
-  employee_id?: number;
+  employee_id?: string;
   employee_name?: string;
   action: string;
   impact: string;
@@ -189,7 +195,7 @@ export interface Suggestion {
 // Solve Response (van Python service)
 export interface SolveResponse {
   status: SolveStatus;
-  roster_id: number;
+  roster_id: string;
   assignments: Assignment[];
   solve_time_seconds: number;
   
@@ -209,7 +215,7 @@ export interface SolveResponse {
 // API Response (van Next.js route)
 export interface SolverApiResponse {
   success: boolean;
-  roster_id: number;
+  roster_id: string;
   solver_result: {
     status: SolveStatus;
     total_assignments: number;
