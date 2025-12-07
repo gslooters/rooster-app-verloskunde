@@ -3,6 +3,7 @@
  * DRAAD95D: RosterPlanningRulesModal geïntegreerd voor planregels beheer
  * DRAAD95G: periodTitle doorgeven aan modal voor dynamische periode titel
  * DRAAD98: ORT knop functionaliteit geïmplementeerd - roept /api/roster/solve aan
+ * DRAAD123: Sluiten knop verwijderd uit resultaatscherm
 */
 'use client';
 import { useEffect, useState } from 'react';
@@ -389,7 +390,7 @@ export default function DashboardClient() {
             )}
           </div>
 
-          {/* DRAAD98: ORT Resultaat feedback */}
+          {/* DRAAD98: ORT Resultaat feedback - DRAAD123: Sluiten knop verwijderd */}
           {ortResult && (
             <div className={`mt-6 p-6 rounded-xl border-2 ${
               ortResult.success 
@@ -453,12 +454,6 @@ export default function DashboardClient() {
                           <span>📋</span>
                           <span>Bekijk Rooster</span>
                         </button>
-                        <button 
-                          onClick={() => setOrtResult(null)}
-                          className="px-6 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-medium"
-                        >
-                          Sluiten
-                        </button>
                       </div>
                     </div>
                   )}
@@ -471,12 +466,6 @@ export default function DashboardClient() {
                       {ortResult.message && (
                         <p className="text-sm text-red-700">{ortResult.message}</p>
                       )}
-                      <button 
-                        onClick={() => setOrtResult(null)}
-                        className="mt-3 px-4 py-2 bg-red-200 text-red-900 rounded-lg hover:bg-red-300 font-medium"
-                      >
-                        Sluiten
-                      </button>
                     </div>
                   )}
                 </div>
