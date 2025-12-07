@@ -17,6 +17,7 @@ import {
   initializePeriodStaffingForRoster
 } from '@/lib/services/period-day-staffing-storage';
 import { getAllServices } from '@/lib/services/diensten-storage';
+import { getRosterById } from '@/lib/services/roosters-supabase';
 import { Dienst } from '@/lib/types/dienst';
 import { TeamScope } from '@/lib/types/daytype-staffing';
 import { getDatesForRosterPeriod, groupDatesByWeek } from '@/lib/utils/roster-date-helpers';
@@ -33,6 +34,11 @@ import TeamSelector from '@/app/_components/TeamSelector';
  * - Terug naar Dashboard button rechtsboven extra opvallend (bg-blue-600)
  * - Compact label formaat in tabel-cellen: "x-onbep" op 1 regel
  * - Als maxBezetting === 9, toon "onbep", anders toon getal
+ *
+ * DRAAD 122C: Status-aware back button navigation
+ * - draft → /planning/design/dashboard (design phase)
+ * - in_progress → /dashboard (HDB - main dashboard)
+ * - final → /dashboard (HDB - main dashboard)
  */
 export default function PeriodStaffingClient() {
   const router = useRouter();
@@ -46,6 +52,7 @@ export default function PeriodStaffingClient() {
   const [isSaving, setIsSaving] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Set<string>>(new Set());
   const [readOnly, setReadOnly] = useState(false);
+  const [rosterStatus, setRosterStatus] = useState<'draft' | 'in_progress' | 'final'>('draft');
 
   // Load data
   useEffect(() => {
@@ -58,6 +65,17 @@ export default function PeriodStaffingClient() {
     async function loadData() {
       try {
         setIsLoading(true);
+        
+        // Haal roster op voor status
+        const roster = await getRosterById(rosterId!);
+        if (!roster) {
+          alert('Rooster niet gevonden');
+          router.push('/planning/design');
+          return;
+        }
+        setRosterStatus(roster.status);
+        setReadOnly(roster.status === 'final');
+        
         const dienstenAlle = await getAllServices();
         const activeDiensten = dienstenAlle.filter(s => s.actief);
         setDiensten(activeDiensten);
@@ -165,13 +183,24 @@ export default function PeriodStaffingClient() {
     }
   }, [rosterId, staffingData, validationErrors]);
 
+  // DRAAD 122C: Status-aware back button navigation
   const handleBackToDashboard = useCallback(() => {
     if (isDirty && !readOnly) {
       const confirmed = confirm('Je hebt niet-opgeslagen wijzigingen. Weet je zeker dat je terug wilt naar het dashboard?');
       if (!confirmed) return;
     }
-    router.push(`/planning/design/dashboard?rosterId=${rosterId}`);
-  }, [isDirty, readOnly, rosterId, router]);
+    
+    if (rosterStatus === 'draft') {
+      // Draft → stay in design flow
+      router.push(`/planning/design/dashboard?rosterId=${rosterId}`);
+    } else if (rosterStatus === 'in_progress' || rosterStatus === 'final') {
+      // In bewerking / Afgesloten → go to main dashboard (HDB)
+      router.push('/dashboard');
+    } else {
+      // Default fallback
+      router.push('/dashboard');
+    }
+  }, [isDirty, readOnly, rosterStatus, rosterId, router]);
 
   // Groepeer data per dienst
   const dataByService = useMemo(() => {
