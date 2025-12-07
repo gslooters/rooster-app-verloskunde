@@ -34,6 +34,12 @@
  * - Preserves ALL 1365 slots in roster schema
  * - Status=0 records now safely updated, never deleted
  * 
+ * DRAAD125A: TypeScript Null-Safety Fix
+ * - FIXED: 'solverRequest.employees' possibly undefined error
+ * - Added proper null-checks after data fetch
+ * - Validate array contents before processing
+ * - Early returns for missing data
+ * 
  * Flow:
  * 1. Fetch roster data from Supabase
  * 2. Transform to solver input format (fixed + blocked split)
@@ -171,6 +177,15 @@ export async function POST(request: NextRequest) {
       );
     }
     
+    // DRAAD125A: Null-check employees array
+    if (!employees || employees.length === 0) {
+      console.error('[DRAAD125A] Employees array is empty or null');
+      return NextResponse.json(
+        { error: 'Geen actieve medewerkers gevonden' },
+        { status: 400 }
+      );
+    }
+    
     // 5. Fetch services
     const { data: services, error: svcError } = await supabase
       .from('service_types')
@@ -182,6 +197,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Fout bij ophalen diensten' },
         { status: 500 }
+      );
+    }
+    
+    // DRAAD125A: Null-check services array
+    if (!services || services.length === 0) {
+      console.error('[DRAAD125A] Services array is empty or null');
+      return NextResponse.json(
+        { error: 'Geen actieve diensten geconfigureerd' },
+        { status: 400 }
       );
     }
     
@@ -200,6 +224,9 @@ export async function POST(request: NextRequest) {
       );
     }
     
+    // DRAAD125A: Null-safe handling for optional arrays
+    const safeRosterEmpServices = rosterEmpServices || [];
+    
     // 7. DRAAD106: Fetch fixed assignments (status 1)
     const { data: fixedData, error: fixedError } = await supabase
       .from('roster_assignments')
@@ -211,6 +238,9 @@ export async function POST(request: NextRequest) {
       console.error('[Solver API] Fixed assignments fetch error:', fixedError);
     }
     
+    // DRAAD125A: Null-safe handling
+    const safeFixedData = fixedData || [];
+    
     // 8. DRAAD106: Fetch blocked slots (status 2, 3)
     const { data: blockedData, error: blockedError } = await supabase
       .from('roster_assignments')
@@ -221,6 +251,9 @@ export async function POST(request: NextRequest) {
     if (blockedError) {
       console.error('[Solver API] Blocked slots fetch error:', blockedError);
     }
+    
+    // DRAAD125A: Null-safe handling
+    const safeBlockedData = blockedData || [];
     
     // 9. DRAAD106: Fetch suggested assignments (status 0 + service_id)
     // Optioneel - alleen voor warm-start hints
@@ -234,6 +267,9 @@ export async function POST(request: NextRequest) {
     if (suggestedError) {
       console.error('[Solver API] Suggested assignments fetch error:', suggestedError);
     }
+    
+    // DRAAD125A: Null-safe handling
+    const safeSuggestedData = suggestedData || [];
     
     // ============================================================
     // 10. DRAAD108: Fetch exacte bezetting eisen
@@ -299,7 +335,7 @@ export async function POST(request: NextRequest) {
     // END DRAAD108
     // ============================================================
     
-    console.log(`[Solver API] Data verzameld: ${employees?.length || 0} medewerkers, ${services?.length || 0} diensten, ${rosterEmpServices?.length || 0} bevoegdheden (actief), ${fixedData?.length || 0} fixed, ${blockedData?.length || 0} blocked, ${suggestedData?.length || 0} suggested, ${exact_staffing.length} exacte bezetting (DRAAD108)`);
+    console.log(`[Solver API] Data verzameld: ${employees.length} medewerkers, ${services.length} diensten, ${safeRosterEmpServices.length} bevoegdheden (actief), ${safeFixedData.length} fixed, ${safeBlockedData.length} blocked, ${safeSuggestedData.length} suggested, ${exact_staffing.length} exacte bezetting (DRAAD108)`);
     
     // 11. Transform naar solver input format
     // DRAAD115: Split voornaam/achternaam, use dienstverband mapping, remove max_werkdagen
@@ -307,7 +343,8 @@ export async function POST(request: NextRequest) {
       roster_id: roster_id.toString(),
       start_date: roster.start_date,
       end_date: roster.end_date,
-      employees: (employees || []).map(emp => {
+      // DRAAD125A: Non-null assertion after validation
+      employees: employees.map(emp => {
         const mappedTeam = dienstverbandMapping[emp.dienstverband as keyof typeof dienstverbandMapping] || 'overig';
         return {
           id: emp.id,
@@ -319,12 +356,12 @@ export async function POST(request: NextRequest) {
           // DRAAD115: removed max_werkdagen - not needed for solver
         };
       }),
-      services: (services || []).map(svc => ({
+      services: services.map(svc => ({
         id: svc.id,
         code: svc.code,
         naam: svc.naam
       })),
-      roster_employee_services: (rosterEmpServices || []).map(res => ({
+      roster_employee_services: safeRosterEmpServices.map(res => ({
         roster_id: res.roster_id.toString(),
         employee_id: res.employee_id,
         service_id: res.service_id,
@@ -332,19 +369,19 @@ export async function POST(request: NextRequest) {
         actief: res.actief
       })),
       // DRAAD106: Nieuwe velden
-      fixed_assignments: (fixedData || []).map(fa => ({
+      fixed_assignments: safeFixedData.map(fa => ({
         employee_id: fa.employee_id,
         date: fa.date,
         dagdeel: fa.dagdeel as 'O' | 'M' | 'A',
         service_id: fa.service_id
       })),
-      blocked_slots: (blockedData || []).map(bs => ({
+      blocked_slots: safeBlockedData.map(bs => ({
         employee_id: bs.employee_id,
         date: bs.date,
         dagdeel: bs.dagdeel as 'O' | 'M' | 'A',
         status: bs.status as 2 | 3
       })),
-      suggested_assignments: (suggestedData || []).map(sa => ({
+      suggested_assignments: safeSuggestedData.map(sa => ({
         employee_id: sa.employee_id,
         date: sa.date,
         dagdeel: sa.dagdeel as 'O' | 'M' | 'A',
@@ -356,7 +393,8 @@ export async function POST(request: NextRequest) {
     };
     
     // DRAAD115: Log Employee sample for verification
-    if (solverRequest.employees.length > 0) {
+    // DRAAD125A: Safe array access with validated non-null employees
+    if (solverRequest.employees && solverRequest.employees.length > 0) {
       console.log('[DRAAD115] Employee sample:', JSON.stringify(solverRequest.employees[0], null, 2));
       console.log('[DRAAD115] Employee count:', solverRequest.employees.length);
     }
@@ -479,7 +517,7 @@ export async function POST(request: NextRequest) {
           summary: {
             total_services_scheduled: solverResult.total_assignments,
             coverage_percentage: solverResult.fill_percentage,
-            unfilled_slots: solverResult.total_slots - solverResult.total_assignments
+            unfilled_slots: (solverResult.total_slots || 0) - solverResult.total_assignments
           },
           bottleneck_report: null,  // Not present for FEASIBLE
           total_assignments: solverResult.total_assignments,
@@ -494,7 +532,7 @@ export async function POST(request: NextRequest) {
           bezetting_violations: bezettingViolations.length
         },
         draad115: {
-          employee_count: solverRequest.employees.length,
+          employee_count: solverRequest.employees?.length || 0,
           mapping_info: 'voornaam/achternaam split, team mapped from dienstverband, max_werkdagen removed'
         },
         draad122: {
@@ -506,6 +544,10 @@ export async function POST(request: NextRequest) {
         draad121: {
           constraint: 'status=0 MUST have service_id=NULL',
           implementation: 'DRAAD122 UPSERT ensures compliance'
+        },
+        draad125a: {
+          fix: 'TypeScript null-safety - validated arrays before processing',
+          timestamp: new Date().toISOString()
         },
         total_time_ms: totalTime
       });
