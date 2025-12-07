@@ -1,0 +1,19 @@
+DRAAD122: Navigation connection fixes
+
+Fase 1: FeasibleSummary button route fix
+Fase 2: PlanningGrid back button with status logic
+Fase 3: Loading text adjustment
+Fase 4: Edit flow navigation fix
+Fase 5: Archive flow navigation fix
+
+Timestamp: 2025-12-07T11:03:30Z
+Deploy: Required
+
+All 5 navigation bugs fixed:
+- Removed 'Terug naar Ontwerp' button from feasible-summary
+- Fixed route /rooster/[id]/plan -> /planning/[id]
+- Added status-aware back button to PlanningGrid
+- Fixed /planning/edit navigation to /planning/[id]
+- Fixed /archived navigation to /planning/[id]
+
+Ready for production deployment.
