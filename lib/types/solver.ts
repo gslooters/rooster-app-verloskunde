@@ -2,6 +2,7 @@
  * DRAAD124: ORT Hulpvelden & Data Integriteit Fix - Type Definitions
  * DRAAD125: HOTFIX - Complete type definitions for route.ts compatibility
  * DRAAD125B: Missing Types - BottleneckItem + BottleneckSuggestion + SolverApiResponse
+ * DRAAD125C: FeasibleSummary Type Addition - fixes TypeScript compilation error
  * Phase 3: TypeScript Types voor Solver & Roster Assignment
  */
 
@@ -303,6 +304,31 @@ export interface BottleneckSuggestion {
   estimated_impact?: number; // % improvement if applied
   effort_level?: 'low' | 'medium' | 'high';
   priority?: number; // 1-10, higher = more important
+}
+
+/**
+ * FeasibleSummary - DRAAD125C
+ * 
+ * Summary data for FEASIBLE solver outcomes
+ * Returned from API when solver successfully finds solution
+ * 
+ * Used by: app/rooster/[id]/feasible-summary/page.tsx
+ * Source: app/api/roster/solve/route.ts (line 197-202)
+ * 
+ * Structure matches the response wrapper from route.ts:
+ * - total_services_scheduled: solverResult.total_assignments
+ * - coverage_percentage: solverResult.fill_percentage
+ * - unfilled_slots: computed from total_slots - assignments
+ */
+export interface FeasibleSummary {
+  /** Total number of services/assignments scheduled by solver */
+  total_services_scheduled: number;
+  
+  /** Coverage percentage (0-100) of filled vs total slots */
+  coverage_percentage: number;
+  
+  /** Number of unfilled/empty roster slots */
+  unfilled_slots: number;
 }
 
 /**
