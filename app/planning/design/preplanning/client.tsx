@@ -55,13 +55,18 @@ import DienstSelectieModal from './components/DienstSelectieModal';
  * - rosterId wordt doorgegeven aan DienstSelectieModal via selectedCell
  * - Modal gebruikt rosterId voor gefilterde diensten query
  * 
+ * DRAAD 122C: Status-aware back button navigation
+ * - draft → /planning/design/dashboard (design phase)
+ * - in_progress → /dashboard (HDB - main dashboard)
+ * - final → /dashboard (HDB - main dashboard)
+ * 
  * Dit scherm toont:
  * - Grid met 35 dagen (5 weken) als kolommen x 3 dagdelen (O/M/A)
  * - Medewerkers als rijen
  * - Cellen op basis van status (0=leeg, 1=dienst, 2=geblokkeerd, 3=NB)
  * - Data wordt opgeslagen in Supabase roster_assignments
  * 
- * Cache: 1733066174000
+ * Cache: 1733596895000
  */
 export default function PrePlanningClient() {
   const router = useRouter();
@@ -304,9 +309,19 @@ export default function PrePlanningClient() {
     }
   }, [selectedCell, rosterId, startDate, endDate]);
 
+  // DRAAD 122C: Status-aware back button navigation
   const handleBackToDashboard = useCallback(() => {
-    router.push(`/planning/design/dashboard?rosterId=${rosterId}`);
-  }, [rosterId, router]);
+    if (rosterStatus === 'draft') {
+      // Draft → stay in design flow
+      router.push(`/planning/design/dashboard?rosterId=${rosterId}`);
+    } else if (rosterStatus === 'in_progress' || rosterStatus === 'final') {
+      // In bewerking / Afgesloten → go to main dashboard (HDB)
+      router.push('/dashboard');
+    } else {
+      // Default fallback
+      router.push('/dashboard');
+    }
+  }, [rosterStatus, rosterId, router]);
 
   // DRAAD 83: Status-afhankelijke content - headerPrefix aangepast
   const headerPrefix = useMemo(() => {
