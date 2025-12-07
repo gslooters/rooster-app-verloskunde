@@ -1,5 +1,6 @@
 /**
  * DRAAD118A Phase 3: BottleneckAnalysisScreen
+ * DRAAD125C: TypeScript Field Names Fix
  * 
  * Displayed when solver returns INFEASIBLE status.
  * Shows detailed capacity gap analysis with suggestions.
@@ -124,9 +125,17 @@ export default function BottleneckAnalysisPage({ searchParams }: PageProps) {
     }
   };
   
-  const getBarColor = (percentage: number): string => {
-    if (percentage >= 50) return 'bg-red-500';
-    if (percentage >= 30) return 'bg-orange-500';
+  const getShortagePercentage = (item: BottleneckItem): number => {
+    return item.required > 0 ? Math.round((item.shortage / item.required) * 100) : 0;
+  };
+  
+  const getCoveragePercentage = (item: BottleneckItem): number => {
+    return item.required > 0 ? Math.round((item.available / item.required) * 100) : 0;
+  };
+  
+  const getBarColor = (shortagePct: number): string => {
+    if (shortagePct >= 50) return 'bg-red-500';
+    if (shortagePct >= 30) return 'bg-orange-500';
     return 'bg-yellow-500';
   };
   
@@ -156,6 +165,13 @@ export default function BottleneckAnalysisPage({ searchParams }: PageProps) {
     );
   }
   
+  // DRAAD125C: Calculate summary stats
+  const bottlenecks = report.bottlenecks || [];
+  const totalRequired = bottlenecks.reduce((sum, item) => sum + item.required, 0);
+  const totalAvailable = bottlenecks.reduce((sum, item) => sum + item.available, 0);
+  const totalShortage = report.total_shortage || (totalRequired - totalAvailable);
+  const shortagePercentage = report.shortage_percentage || (totalRequired > 0 ? Math.round((totalShortage / totalRequired) * 100) : 0);
+  
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
       {/* Header */}
@@ -172,30 +188,30 @@ export default function BottleneckAnalysisPage({ searchParams }: PageProps) {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-white p-4 rounded-lg border border-gray-200">
             <div className="text-sm font-medium text-gray-600">Totaal nodig</div>
-            <div className="text-2xl font-bold text-gray-900">{report.total_capacity_needed}</div>
+            <div className="text-2xl font-bold text-gray-900">{totalRequired}</div>
           </div>
           <div className="bg-white p-4 rounded-lg border border-gray-200">
             <div className="text-sm font-medium text-gray-600">Beschikbaar</div>
-            <div className="text-2xl font-bold text-gray-900">{report.total_capacity_available}</div>
+            <div className="text-2xl font-bold text-gray-900">{totalAvailable}</div>
           </div>
           <div className="bg-white p-4 rounded-lg border border-gray-200">
             <div className="text-sm font-medium text-gray-600">Tekort</div>
-            <div className="text-2xl font-bold text-red-600">{report.total_shortage}</div>
+            <div className="text-2xl font-bold text-red-600">{totalShortage}</div>
           </div>
           <div className="bg-white p-4 rounded-lg border border-gray-200">
             <div className="text-sm font-medium text-gray-600">Percentage</div>
-            <div className="text-2xl font-bold text-red-600">{report.shortage_percentage.toFixed(1)}%</div>
+            <div className="text-2xl font-bold text-red-600">{shortagePercentage.toFixed(1)}%</div>
           </div>
         </div>
         
         {/* Critical Count Alert */}
-        {report.critical_count > 0 && (
+        {(report.critical_count || 0) > 0 && (
           <div className="bg-red-50 border border-red-300 rounded-lg p-4 mb-8">
             <div className="flex items-start gap-3">
               <div className="text-red-600 font-bold text-xl">⚠️</div>
               <div>
                 <div className="font-medium text-red-900">
-                  {report.critical_count} kritieke knelpunt{report.critical_count !== 1 ? 'en' : ''}
+                  {report.critical_count} kritieke knelpunt{(report.critical_count || 0) !== 1 ? 'en' : ''}
                 </div>
                 <div className="text-sm text-red-800 mt-1">
                   Dit zijn meestal systeemdiensten of diensten met volledige capaciteitstekort.
@@ -217,28 +233,25 @@ export default function BottleneckAnalysisPage({ searchParams }: PageProps) {
                 <th className="text-right px-4 py-3 font-semibold text-gray-700">Nodig</th>
                 <th className="text-right px-4 py-3 font-semibold text-gray-700">Beschikbaar</th>
                 <th className="text-right px-4 py-3 font-semibold text-gray-700">Tekort</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700">Ernstig</th>
+                <th className="text-center px-4 py-3 font-semibold text-gray-700">Ernst</th>
                 <th className="px-4 py-3 font-semibold text-gray-700">Dekking</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {report.bottlenecks.map((item: BottleneckItem, idx: number) => {
-                const dekking = item.nodig > 0 ? Math.round((item.beschikbaar / item.nodig) * 100) : 0;
-                const isSystemService = item.is_system_service;
+              {bottlenecks.map((item: BottleneckItem, idx: number) => {
+                const coveragePct = getCoveragePercentage(item);
+                const shortagePct = getShortagePercentage(item);
                 const isCritical = item.severity === 'critical';
                 
                 return (
                   <tr key={idx} className={isCritical ? 'bg-red-50' : 'hover:bg-gray-50'}>
                     <td className="px-4 py-3">
-                      <div className="font-medium text-gray-900">{item.service_code}</div>
-                      <div className="text-xs text-gray-600">{item.service_naam}</div>
-                      {isSystemService && (
-                        <div className="text-xs font-semibold text-red-700 mt-1">🔴 Systeemservice</div>
-                      )}
+                      <div className="font-medium text-gray-900">{item.service_code || 'N/A'}</div>
+                      <div className="text-xs text-gray-600">{item.reason || 'Capaciteitstekort'}</div>
                     </td>
-                    <td className="text-right px-4 py-3 font-medium">{item.nodig}</td>
-                    <td className="text-right px-4 py-3 font-medium">{item.beschikbaar}</td>
-                    <td className="text-right px-4 py-3 font-medium text-red-600">{item.tekort}</td>
+                    <td className="text-right px-4 py-3 font-medium">{item.required}</td>
+                    <td className="text-right px-4 py-3 font-medium">{item.available}</td>
+                    <td className="text-right px-4 py-3 font-medium text-red-600">{item.shortage}</td>
                     <td className="text-center px-4 py-3">
                       <span className={`inline-block px-2 py-1 rounded text-xs font-semibold ${getSeverityBadgeColor(item.severity)}`}>
                         {item.severity === 'critical' ? 'KRITIEK' : item.severity === 'high' ? 'HOOG' : 'GEMIDDELD'}
@@ -248,11 +261,11 @@ export default function BottleneckAnalysisPage({ searchParams }: PageProps) {
                       <div className="flex items-center gap-2">
                         <div className="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
                           <div
-                            className={`h-full ${getBarColor(item.tekort_percentage)}`}
-                            style={{ width: `${Math.max(100 - item.tekort_percentage, 0)}%` }}
+                            className={`h-full ${getBarColor(shortagePct)}`}
+                            style={{ width: `${Math.max(coveragePct, 0)}%` }}
                           />
                         </div>
-                        <span className="text-xs font-medium text-gray-600 w-8 text-right">{dekking}%</span>
+                        <span className="text-xs font-medium text-gray-600 w-8 text-right">{coveragePct}%</span>
                       </div>
                     </td>
                   </tr>
@@ -275,19 +288,27 @@ export default function BottleneckAnalysisPage({ searchParams }: PageProps) {
               >
                 <div className="flex items-start gap-3">
                   <div className="text-lg">
-                    {suggestion.type === 'increase_capability' && '📈'}
-                    {suggestion.type === 'reduce_requirement' && '📉'}
-                    {suggestion.type === 'hire_temp' && '👥'}
+                    {suggestion.type === 'increase_staffing' && '📈'}
+                    {suggestion.type === 'relax_constraint' && '📉'}
+                    {suggestion.type === 'swap_assignment' && '🔄'}
+                    {suggestion.type === 'add_capacity' && '👥'}
                   </div>
                   <div className="flex-1">
                     <div className="font-medium text-gray-900">
-                      {suggestion.service_code}: {suggestion.action}
+                      {suggestion.message}
                     </div>
-                    <div className="text-sm text-gray-600 mt-1">{suggestion.impact}</div>
-                    <div className="flex items-center gap-2 mt-2">
-                      <div className="w-2 h-2 rounded-full bg-gray-400"></div>
-                      <span className="text-xs font-semibold text-gray-500">Prioriteit: {suggestion.priority}/10</span>
+                    <div className="text-sm text-gray-600 mt-1">
+                      {suggestion.type === 'increase_staffing' && 'Meer medewerkers beschikbaar maken voor deze dienst'}
+                      {suggestion.type === 'relax_constraint' && 'Restricties voor deze dienst versoepelen'}
+                      {suggestion.type === 'swap_assignment' && 'Medewerkers uisselen tussen diensten'}
+                      {suggestion.type === 'add_capacity' && 'Extra capaciteit toevoegen'}
                     </div>
+                    {suggestion.priority && (
+                      <div className="flex items-center gap-2 mt-2">
+                        <div className="w-2 h-2 rounded-full bg-gray-400"></div>
+                        <span className="text-xs font-semibold text-gray-500">Prioriteit: {suggestion.priority}/10</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
