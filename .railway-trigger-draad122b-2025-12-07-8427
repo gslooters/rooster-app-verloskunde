@@ -1,0 +1,16 @@
+RAILWAY BUILD TRIGGER
+
+Project: rooster-app-verloskunde
+Service: frontend (Next.js app)
+Date: 2025-12-07T11:28:30Z
+Reason: Force rebuild for PlanningGrid UI implementation
+Random: 8427
+
+Action: Railway will detect this file and trigger:
+1. Fresh build of Next.js application
+2. Cache invalidation for all pages
+3. New deployment to production
+
+Expected time: 5-10 minutes
+
+Monitor at: https://railway.app/project/90165889-1a50-4236-aefe-b1e1ae44dc7f
