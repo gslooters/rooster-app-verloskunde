@@ -1,7 +1,7 @@
 /**
  * DRAAD124: ORT Hulpvelden & Data Integriteit Fix - Type Definitions
  * DRAAD125: HOTFIX - Complete type definitions for route.ts compatibility
- * DRAAD125B: Missing Types - BottleneckItem + BottleneckSuggestion
+ * DRAAD125B: Missing Types - BottleneckItem + BottleneckSuggestion + SolverApiResponse
  * Phase 3: TypeScript Types voor Solver & Roster Assignment
  */
 
@@ -344,6 +344,32 @@ export interface SolveResponse {
     assignments_editable: number;
     total_to_solve: number;
   };
+}
+
+/**
+ * DRAAD125B: SolverApiResponse - Wrapper response from /api/roster/solve
+ * The API endpoint wraps SolveResponse with metadata and conditionally includes summary
+ */
+export interface SolverApiResponse {
+  success: boolean;
+  roster_id: string;
+  solver_result: SolveResponse & {
+    // Additional fields added by API wrapper
+    summary?: {
+      total_services_scheduled: number;
+      coverage_percentage?: number;
+      unfilled_slots: number;
+    } | null;
+  };
+  // Optional metadata from different DRADs
+  draad108?: Record<string, any>;
+  draad115?: Record<string, any>;
+  draad118a?: Record<string, any>;
+  draad121?: Record<string, any>;
+  draad122?: Record<string, any>;
+  draad125a?: Record<string, any>;
+  error?: string;
+  total_time_ms?: number;
 }
 
 /**
