@@ -1,0 +1,25 @@
+{
+  "version": "1.0.0-draad124",
+  "timestamp": 1733600000000,
+  "buildId": "draad124-fase2to5-" + Math.random().toString(36).substr(2, 9),
+  "description": "DRAAD124: ORT Hulpvelden & Data Integriteit Fix - FASE 2-5 Complete Implementation",
+  "phases": {
+    "fase1": "✅ Database: ALTER TABLE + 6 hulpvelden",
+    "fase2": "✅ Python Solver: Confidence + Constraint Reason",
+    "fase3": "✅ TypeScript Types: Hulpvelden interfaces",
+    "fase4": "✅ Next.js Route: Pre/Post validation + Protected filter",
+    "fase5": "✅ Frontend UI: Badges, colors, cache-busting"
+  },
+  "changes": [
+    "app/api/roster/solve/route.ts - Complete rewrite with 6 validation phases",
+    "lib/types/solver.ts - New type definitions with confidence and constraint_reason",
+    "solver/solver_engine.py - Confidence scoring and constraint tracing",
+    "Cache-busting: Dynamic buildId + random suffix"
+  ],
+  "validation": {
+    "pre_ort_state": "Captured before solving",
+    "protected_filter": "Status >= 1 records skipped in write-back",
+    "post_ort_state": "Validated after solving",
+    "total_records": "Must remain 1365"
+  }
+}
