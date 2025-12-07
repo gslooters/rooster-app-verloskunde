@@ -10,6 +10,11 @@
   /* Cache-bust: Force browser refresh voor team data wijzigingen */
 }
 
+/* DRAAD122C: Navigation routes fixed - 1733595309 */
+.draad122c-nav-routes-fixed-1733595309 {
+  /* Cache-bust: Force browser refresh voor routing wijzigingen */
+}
+
 :root {
   /* Primitive Color Tokens */
   --color-white: rgba(255, 255, 255, 1);
