@@ -1,26 +1,22 @@
-# Railway Auto-Deploy Trigger
-# Modify this file to trigger Railway deployment
-
-# DRAAD101 FIX - SOLVER SERVICE MET NIXPACKS CONFIG
-Build: 101-SOLVER-FIXED
-Timestamp: 2025-12-04T15:58:00Z
-Random: 78451
-
-Changes:
-- Added solver/nixpacks.toml (forces Python detection)
-- Added solver/.railwayignore (ignores root Next.js files)
-- Fixed: Railway now correctly detects solver/ as Python project
-- Updated: SOLVER_DEPLOYMENT_FIXED.md with corrected instructions
-
-Deployment: FIXED - Python Solver Service
-Status: READY FOR CLEAN RAILWAY DEPLOYMENT
-
-INSTRUCTIES:
-1. Verwijder heartfelt-joy service (foutieve build)
-2. Maak nieuwe service met Root Directory = solver
-3. OF gebruik Railway CLI: railway up --root solver
-4. Verify logs: "Detected Python" (NIET "Detected Node")
-5. Generate public URL
-6. Configureer SOLVER_SERVICE_URL in Next.js
-
-See: SOLVER_DEPLOYMENT_FIXED.md voor complete guide
+# Railway Deployment Trigger
+# This file is used to force Railway to rebuild the deployment
+# Each commit to this file triggers a new build
+#
+# DRAAD128: UPSERT Fix - PostgreSQL RPC Function
+# Date: 2025-12-08 00:43 CET
+# Build: 847362941
+#
+# Changes included:
+# 1. PostgreSQL migration: upsert_ort_assignments() function
+# 2. route.ts: UPSERT via rpc() instead of supabase.upsert()
+# 3. Cache-buster: 20251208-upsert-fix-optie-e
+#
+# Expected outcome:
+# - PostgreSQL function created in Supabase
+# - route.ts deployed with RPC call
+# - Cache invalidated in browsers
+# - ORT solver should run without "row a second time" error
+#
+TRIGGER_BUILD=847362941
+TIMESTAMP=2025-12-08T00:43:00Z
+VERSION=20251208-upsert-fix-optie-e
