@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { getRosters, isDutchHoliday, isAvailable } from './libAliases';
 import AvailabilityPopup from './_components/AvailabilityPopup';
 import '@/styles/planning.css';
@@ -59,6 +60,7 @@ const FALLBACK_EMPLOYEES = [
 ];
 
 export default function PlanningGrid({ rosterId }: { rosterId: string }) {
+  const router = useRouter();
   const [rosters, setRosters] = useState<Roster[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -172,6 +174,19 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
     fetchServicesAndMappings();
   }, [employees]);
 
+  const handleBackToDashboard = () => {
+    if (roster?.status === 'draft') {
+      // Ga terug naar Dashboard Rooster Ontwerp
+      router.push(`/planning/design/dashboard?rosterId=${rosterId}`);
+    } else if (roster?.status === 'in_progress' || roster?.status === 'final') {
+      // Ga terug naar Hoofd-dashboard
+      router.push('/dashboard');
+    } else {
+      // Fallback naar hoofd-dashboard
+      router.push('/dashboard');
+    }
+  };
+
   if (loading || servicesLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -199,7 +214,22 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
 
   return (
     <div className="planning-grid-container">
-      <p className="p-4 text-green-700">PlanningGrid async laadstructuur succesvol. (UI volgt in vervolgstap)</p>
+      {/* Header met Terug-knop */}
+      <div className="flex items-center justify-between p-4 border-b border-gray-200">
+        <h1 className="text-2xl font-bold text-gray-900">Planrooster</h1>
+        <button
+          onClick={handleBackToDashboard}
+          className="flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+          title="Terug naar dashboard"
+        >
+          ← Terug naar Dashboard
+        </button>
+      </div>
+      
+      {/* Main planning content */}
+      <div className="p-4">
+        <p className="p-4 text-green-700">PlanningGrid async laadstructuur succesvol. (UI volgt in vervolgstap)</p>
+      </div>
     </div>
   );
 }
