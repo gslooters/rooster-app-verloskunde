@@ -1,0 +1,6 @@
+DRAAD122 Navigation Fixes
+Random: 8472651
+Trigger: Force rebuild and deploy
+
+This file triggers Railway to rebuild and redeploy both frontend and backend services.
+Delete after deployment confirms success.
