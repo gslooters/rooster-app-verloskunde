@@ -4,6 +4,7 @@
  * DRAAD95G: periodTitle doorgeven aan modal voor dynamische periode titel
  * DRAAD98: ORT knop functionaliteit geïmplementeerd - roept /api/roster/solve aan
  * DRAAD123: Sluiten knop verwijderd uit resultaatscherm
+ * DRAAD123FIX: Correctie: Bekijk Rooster link naar /planning/design/preplanning?id= 
 */
 'use client';
 import { useEffect, useState } from 'react';
@@ -390,7 +391,7 @@ export default function DashboardClient() {
             )}
           </div>
 
-          {/* DRAAD98: ORT Resultaat feedback - DRAAD123: Sluiten knop verwijderd */}
+          {/* DRAAD98: ORT Resultaat feedback - DRAAD123FIX: Bekijk Rooster link naar /planning/design/preplanning?id= */}
           {ortResult && (
             <div className={`mt-6 p-6 rounded-xl border-2 ${
               ortResult.success 
@@ -448,7 +449,7 @@ export default function DashboardClient() {
 
                       <div className="flex gap-3 mt-4">
                         <button 
-                          onClick={() => router.push(`/planning/design?rosterId=${rosterId}`)}
+                          onClick={() => router.push(`/planning/design/preplanning?id=${rosterId}`)}
                           className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold flex items-center gap-2"
                         >
                           <span>📋</span>
