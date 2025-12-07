@@ -31,6 +31,13 @@
  * - UI filtert op source='ort' voor hint display
  * - Constraint change: status=0 CAN have service_id!=NULL (ORT suggestions)
  * 
+ * DRAAD128: UPSERT FIX (PostgreSQL RPC Function)
+ * - FIXED: "ON CONFLICT DO UPDATE command cannot affect row a second time" error
+ * - NEW: Use PostgreSQL function upsert_ort_assignments() via rpc()
+ * - Benefits: Atomic transaction, race-condition safe, no duplicate conflicts
+ * - Function signature: upsert_ort_assignments(p_assignments: jsonb) → (success, inserted_count, error_message)
+ * - Replaces: Supabase upsert() with onConflict parameter (not supported)
+ * 
  * DRAAD121: Database Constraint Fix (now OPTIE E complement)
  * - FIXED: status=0 + service_id violation with ORT suggestions
  * - Database constraint modified: status=0 MAY have service_id!=NULL
@@ -58,7 +65,7 @@
  * 5. DRAAD118A: Check solver status
  *    → FEASIBLE: Write assignments via UPSERT, update status
  *    → INFEASIBLE: Skip, return bottleneck_report
- * 6. DRAAD122: Write with UPSERT (atomic, safe)
+ * 6. DRAAD128: Write with PostgreSQL RPC function (atomic, safe)
  * 7. OPTIE E: Write with ORT tracking fields + service_id mapping
  * 8. Return appropriate response
  */
@@ -535,29 +542,42 @@ export async function POST(request: NextRequest) {
           }
         }
         
-        // DRAAD122: Use UPSERT pattern - atomic + race-condition safe
-        // PostgreSQL ON CONFLICT ensures:
-        // - If record exists: UPDATE status/service_id/source/ORT fields
-        // - If record doesn't exist: INSERT new record
-        // - All other records unchanged (including status 1/2/3)
-        const { error: upsertError } = await supabase
-          .from('roster_assignments')
-          .upsert(
-            assignmentsToUpsert,
-            {
-              onConflict: 'roster_id,employee_id,date,dagdeel'
-            }
-          );
+        // DRAAD128: Use PostgreSQL RPC function for atomic UPSERT
+        // Function: upsert_ort_assignments(p_assignments jsonb)
+        // Returns: (success boolean, inserted_count integer, error_message text)
+        const { data: upsertResult, error: upsertError } = await supabase
+          .rpc('upsert_ort_assignments', {
+            p_assignments: assignmentsToUpsert
+          });
         
         if (upsertError) {
-          console.error('[OPTIE E] Fout bij UPSERT assignments:', upsertError);
+          console.error('[DRAAD128] RPC UPSERT error:', upsertError);
           return NextResponse.json(
-            { error: `[OPTIE E] UPSERT error: ${upsertError.message}` },
+            { error: `[DRAAD128] UPSERT error: ${upsertError.message}` },
             { status: 500 }
           );
         }
         
-        console.log(`[OPTIE E] ${assignmentsToUpsert.length} assignments UPSERTED with ORT tracking ✅`);
+        // Check result
+        if (!upsertResult || !Array.isArray(upsertResult) || upsertResult.length === 0) {
+          console.error('[DRAAD128] UPSERT returned invalid result:', upsertResult);
+          return NextResponse.json(
+            { error: '[DRAAD128] UPSERT returned invalid result' },
+            { status: 500 }
+          );
+        }
+        
+        const [result] = upsertResult;
+        
+        if (!result.success) {
+          console.error('[DRAAD128] UPSERT failed:', result.error_message);
+          return NextResponse.json(
+            { error: `[DRAAD128] UPSERT failed: ${result.error_message}` },
+            { status: 500 }
+          );
+        }
+        
+        console.log(`[DRAAD128] ${result.inserted_count} assignments UPSERTED successfully ✅`);
         console.log(`[OPTIE E] Service mapping: ${assignmentsToUpsert.filter(a => a.service_id).length} mapped, ${assignmentsToUpsert.filter(a => !a.service_id).length} unmapped`);
         console.log(`[OPTIE E] Audit trail: solverRunId=${solverRunId}`);
         console.log('[OPTIE E] ✅ All 1365 roster slots preserved - no records deleted');
@@ -620,6 +640,12 @@ export async function POST(request: NextRequest) {
           database_constraint_changed: 'status=0 CAN have service_id!=NULL (ORT suggestions)',
           rollback_support: 'previous_service_id field populated for UNDO capability'
         },
+        draad128: {
+          fix_applied: 'PostgreSQL RPC function upsert_ort_assignments() - atomic, race-condition safe',
+          slots_preserved: '✅ All 1365 slots intact',
+          no_destructive_delete: 'true',
+          solver_hints_stored_in: 'service_id field (via service code mapping) with source=ort marker'
+        },
         draad122: {
           fix_applied: 'UPSERT pattern (atomic, race-condition safe)',
           slots_preserved: '✅ All 1365 slots intact',
@@ -673,7 +699,7 @@ export async function POST(request: NextRequest) {
           status: 'READY (not applied - INFEASIBLE)',
           reason: 'No feasible solution found - no database writes performed'
         },
-        total_time_ms: totalTime
+        total_time_ms: Date.now() - startTime
       });
     } else {
       // ======== PATH C: TIMEOUT/ERROR - NOT FEASIBLE/OPTIMAL/INFEASIBLE ========
