@@ -1,6 +1,7 @@
 /**
  * DRAAD124: ORT Hulpvelden & Data Integriteit Fix - Type Definitions
  * DRAAD125: HOTFIX - Complete type definitions for route.ts compatibility
+ * DRAAD125B: Missing Types - BottleneckItem + BottleneckSuggestion
  * Phase 3: TypeScript Types voor Solver & Roster Assignment
  */
 
@@ -275,24 +276,47 @@ export interface SolverSuggestion {
 }
 
 /**
+ * Bottleneck Item (DRAAD125B)
+ * Individual staffing shortage at specific time slot
+ */
+export interface BottleneckItem {
+  date: string; // ISO 8601
+  dagdeel: 'O' | 'M' | 'A';
+  service_id: string; // UUID
+  service_code?: string; // DIA, DDO, NBH, etc
+  required: number; // Required staff count
+  available: number; // Available staff count
+  shortage: number; // required - available
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  reason?: string; // Why this shortage exists
+}
+
+/**
+ * Bottleneck Suggestion (DRAAD125B)
+ * Actionable recommendation to resolve bottleneck
+ */
+export interface BottleneckSuggestion {
+  type: 'increase_staffing' | 'relax_constraint' | 'swap_assignment' | 'add_capacity';
+  message: string;
+  affected_dates?: string[]; // ISO 8601 dates
+  affected_services?: string[]; // Service IDs
+  estimated_impact?: number; // % improvement if applied
+  effort_level?: 'low' | 'medium' | 'high';
+  priority?: number; // 1-10, higher = more important
+}
+
+/**
  * Bottleneck Report (DRAAD118A)
  */
 export interface BottleneckReport {
   reason: string;
   missing_assignments: number;
   impossible_constraints: string[];
-  bottlenecks?: Array<{
-    date: string;
-    dagdeel: string;
-    service_id: string;
-    required: number;
-    available: number;
-    shortage: number;
-  }>;
+  bottlenecks?: BottleneckItem[]; // DRAAD125B: typed array
   critical_count?: number;
   total_shortage?: number;
   shortage_percentage?: number;
-  suggestions?: string[];
+  suggestions?: BottleneckSuggestion[]; // DRAAD125B: typed array
 }
 
 /**
