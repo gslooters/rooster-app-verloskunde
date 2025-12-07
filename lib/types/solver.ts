@@ -1,7 +1,84 @@
 /**
  * DRAAD124: ORT Hulpvelden & Data Integriteit Fix - Type Definitions
+ * DRAAD125: HOTFIX - Complete type definitions for route.ts compatibility
  * Phase 3: TypeScript Types voor Solver & Roster Assignment
  */
+
+/**
+ * Employee from employees table
+ * DRAAD115: voornaam/achternaam split, team mapped from dienstverband
+ */
+export interface Employee {
+  id: string; // UUID
+  voornaam: string;
+  achternaam: string;
+  team: 'maat' | 'loondienst' | 'overig'; // mapped from dienstverband
+  structureel_nbh?: boolean;
+  min_werkdagen?: number;
+}
+
+/**
+ * Service Type from service_types table
+ */
+export interface Service {
+  id: string; // UUID
+  code: string; // 'DIA', 'DDO', 'NBH', 'STUDIE', etc
+  naam: string; // Full name
+}
+
+/**
+ * Roster Employee Service (bevoegdheden)
+ */
+export interface RosterEmployeeService {
+  roster_id: string;
+  employee_id: string;
+  service_id: string;
+  aantal: number; // max # of shifts for this service
+  actief: boolean;
+}
+
+/**
+ * Fixed Assignment (status=1)
+ */
+export interface FixedAssignment {
+  employee_id: string;
+  date: string; // ISO 8601
+  dagdeel: 'O' | 'M' | 'A';
+  service_id: string; // UUID
+}
+
+/**
+ * Blocked Slot (status=2,3)
+ */
+export interface BlockedSlot {
+  employee_id: string;
+  date: string; // ISO 8601
+  dagdeel: 'O' | 'M' | 'A';
+  status: 2 | 3; // 2=blocked, 3=system
+}
+
+/**
+ * Suggested Assignment (status=0 + service_id)
+ * Warm-start hints for ORT solver
+ */
+export interface SuggestedAssignment {
+  employee_id: string;
+  date: string; // ISO 8601
+  dagdeel: 'O' | 'M' | 'A';
+  service_id: string; // UUID
+}
+
+/**
+ * Exact Staffing Requirement (DRAAD108)
+ */
+export interface ExactStaffing {
+  date: string; // ISO 8601
+  dagdeel: 'O' | 'M' | 'A';
+  service_id: string; // UUID
+  team?: 'TOT' | 'GRO' | 'ORA'; // optional team filter
+  exact_aantal: number; // Required # of staff
+  is_system_service?: boolean;
+}
 
 /**
  * Assignment Output van ORT Solver Engine
@@ -16,8 +93,8 @@ export interface Assignment {
   service_code: string; // DIA, DDO, NBH, STUDIE, etc
 
   // FASE 2: Hulpvelden
-  confidence: number; // 0.0 - 1.0: solver certainty
-  constraint_reason: {
+  confidence?: number; // 0.0 - 1.0: solver certainty (optional for backward compat)
+  constraint_reason?: {
     constraints: string[]; // ['exact_staffing', 'coverage', ...]
     reason_text: string; // "EXACT 2 people required for DIA morning"
     flexibility: 'rigid' | 'medium' | 'flexible';
@@ -104,29 +181,45 @@ export interface RosterAssignmentRecord {
 
 /**
  * Solve Request (Input to ORT)
+ * DRAAD115: employees array + exact_staffing (DRAAD108)
  */
 export interface SolveRequest {
   roster_id: string;
+  start_date?: string; // ISO 8601
+  end_date?: string; // ISO 8601
+
+  // Employee data (DRAAD115: new format)
+  employees?: Employee[];
+  services?: Service[];
+  roster_employee_services?: RosterEmployeeService[];
 
   // Fixed assignments (status=1) - ORT mag niet aanraken
-  fixed_assignments: Array<{
+  fixed_assignments?: Array<{
     employee_id: string;
     date: string;
     dagdeel: string;
     service_id: string;
-    service_code: string;
+    service_code?: string;
   }>;
 
   // Blocked slots (status=2,3) - ORT mag niet gebruiken
-  blocked_slots: Array<{
+  blocked_slots?: Array<{
     employee_id: string;
     date: string;
     dagdeel: string;
     status: number;
   }>;
 
+  // Suggested assignments (status=0 + service_id) - warm start
+  suggested_assignments?: Array<{
+    employee_id: string;
+    date: string;
+    dagdeel: string;
+    service_id: string;
+  }>;
+
   // Editable slots (status=0) - ORT mag aanpassen
-  editable_slots: Array<{
+  editable_slots?: Array<{
     employee_id: string;
     date: string;
     dagdeel: string;
@@ -134,17 +227,17 @@ export interface SolveRequest {
   }>;
 
   // Exact staffing constraints (DRAAD108)
-  exact_staffing: Array<{
-    service_id: string;
-    service_code: string;
+  exact_staffing?: Array<{
     date: string;
-    dagdeel: string;
-    required_count: number;
-    flexibility: 'rigid' | 'flexible';
+    dagdeel: 'O' | 'M' | 'A';
+    service_id: string;
+    team?: 'TOT' | 'GRO' | 'ORA';
+    exact_aantal: number;
+    is_system_service?: boolean;
   }>;
 
-  // Employee capabilities
-  employee_services: Array<{
+  // Employee capabilities (backward compat)
+  employee_services?: Array<{
     employee_id: string;
     service_id: string;
     actief: boolean;
@@ -159,24 +252,68 @@ export interface SolveRequest {
     time_limit_seconds?: number;
     optimization_level?: 'fast' | 'balanced' | 'optimal';
   };
+  timeout_seconds?: number;
+}
+
+/**
+ * Constraint Violation
+ */
+export interface Violation {
+  constraint_type: string;
+  message: string;
+  severity: 'critical' | 'warning' | 'info';
+  affected_slots?: number;
+}
+
+/**
+ * Solver Suggestion
+ */
+export interface SolverSuggestion {
+  type: 'increase_staffing' | 'relax_constraint' | 'add_coverage';
+  message: string;
+  impact: string;
+}
+
+/**
+ * Bottleneck Report (DRAAD118A)
+ */
+export interface BottleneckReport {
+  reason: string;
+  missing_assignments: number;
+  impossible_constraints: string[];
+  bottlenecks?: Array<{
+    date: string;
+    dagdeel: string;
+    service_id: string;
+    required: number;
+    available: number;
+    shortage: number;
+  }>;
+  critical_count?: number;
+  total_shortage?: number;
+  shortage_percentage?: number;
+  suggestions?: string[];
 }
 
 /**
  * Solve Response (Output from ORT)
  */
 export interface SolveResponse {
-  success: boolean;
-  solver_status: 'optimal' | 'feasible' | 'infeasible' | 'timeout' | 'error';
+  success?: boolean;
+  status: 'optimal' | 'feasible' | 'infeasible' | 'timeout' | 'error';
   assignments: Assignment[];
+  total_assignments: number;
+  total_slots?: number;
+  fill_percentage?: number;
 
   // Diagnostics
   solve_time_seconds?: number;
-  bottleneck_report?: {
-    reason: string;
-    missing_assignments: number;
-    impossible_constraints: string[];
-  };
+  bottleneck_report?: BottleneckReport;
+  violations?: Violation[];
+  suggestions?: SolverSuggestion[];
 
+  // Legacy fields for backward compat
+  solver_status?: 'optimal' | 'feasible' | 'infeasible' | 'timeout' | 'error';
   metadata?: {
     assignments_fixed: number;
     assignments_protected: number;
