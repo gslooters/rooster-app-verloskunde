@@ -15,6 +15,11 @@
   /* Cache-bust: Force browser refresh voor routing wijzigingen */
 }
 
+/* DRAAD122C: Back button status-aware routing - 1733596980 */
+.draad122c-back-button-status-aware-1733596980 {
+  /* Cache-bust: Force browser refresh voor back button navigation fixes */
+}
+
 :root {
   /* Primitive Color Tokens */
   --color-white: rgba(255, 255, 255, 1);
