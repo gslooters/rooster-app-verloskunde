@@ -9,7 +9,7 @@ function ArchivedRosterCard({ roster }: { roster: Roster }) {
   const router = useRouter();
   const weekRange = formatWeekRange(roster.start_date, roster.end_date);
   const dateRange = formatDateRangeNl(roster.start_date, roster.end_date);
-  const handleOpenRoster = () => { router.push(`/planning/design/dashboard?rosterId=${roster.id}`); };
+  const handleOpenRoster = () => { router.push(`/planning/${roster.id}`); };
 
   return (
     <div className="bg-gray-50 border border-gray-300 rounded-lg p-4 hover:shadow-md hover:bg-gray-100 transition-shadow cursor-pointer" onClick={handleOpenRoster}>
