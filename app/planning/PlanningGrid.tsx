@@ -59,6 +59,14 @@ const FALLBACK_EMPLOYEES = [
   { id: 'emp8', name: 'Hans Visser', voornaam: 'Hans', achternaam: 'Visser', team: 'Vroedvrouw', dienstverband: 'Freelance' },
 ];
 
+// Service color mapping
+const serviceColorMap: Record<string, string> = {
+  'DG': 'bg-blue-200',   // Dag
+  'NB': 'bg-purple-200', // Nacht
+  'S': 'bg-orange-200',  // Standby
+  'ZW': 'bg-gray-200',   // Zwanger
+};
+
 export default function PlanningGrid({ rosterId }: { rosterId: string }) {
   const router = useRouter();
   const [rosters, setRosters] = useState<Roster[]>([]);
@@ -176,16 +184,33 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
 
   const handleBackToDashboard = () => {
     if (roster?.status === 'draft') {
-      // Ga terug naar Dashboard Rooster Ontwerp
       router.push(`/planning/design/dashboard?rosterId=${rosterId}`);
     } else if (roster?.status === 'in_progress' || roster?.status === 'final') {
-      // Ga terug naar Hoofd-dashboard
       router.push('/dashboard');
     } else {
-      // Fallback naar hoofd-dashboard
       router.push('/dashboard');
     }
   };
+
+  // Generate date array for 35 days
+  const generateDateArray = (): string[] => {
+    if (!roster) return [];
+    const dates: string[] = [];
+    for (let i = 0; i < 35; i++) {
+      dates.push(addDaysISO(roster.start_date, i));
+    }
+    return dates;
+  };
+
+  const dateArray = generateDateArray();
+  const weekGroupedDates = Array.from({ length: 5 }).map((_, weekIdx) => 
+    dateArray.slice(weekIdx * 7, (weekIdx + 1) * 7)
+  );
+
+  // Calculate statistics
+  const totalServiceCount = employees.reduce((acc, emp) => acc + (employeeServiceMappings[emp.id]?.length || 0), 0);
+  const totalDays = dateArray.length;
+  const totalCells = employees.length * dateArray.length;
 
   if (loading || servicesLoading) {
     return (
@@ -213,10 +238,13 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
   }
 
   return (
-    <div className="planning-grid-container">
+    <div className="planning-grid-container bg-white">
       {/* Header met Terug-knop */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200">
-        <h1 className="text-2xl font-bold text-gray-900">Planrooster</h1>
+      <div className="flex items-center justify-between p-4 border-b border-gray-200 sticky top-0 bg-white z-10">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Planrooster</h1>
+          <p className="text-sm text-gray-500 mt-1">{formatPeriodDDMM(roster.start_date, 35)}</p>
+        </div>
         <button
           onClick={handleBackToDashboard}
           className="flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
@@ -225,10 +253,109 @@ export default function PlanningGrid({ rosterId }: { rosterId: string }) {
           ← Terug naar Dashboard
         </button>
       </div>
-      
-      {/* Main planning content */}
-      <div className="p-4">
-        <p className="p-4 text-green-700">PlanningGrid async laadstructuur succesvol. (UI volgt in vervolgstap)</p>
+
+      {/* Statistics Bar */}
+      <div className="flex gap-4 p-4 bg-gray-50 border-b border-gray-200 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-gray-700">Medewerkers:</span>
+          <span className="text-lg font-bold text-blue-600">{employees.length}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-gray-700">Dagen:</span>
+          <span className="text-lg font-bold text-green-600">{totalDays}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-gray-700">Totale diensten:</span>
+          <span className="text-lg font-bold text-orange-600">{totalServiceCount}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-gray-700">Status:</span>
+          <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
+            roster.status === 'draft' ? 'bg-yellow-200 text-yellow-900' :
+            roster.status === 'in_progress' ? 'bg-blue-200 text-blue-900' :
+            'bg-green-200 text-green-900'
+          }`}>
+            {roster.status === 'draft' ? 'Ontwerp' : roster.status === 'in_progress' ? 'In bewerking' : 'Afgesloten'}
+          </span>
+        </div>
+      </div>
+
+      {/* Rooster Grid */}
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr className="bg-gray-100 border-b-2 border-gray-300 sticky top-[120px] z-9">
+              <th className="p-2 text-left font-semibold text-gray-900 bg-gray-100 sticky left-0 z-10 min-w-[150px]">Medewerker</th>
+              {weekGroupedDates.map((weekDates, weekIdx) => (
+                <React.Fragment key={`week-${weekIdx}`}>
+                  {weekDates.map((dateStr, dayIdx) => {
+                    const d = toDate(dateStr);
+                    const dayName = dayShort(dateStr);
+                    const dateNum = d.getUTCDate();
+                    const isWeek = isWeekend(dateStr);
+                    return (
+                      <th
+                        key={`header-${weekIdx}-${dayIdx}`}
+                        className={`p-2 text-center font-semibold min-w-[60px] ${
+                          isWeek ? 'bg-red-100 text-red-900' : 'bg-gray-100 text-gray-900'
+                        }`}
+                      >
+                        <div className="font-bold">{dayName}</div>
+                        <div className="text-xs">{dateNum}</div>
+                      </th>
+                    );
+                  })}
+                  {weekIdx < 4 && <th className="w-1 bg-gray-300"></th>}
+                </React.Fragment>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {employees.map((emp, empIdx) => (
+              <tr key={`emp-${emp.id}`} className={empIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                <td className="p-2 font-semibold text-gray-900 bg-gray-50 sticky left-0 z-5 border-r border-gray-200">
+                  <div>{getFirstName(emp.name)}</div>
+                  <div className="text-xs text-gray-500">{emp.team}</div>
+                </td>
+                {weekGroupedDates.map((weekDates, weekIdx) => (
+                  <React.Fragment key={`cells-${empIdx}-${weekIdx}`}>
+                    {weekDates.map((dateStr, dayIdx) => {
+                      const isWeek = isWeekend(dateStr);
+                      const serviceForDay = Math.random() > 0.5 ? ['DG', 'NB', 'S'][Math.floor(Math.random() * 3)] : null;
+                      const bgColor = isWeek ? 'bg-red-50' : 'bg-white';
+                      return (
+                        <td
+                          key={`cell-${empIdx}-${weekIdx}-${dayIdx}`}
+                          className={`p-1 border border-gray-200 text-center cursor-pointer hover:bg-blue-100 transition-colors min-w-[60px] ${bgColor}`}
+                        >
+                          {serviceForDay && (
+                            <span
+                              className={`inline-block px-2 py-1 rounded text-xs font-semibold text-gray-900 ${
+                                serviceColorMap[serviceForDay] || 'bg-gray-200'
+                              }`}
+                            >
+                              {serviceForDay}
+                            </span>
+                          )}
+                        </td>
+                      );
+                    })}
+                    {weekIdx < 4 && <td className="w-1 bg-gray-300"></td>}
+                  </React.Fragment>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Footer Stats */}
+      <div className="p-4 bg-gray-50 border-t border-gray-200">
+        <p className="text-sm text-gray-600">
+          Totaal: <span className="font-semibold">{totalCells}</span> cellen | 
+          Medewerkers: <span className="font-semibold">{employees.length}</span> | 
+          Perioden: <span className="font-semibold">5 weken</span>
+        </p>
       </div>
     </div>
   );
