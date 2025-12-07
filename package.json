@@ -1,6 +1,6 @@
 {
   "name": "rooster-app-final",
-  "version": "0.1.1-draad106d2.1733421918000",
+  "version": "0.1.1-draad125b.1733423268000",
   "private": true,
   "scripts": {
     "dev": "next dev",
