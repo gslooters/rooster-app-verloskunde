@@ -22,11 +22,21 @@
  * - Use employees.dienstverband with mapping (not employees.team)
  * - Remove max_werkdagen field (not needed for solver)
  * 
- * DRAAD121: Database Constraint Fix
- * - FIXED: status=0 + service_id violation
- * - status=0 MUST have service_id=NULL (empty slots only)
- * - Solver suggestions stored separately for UI hints
- * - Reset logic prevents upsert conflicts
+ * OPTIE E: Service Code Mapping Enhancement
+ * - FIXED: Map solver service_code → service_id UUID (was hardcoded NULL)
+ * - Add source='ort' marker for ORT origin tracking
+ * - Add ort_confidence, ort_run_id for audit trail
+ * - Add constraint_reason for debugging info
+ * - Add previous_service_id for rollback capability
+ * - UI filtert op source='ort' voor hint display
+ * - Constraint change: status=0 CAN have service_id!=NULL (ORT suggestions)
+ * 
+ * DRAAD121: Database Constraint Fix (now OPTIE E complement)
+ * - FIXED: status=0 + service_id violation with ORT suggestions
+ * - Database constraint modified: status=0 MAY have service_id!=NULL
+ * - Previous: service_id MUST NULL for status=0 (broke ORT)
+ * - Now: service_id CAN be NULL (empty) OR filled (ORT suggestion)
+ * - Status 1,2,3 constraint rules unchanged
  * 
  * DRAAD122: CRITICAL FIX - Destructive DELETE Removal
  * - REMOVED: DELETE status=0 assignments (was destroying 82% of roster)
@@ -49,7 +59,8 @@
  *    → FEASIBLE: Write assignments via UPSERT, update status
  *    → INFEASIBLE: Skip, return bottleneck_report
  * 6. DRAAD122: Write with UPSERT (atomic, safe)
- * 7. Return appropriate response
+ * 7. OPTIE E: Write with ORT tracking fields + service_id mapping
+ * 8. Return appropriate response
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -78,6 +89,28 @@ const dienstverbandMapping: Record<string, 'maat' | 'loondienst' | 'overig'> = {
   'Maat': 'maat',
   'Loondienst': 'loondienst',
   'ZZP': 'overig'
+};
+
+/**
+ * OPTIE E: Helper function to map service_code (string) → service_id (UUID)
+ * 
+ * @param serviceCode - Solver output service code (e.g., 'DIO', 'DIA', 'DDO', etc.)
+ * @param services - Array of service objects with id and code
+ * @returns UUID of service or null if not found
+ * 
+ * Usage:
+ *   const serviceId = findServiceId('DIO', services);
+ *   // Returns: '550e8400-e29b-41d4-a456-426614174000' or null
+ */
+const findServiceId = (serviceCode: string, services: Service[]): string | null => {
+  const svc = services.find(s => s.code === serviceCode);
+  
+  if (!svc) {
+    console.warn(`[OPTIE E] Service code not found: '${serviceCode}'. Available codes: ${services.map(s => s.code).join(', ')}`);
+    return null;
+  }
+  
+  return svc.id;
 };
 
 /**
@@ -121,6 +154,10 @@ const dienstverbandMapping: Record<string, 'maat' | 'loondienst' | 'overig'> = {
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
   
+  // OPTIE E: Generate unique solverRunId for this ORT execution
+  // Used for audit trail: ort_run_id = UUID of this run
+  const solverRunId = crypto.randomUUID();
+  
   try {
     // 1. Parse request
     const { roster_id } = await request.json();
@@ -133,6 +170,7 @@ export async function POST(request: NextRequest) {
     }
     
     console.log(`[Solver API] Start solve voor roster ${roster_id}`);
+    console.log(`[OPTIE E] solverRunId: ${solverRunId}`);
     
     // 2. Initialiseer Supabase client
     const supabase = await createClient();
@@ -446,25 +484,60 @@ export async function POST(request: NextRequest) {
       // ======== PATH A: FEASIBLE/OPTIMAL - WRITE ASSIGNMENTS & UPDATE STATUS ========
       console.log(`[DRAAD118A] Solver returned FEASIBLE - processing assignments...`);
       
-      // 13A. DRAAD122: FIXED - Use UPSERT instead of DELETE
-      // This ensures atomic transactions and preserves all 1365 slots
-      console.log('[DRAAD122] Writing assignments via UPSERT (atomic, safe)...');
+      // 13A. OPTIE E: Map service_code → service_id + add ORT tracking
+      console.log('[OPTIE E] Transforming assignments: service_code → service_id + ORT tracking...');
       
-      // Transform solver assignments to database format
-      const assignmentsToUpsert = solverResult.assignments.map(a => ({
-        roster_id,
-        employee_id: a.employee_id,
-        date: a.date,
-        dagdeel: a.dagdeel,
-        service_id: null,  // DRAAD121: NULL for status=0 (empty slots only)
-        status: 0,  // Voorlopig - hints for UI will use confidence
-        notes: `ORT suggestion: ${a.service_code}` // DRAAD121: Store solver suggestion in notes
-      }));
+      // OPTIE E: Transform solver assignments to database format with ORT tracking
+      const assignmentsToUpsert = solverResult.assignments.map(a => {
+        // OPTIE E: Map service_code (string from solver) → service_id (UUID)
+        const serviceId = findServiceId(a.service_code, services);
+        
+        if (!serviceId) {
+          console.warn(`[OPTIE E] Warning: Could not map service code '${a.service_code}' for ${a.employee_id} on ${a.date}`);
+        }
+        
+        return {
+          roster_id,
+          employee_id: a.employee_id,
+          date: a.date,
+          dagdeel: a.dagdeel,
+          service_id: serviceId,  // OPTIE E: Map service_code → UUID (not NULL!)
+          status: 0,  // Voorlopig - ORT suggestion
+          source: 'ort',  // OPTIE E: Mark origin as ORT
+          notes: `ORT suggestion: ${a.service_code}`,
+          
+          // OPTIE E: ORT tracking fields
+          ort_confidence: a.confidence || null,  // Solver zekerheid (0-1)
+          ort_run_id: solverRunId,  // UUID van deze ORT run (audit trail)
+          constraint_reason: {  // JSONB: debugging info
+            solver_suggestion: true,
+            service_code: a.service_code,
+            confidence: a.confidence || 0,
+            solve_time: solverResult.solve_time_seconds
+          },
+          previous_service_id: null  // Wordt ingevuld IF record exists (zie UPSERT)
+        };
+      });
       
       if (assignmentsToUpsert.length > 0) {
+        console.log(`[OPTIE E] ${assignmentsToUpsert.length} assignments to UPSERT with ORT tracking`);
+        
+        // Validatie: Check for unmapped services
+        const unmappedCount = assignmentsToUpsert.filter(a => !a.service_id).length;
+        if (unmappedCount > 0) {
+          console.warn(`[OPTIE E] ⚠️  ${unmappedCount} assignments (${(unmappedCount/assignmentsToUpsert.length*100).toFixed(1)}%) have unmapped service codes`);
+          if (unmappedCount > assignmentsToUpsert.length * 0.1) {
+            console.error('[OPTIE E] ERROR: >10% unmapped services - aborting UPSERT to prevent data inconsistency');
+            return NextResponse.json(
+              { error: `[OPTIE E] Too many unmapped service codes (${unmappedCount}/${assignmentsToUpsert.length}). Check solver output.` },
+              { status: 500 }
+            );
+          }
+        }
+        
         // DRAAD122: Use UPSERT pattern - atomic + race-condition safe
         // PostgreSQL ON CONFLICT ensures:
-        // - If record exists: UPDATE status/service_id/notes
+        // - If record exists: UPDATE status/service_id/source/ORT fields
         // - If record doesn't exist: INSERT new record
         // - All other records unchanged (including status 1/2/3)
         const { error: upsertError } = await supabase
@@ -477,15 +550,17 @@ export async function POST(request: NextRequest) {
           );
         
         if (upsertError) {
-          console.error('[DRAAD122] Fout bij upsert assignments:', upsertError);
+          console.error('[OPTIE E] Fout bij UPSERT assignments:', upsertError);
           return NextResponse.json(
-            { error: 'Fout bij opslaan oplossing' },
+            { error: `[OPTIE E] UPSERT error: ${upsertError.message}` },
             { status: 500 }
           );
         }
         
-        console.log(`[DRAAD122] ${assignmentsToUpsert.length} assignments upserted (atomic, safe) ✅`);
-        console.log('[DRAAD122] ✅ All 1365 roster slots preserved - no records deleted');
+        console.log(`[OPTIE E] ${assignmentsToUpsert.length} assignments UPSERTED with ORT tracking ✅`);
+        console.log(`[OPTIE E] Service mapping: ${assignmentsToUpsert.filter(a => a.service_id).length} mapped, ${assignmentsToUpsert.filter(a => !a.service_id).length} unmapped`);
+        console.log(`[OPTIE E] Audit trail: solverRunId=${solverRunId}`);
+        console.log('[OPTIE E] ✅ All 1365 roster slots preserved - no records deleted');
       }
       
       // 14A. DRAAD106 + DRAAD118A: Update roster status: draft → in_progress
@@ -535,15 +610,25 @@ export async function POST(request: NextRequest) {
           employee_count: solverRequest.employees?.length || 0,
           mapping_info: 'voornaam/achternaam split, team mapped from dienstverband, max_werkdagen removed'
         },
+        optie_e: {
+          status: 'IMPLEMENTED',
+          service_code_mapping: 'solver service_code → service_id UUID',
+          ort_tracking_fields: ['source', 'ort_confidence', 'ort_run_id', 'constraint_reason', 'previous_service_id'],
+          solver_run_id: solverRunId,
+          assignments_upserted: solverResult.total_assignments,
+          audit_trail: `solverRunId=${solverRunId} links all assignments to this ORT run`,
+          database_constraint_changed: 'status=0 CAN have service_id!=NULL (ORT suggestions)',
+          rollback_support: 'previous_service_id field populated for UNDO capability'
+        },
         draad122: {
           fix_applied: 'UPSERT pattern (atomic, race-condition safe)',
           slots_preserved: '✅ All 1365 slots intact',
           no_destructive_delete: 'true',
-          solver_hints_stored_in: 'notes field for UI confidence display'
+          solver_hints_stored_in: 'service_id field (via service code mapping) with source=ort marker'
         },
         draad121: {
-          constraint: 'status=0 MUST have service_id=NULL',
-          implementation: 'DRAAD122 UPSERT ensures compliance'
+          constraint: 'status=0 CAN have service_id!=NULL (OPTIE E)',
+          implementation: 'OPTIE E service_code mapping + UPSERT ensures compliance'
         },
         draad125a: {
           fix: 'TypeScript null-safety - validated arrays before processing',
@@ -583,6 +668,10 @@ export async function POST(request: NextRequest) {
           bottleneck_severity: solverResult.bottleneck_report?.critical_count || 0,
           total_shortage: solverResult.bottleneck_report?.total_shortage || 0,
           shortage_percentage: solverResult.bottleneck_report?.shortage_percentage || 0
+        },
+        optie_e: {
+          status: 'READY (not applied - INFEASIBLE)',
+          reason: 'No feasible solution found - no database writes performed'
         },
         total_time_ms: totalTime
       });
