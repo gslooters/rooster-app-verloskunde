@@ -4,7 +4,6 @@
  * Displayed when solver returns FEASIBLE status.
  * Shows brief summary and allows user to:
  * - Proceed to Planrooster (status now 'in_progress')
- * - Return to Design Dashboard
  * 
  * ROUTING:
  * /rooster/[id]/feasible-summary
@@ -14,8 +13,7 @@
  * - Backend has already set rooster.status to 'in_progress' at this point
  * 
  * NAVIGATION OUT:
- * - Continue to Plan: /rooster/[id]/plan (status filter in plan page handles this)
- * - Back to Design: /rooster/[id]/design
+ * - Continue to Plan: /planning/[id] (rooster grid)
  */
 
 'use client';
@@ -200,28 +198,19 @@ export default function FeasibleSummaryPage({ searchParams }: PageProps) {
           {/* Message Box */}
           <div className="bg-blue-50 border-t border-blue-100 px-6 py-4">
             <p className="text-sm text-blue-900">
-              💡 <strong>Volgende stap:</strong> U kunt nu naar de planningstool gaan om het rooster verder aan te passen,
-              of teruggaan naar het ontwerp om aanpassingen door te voeren.
+              💡 <strong>Volgende stap:</strong> U kunt nu naar de planningstool gaan om het rooster in te zien en verder aan te passen.
             </p>
           </div>
         </div>
         
         {/* Action Buttons */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4">
           {/* Continue to Plan */}
           <Link
-            href={`/rooster/${roster_id}/plan`}
+            href={`/planning/${roster_id}`}
             className="bg-green-600 hover:bg-green-700 text-white font-semibold py-4 px-6 rounded-lg transition-colors text-center"
           >
             📋 Ga naar Planrooster
-          </Link>
-          
-          {/* Back to Design */}
-          <Link
-            href={`/rooster/${roster_id}/design`}
-            className="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-4 px-6 rounded-lg transition-colors text-center"
-          >
-            🔙 Terug naar Ontwerp
           </Link>
         </div>
         
@@ -229,8 +218,7 @@ export default function FeasibleSummaryPage({ searchParams }: PageProps) {
         <div className="mt-8 bg-white border border-gray-200 rounded-lg p-4">
           <div className="text-sm text-gray-700">
             <strong>Roosterstatus:</strong> Het rooster is nu in status <em>"In bewerking"</em> (in_progress).
-            U kunt het nu gebruiken in de planningstool. Als u wilt terugkeren naar het ontwerp-dashboard,
-            gebruikt u de knop "Terug naar Ontwerp" hierboven.
+            U kunt het nu gebruiken in de planningstool.
           </div>
         </div>
       </div>
