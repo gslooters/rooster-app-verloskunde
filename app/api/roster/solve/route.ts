@@ -310,7 +310,9 @@ interface DuplicateAnalysis {
   totalCount: number;
   uniqueCount: number;
   duplicateCount: number;
-  duplicateKeys: Array<{key: string; count: number; indices: number[]}>;}n
+  duplicateKeys: Array<{key: string; count: number; indices: number[]}>;
+}
+
 const logDuplicates = (assignments: any[], label: string): DuplicateAnalysis => {
   const keyMap = new Map<string, number[]>();
   
@@ -418,7 +420,9 @@ interface BatchDuplicateCheck {
   hasDuplicates: boolean;
   count: number;
   keys: string[];
-  details: Array<{key: string; count: number; indices: number[]}>;}n
+  details: Array<{key: string; count: number; indices: number[]}>;
+}
+
 const findDuplicatesInBatch = (batch: any[], batchNumber: number): BatchDuplicateCheck => {
   const keyMap = new Map<string, number[]>();
   
