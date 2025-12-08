@@ -38,6 +38,12 @@
  * - Function signature: upsert_ort_assignments(p_assignments: jsonb) → (success, inserted_count, error_message)
  * - Replaces: Supabase upsert() with onConflict parameter (not supported)
  * 
+ * DRAAD128.6: SOURCE FIELD CASE FIX
+ * - FIXED: CHECK constraint violation: source must be lowercase 'ort'
+ * - Previous: source='ORT' (uppercase) - violates constraint
+ * - Now: source='ort' (lowercase) - matches constraint allowed values
+ * - Constraint values: ['manual', 'ort', 'system', 'import']
+ * 
  * DRAAD127: DUPLICATE PREVENTION (TypeScript + SQL)
  * - FIXED: Solver batch can contain duplicate keys (same employee-date-dagdeel)
  * - NEW: Deduplicate in TypeScript BEFORE UPSERT
@@ -563,7 +569,7 @@ export async function POST(request: NextRequest) {
           dagdeel: a.dagdeel,
           service_id: serviceId,  // OPTIE E: Map service_code → UUID (not NULL!)
           status: 0,  // Voorlopig - ORT suggestion
-          source: 'ort',  // OPTIE E: Mark origin as ORT
+          source: 'ort',  // DRAAD128.6: FIXED - lowercase 'ort' (was 'ORT')
           notes: `ORT suggestion: ${a.service_code}`,
           
           // OPTIE E: ORT tracking fields
@@ -638,6 +644,7 @@ export async function POST(request: NextRequest) {
         console.log(`[OPTIE E] Audit trail: solverRunId=${solverRunId}`);
         console.log('[OPTIE E] ✅ All 1365 roster slots preserved - no records deleted');
         console.log(`[DRAAD127] ✅ Deduplication successful - prevented duplicate conflict errors`);
+        console.log(`[DRAAD128.6] ✅ Source field case fixed: 'ort' (lowercase) - matches CHECK constraint`);
       }
       
       // 14A. DRAAD106 + DRAAD118A: Update roster status: draft → in_progress
@@ -707,7 +714,8 @@ export async function POST(request: NextRequest) {
           fix_applied: 'PostgreSQL RPC function upsert_ort_assignments() - atomic, race-condition safe',
           slots_preserved: '✅ All 1365 slots intact',
           no_destructive_delete: 'true',
-          solver_hints_stored_in: 'service_id field (via service code mapping) with source=ort marker'
+          solver_hints_stored_in: 'service_id field (via service code mapping) with source=ort marker',
+          source_case_fixed: 'DRAAD128.6 - lowercase ort matches CHECK constraint'
         },
         draad122: {
           fix_applied: 'UPSERT pattern (atomic, race-condition safe)',
