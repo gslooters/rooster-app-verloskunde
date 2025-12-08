@@ -1,0 +1,18 @@
+DRAAD129 HOTFIX - Railway Rebuild
+==================================
+
+Fix Applied: Unterminated string constant on line 822
+  Before: cache_busting: 'Timestamp + random execution ID
+  After:  cache_busting: 'Timestamp + random execution ID'
+
+Status: READY FOR REBUILD
+Timestamp: 2025-12-08T08:47:14Z
+MS: 1733681234000
+
+Railway will now:
+1. Detect this new trigger file
+2. Rebuild the application
+3. Deploy with syntax error fixed
+
+Expected: Build should pass this time
+Next: Monitor railway logs for successful deploy
