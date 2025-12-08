@@ -1,0 +1,20 @@
+{
+  "draad": "DRAAD129",
+  "phase": "STAP 1 - Diagnostic Logging",
+  "timestamp": "2025-12-08T08:41:49Z",
+  "unix_timestamp_ms": 1733681040123,
+  "execution_id": "diag-dup-detect-129",
+  "status": "DEPLOYED",
+  "description": "Detailed duplicate detection logging implemented",
+  "changes": [
+    "Added DRAAD129 diagnostic phase BEFORE deduplicateAssignments()",
+    "Logs raw solver output count and samples",
+    "Maps key frequencies to find duplicates",
+    "Logs duplicate keys and instances",
+    "Compares before/after deduplication",
+    "Identifies duplicate source"
+  ],
+  "next_phase": "STAP 2 - Batch Processing",
+  "railway_trigger": "1733681040123",
+  "cache_buster_id": "draad129-diag-1"
+}
