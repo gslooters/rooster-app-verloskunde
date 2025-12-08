@@ -1,0 +1,19 @@
+DRAAD129 STAP 1: Diagnostic Logging
+====================================
+
+Deployment Timestamp: 2025-12-08T08:42:05Z
+Build Trigger ID: draad129-diagnostics-1
+Phase: Diagnostic duplicate detection
+
+Changes deployed:
+- Route.ts: Added DRAAD129 diagnostic phase
+- Logs raw solver assignments count
+- Samples first 5 assignments
+- Detects and logs duplicate keys
+- Compares deduplication before/after
+- Identifies duplicate source (solver vs transformation)
+
+Cache Buster: 1733681040123
+Random: 5829
+
+Next: Monitor logs in Railway console for [DRAAD129] tags
