@@ -69,6 +69,11 @@
  * - Identify source of duplicates (solver vs transformation)
  * - Cache busting: timestamp in logs
  * 
+ * DRAAD129-HOTFIX: SYNTAX ERROR FIX
+ * - FIXED: Unterminated string constant on line 822
+ * - cache_busting string now properly closed
+ * - Build should pass now
+ * 
  * DRAAD121: Database Constraint Fix (now OPTIE E complement)
  * - FIXED: status=0 + service_id violation with ORT suggestions
  * - Database constraint modified: status=0 MAY have service_id!=NULL
@@ -819,7 +824,7 @@ export async function POST(request: NextRequest) {
           duplicate_detection: 'Detailed analysis logged',
           execution_timestamp: executionTimestamp,
           execution_ms: executionMs,
-          cache_busting: 'Timestamp + random execution ID
+          cache_busting: 'Timestamp + random execution ID'
         },
         optie_e: {
           status: 'IMPLEMENTED',
