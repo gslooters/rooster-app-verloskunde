@@ -2,21 +2,30 @@
 # This file is used to force Railway to rebuild the deployment
 # Each commit to this file triggers a new build
 #
+# DRAAD127: Duplicate Prevention - TypeScript Deduplication
+# Date: 2025-12-08 01:06 CET
+# Build: 394857261
+#
 # DRAAD128: UPSERT Fix - PostgreSQL RPC Function
 # Date: 2025-12-08 00:43 CET
-# Build: 847362941
+# Build: 847362941 → 394857261 (rebuild with DRAAD127)
 #
-# Changes included:
-# 1. PostgreSQL migration: upsert_ort_assignments() function
-# 2. route.ts: UPSERT via rpc() instead of supabase.upsert()
-# 3. Cache-buster: 20251208-upsert-fix-optie-e
+# Combined Changes:
+# 1. DRAAD127: deduplicateAssignments() function in route.ts
+# 2. DRAAD127: Set-based duplicate filtering using composite keys
+# 3. DRAAD127: Logs duplicate count and filtered assignments
+# 4. DRAAD128: PostgreSQL migration with DISTINCT ON
+# 5. DRAAD128: route.ts uses rpc('upsert_ort_assignments')
+# 6. Cache-buster: 20251208-full-duplicate-fix
 #
 # Expected outcome:
-# - PostgreSQL function created in Supabase
-# - route.ts deployed with RPC call
-# - Cache invalidated in browsers
-# - ORT solver should run without "row a second time" error
+# - Duplicates removed BEFORE database call
+# - SQL also has DISTINCT ON for double protection
+# - No more "ON CONFLICT cannot affect row a second time" errors
+# - All 1365 roster slots preserved
+# - ORT solver completes successfully
 #
-TRIGGER_BUILD=847362941
-TIMESTAMP=2025-12-08T00:43:00Z
-VERSION=20251208-upsert-fix-optie-e
+TRIGGER_BUILD=394857261
+TIMESTAMP=2025-12-08T01:06:47Z
+VERSION=20251208-full-duplicate-fix
+STATUS=DRAAD127+DRAAD128
