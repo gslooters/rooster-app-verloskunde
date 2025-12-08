@@ -1,0 +1,42 @@
+# DRAAD131: ORT Infeasible Fix – Status 1 Constraint Separation
+# Timestamp: 2025-12-08T18:33:00Z
+# Cache bust: 1733505180
+
+## Problem Statement
+Status 1 in blocked_slots caused INFEASIBLE conflict:
+- Constraint 3A: Status 1 var == 1 (MUST assign)
+- Constraint 3B: Status 1 var == 0 (MUST NOT assign)
+- Result: CP-SAT model INFEASIBLE immediate
+
+## Solution Applied
+1. route.ts: blocked_slots fetch [1,2,3] → [2,3]
+2. solver_engine.py: Constraint 3B updated
+3. solver_engine.py: Logging improved for verification
+4. lib/cache-bust-draad131.ts: NEW file
+
+## Constraint Logic
+- Constraint 3A: Status 1 fixed assignments (var == 1)
+- Constraint 3B: Status 2,3 blocked slots (var == 0)
+- Constraint 2: DEPRECATED (status 1 handled by 3A)
+
+## Safety
+- READ-ONLY query change (no database writes)
+- Status 1 double-protected: 3A + not in blocked_slots
+- All 1365 slots preserved
+- Database: Zero changes
+
+## Expected Outcome
+- ORT returns FEASIBLE when capacity exists
+- No constraint conflict
+- Status 1 assignments fully respected
+- Bottleneck analysis accurate
+
+## Verification Checklist
+✅ route.ts: [1,2,3] → [2,3] (DONE)
+✅ solver_engine.py Constraint 3B: documented (DONE)
+✅ solver_engine.py logging: [DRAAD131] ✅ No status 1 (DONE)
+✅ cache-bust-draad131.ts: created (DONE)
+✅ Railway rebuild: auto-triggered
+
+## Rollback
+If needed: revert route.ts line ~658 to [1,2,3]
