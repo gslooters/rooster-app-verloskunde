@@ -1,5 +1,23 @@
-RAILWAY DEPLOY TRIGGER #98457
-Timestamp: 2025-12-03T13:53:30Z
-Commit: a1dad09da1a79c3a8c19086f6c7fe4cc8129fb58
-Fix: DRAAD98D - Corrigeer services tabel naar service_types + actief kolom in solver route
-Random: 98457
+RAILWAY DEPLOY TRIGGER #99888
+Timestamp: 2025-12-08T22:20:00Z
+Commit: 628807acd1adb03e99f4bcfc3107ba97defc8717
+Fix: BATCH_DEDUP_FIX - Per-batch deduplication before UPSERT
+Random: 99888
+
+ROOT CAUSE:
+- PostgreSQL cannot handle duplicate keys WITHIN a single INSERT statement
+- Previous global dedup (before batching) missed batch-level duplicates
+- Result: 22/23 batches failed with "cannot affect row a second time" error
+
+SOLUTION:
+- Per-batch deduplication BEFORE Supabase .upsert() call
+- Helper: deduplicateBatch(batch, batchNumber) - O(n) dedup using Map
+- Strategy: Keep LAST occurrence per composite key (solver final decision)
+
+EXPECTED RESULT:
+- All batches now succeed (100% vs previous 4.3%)
+- Eliminates ALL "cannot affect row a second time" errors
+
+FILES CHANGED:
+1. app/api/cache-bust/BATCH_DEDUP_FIX.ts (NEW)
+2. app/api/roster/solve/route.ts (UPDATED with deduplicateBatch())
