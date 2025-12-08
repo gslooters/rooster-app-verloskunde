@@ -2,30 +2,34 @@
 # This file is used to force Railway to rebuild the deployment
 # Each commit to this file triggers a new build
 #
+# DRAAD128.6: Source Field Case Fix
+# Date: 2025-12-08 01:23 CET
+# Build: 617382451
+#
 # DRAAD127: Duplicate Prevention - TypeScript Deduplication
 # Date: 2025-12-08 01:06 CET
 # Build: 394857261
 #
 # DRAAD128: UPSERT Fix - PostgreSQL RPC Function
 # Date: 2025-12-08 00:43 CET
-# Build: 847362941 → 394857261 (rebuild with DRAAD127)
+# Build: 847362941
 #
 # Combined Changes:
-# 1. DRAAD127: deduplicateAssignments() function in route.ts
-# 2. DRAAD127: Set-based duplicate filtering using composite keys
-# 3. DRAAD127: Logs duplicate count and filtered assignments
-# 4. DRAAD128: PostgreSQL migration with DISTINCT ON
-# 5. DRAAD128: route.ts uses rpc('upsert_ort_assignments')
-# 6. Cache-buster: 20251208-full-duplicate-fix
+# 1. DRAAD128.6: route.ts source field lowercase 'ort' (was uppercase 'ORT')
+# 2. DRAAD128.6: Matches PostgreSQL CHECK constraint: source IN ('manual', 'ort', 'system', 'import')
+# 3. DRAAD127: deduplicateAssignments() function in route.ts
+# 4. DRAAD127: Set-based duplicate filtering using composite keys
+# 5. DRAAD128: PostgreSQL RPC function upsert_ort_assignments()
+# 6. Cache-buster: 20251208-source-case-fix
 #
 # Expected outcome:
-# - Duplicates removed BEFORE database call
-# - SQL also has DISTINCT ON for double protection
-# - No more "ON CONFLICT cannot affect row a second time" errors
+# - No more "violates check constraint roster_assignments_source_check" error
+# - Source field accepts 'ort' (lowercase) as intended
 # - All 1365 roster slots preserved
-# - ORT solver completes successfully
+# - Assignments UPSERT with ORT tracking succeeds
+# - Dashboard solver runs without errors
 #
-TRIGGER_BUILD=394857261
-TIMESTAMP=2025-12-08T01:06:47Z
-VERSION=20251208-full-duplicate-fix
-STATUS=DRAAD127+DRAAD128
+TRIGGER_BUILD=617382451
+TIMESTAMP=2025-12-08T01:23:45Z
+VERSION=20251208-source-case-fix
+STATUS=DRAAD128.6+DRAAD127+DRAAD128
