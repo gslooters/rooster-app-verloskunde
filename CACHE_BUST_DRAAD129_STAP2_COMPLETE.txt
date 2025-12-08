@@ -1,0 +1,73 @@
+# DRAAD129 STAP 2 & STAP 3 DEPLOYMENT
+
+**Timestamp**: 2025-12-08T08:54:00Z  
+**Phase**: STAP 2 (Batch Processing) + STAP 3 (SQL Fix)  
+**Random Trigger**: 7392  
+**Build Status**: PENDING
+
+## Implementation Summary
+
+### STAP 2: Batch Processing (route.ts)
+- ✅ Replaced all-at-once RPC with batch loop
+- ✅ BATCH_SIZE = 50 assignments per call
+- ✅ Per-batch error collection
+- ✅ Detailed logging (batch number, success/failure)
+- ✅ Cache busting with timestamp
+
+### STAP 3: PostgreSQL Function (SQL Migration)
+- ✅ Created new migration file
+- ✅ DISTINCT ON deduplication
+- ✅ Temp table approach
+- ✅ Enhanced error handling
+
+### DRAAD129: Diagnostic Logging (Already in STAP 1)
+- ✅ Raw solver output analysis
+- ✅ Duplicate key detection
+- ✅ Before/after comparison
+
+## Deployment Instructions
+
+1. **Deploy to Railway** (automatic on push)
+   - Next.js rebuilds with new route.ts
+   - TypeScript compilation validates batch logic
+   - Build should complete: ~3-5 minutes
+
+2. **Execute SQL Migration in Supabase**
+   - File: `supabase/migrations/20251208_DRAAD129_STAP3_fix_upsert_ort_assignments.sql`
+   - Method: Run in Supabase SQL Editor
+   - Expected: Function replaced successfully
+
+3. **Test Solver**
+   - POST /api/roster/solve
+   - Observe console logs: [DRAAD129] and [DRAAD129-STAP2]
+   - Check batch processing logs
+   - Verify all batches succeed
+
+## Expected Log Output
+
+```
+[DRAAD129] === DIAGNOSTIC PHASE: Analyzing solver output for duplicates ===
+[DRAAD129] Raw solver assignments: 1133 total
+[DRAAD129] Sample 0: emp=..., date=..., dagdeel=...
+[DRAAD129] ⚠️ DUPLICATES FOUND: X duplicate keys detected
+[DRAAD129] After deduplication: Y assignments (removed Z)
+
+[DRAAD129-STAP2] === BATCH PROCESSING PHASE ===
+[DRAAD129-STAP2] Configuration: BATCH_SIZE=50, TOTAL_ASSIGNMENTS=Y, TOTAL_BATCHES=N
+[DRAAD129-STAP2] Batch 0/N: processing 50 assignments (0-49)...
+[DRAAD129-STAP2] ✅ Batch 0 OK: 50 assignments inserted (total: 50)
+[DRAAD129-STAP2] Batch 1/N: processing 50 assignments (50-99)...
+[DRAAD129-STAP2] ✅ Batch 1 OK: 50 assignments inserted (total: 100)
+...
+[DRAAD129-STAP2] ✅ ALL BATCHES SUCCEEDED: 1133 total assignments inserted
+```
+
+## Files Modified
+
+- `app/api/roster/solve/route.ts` ✅ (STAP 2)
+- `supabase/migrations/20251208_DRAAD129_STAP3_fix_upsert_ort_assignments.sql` ✅ (STAP 3)
+- `CACHE_BUST_DRAAD129_STAP2_COMPLETE.txt` ✅ (This file)
+
+---
+
+**Ready for production deployment** ✅
