@@ -1,0 +1,14 @@
+# DRAAD128: Solver BlockedSlot Validation Fix
+# Date: 2025-12-08 17:10 CET
+# Change: BlockedSlot.status now accepts Literal[1, 2, 3] (was Literal[2, 3])
+# Reason: DRAAD130 includes status 1 fixed assignments in blocked_slots array
+# Impact: Solver API now properly validates all roster assignment statuses
+#
+# Files Modified:
+# - solver/models.py: BlockedSlot class (line 233)
+#   OLD: status: Literal[2, 3]
+#   NEW: status: Literal[1, 2, 3]
+#
+# Commit: be5f16032d6f377ccf660f53a107cbd1cc4b6820
+# Deploy: Railway Solver2 rebuild required
+# Cache Bust Timestamp: 1733686243000
