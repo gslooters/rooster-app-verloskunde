@@ -38,6 +38,14 @@
  * - Function signature: upsert_ort_assignments(p_assignments: jsonb) → (success, inserted_count, error_message)
  * - Replaces: Supabase upsert() with onConflict parameter (not supported)
  * 
+ * DRAAD127: DUPLICATE PREVENTION (TypeScript + SQL)
+ * - FIXED: Solver batch can contain duplicate keys (same employee-date-dagdeel)
+ * - NEW: Deduplicate in TypeScript BEFORE UPSERT
+ * - Method: Use Set<string> to track unique keys
+ * - Key format: "roster_id|employee_id|date|dagdeel"
+ * - SQL function also uses DISTINCT ON for double protection
+ * - Prevents: "ON CONFLICT cannot affect row a second time"
+ * 
  * DRAAD121: Database Constraint Fix (now OPTIE E complement)
  * - FIXED: status=0 + service_id violation with ORT suggestions
  * - Database constraint modified: status=0 MAY have service_id!=NULL
@@ -66,8 +74,9 @@
  *    → FEASIBLE: Write assignments via UPSERT, update status
  *    → INFEASIBLE: Skip, return bottleneck_report
  * 6. DRAAD128: Write with PostgreSQL RPC function (atomic, safe)
- * 7. OPTIE E: Write with ORT tracking fields + service_id mapping
- * 8. Return appropriate response
+ * 7. DRAAD127: Deduplicate assignments before UPSERT
+ * 8. OPTIE E: Write with ORT tracking fields + service_id mapping
+ * 9. Return appropriate response
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -118,6 +127,49 @@ const findServiceId = (serviceCode: string, services: Service[]): string | null 
   }
   
   return svc.id;
+};
+
+/**
+ * DRAAD127: Deduplicate assignments by unique key
+ * 
+ * Removes exact duplicates that could cause "ON CONFLICT cannot affect row twice" error.
+ * Uses composite key: (roster_id, employee_id, date, dagdeel)
+ * 
+ * @param assignments - Array of assignments with potential duplicates
+ * @returns Deduplicated array, keeping first occurrence of each key
+ */
+interface Assignment {
+  roster_id: string | any;
+  employee_id: string;
+  date: string;
+  dagdeel: string;
+  [key: string]: any;
+}
+
+const deduplicateAssignments = (assignments: Assignment[]): Assignment[] => {
+  const seenKeys = new Set<string>();
+  const deduplicated: Assignment[] = [];
+  let duplicateCount = 0;
+
+  for (const assignment of assignments) {
+    // DRAAD127: Create composite key for uniqueness
+    const key = `${assignment.roster_id}|${assignment.employee_id}|${assignment.date}|${assignment.dagdeel}`;
+    
+    if (seenKeys.has(key)) {
+      duplicateCount++;
+      console.warn(`[DRAAD127] Duplicate detected and filtered: ${key}`);
+      continue;  // Skip this duplicate
+    }
+    
+    seenKeys.add(key);
+    deduplicated.push(assignment);
+  }
+  
+  if (duplicateCount > 0) {
+    console.log(`[DRAAD127] Deduplicated: removed ${duplicateCount} duplicates (${assignments.length} → ${deduplicated.length})`);
+  }
+  
+  return deduplicated;
 };
 
 /**
@@ -178,6 +230,7 @@ export async function POST(request: NextRequest) {
     
     console.log(`[Solver API] Start solve voor roster ${roster_id}`);
     console.log(`[OPTIE E] solverRunId: ${solverRunId}`);
+    console.log(`[DRAAD127] Deduplication enabled`);
     
     // 2. Initialiseer Supabase client
     const supabase = await createClient();
@@ -529,14 +582,17 @@ export async function POST(request: NextRequest) {
       if (assignmentsToUpsert.length > 0) {
         console.log(`[OPTIE E] ${assignmentsToUpsert.length} assignments to UPSERT with ORT tracking`);
         
+        // DRAAD127: Deduplicate assignments BEFORE UPSERT
+        const deduplicatedAssignments = deduplicateAssignments(assignmentsToUpsert);
+        
         // Validatie: Check for unmapped services
-        const unmappedCount = assignmentsToUpsert.filter(a => !a.service_id).length;
+        const unmappedCount = deduplicatedAssignments.filter(a => !a.service_id).length;
         if (unmappedCount > 0) {
-          console.warn(`[OPTIE E] ⚠️  ${unmappedCount} assignments (${(unmappedCount/assignmentsToUpsert.length*100).toFixed(1)}%) have unmapped service codes`);
-          if (unmappedCount > assignmentsToUpsert.length * 0.1) {
+          console.warn(`[OPTIE E] ⚠️  ${unmappedCount} assignments (${(unmappedCount/deduplicatedAssignments.length*100).toFixed(1)}%) have unmapped service codes`);
+          if (unmappedCount > deduplicatedAssignments.length * 0.1) {
             console.error('[OPTIE E] ERROR: >10% unmapped services - aborting UPSERT to prevent data inconsistency');
             return NextResponse.json(
-              { error: `[OPTIE E] Too many unmapped service codes (${unmappedCount}/${assignmentsToUpsert.length}). Check solver output.` },
+              { error: `[OPTIE E] Too many unmapped service codes (${unmappedCount}/${deduplicatedAssignments.length}). Check solver output.` },
               { status: 500 }
             );
           }
@@ -547,7 +603,7 @@ export async function POST(request: NextRequest) {
         // Returns: (success boolean, inserted_count integer, error_message text)
         const { data: upsertResult, error: upsertError } = await supabase
           .rpc('upsert_ort_assignments', {
-            p_assignments: assignmentsToUpsert
+            p_assignments: deduplicatedAssignments  // DRAAD127: Use deduplicated assignments!
           });
         
         if (upsertError) {
@@ -578,9 +634,10 @@ export async function POST(request: NextRequest) {
         }
         
         console.log(`[DRAAD128] ${result.inserted_count} assignments UPSERTED successfully ✅`);
-        console.log(`[OPTIE E] Service mapping: ${assignmentsToUpsert.filter(a => a.service_id).length} mapped, ${assignmentsToUpsert.filter(a => !a.service_id).length} unmapped`);
+        console.log(`[OPTIE E] Service mapping: ${deduplicatedAssignments.filter(a => a.service_id).length} mapped, ${deduplicatedAssignments.filter(a => !a.service_id).length} unmapped`);
         console.log(`[OPTIE E] Audit trail: solverRunId=${solverRunId}`);
         console.log('[OPTIE E] ✅ All 1365 roster slots preserved - no records deleted');
+        console.log(`[DRAAD127] ✅ Deduplication successful - prevented duplicate conflict errors`);
       }
       
       // 14A. DRAAD106 + DRAAD118A: Update roster status: draft → in_progress
@@ -629,6 +686,12 @@ export async function POST(request: NextRequest) {
         draad115: {
           employee_count: solverRequest.employees?.length || 0,
           mapping_info: 'voornaam/achternaam split, team mapped from dienstverband, max_werkdagen removed'
+        },
+        draad127: {
+          status: 'IMPLEMENTED',
+          deduplication: 'Duplicate assignments filtered before UPSERT',
+          protection: 'Composite key (roster_id|employee_id|date|dagdeel)',
+          notes: 'Prevents ON CONFLICT cannot affect row twice error'
         },
         optie_e: {
           status: 'IMPLEMENTED',
