@@ -35,7 +35,7 @@
  * - FIXED: "ON CONFLICT DO UPDATE command cannot affect row a second time" error
  * - NEW: Use PostgreSQL function upsert_ort_assignments() via rpc()
  * - Benefits: Atomic transaction, race-condition safe, no duplicate conflicts
- * - Function signature: upsert_ort_assignments(p_assignments: jsonb) → (success, inserted_count, error_message)
+ * - Function signature: upsert_ort_assignments(p_assignments: jsonb) → (success, message, count_processed)
  * - Replaces: Supabase upsert() with onConflict parameter (not supported)
  * 
  * DRAAD128.6: SOURCE FIELD CASE FIX
@@ -76,11 +76,25 @@
  * - Benefits:
  *   - Isolate which batch fails
  *   - Better error messages
- *   - Prevent timeout on 1133 items
+ *   - Prevent timeout on 1140 items
  *   - Track progress
  * - Error handling: Per-batch error collection
  * - Logging: Batch start, success, failure with details
  * - Status: Each batch reported individually
+ * 
+ * DRAAD129-STAP3-FIXED: RPC FUNCTION REFACTORED
+ * - PROBLEM: CREATE TEMP TABLE called multiple times causes "relation already exists"
+ * - PostgreSQL temp tables are session-scoped and persist between function calls
+ * - In batched RPC calls, second+ invocation fails
+ * - SOLUTION: Removed CREATE TEMP TABLE
+ * - NEW: Use VALUES clause with DISTINCT ON directly in INSERT...SELECT
+ * - Benefits:
+ *   - No session state
+ *   - Batch-safe (each RPC independent transaction)
+ *   - Thread-safe
+ *   - Maintains deduplication logic (DISTINCT ON)
+ *   - Same atomicity guarantees
+ * - Migration: 20251208_DRAAD129_STAP3_FIXED_upsert_ort_assignments.sql
  * 
  * DRAAD129-HOTFIX: SYNTAX ERROR FIX
  * - FIXED: Unterminated string constant on line 822
@@ -134,12 +148,14 @@
  * 7. DRAAD127: Deduplicate assignments before UPSERT
  * 8. DRAAD129: Diagnostic logging to identify duplicate source
  * 9. DRAAD129-STAP2: Process assignments in batches (BATCH_SIZE=50)
- * 10. OPTIE E: Write with ORT tracking fields + service_id mapping
- * 11. Return appropriate response
+ * 10. DRAAD129-STAP3-FIXED: RPC uses VALUES + DISTINCT ON (no TEMP TABLE)
+ * 11. OPTIE E: Write with ORT tracking fields + service_id mapping
+ * 12. Return appropriate response
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { CACHE_BUST_DRAAD129_STAP3_FIXED } from '@/app/api/cache-bust/DRAAD129_STAP3_FIXED';
 import type {
   SolveRequest,
   SolveResponse,
@@ -281,6 +297,10 @@ export async function POST(request: NextRequest) {
   const executionMs = Date.now();
   const cacheBustingId = `DRAAD131-${executionMs}-${Math.floor(Math.random() * 10000)}`;
   
+  // DRAAD129-STAP3-FIXED: Import cache bust version
+  const cacheBustVersion = CACHE_BUST_DRAAD129_STAP3_FIXED.version;
+  const cacheBustTimestamp = CACHE_BUST_DRAAD129_STAP3_FIXED.timestamp;
+  
   try {
     // 1. Parse request
     const { roster_id } = await request.json();
@@ -298,6 +318,7 @@ export async function POST(request: NextRequest) {
     console.log(`[DRAAD131] DRAAD131 FIX: Status 1 now EXCLUDED from blocked_slots (only [2,3])`);
     console.log(`[DRAAD129] Execution timestamp: ${executionTimestamp} (${executionMs})`);
     console.log(`[DRAAD129] Cache busting: ${cacheBustingId}`);
+    console.log(`[DRAAD129-STAP3-FIXED] Cache bust version: ${cacheBustVersion} (timestamp: ${cacheBustTimestamp})`);
     
     // 2. Initialiseer Supabase client
     const supabase = await createClient();
@@ -625,36 +646,28 @@ export async function POST(request: NextRequest) {
       console.log('[OPTIE E] Transforming assignments: service_code → service_id + ORT tracking...');
       
       // OPTIE E: Transform solver assignments to database format with ORT tracking
-      const assignmentsToUpsert = solverResult.assignments.map(a => {
+      const assignmentsToUpsert = solverResult.assignments.map(a => ({
+        roster_id,
+        employee_id: a.employee_id,
+        date: a.date,
+        dagdeel: a.dagdeel,
         // OPTIE E: Map service_code (string from solver) → service_id (UUID)
-        const serviceId = findServiceId(a.service_code, services);
+        service_id: findServiceId(a.service_code, services),
+        status: 0,  // Voorlopig - ORT suggestion
+        source: 'ort',  // DRAAD128.6: FIXED - lowercase 'ort' (was 'ORT')
+        notes: `ORT suggestion: ${a.service_code}`,
         
-        if (!serviceId) {
-          console.warn(`[OPTIE E] Warning: Could not map service code '${a.service_code}' for ${a.employee_id} on ${a.date}`);
-        }
-        
-        return {
-          roster_id,
-          employee_id: a.employee_id,
-          date: a.date,
-          dagdeel: a.dagdeel,
-          service_id: serviceId,  // OPTIE E: Map service_code → UUID (not NULL!)
-          status: 0,  // Voorlopig - ORT suggestion
-          source: 'ort',  // DRAAD128.6: FIXED - lowercase 'ort' (was 'ORT')
-          notes: `ORT suggestion: ${a.service_code}`,
-          
-          // OPTIE E: ORT tracking fields
-          ort_confidence: a.confidence || null,  // Solver zekerheid (0-1)
-          ort_run_id: solverRunId,  // UUID van deze ORT run (audit trail)
-          constraint_reason: {  // JSONB: debugging info
-            solver_suggestion: true,
-            service_code: a.service_code,
-            confidence: a.confidence || 0,
-            solve_time: solverResult.solve_time_seconds
-          },
-          previous_service_id: null  // Wordt ingevuld IF record exists (zie UPSERT)
-        };
-      });
+        // OPTIE E: ORT tracking fields
+        ort_confidence: a.confidence || null,  // Solver zekerheid (0-1)
+        ort_run_id: solverRunId,  // UUID van deze ORT run (audit trail)
+        constraint_reason: {  // JSONB: debugging info
+          solver_suggestion: true,
+          service_code: a.service_code,
+          confidence: a.confidence || 0,
+          solve_time: solverResult.solve_time_seconds
+        },
+        previous_service_id: null  // Wordt ingevuld IF record exists (zie UPSERT)
+      }));
       
       if (assignmentsToUpsert.length > 0) {
         console.log(`[OPTIE E] ${assignmentsToUpsert.length} assignments raw from solver`);
@@ -669,7 +682,7 @@ export async function POST(request: NextRequest) {
         
         // Build key map to find duplicates
         const keyMap = new Map<string, number>();
-        const keyInstances = new Map<string, Array<{ index: number; emp: string; date: string; dagdeel: string }> >();
+        const keyInstances = new Map<string, Array<{ index: number; emp: string; date: string; dagdeel: string }>>();
         
         assignmentsToUpsert.forEach((a, i) => {
           // DRAAD129: Use same key format as deduplication
@@ -734,6 +747,7 @@ export async function POST(request: NextRequest) {
         const TOTAL_BATCHES = Math.ceil(TOTAL_ASSIGNMENTS / BATCH_SIZE);
         
         console.log(`[DRAAD129-STAP2] Configuration: BATCH_SIZE=${BATCH_SIZE}, TOTAL_ASSIGNMENTS=${TOTAL_ASSIGNMENTS}, TOTAL_BATCHES=${TOTAL_BATCHES}`);
+        console.log(`[DRAAD129-STAP3-FIXED] Using VALUES + DISTINCT ON (no CREATE TEMP TABLE)`);
         
         let totalProcessed = 0;
         let batchErrors: Array<{batchNum: number; error: string; assignmentCount: number}> = [];
@@ -753,20 +767,33 @@ export async function POST(request: NextRequest) {
           }
           
           // Call RPC for this batch
+          // DRAAD129-STAP3-FIXED: Function now uses VALUES + DISTINCT ON (no TEMP TABLE)
           const { data: upsertResult, error: upsertError } = await supabase
             .rpc('upsert_ort_assignments', {
               p_assignments: batch
             });
           
+          // DRAAD128.8: Detailed RPC response debugging
           if (upsertError) {
-            console.error(`[DRAAD129-STAP2] ❌ Batch ${batchNum} FAILED: ${upsertError.message}`);
+            console.error(`[DRAAD129-STAP2] ❌ Batch ${batchNum} FAILED with RPC error:`);
+            console.error(`[DRAAD129-STAP2]   Error message: ${upsertError.message}`);
+            console.error(`[DRAAD129-STAP2]   Error code: ${upsertError.code}`);
+            console.error(`[DRAAD129-STAP2]   Error details: ${JSON.stringify(upsertError, null, 2)}`);
             batchErrors.push({
               batchNum,
-              error: upsertError.message,
+              error: upsertError.message || 'Unknown RPC error',
               assignmentCount: batch.length
             });
-          } else if (!upsertResult || !Array.isArray(upsertResult) || upsertResult.length === 0) {
-            const errorMsg = `Invalid RPC response - result: ${JSON.stringify(upsertResult)}`;
+          } else if (!upsertResult) {
+            const errorMsg = 'RPC returned null result';
+            console.error(`[DRAAD129-STAP2] ❌ Batch ${batchNum} FAILED: ${errorMsg}`);
+            batchErrors.push({
+              batchNum,
+              error: errorMsg,
+              assignmentCount: batch.length
+            });
+          } else if (!Array.isArray(upsertResult) || upsertResult.length === 0) {
+            const errorMsg = `Invalid RPC response - result is not an array: ${JSON.stringify(upsertResult)}`;
             console.error(`[DRAAD129-STAP2] ❌ Batch ${batchNum} FAILED: ${errorMsg}`);
             batchErrors.push({
               batchNum,
@@ -774,12 +801,23 @@ export async function POST(request: NextRequest) {
               assignmentCount: batch.length
             });
           } else {
+            // DRAAD128.8: Validate response structure
             const [result] = upsertResult;
-            if (!result.success) {
-              console.error(`[DRAAD129-STAP2] ❌ Batch ${batchNum} FAILED (RPC returned failure): ${result.message}`);
+            console.log(`[DRAAD129-STAP2] Batch ${batchNum} RPC response: ${JSON.stringify(result, null, 2)}`);
+            
+            if (!result || typeof result !== 'object') {
+              const errorMsg = `Invalid result object: ${JSON.stringify(result)}`;
+              console.error(`[DRAAD129-STAP2] ❌ Batch ${batchNum} FAILED: ${errorMsg}`);
               batchErrors.push({
                 batchNum,
-                error: result.message || 'Unknown RPC error',
+                error: errorMsg,
+                assignmentCount: batch.length
+              });
+            } else if (!result.success) {
+              console.error(`[DRAAD129-STAP2] ❌ Batch ${batchNum} FAILED (RPC returned failure): ${result.message || 'No message'}`);
+              batchErrors.push({
+                batchNum,
+                error: result.message || 'RPC function returned success=false',
                 assignmentCount: batch.length
               });
             } else {
@@ -809,7 +847,10 @@ export async function POST(request: NextRequest) {
               totalAssignments: TOTAL_ASSIGNMENTS,
               failedBatches: batchErrors.length,
               totalBatches: TOTAL_BATCHES
-            }
+            },
+            cacheBustVersion,
+            cacheBustTimestamp,
+            draad129_stap3_fixed: 'VALUES + DISTINCT ON approach applied'
           }, { status: 500 });
         }
         
@@ -895,7 +936,18 @@ export async function POST(request: NextRequest) {
           batch_processing: 'STAP2 IMPLEMENTED - All batches processed successfully',
           execution_timestamp: executionTimestamp,
           execution_ms: executionMs,
-          cache_busting: cacheBustingId
+          cache_busting: cacheBustingId,
+          cache_bust_version: cacheBustVersion,
+          cache_bust_timestamp: cacheBustTimestamp
+        },
+        draad129_stap3_fixed: {
+          status: 'IMPLEMENTED',
+          fix: 'VALUES + DISTINCT ON - removed CREATE TEMP TABLE',
+          reason: 'CREATE TEMP TABLE fails on second+ batch call in same session',
+          solution: 'Direct DISTINCT ON in INSERT...SELECT',
+          benefits: ['batch-safe', 'thread-safe', 'no session state', 'atomic per batch'],
+          migration: '20251208_DRAAD129_STAP3_FIXED_upsert_ort_assignments.sql',
+          rpc_function: 'upsert_ort_assignments(p_assignments jsonb)'
         },
         optie_e: {
           status: 'IMPLEMENTED',
@@ -976,6 +1028,10 @@ export async function POST(request: NextRequest) {
           status: 'SKIPPED',
           reason: 'INFEASIBLE result - no assignments to analyze'
         },
+        draad129_stap3_fixed: {
+          status: 'READY',
+          note: 'Fix applied in request, but no assignments to write'
+        },
         total_time_ms: Date.now() - startTime
       });
     } else {
@@ -996,6 +1052,10 @@ export async function POST(request: NextRequest) {
           status: 'SKIPPED',
           reason: `Solver status ${solverResult.status} - no assignments to analyze`
         },
+        draad129_stap3_fixed: {
+          status: 'READY',
+          note: 'Fix applied but solver timeout or error occurred'
+        },
         total_time_ms: totalTime
       }, {
         status: 500
@@ -1009,7 +1069,9 @@ export async function POST(request: NextRequest) {
       {
         error: 'Internal server error',
         message: error.message || 'Onbekende fout',
-        type: error.name || 'Error'
+        type: error.name || 'Error',
+        cacheBustVersion,
+        cacheBustTimestamp
       },
       { status: 500 }
     );
