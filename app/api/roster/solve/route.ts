@@ -87,6 +87,13 @@
  * - cache_busting string now properly closed
  * - Build should pass now
  * 
+ * DRAAD131: ORT Infeasible Fix – Status 1 Constraint Separation
+ * - FIXED: Status 1 was in blocked_slots → conflict with Constraint 3A
+ * - Symptom: CP-SAT says var==1 (3A fixed) AND var==0 (3B blocked) → INFEASIBLE
+ * - Solution: Remove status 1 from blocked_slots fetch [1,2,3] → [2,3]
+ * - Status 1 protection: Constraint 3A fixeert + niet in blocked_slots
+ * - Result: No constraint conflict, FEASIBLE when capacity exists
+ * 
  * DRAAD121: Database Constraint Fix (now OPTIE E complement)
  * - FIXED: status=0 + service_id violation with ORT suggestions
  * - Database constraint modified: status=0 MAY have service_id!=NULL
@@ -107,12 +114,13 @@
  * - Early returns for missing data
  * 
  * DRAAD130: STATUS 1 FIX - Critical Bug in Blocked Slots Fetch
- * - FIXED: blocked_slots query was ONLY fetching status [2,3]
- * - MISSING: status=1 (planner already scheduled) must be included!
- * - NEW: blocked_slots query now includes status [1, 2, 3]
- * - Impact: ORT now respects existing (status=1) assignments
- * - Prevents: ORT overwriting planner's scheduled assignments
- * - Side effect: Constraint 2 is now redundant (status 1 is blocked)
+ * - PREVIOUS: blocked_slots query was fetching status [1,2,3] 
+ * - ISSUE: Status 1 shouldn't be in blocked_slots (owned by fixed_assignments)
+ * - DRAAD131: Removed status 1 from this fetch to prevent constraint conflict
+ * - NEW blocked_slots query now includes only status [2, 3]
+ * - Status 1 protection: Moved to Constraint 3A (fixed_assignments)
+ * - Impact: ORT now respects existing (status=1) assignments WITHOUT conflict
+ * - Result: FEASIBLE status when capacity exists
  * 
  * Flow:
  * 1. Fetch roster data from Supabase
@@ -271,7 +279,7 @@ export async function POST(request: NextRequest) {
   // DRAAD129: Cache busting - timestamp for this execution
   const executionTimestamp = new Date().toISOString();
   const executionMs = Date.now();
-  const cacheBustingId = `DRAAD130-${executionMs}-${Math.floor(Math.random() * 10000)}`;
+  const cacheBustingId = `DRAAD131-${executionMs}-${Math.floor(Math.random() * 10000)}`;
   
   try {
     // 1. Parse request
@@ -287,7 +295,7 @@ export async function POST(request: NextRequest) {
     console.log(`[Solver API] Start solve voor roster ${roster_id}`);
     console.log(`[OPTIE E] solverRunId: ${solverRunId}`);
     console.log(`[DRAAD127] Deduplication enabled`);
-    console.log(`[DRAAD130] DRAAD130 FIX: Status 1 now included in blocked_slots`);
+    console.log(`[DRAAD131] DRAAD131 FIX: Status 1 now EXCLUDED from blocked_slots (only [2,3])`);
     console.log(`[DRAAD129] Execution timestamp: ${executionTimestamp} (${executionMs})`);
     console.log(`[DRAAD129] Cache busting: ${cacheBustingId}`);
     
@@ -398,16 +406,16 @@ export async function POST(request: NextRequest) {
     // DRAAD125A: Null-safe handling
     const safeFixedData = fixedData || [];
     
-    // 8. DRAAD130: FIX - Now include status 1, 2, 3 as blocked!
-    // DRAAD106: Fetch blocked slots (status 1, 2, 3)
-    // DRAAD130: Added status 1 (planner scheduled) to blocked slots
-    console.log('[DRAAD130] Fetching blocked slots including status 1 (fixed assignments)');
+    // 8. DRAAD131: FIX - REMOVED STATUS 1 FROM BLOCKED SLOTS!
+    // DRAAD106: Fetch blocked slots (status 2, 3 ONLY)
+    // DRAAD131: Removed status 1 (fixed_assignments protection via Constraint 3A)
+    console.log('[DRAAD131] Fetching blocked slots [2,3] only (status 1 removed)');
     
     const { data: blockedData, error: blockedError } = await supabase
       .from('roster_assignments')
       .select('employee_id, date, dagdeel, status')
       .eq('roster_id', roster_id)
-      .in('status', [1, 2, 3]);  // ✅ NOW INCLUDES STATUS 1!
+      .in('status', [2, 3]);  // ✅ DRAAD131: STATUS 1 REMOVED!
     
     if (blockedError) {
       console.error('[Solver API] Blocked slots fetch error:', blockedError);
@@ -417,10 +425,10 @@ export async function POST(request: NextRequest) {
     const safeBlockedData = blockedData || [];
     
     // Log blocking breakdown
-    const status1Count = safeBlockedData.filter(b => b.status === 1).length;
     const status2Count = safeBlockedData.filter(b => b.status === 2).length;
     const status3Count = safeBlockedData.filter(b => b.status === 3).length;
-    console.log(`[DRAAD130] Blocked slots breakdown: status 1=${status1Count}, status 2=${status2Count}, status 3=${status3Count}, total=${safeBlockedData.length}`);
+    console.log(`[DRAAD131] Blocked slots breakdown: status 2=${status2Count}, status 3=${status3Count}, total=${safeBlockedData.length}`);
+    console.log('[DRAAD131] Status 1 protection: Constraint 3A (fixed_assignments) instead of Constraint 3B');
     
     // 9. DRAAD106: Fetch suggested assignments (status 0 + service_id)
     // Optioneel - alleen voor warm-start hints
@@ -502,7 +510,7 @@ export async function POST(request: NextRequest) {
     // END DRAAD108
     // ============================================================
     
-    console.log(`[Solver API] Data verzameld: ${employees.length} medewerkers, ${services.length} diensten, ${safeRosterEmpServices.length} bevoegdheden (actief), ${safeFixedData.length} fixed, ${safeBlockedData.length} blocked (incl status 1), ${safeSuggestedData.length} suggested, ${exact_staffing.length} exacte bezetting (DRAAD108)`);
+    console.log(`[Solver API] Data verzameld: ${employees.length} medewerkers, ${services.length} diensten, ${safeRosterEmpServices.length} bevoegdheden (actief), ${safeFixedData.length} fixed, ${safeBlockedData.length} blocked [2,3 only], ${safeSuggestedData.length} suggested, ${exact_staffing.length} exacte bezetting (DRAAD108)`);
     
     // 11. Transform naar solver input format
     // DRAAD115: Split voornaam/achternaam, use dienstverband mapping, remove max_werkdagen
@@ -546,7 +554,7 @@ export async function POST(request: NextRequest) {
         employee_id: bs.employee_id,
         date: bs.date,
         dagdeel: bs.dagdeel as 'O' | 'M' | 'A',
-        status: bs.status as 1 | 2 | 3  // DRAAD130: Now includes status 1
+        status: bs.status as 2 | 3  // DRAAD131: Now [2,3] only (status 1 removed)
       })),
       suggested_assignments: safeSuggestedData.map(sa => ({
         employee_id: sa.employee_id,
@@ -860,16 +868,16 @@ export async function POST(request: NextRequest) {
           exact_staffing_count: exact_staffing.length,
           bezetting_violations: bezettingViolations.length
         },
-        draad130: {
+        draad131: {
           status: 'FIXED',
-          fix_applied: 'Status 1 now included in blocked_slots fetch',
+          fix_applied: 'Status 1 REMOVED from blocked_slots fetch [2,3] only',
           blocked_slots_breakdown: {
-            status_1_count: status1Count,
             status_2_count: status2Count,
             status_3_count: status3Count,
             total_blocked: safeBlockedData.length
           },
-          impact: 'ORT now respects existing (status=1) planner assignments and does not overwrite them'
+          impact: 'ORT now respects existing (status=1) planner assignments without constraint conflict',
+          constraint_protection: 'Status 1: Constraint 3A (fixed) | Status 2,3: Constraint 3B (blocked)'
         },
         draad115: {
           employee_count: solverRequest.employees?.length || 0,
@@ -956,9 +964,9 @@ export async function POST(request: NextRequest) {
           total_shortage: solverResult.bottleneck_report?.total_shortage || 0,
           shortage_percentage: solverResult.bottleneck_report?.shortage_percentage || 0
         },
-        draad130: {
+        draad131: {
           status: 'APPLIED',
-          note: 'Status 1 included in blocked slots - may contribute to INFEASIBLE status'
+          note: 'Status 1 REMOVED from blocked_slots - constraint conflict resolved if still INFEASIBLE, cause is other capacity gaps'
         },
         optie_e: {
           status: 'READY (not applied - INFEASIBLE)',
@@ -980,7 +988,7 @@ export async function POST(request: NextRequest) {
         roster_id,
         solver_result: solverResult,
         error: `Solver status ${solverResult.status}`,
-        draad130: {
+        draad131: {
           status: 'APPLIED',
           note: 'Fix was applied to request, but solver did not return FEASIBLE/INFEASIBLE'
         },
