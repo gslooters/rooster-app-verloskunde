@@ -5,6 +5,7 @@
  * DRAAD98: ORT knop functionaliteit geïmplementeerd - roept /api/roster/solve aan
  * DRAAD123: Sluiten knop verwijderd uit resultaatscherm
  * DRAAD123FIX: Correctie: Bekijk Rooster link naar /planning/design/preplanning?id= 
+ * DRAAD129: Fix infeasible routing - route naar bottleneck-analysis pagina bij infeasible status
 */
 'use client';
 import { useEffect, useState } from 'react';
@@ -24,21 +25,25 @@ type CompletionStatus = {
   planregels: boolean;
 };
 
+type SolverResult = {
+  status: string;
+  total_assignments: number;
+  total_slots: number;
+  fill_percentage: number;
+  solve_time_seconds: number;
+  violations?: Array<{
+    type: string;
+    severity: string;
+    message: string;
+  }>;
+  suggestions?: string[];
+  summary?: any;
+  bottleneck_report?: any;
+};
+
 type ORTResult = {
   success: boolean;
-  solver_result?: {
-    status: string;
-    total_assignments: number;
-    total_slots: number;
-    fill_percentage: number;
-    solve_time_seconds: number;
-    violations: Array<{
-      type: string;
-      severity: string;
-      message: string;
-    }>;
-    suggestions: string[];
-  };
+  solver_result?: SolverResult;
   error?: string;
   message?: string;
 };
@@ -181,7 +186,7 @@ export default function DashboardClient() {
   }
   const allesVoltooid = Object.values(completionStatus).every(Boolean);
   
-  // DRAAD98: ORT handler
+  // DRAAD129: Updated ORT handler with infeasible routing logic
   async function handleStartORT() {
     if (!rosterId || !allesVoltooid) return;
     
@@ -202,10 +207,84 @@ export default function DashboardClient() {
       const result: ORTResult = await response.json();
       
       console.log('[Dashboard] ORT resultaat:', result);
-      setOrtResult(result);
+      console.log('[DRAAD129] Solver status:', result.solver_result?.status);
+      
+      // DRAAD129: Check solver status and route accordingly
+      if (result.success && result.solver_result) {
+        const solverStatus = result.solver_result.status;
+        
+        if (solverStatus === 'feasible' || solverStatus === 'optimal') {
+          // ✅ FEASIBLE: Store summary and navigate to feasible-summary page
+          console.log('[DRAAD129] FEASIBLE outcome - routing to feasible-summary');
+          
+          if (result.solver_result.summary) {
+            if (typeof window !== 'undefined') {
+              sessionStorage.setItem(
+                `feasible-summary-${rosterId}`,
+                JSON.stringify(result.solver_result.summary)
+              );
+            }
+          }
+          
+          // Route to feasible summary
+          router.push(`/rooster/${rosterId}/feasible-summary`);
+          return;
+          
+        } else if (solverStatus === 'infeasible') {
+          // ⛔ INFEASIBLE: Store bottleneck report and navigate to analysis page
+          console.log('[DRAAD129] INFEASIBLE outcome - routing to bottleneck-analysis');
+          
+          if (result.solver_result.bottleneck_report) {
+            if (typeof window !== 'undefined') {
+              sessionStorage.setItem(
+                `bottleneck-report-${rosterId}`,
+                JSON.stringify(result.solver_result.bottleneck_report)
+              );
+            }
+          }
+          
+          // Route to bottleneck analysis
+          router.push(`/rooster/${rosterId}/bottleneck-analysis`);
+          return;
+          
+        } else if (solverStatus === 'timeout') {
+          // TIMEOUT error
+          console.error('[DRAAD129] TIMEOUT error');
+          setOrtResult({
+            success: false,
+            error: 'Solver Timeout',
+            message: 'De berekening duurde te lang. Probeer het later opnieuw of vereenvoudig het probleem.'
+          });
+          setOrtLoading(false);
+          return;
+        } else {
+          // Unknown status
+          console.error('[DRAAD129] Unknown solver status:', solverStatus);
+          setOrtResult({
+            success: false,
+            error: 'Onbekende solver status',
+            message: `Status: ${solverStatus}`
+          });
+          setOrtLoading(false);
+          return;
+        }
+      }
+      
+      // If we get here, something went wrong
+      if (!result.success) {
+        console.error('[Dashboard] API returned success=false');
+        setOrtResult(result);
+      } else {
+        console.error('[Dashboard] Missing solver_result in response');
+        setOrtResult({
+          success: false,
+          error: 'Onverwachte response',
+          message: 'Solver response bevat geen status informatie'
+        });
+      }
       
       if (result.success) {
-        // Refresh data om nieuwe status te tonen
+        // Refresh data
         const refreshedData = await loadRosterDesignData(rosterId);
         if (refreshedData) {
           setDesignData(refreshedData);
@@ -391,7 +470,7 @@ export default function DashboardClient() {
             )}
           </div>
 
-          {/* DRAAD98: ORT Resultaat feedback - DRAAD123FIX: Bekijk Rooster link naar /planning/design/preplanning?id= */}
+          {/* DRAAD98 + DRAAD129: ORT Resultaat feedback - alleen tonen bij errors na routing */}
           {ortResult && (
             <div className={`mt-6 p-6 rounded-xl border-2 ${
               ortResult.success 
