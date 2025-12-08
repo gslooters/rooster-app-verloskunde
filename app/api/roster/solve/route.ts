@@ -101,6 +101,10 @@
  * - REASON: Response JSON needs access to batch configuration
  * 
  * DRAAD129-FIX4: COMPREHENSIVE DUPLICATE VERIFICATION (THIS PHASE)
+ * - FIXED: logDuplicates() and findDuplicatesInBatch() now use complete composite key
+ * - Previous: Key was missing roster_id (employee_id|date|dagdeel)
+ * - Now: Key includes all 4 components (roster_id|employee_id|date|dagdeel)
+ * - This matches the UPSERT onConflict composite key exactly
  * - NEW: logDuplicates() helper - detailed INPUT analysis before dedup
  * - NEW: findDuplicatesInBatch() helper - per-batch verification BEFORE UPSERT
  * - NEW: verifyDeduplicationResult() helper - validation after dedup
@@ -184,7 +188,10 @@ const findServiceId = (serviceCode: string, services: Service[]): string | null 
 /**
  * DRAAD129-FIX4: FASE 2 - Helper function to log duplicates in assignment array
  * 
- * Analyzes array for duplicate keys: (employee_id|date|dagdeel)
+ * FIXED: Now uses complete composite key (roster_id|employee_id|date|dagdeel)
+ * Previous bug: Key was missing roster_id, only used (employee_id|date|dagdeel)
+ * 
+ * Analyzes array for duplicate keys matching UPSERT onConflict key
  * Provides detailed diagnostics if duplicates found
  * 
  * @param assignments - Array of assignments to analyze
@@ -203,7 +210,8 @@ const logDuplicates = (assignments: any[], label: string): DuplicateAnalysis => 
   const keyMap = new Map<string, number[]>();
   
   assignments.forEach((a, i) => {
-    const key = `${a.employee_id}|${a.date}|${a.dagdeel}`;
+    // ✅ FIX4: INCLUDE ALL 4 FIELDS FROM COMPOSITE KEY (was missing roster_id)
+    const key = `${a.roster_id}|${a.employee_id}|${a.date}|${a.dagdeel}`;
     if (!keyMap.has(key)) {
       keyMap.set(key, []);
     }
@@ -292,6 +300,9 @@ const verifyDeduplicationResult = (before: any[], after: any[], label: string): 
 /**
  * DRAAD129-FIX4: FASE 4 - Helper function to find duplicates in a single batch
  * 
+ * FIXED: Now uses complete composite key (roster_id|employee_id|date|dagdeel)
+ * Previous bug: Key was missing roster_id, only used (employee_id|date|dagdeel)
+ * 
  * Used BEFORE each UPSERT call to verify batch has no duplicates
  * 
  * @param batch - Batch of assignments to check
@@ -309,7 +320,8 @@ const findDuplicatesInBatch = (batch: any[], batchNumber: number): BatchDuplicat
   const keyMap = new Map<string, number[]>();
   
   batch.forEach((a, i) => {
-    const key = `${a.employee_id}|${a.date}|${a.dagdeel}`;
+    // ✅ FIX4: INCLUDE ALL 4 FIELDS FROM COMPOSITE KEY (was missing roster_id)
+    const key = `${a.roster_id}|${a.employee_id}|${a.date}|${a.dagdeel}`;
     if (!keyMap.has(key)) {
       keyMap.set(key, []);
     }
@@ -1111,6 +1123,7 @@ export async function POST(request: NextRequest) {
           status: 'IMPLEMENTED',
           version: fix4Version,
           timestamp: fix4Timestamp,
+          bugfix_applied: 'logDuplicates() and findDuplicatesInBatch() now use complete composite key (roster_id|employee_id|date|dagdeel)',
           helper_functions: [
             'logDuplicates() - detailed INPUT analysis',
             'verifyDeduplicationResult() - validation after dedup',
