@@ -2,6 +2,10 @@
 # This file is used to force Railway to rebuild the deployment
 # Each commit to this file triggers a new build
 #
+# DRAAD128.8: RPC Response Debugging
+# Date: 2025-12-08 01:30 CET
+# Build: 728493651
+#
 # DRAAD128.6: Source Field Case Fix
 # Date: 2025-12-08 01:23 CET
 # Build: 617382451
@@ -14,22 +18,20 @@
 # Date: 2025-12-08 00:43 CET
 # Build: 847362941
 #
-# Combined Changes:
-# 1. DRAAD128.6: route.ts source field lowercase 'ort' (was uppercase 'ORT')
-# 2. DRAAD128.6: Matches PostgreSQL CHECK constraint: source IN ('manual', 'ort', 'system', 'import')
-# 3. DRAAD127: deduplicateAssignments() function in route.ts
-# 4. DRAAD127: Set-based duplicate filtering using composite keys
-# 5. DRAAD128: PostgreSQL RPC function upsert_ort_assignments()
-# 6. Cache-buster: 20251208-source-case-fix
+# Changes in DRAAD128.8:
+# 1. route.ts: Log full RPC response structure
+# 2. route.ts: Check for upsertResult null/undefined
+# 3. route.ts: Validate Array.isArray(upsertResult)
+# 4. route.ts: Debug result object contents
+# 5. route.ts: Provide detailed error messages for each condition
+# 6. route.ts: Log typeof upsertResult and array check
 #
-# Expected outcome:
-# - No more "violates check constraint roster_assignments_source_check" error
-# - Source field accepts 'ort' (lowercase) as intended
-# - All 1365 roster slots preserved
-# - Assignments UPSERT with ORT tracking succeeds
-# - Dashboard solver runs without errors
+# Purpose:
+# - Find ROOT CAUSE of '[DRAAD128] UPSERT failed: undefined'
+# - Understand RPC response structure
+# - Fix silent failures
 #
-TRIGGER_BUILD=617382451
-TIMESTAMP=2025-12-08T01:23:45Z
-VERSION=20251208-source-case-fix
-STATUS=DRAAD128.6+DRAAD127+DRAAD128
+TRIGGER_BUILD=728493651
+TIMESTAMP=2025-12-08T01:30:15Z
+VERSION=20251208-rpc-debugging
+STATUS=DRAAD128.8+DRAAD128.6+DRAAD127+DRAAD128
