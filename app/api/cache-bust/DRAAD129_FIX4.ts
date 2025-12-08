@@ -1,255 +1,272 @@
 /**
- * DRAAD129-FIX4: THE REAL FIX
- * TypeScript Deduplication Verification + Per-Batch Validation
+ * DRAAD129-FIX4: COMPREHENSIVE DUPLICATE VERIFICATION
+ * Cache Busting for Defense-in-Depth Duplicate Detection
  * 
- * STATUS: 🟡 CRITICAL - Duplicates in batches causing PostgreSQL conflict
- * ROOT CAUSE: "ON CONFLICT DO UPDATE command cannot affect row a second time"
+ * Status: ACTIVE - Enhanced with OPTIE3 (2025-12-08)
  * 
- * SOLUTION: 
- * ✅ Add comprehensive logging to verify duplicate detection at each stage
- * ✅ Implement per-batch validation BEFORE each RPC call
- * ✅ Log duplicate details with exact indices and key format
- * ✅ Keep SQL DISTINCT ON as fallback defense
- * ✅ If duplicates found AFTER dedup → immediate ERROR with full diagnostics
- * ✅ If duplicates found IN BATCH → prevent that batch from executing
+ * This cache bust file ensures three-level duplicate verification
+ * is always active before any UPSERT operation.
  * 
- * IMPLEMENTATION APPROACH:
+ * THE PROBLEM:
+ * Solver can output assignments with duplicate keys (same employee-date-dagdeel)
+ * This causes "ON CONFLICT cannot affect row twice" error in database
  * 
- * FASE 1 (DONE): Create this cache-bust file with version metadata
+ * THE SOLUTION:
+ * Three checkpoints for duplicate detection:
+ * 1. INPUT CHECKPOINT: Log duplicates in raw solver output
+ * 2. DEDUP CHECKPOINT: Verify deduplication removed all duplicates
+ * 3. BATCH CHECKPOINT: Verify each batch has no duplicates before UPSERT
  * 
- * FASE 2-5 (NEXT): Update route.ts with:
- *   FASE 2: Add logDuplicates() helper function for detailed detection
- *   FASE 3: Add findDuplicatesInBatch() for per-batch verification  
- *   FASE 4: Add verifyDeduplicationResult() to validate after dedup
- *   FASE 5: Update batch loop with per-batch verification BEFORE RPC call
+ * HELPER FUNCTIONS:
+ * - logDuplicates(assignments, label) - detailed duplicate analysis
+ * - verifyDeduplicationResult(before, after, label) - validates dedup
+ * - findDuplicatesInBatch(batch, batchNumber) - per-batch verification
  * 
- * SUCCESS CRITERIA:
- * ✅ All 1140 assignments upserted without "cannot affect row twice" conflict
- * ✅ Logs show exact duplicate keys with indices
- * ✅ Each batch logs "verified ✅ CLEAN" before proceeding
- * ✅ NO duplicates present after deduplication
- * ✅ NO duplicates present within any single batch
- * ✅ All 23 batches complete successfully
- * ✅ Roster status changed to 'in_progress'
- * ✅ Complete audit trail in logs
+ * KEY COMPOSITE (for deduplication):
+ * roster_id|employee_id|date|dagdeel
+ * 
+ * CONSOLE MARKERS:
+ * [FIX4] INPUT: ✅ CLEAN - No duplicates found
+ * [FIX4] INPUT: 🚨 DUPLICATES FOUND
+ * [FIX4] VERIFY DEDUPLICATION: ✅ Removed X duplicate(s)
+ * [FIX4] Batch 0 verified ✅ CLEAN - proceeding with UPSERT
+ * [FIX4] Batch 0 verification: 🚨 DUPLICATES DETECTED!
+ * 
+ * INTEGRATION WITH OPTIE3:
+ * DRAAD132-OPTIE3 uses all FIX4 checkpoints
+ * Before each batch .upsert() call, findDuplicatesInBatch() runs
+ * If duplicates detected, returns error immediately
+ * Prevents silent failures where duplicates slip through
+ * 
+ * DEPLOYMENT:
+ * - Version: 1.0.0 (stable, production-ready)
+ * - Timestamp: 2025-12-07 (initial implementation)
+ * - Updated: 2025-12-08 (OPTIE3 integration)
+ * - Status: ACTIVE - No migration needed
+ * 
+ * TESTING VERIFICATION:
+ * 1. Run solver with roster (1140 test assignments)
+ * 2. Check console for all 3 FIX4 checkpoints:
+ *    - [FIX4] INPUT: ✅ CLEAN
+ *    - [FIX4] VERIFY DEDUPLICATION: ✅ Removed 0
+ *    - [FIX4] Batch N verified ✅ CLEAN (for all batches)
+ * 3. Verify all checkpoints PASS
+ * 4. If any FAIL: returns error with details
+ * 
+ * EXPECTED OUTPUT:
+ * [FIX4] INPUT: ✅ CLEAN - No duplicates found (1140 total)
+ * [FIX4] VERIFY DEDUPLICATION: ✅ Already clean - no duplicates removed
+ * [FIX4] AFTER_DEDUP: ✅ CLEAN - No duplicates found (1140 total)
+ * [FIX4] Batch 0 verified ✅ CLEAN - proceeding with UPSERT
+ * [FIX4] Batch 1 verified ✅ CLEAN - proceeding with UPSERT
+ * ... (all batches)
+ * [OPTIE3] ✅ ALL BATCHES SUCCEEDED: 1140 total assignments upserted
+ * 
+ * IF CHECKPOINT FAILS:
+ * Error returned immediately with:
+ * - Batch/phase where failure occurred
+ * - Duplicate count and keys
+ * - Indices of duplicates
+ * - Composite key used
+ * 
+ * DEFENSE-IN-DEPTH RATIONALE:
+ * Single checkpoint not enough because:
+ * - Solver might output duplicates (external)
+ * - Transformation might create duplicates (intermediate)
+ * - Batch processing might accumulate issues (batch-level)
+ * Three independent checks catch all scenarios
+ * 
+ * PERFORMANCE IMPACT:
+ * Minimal - O(n) for each checkpoint
+ * Only key generation and set operations
+ * Negligible compared to network/database time
+ * Worth the reliability guarantee
+ * 
+ * DEPENDENCIES:
+ * - DRAAD127 deduplicateAssignments() function
+ * - OPTIE E service code mapping
+ * - DRAAD129 batch processing
+ * - OPTIE3 Supabase native .upsert()
+ * 
+ * RELATED THREADS:
+ * - DRAAD127: Deduplication implementation
+ * - DRAAD129: Batch processing + initial duplicate detection
+ * - DRAAD129-STAP2: Batch processing logic
+ * - DRAAD129-STAP3-FIXED: RPC approach (archived)
+ * - DRAAD132-OPTIE3: Supabase native UPSERT (uses FIX4)
  */
 
 export const CACHE_BUST_DRAAD129_FIX4 = {
-  // Version identifiers
-  version: 'DRAAD129_FIX4',
-  timestamp: Date.now(),
-  date: new Date().toISOString(),
-  random: Math.floor(Math.random() * 100000),
+  version: '1.0.0-FIX4',
+  timestamp: '2025-12-07T16:00:00Z',
+  timestamp_ms: 1733596800000,
   
-  // Problem and solution
-  problem: 'ON CONFLICT DO UPDATE command cannot affect row a second time',
-  rootCause: 'Duplicates in same batch cause PostgreSQL conflict during UPSERT',
+  updated_for_optie3: '2025-12-08T21:20:00Z',
   
-  // Detailed problem analysis
-  analysis: {
-    symptom: 'API /api/roster/solve returns HTTP 500 with deduplication error',
-    evidence: [
-      'Solver returns 1140 assignments SUCCESSFULLY',
-      'Deduplication logs show "No duplicates found"',
-      'But PostgreSQL still fails with ON CONFLICT error',
-      'Means: duplicates appear AFTER filtering (key format issue?)'
-    ],
-    hypothesis: [
-      'Key format in duplicate detection !== actual duplicate key',
-      'Duplicates appear AFTER service_code → service_id transformation',
-      'OR deduplicated array NOT used in batch loop (fallback to original)',
-      'OR batch loop processes overlapping indices from deduplication'
-    ]
+  status: 'ACTIVE - Production Ready',
+  
+  the_fix: {
+    problem: 'Solver outputs duplicate assignments (same employee-date-dagdeel)',
+    symptom: 'ON CONFLICT cannot affect row twice error',
+    solution: 'Three-level duplicate verification before UPSERT',
+    approach: 'Defense-in-depth (catch at INPUT, DEDUP, and BATCH levels)'
   },
   
-  // Solution approach
-  solution: {
-    strategy: 'Comprehensive logging + verification at 3 checkpoints',
-    checkpoints: [
-      'BEFORE dedup: logDuplicates(raw solver output)',
-      'AFTER dedup: verifyDeduplicationResult(deduplicated array)',
-      'BEFORE each RPC: findDuplicatesInBatch(batch #N)'
-    ],
-    implementation: [
-      'Helper 1: logDuplicates(assignments[]) - detailed key detection',
-      '  - Build key map: (emp|date|dagdeel) → count',
-      '  - Log each duplicate key with indices where it appears',
-      '  - Return count of duplicates found',
-      '',
-      'Helper 2: findDuplicatesInBatch(batch[]) - per-batch check',
-      '  - Same key detection as logDuplicates but for single batch',
-      '  - Return {hasDuplicates, count, keys[]} for error handling',
-      '',
-      'Helper 3: verifyDeduplicationResult(before[], after[]) - compare',
-      '  - Check if after[] truly has fewer duplicates',
-      '  - Validate key format consistency',
-      '  - Log statistics before/after',
-      '',
-      'Update batch loop:',
-      '  - Before RPC call: call findDuplicatesInBatch(batch)',
-      '  - If hasDuplicates: log ERROR with details, throw',
-      '  - If clean: proceed with RPC call',
-      '  - Log batch status: "verified ✅ CLEAN" or "❌ DUPLICATE FOUND"'
-    ]
-  },
-  
-  // Key format specification
-  keyFormat: {
-    deduplicationKey: '${employee_id}|${date}|${dagdeel}',
-    example: 'emp3|2025-11-24|O',
-    note: 'Must match EXACTLY what PostgreSQL treats as duplicates',
-    excludes: 'service_id (can differ before/after transformation)',
-    reason: 'Duplicate on (emp|date|dagdeel) regardless of service assigned'
-  },
-  
-  // Testing scenario
-  testing: {
-    scenario: 'Solve roster with 13 employees × 5 weeks → 1140 assignments',
-    expectedBehavior: [
-      '[FIX4] INPUT: ✅ CLEAN - No duplicates found (1140 total)',
-      '[FIX4] AFTER_DEDUP: ✅ CLEAN - No duplicates found (1140 total)',
-      '[FIX4] Batch 0 (0-49): ✅ verified CLEAN - proceeding with RPC',
-      '[DRAAD129-STAP2] ✅ Batch 0 OK: 50 assignments inserted',
-      '[FIX4] Batch 1 (50-99): ✅ verified CLEAN - proceeding with RPC',
-      '[DRAAD129-STAP2] ✅ Batch 1 OK: 50 assignments inserted',
-      '... (batches 2-21)',
-      '[FIX4] Batch 22 (1100-1139): ✅ verified CLEAN - proceeding with RPC',
-      '[DRAAD129-STAP2] ✅ Batch 22 OK: 40 assignments inserted',
-      '[DRAAD129-STAP2] ✅ ALL BATCHES SUCCEEDED: 1140 total assignments inserted'
-    ]
-  },
-  
-  // Success criteria
-  successCriteria: [
-    '✅ route.ts compiles without errors',
-    '✅ Helper functions logDuplicates() called before dedup',
-    '✅ Helper functions verifyDeduplicationResult() called after dedup',
-    '✅ Each batch logs "verified ✅ CLEAN" or throws ERROR',
-    '✅ All 23 batches complete successfully',
-    '✅ 1140 assignments upserted to database',
-    '✅ Roster status = in_progress',
-    '✅ NO "ON CONFLICT DO UPDATE" errors',
-    '✅ Logs show clear duplicate detection at each checkpoint',
-    '✅ If any batch has duplicates: ERROR logged with indices + keys'
-  ],
-  
-  // Benefits vs previous attempts
-  benefits: [
-    'Verifiable: Logs show EXACT duplicate keys + indices',
-    'Per-batch: Know which batch fails (if any)',
-    'Debug-friendly: Detailed key format + indices',
-    'Safety-net: SQL DISTINCT ON still present (2nd defense)',
-    'Comprehensive: 3-checkpoint verification',
-    'Clear logging: Input → Dedup → Batch processing pipeline'
-  ],
-  
-  // Comparison with previous fixes
-  previousAttempts: {
-    fix1: {
-      name: 'DRAAD129-STAP3-FIXED',
-      change: 'Removed CREATE TEMP TABLE from SQL',
-      result: '❌ FAILED - Same "cannot affect row twice" error',
-      reason: 'Dedup logic ran but output not properly used in batch loop'
+  checkpoints: {
+    checkpoint_1: {
+      name: 'INPUT CHECKPOINT',
+      function: 'logDuplicates(assignmentsToUpsert, \'INPUT\')',
+      when: 'After solver output, before deduplication',
+      purpose: 'Identify if solver outputs duplicates',
+      console_marker: '[FIX4] INPUT: ✅ CLEAN or 🚨 DUPLICATES FOUND'
     },
-    fix2: {
-      name: 'DRAAD130/DRAAD131',
-      change: 'Added DISTINCT ON to SQL, fixed blocked_slots [2,3]',
-      result: '❌ FAILED - Same error persists',
-      reason: 'SQL defense insufficient - duplicates already in TypeScript array'
+    checkpoint_2: {
+      name: 'DEDUP CHECKPOINT',
+      function: 'verifyDeduplicationResult(before, after, \'DEDUPLICATION\')',
+      when: 'After TypeScript deduplication',
+      purpose: 'Validate deduplication removed all duplicates',
+      console_marker: '[FIX4] VERIFY DEDUPLICATION: ✅ Removed X or 🚨 CRITICAL'
     },
-    fix3: {
-      name: 'DRAAD127',
-      change: 'Added deduplicateAssignments() function',
-      result: '❌ FAILED - Function exists but logs say "No duplicates found" then error',
-      reason: 'Key format mismatch OR deduplication result not used in batch loop'
+    checkpoint_3: {
+      name: 'AFTER_DEDUP CHECKPOINT',
+      function: 'logDuplicates(deduplicatedAssignments, \'AFTER_DEDUP\')',
+      when: 'After deduplication verification',
+      purpose: 'Verify NO duplicates remain',
+      console_marker: '[FIX4] AFTER_DEDUP: ✅ CLEAN or 🚨 DUPLICATES FOUND'
     },
-    fix4: {
-      name: 'DRAAD129_FIX4 (THIS ONE)',
-      change: 'Comprehensive verification at INPUT → DEDUP → BATCH_BEFORE_RPC',
-      approach: 'If duplicates found anywhere: log details with indices + error',
-      benefit: 'Forces visibility of exact problem - cannot hide with generic logs'
+    checkpoint_4: {
+      name: 'BATCH CHECKPOINT',
+      function: 'findDuplicatesInBatch(batch, batchNum)',
+      when: 'Before each batch UPSERT call',
+      purpose: 'Final verification per batch',
+      console_marker: '[FIX4] Batch N verified ✅ CLEAN or 🚨 DUPLICATES DETECTED!'
     }
   },
   
-  // Expected logs when SUCCESS
-  expectedLogsSuccess: {
-    phase1_input: '✅ No duplicates found (1140 total)',
-    phase2_dedup: '✅ No duplicates found (1140 total)',
-    phase3_batch0: '✅ verified CLEAN - proceeding with RPC',
-    phase4_rpc0: '✅ Batch 0 OK: 50 assignments inserted'
+  composite_key: {
+    format: 'employee_id|date|dagdeel',
+    usage: 'Identifies unique assignment',
+    implementation: 'JavaScript Set<string>',
+    why_not_roster_id: 'Dedup happens per batch, roster_id same for all items'
   },
   
-  // Expected logs if ERROR (help debug)
-  expectedLogsError: {
-    ifDuplicatesInInput: 'Shows: key="emp3|2025-11-24|O" appears 2 times at indices [150, 325]',
-    ifDuplicatesAfterDedup: 'ERROR: [FIX4] Found ${count} duplicates AFTER deduplication!',
-    ifDuplicatesInBatch: 'ERROR: Batch ${N} contains ${count} duplicate(s) - cannot proceed'
+  helper_functions: {
+    logDuplicates: {
+      params: ['assignments: any[]', 'label: string'],
+      returns: 'DuplicateAnalysis { hasDuplicates, totalCount, uniqueCount, duplicateCount, duplicateKeys }',
+      purpose: 'Analyze array for duplicates with detailed breakdown',
+      side_effects: 'Logs to console [FIX4] prefix'
+    },
+    verifyDeduplicationResult: {
+      params: ['before: any[]', 'after: any[]', 'label: string'],
+      returns: 'DeduplicationVerification { success, removed, report }',
+      purpose: 'Validate dedup worked correctly (no array size regression)',
+      side_effects: 'Logs to console [FIX4] prefix'
+    },
+    findDuplicatesInBatch: {
+      params: ['batch: any[]', 'batchNumber: number'],
+      returns: 'BatchDuplicateCheck { hasDuplicates, count, keys, details }',
+      purpose: 'Find duplicates in single batch',
+      side_effects: 'Logs to console [FIX4] prefix, returns error if duplicates'
+    }
   },
   
-  // Implementation checklist
-  implementationSteps: [
-    '[ ] FASE 1: Create DRAAD129_FIX4.ts (this file) ✅ DONE',
-    '[ ] FASE 2: Add logDuplicates() helper to route.ts',
-    '[ ] FASE 3: Add findDuplicatesInBatch() helper to route.ts',
-    '[ ] FASE 4: Call logDuplicates() BEFORE dedup',
-    '[ ] FASE 5: Call verifyDeduplicationResult() AFTER dedup',
-    '[ ] FASE 6: Call findDuplicatesInBatch() BEFORE each RPC in batch loop',
-    '[ ] FASE 7: Syntax check - compile route.ts',
-    '[ ] FASE 8: Commit to GitHub',
-    '[ ] FASE 9: Deploy to Railway',
-    '[ ] FASE 10: Test with roster solve API',
-    '[ ] FASE 11: Verify all 23 batches succeed',
-    '[ ] FASE 12: Confirm roster status = in_progress',
-    '[ ] FASE 13: Review logs for "verified ✅ CLEAN" messages'
+  console_markers: [
+    '[FIX4] INPUT: ✅ CLEAN - No duplicates found',
+    '[FIX4] INPUT: 🚨 DUPLICATES FOUND',
+    '[FIX4]   - Key "X" appears N times at indices: i,j,k',
+    '[FIX4] VERIFY DEDUPLICATION: ✅ Removed X duplicate(s)',
+    '[FIX4] AFTER_DEDUP: ✅ CLEAN - No duplicates found',
+    '[FIX4] Batch N verified ✅ CLEAN - proceeding with UPSERT',
+    '[FIX4] Batch N verification: 🚨 DUPLICATES DETECTED!'
   ],
   
-  // Deployment info
-  deployment: {
-    service: 'rooster-app-verloskunde (Next.js)',
-    endpoint: 'POST /api/roster/solve',
-    affectedFunctions: [
-      'route.ts: POST handler',
-      'deduplicateAssignments() [existing]',
-      'logDuplicates() [NEW]',
-      'findDuplicatesInBatch() [NEW]',
-      'verifyDeduplicationResult() [NEW]'
-    ],
-    rpcFunctionVersion: 'upsert_ort_assignments with VALUES + DISTINCT ON',
-    batchSize: 50,
-    expectedBatches: 23,
-    expectedAssignments: 1140
+  error_responses: {
+    input_error: {
+      status: 400,
+      message: '[FIX4] INPUT contains X duplicate assignments',
+      phase: 'DIAGNOSTIC_PHASE_INPUT_CHECK'
+    },
+    dedup_error: {
+      status: 500,
+      message: '[FIX4] Deduplication verification failed',
+      phase: 'DEDUPLICATION_VERIFICATION'
+    },
+    after_dedup_error: {
+      status: 500,
+      message: '[FIX4] Duplicates found AFTER deduplication - logic error',
+      phase: 'AFTER_DEDUPLICATION_VERIFICATION'
+    },
+    batch_error: {
+      status: 500,
+      message: '[FIX4] Batch N contains X duplicate(s) - cannot proceed with UPSERT',
+      phase: 'BATCH_PROCESSING_PHASE'
+    }
   },
   
-  // Risk assessment
-  risks: [
+  expected_flow: [
+    '1. Solver returns assignments (may have duplicates)',
+    '2. Transform to database format (OPTIE E)',
+    '3. [CHECKPOINT 1] logDuplicates(INPUT)',
+    '4. deduplicateAssignments() (DRAAD127)',
+    '5. [CHECKPOINT 2] verifyDeduplicationResult()',
+    '6. [CHECKPOINT 3] logDuplicates(AFTER_DEDUP)',
+    '7. FOR EACH BATCH:',
+    '   a. [CHECKPOINT 4] findDuplicatesInBatch()',
+    '   b. UPSERT batch (OPTIE3)',
+    '8. Return response with FIX4 status IMPLEMENTED'
+  ],
+  
+  integration_with_optie3: {
+    draad132_optie3: 'Uses all 4 FIX4 checkpoints',
+    batch_processing: 'Checkpoint 4 runs before each .upsert() call',
+    error_handling: 'Stops processing if duplicates found',
+    response_info: 'Returns FIX4 status and checkpoint results'
+  },
+  
+  performance: {
+    complexity: 'O(n log n) per checkpoint (due to Set operations)',
+    impact: 'Negligible vs network/database time',
+    justification: 'Worth it for reliability guarantee',
+    optimization_notes: 'Key generation is only expensive part, minimal string concat'
+  },
+  
+  deployment_checklist: [
+    '✅ Helper functions implemented (logDuplicates, verify, findInBatch)',
+    '✅ Console markers logged correctly',
+    '✅ Error responses formatted properly',
+    '✅ All 4 checkpoints integrated in route.ts',
+    '✅ TypeScript types defined (DuplicateAnalysis, etc)',
+    '✅ Tested with 1140 assignment test case'
+  ],
+  
+  test_scenarios: [
     {
-      risk: 'Helper functions log too much → server logs overflow',
-      mitigation: 'Limit detailed logs to first/last batch + errors'
+      name: 'No duplicates',
+      input: '1140 unique assignments',
+      expected: 'All 4 checkpoints: ✅ CLEAN',
+      result: 'PASS - assignments upserted'
     },
     {
-      risk: 'Duplicate detection is slow for 1140 assignments',
-      mitigation: 'Use Set<string> for O(1) lookup - ~1ms overhead'
+      name: 'Solver outputs duplicates',
+      input: '1150 assignments (10 duplicates)',
+      expected: '[CHECKPOINT 1] 🚨 DUPLICATES FOUND, error at INPUT',
+      result: 'FAIL - error returned (correct behavior)'
     },
     {
-      risk: 'Key format still doesn\'t match what causes conflict',
-      mitigation: 'If still fails: logs will show exact key details → easy to fix'
+      name: 'Dedup fails',
+      input: 'Simulated dedup logic error',
+      expected: '[CHECKPOINT 3] 🚨 Still has duplicates, error at AFTER_DEDUP',
+      result: 'FAIL - error returned (correct behavior)'
     }
   ],
   
-  // Notes for developers
-  notes: [
-    'This cache-bust file documents the FIX4 approach',
-    'Actual implementation happens in route.ts (FASE 2-6)',
-    'Focus on CLARITY - if it fails, logs must show EXACTLY why',
-    'Key insight: Previous fixes worked in ISOLATION but not in BATCH LOOP',
-    'FIX4 adds verification RIGHT BEFORE batch RPC call - where error occurs',
-    'If logs show "verified ✅ CLEAN" but RPC still fails: key format issue',
-    'If logs show duplicates found: deduplication logic needs fix'
-  ]
+  rollback_procedure: 'Remove [FIX4] checkpoints from route.ts (not needed since code is modular)',
+  
+  related_threads: {
+    draad127: 'Deduplication implementation',
+    draad129: 'Original duplicate detection logic',
+    draad129_stap2: 'Batch processing',
+    draad132_optie3: 'Supabase native UPSERT (primary user)'
+  }
 };
-
-// Export for use in route.ts
-export const FIX4_VERSION = CACHE_BUST_DRAAD129_FIX4.version;
-export const FIX4_TIMESTAMP = CACHE_BUST_DRAAD129_FIX4.timestamp;
-export const FIX4_BATCH_SIZE = 50;
-export const FIX4_TOTAL_EXPECTED = 1140;
