@@ -20,6 +20,12 @@ DRAD118A: INFEASIBLE handling met Bottleneck Analysis
 - BottleneckSuggestion: Actionable recommendations
 - BottleneckReport: Complete analysis when INFEASIBLE
 - Status STAYS 'draft' when INFEASIBLE (not 'in_progress')
+
+DRAD128: BlockedSlot validation fix
+- CHANGED: BlockedSlot.status now accepts Literal[1, 2, 3] (was Literal[2, 3])
+- REASON: DRAAD130 includes status 1 fixed assignments in blocked_slots array
+- SEMANTICS: Status 1 = Fixed (MUST be respected), Status 2-3 = Blocked (CANNOT be used)
+- COMPATIBILITY: Solver properly handles all three statuses as hard constraints
 """
 
 from pydantic import BaseModel, Field, validator, ConfigDict
@@ -136,20 +142,26 @@ class FixedAssignment(BaseModel):
 
 
 class BlockedSlot(BaseModel):
-    """Status 2, 3: Niet beschikbaar voor ORT.
+    """Status 1, 2, 3: Niet beschikbaar of gefinaliseerd (DRAAD128).
     
+    DRAAD128 CHANGE: Now accepts status 1 (Fixed assignments from DRAAD130)
+    - Status 1: Fixed (handmatig gepland, ORT MOET respecteren)
     - Status 2: Geblokkeerd door DIA/DDA/DIO/DDO dienst (automatisch)
     - Status 3: Structureel NBH (handmatig of systeem)
     
-    ORT gedrag: HARD CONSTRAINT - mag NIET worden gebruikt voor ENIGE dienst.
+    ORT gedrag: HARD CONSTRAINT - respecteer status 1, mag status 2-3 NIET gebruiken.
+    
+    RATIONALE: DRAAD130 optimizes data transfer by including status 1 fixed
+    assignments in the same blocked_slots array as status 2-3 blocked items.
+    This reduces payload size and simplifies data handling.
     """
     employee_id: str
     date: date
     dagdeel: Dagdeel
-    status: Literal[2, 3]
+    status: Literal[1, 2, 3]  # DRAAD128: Now includes 1 (Fixed)
     blocked_by_service_id: Optional[str] = Field(
         default=None,
-        description="Voor status 2: welke dienst veroorzaakt blokkering"
+        description="For status 1: assigned service; for status 2: blocking service"
     )
 
 
@@ -321,6 +333,7 @@ class SolveRequest(BaseModel):
     DRAAD106: Splitst pre_assignments in fixed, blocked, suggested
     DRAAD108: Voegt exact_staffing toe voor bezetting realiseren
     DRAAD118A: Verwacht bottleneck_report in response bij INFEASIBLE
+    DRAAD128: BlockedSlot.status now includes 1 (Fixed assignments)
     """
     roster_id: str  # uuid in database (als string)
     start_date: date
@@ -336,7 +349,7 @@ class SolveRequest(BaseModel):
     )
     blocked_slots: List[BlockedSlot] = Field(
         default_factory=list,
-        description="Status 2, 3: MAG NIET worden gebruikt"
+        description="Status 1 (DRAAD128), 2, 3: Status 1=respect, Status 2-3=CANNOT use"
     )
     suggested_assignments: List[SuggestedAssignment] = Field(
         default_factory=list,
@@ -452,6 +465,7 @@ class SolveResponse(BaseModel):
       → Backend (route.ts): Keep rooster status as 'draft' (DO NOT change!)
     
     DRAAD106: Respecteer fixed, blocked, suggested assignments
+    DRAAD128: BlockedSlot.status validation now accepts 1, 2, 3
     """
     status: SolveStatus
     roster_id: str  # uuid in database (als string)
