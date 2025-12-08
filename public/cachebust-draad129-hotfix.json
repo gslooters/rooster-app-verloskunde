@@ -1,0 +1,12 @@
+{
+  "draad": "DRAAD129-HOTFIX",
+  "type": "SYNTAX_FIX",
+  "timestamp": "2025-12-08T08:47:07Z",
+  "unix_timestamp_ms": 1733681227000,
+  "error_fixed": "Unterminated string constant on line 822",
+  "fix_description": "cache_busting string: 'Timestamp + random execution ID' - closing quote added",
+  "status": "READY_FOR_REBUILD",
+  "railway_trigger_id": "hotfix-syntax-129",
+  "cache_buster_random": 4271,
+  "next_step": "Railway will rebuild and deploy"
+}
