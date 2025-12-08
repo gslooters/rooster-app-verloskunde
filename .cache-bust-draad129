@@ -1,0 +1,8 @@
+DRAAD129-FIX-TIMESTAMP: 1733699033000
+DESCRIPTION: Fix infeasible routing in DashboardClient.tsx
+CHANGES:
+- Added routing logic to check solver status
+- On FEASIBLE: route to /rooster/[id]/feasible-summary
+- On INFEASIBLE: route to /rooster/[id]/bottleneck-analysis with bottleneck_report in sessionStorage
+- Added proper error handling for timeout and unknown statuses
+DATE: 2025-12-08T17:43:53Z
