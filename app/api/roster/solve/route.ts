@@ -95,6 +95,11 @@
  * - FIX4 Deduplication: Extra defense-in-depth layer (before upsert)
  * - Batch Processing: BATCH_SIZE=50, TOTAL_BATCHES=calculated
  * 
+ * DRAAD132-BUGFIX: VARIABLE SCOPE FIX
+ * - FIXED: TOTAL_ASSIGNMENTS undefined in response JSON scope
+ * - MOVED: Variable declaration to outer scope (before conditional)
+ * - REASON: Response JSON needs access to batch configuration
+ * 
  * DRAAD129-FIX4: COMPREHENSIVE DUPLICATE VERIFICATION (THIS PHASE)
  * - NEW: logDuplicates() helper - detailed INPUT analysis before dedup
  * - NEW: findDuplicatesInBatch() helper - per-batch verification BEFORE UPSERT
@@ -445,6 +450,9 @@ export async function POST(request: NextRequest) {
   // DRAAD132: Import OPTIE3 cache bust
   const optie3Version = CACHE_BUST_OPTIE3.version;
   const optie3Timestamp = CACHE_BUST_OPTIE3.timestamp;
+  
+  // DRAAD132-BUGFIX: Declare TOTAL_ASSIGNMENTS in outer scope for response JSON access
+  let totalAssignmentsForResponse = 0;
   
   try {
     // 1. Parse request
@@ -908,6 +916,9 @@ export async function POST(request: NextRequest) {
         const TOTAL_ASSIGNMENTS = deduplicatedAssignments.length;
         const TOTAL_BATCHES = Math.ceil(TOTAL_ASSIGNMENTS / BATCH_SIZE);
         
+        // DRAAD132-BUGFIX: Store for response JSON access
+        totalAssignmentsForResponse = TOTAL_ASSIGNMENTS;
+        
         console.log(`[OPTIE3] Configuration: BATCH_SIZE=${BATCH_SIZE}, TOTAL_ASSIGNMENTS=${TOTAL_ASSIGNMENTS}, TOTAL_BATCHES=${TOTAL_BATCHES}`);
         console.log(`[OPTIE3] METHOD: Supabase native .upsert() with onConflict composite key`);
         console.log(`[OPTIE3] COMPOSITE_KEY: roster_id, employee_id, date, dagdeel`);
@@ -1117,7 +1128,7 @@ export async function POST(request: NextRequest) {
           method: 'Supabase native .upsert() with onConflict',
           composite_key: 'roster_id,employee_id,date,dagdeel',
           deduplication_layer: 'FIX4 TypeScript dedup (defense-in-depth)',
-          batch_processing: `BATCH_SIZE=50, TOTAL_BATCHES=${Math.ceil(solverResult.total_assignments / 50)}`,
+          batch_processing: `BATCH_SIZE=50, TOTAL_BATCHES=${Math.ceil((totalAssignmentsForResponse || solverResult.total_assignments) / 50)}`,
           benefits: [
             '✅ No RPC function complexity',
             '✅ No CREATE TEMP TABLE session state issues',
@@ -1128,7 +1139,7 @@ export async function POST(request: NextRequest) {
           ],
           implementation_date: '2025-12-08',
           total_processed: solverResult.total_assignments,
-          total_assignments: TOTAL_ASSIGNMENTS,
+          total_assignments: totalAssignmentsForResponse,
           version: optie3Version,
           timestamp: optie3Timestamp
         },
