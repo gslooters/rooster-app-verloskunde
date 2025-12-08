@@ -1,0 +1,68 @@
+# DRAAD128: Railway Trigger - Solver2 Validation Fix Deploy
+# ============================================================================
+# Purpose: Trigger rebuild of Solver2 service after models.py BlockedSlot fix
+# Issue: HTTP 422 "Input should be 2 or 3" when status=1 sent to blocked_slots
+# Root Cause: Pydantic validation too strict (Literal[2,3] only)
+# Solution: Expand validation to Literal[1, 2, 3] to match DRAAD130 data
+# 
+# Files Modified:
+# - solver/models.py: BlockedSlot.status field (line 233-235)
+#   FROM: status: Literal[2, 3]
+#   TO:   status: Literal[1, 2, 3]
+#
+# Why Include Status 1?
+# =========================================================================
+# DRAAD130 (rooster-app-verloskunde) now sends status 1 (fixed assignments)
+# in the blocked_slots array alongside status 2-3 (true blocks) to optimize:
+# - Payload size reduction
+# - Simplified client-side data handling
+# - Server-side processing efficiency
+#
+# Status Semantics (DRAAD106):
+# =========================================================================
+# Status 1: Fixed (must be respected) - assigned service_id in payload
+# Status 2: Blocked (cannot use) - NULL service_id, blocking service stored
+# Status 3: Structurally unavailable (cannot use) - NULL service_id
+#
+# Solver Behavior:
+# =========================================================================
+# - Status 1: HARD CONSTRAINT - must use exactly the assigned service
+# - Status 2-3: HARD CONSTRAINT - cannot assign ANY service to this slot
+#
+# Testing Before Deploy:
+# =========================================================================
+# POST /api/v1/solve-schedule with blocked_slots containing status 1 items
+# Expected: HTTP 200 OK with solution
+# Old behavior: HTTP 422 with Pydantic validation error
+# New behavior: Accepts status 1, treats as fixed hard constraint
+#
+# Railway Environment Variables (Solver2 service):
+# =========================================================================
+# SOLVER_VERSION=2  # Ensure correct solver is running
+# PYTHONUNBUFFERED=1  # Enable real-time logging
+#
+# Deployment Checklist:
+# =========================================================================
+# ✓ Code change: solver/models.py updated
+# ✓ Cache bust: .cachebust-draad128-solver-fix created
+# ✓ Git commit: 2aa9e08531798793bfd7bd0c79f102e9050fc8e6 (models.py)
+# ✓ Git commit: be5f16032d6f377ccf660f53a107cbd1cc4b6820 (cache-bust)
+# ✓ Railway trigger: THIS FILE - will force rebuild
+#
+# After Successful Deploy:
+# =========================================================================
+# 1. Test with rooster-app-verloskunde calling solve-schedule
+# 2. Verify no more 422 errors when status 1 in blocked_slots
+# 3. Monitor solver logs for proper constraint handling
+# 4. Confirm FEASIBLE solutions when status 1 assignments present
+#
+# Rollback Plan (if issues):
+# =========================================================================
+# 1. Revert solver/models.py to previous version
+# 2. Remove this trigger file
+# 3. Git force-push if necessary
+# 4. Railway will auto-redeploy with old code
+#
+# Created: 2025-12-08 17:11 CET
+# Git SHA: 2aa9e08531798793bfd7bd0c79f102e9050fc8e6
+# Random ID: 947284
