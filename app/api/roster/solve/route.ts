@@ -1,22 +1,21 @@
 /**
  * API Route: POST /api/roster/solve
  * 
- * DRAAD134: BASELINE VERIFIED + CORRECT DELETE+INSERT
+ * DRAAD135: DELETE FUNCTIONALITY REMOVED & UPSERT RESTORED
  * 
- * FIXED: DELETE clause changed from source='ort' to status=0
- * REASON: DELETE must remove ALL status=0 assignments (any source)
- * RESULT: Eliminates 1056+ duplicate key violations from DRAAD133
+ * CRITICAL: roster_assignments records are NEVER deleted
+ * Method: UPSERT with onConflict handling (DRAAD132 pattern)
+ * Status preservation: All status (0,1,2,3) maintained via UPDATE
  * 
- * The Fix:
- *   OLD: .delete().eq('source', 'ort')
- *   NEW: .delete().eq('status', 0)
+ * What was removed:
+ *   DELETE FROM roster_assignments WHERE status=0
+ *   ^ This destroyed 1134 records in DRAAD134
  * 
- * Why This Works:
- *   - Status 0 = provisional/suggestion only (safe to delete)
- *   - Status 1,2,3 = planner assignments (NEVER delete)
- *   - DELETE status=0 removes ~1134 rows
- *   - INSERT 1140 new rows succeeds (no composite key conflicts)
- *   - Final state: 6+6+219+1140 = 1371 rows
+ * What is restored:
+ *   UPSERT pattern from DRAAD132 (last working version)
+ *   - Inserts new assignments
+ *   - Updates existing on composite key conflict
+ *   - NEVER deletes any records
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -24,7 +23,7 @@ import { createClient } from '@/lib/supabase/server';
 import { CACHE_BUST_DRAAD129_STAP3_FIXED } from '@/app/api/cache-bust/DRAAD129_STAP3_FIXED';
 import { CACHE_BUST_DRAAD129_FIX4 } from '@/app/api/cache-bust/DRAAD129_FIX4';
 import { CACHE_BUST_OPTIE3_CONSTRAINT_RESOLUTION } from '@/app/api/cache-bust/OPTIE3_CONSTRAINT_RESOLUTION';
-import { CACHE_BUST_DRAAD134 } from '@/app/api/cache-bust/DRAAD134';
+import { CACHE_BUST_DRAAD135 } from '@/app/api/cache-bust/DRAAD135';
 import type {
   SolveRequest,
   SolveResponse,
@@ -169,10 +168,10 @@ export async function POST(request: NextRequest) {
   const solverRunId = crypto.randomUUID();
   const executionTimestamp = new Date().toISOString();
   const executionMs = Date.now();
-  const cacheBustingId = `DRAAD134-${executionMs}-${Math.floor(Math.random() * 100000)}`;
+  const cacheBustingId = `DRAAD135-${executionMs}-${Math.floor(Math.random() * 100000)}`;
   
-  const draad134Version = CACHE_BUST_DRAAD134.version;
-  const draad134Timestamp = CACHE_BUST_DRAAD134.timestamp;
+  const draad135Version = CACHE_BUST_DRAAD135.version;
+  const draad135Timestamp = CACHE_BUST_DRAAD135.timestamp;
   
   try {
     const { roster_id } = await request.json();
@@ -185,9 +184,9 @@ export async function POST(request: NextRequest) {
     }
     
     console.log(`[Solver API] Start solve voor roster ${roster_id}`);
-    console.log(`[DRAAD134] Cache bust: ${cacheBustingId}`);
-    console.log(`[DRAAD134] Version: ${draad134Version}`);
-    console.log(`[DRAAD134] DELETE clause: status=0 (not source=\'ort\')`);
+    console.log(`[DRAAD135] Cache bust: ${cacheBustingId}`);
+    console.log(`[DRAAD135] Version: ${draad135Version}`);
+    console.log(`[DRAAD135] Method: UPSERT (no DELETE)`);
     
     const supabase = await createClient();
     
@@ -429,51 +428,31 @@ export async function POST(request: NextRequest) {
           }, { status: 500 });
         }
         
-        // DRAAD134: DELETE status=0 (not source='ort')
-        console.log('[DRAAD134] === DELETE+INSERT PHASE ===');
-        console.log('[DRAAD134] DELETE: Removing status=0 assignments (all sources)...');
+        // DRAAD135: UPSERT pattern (restored from DRAAD132)
+        // CRITICAL: roster_assignments records are NEVER deleted
+        // Method: UPSERT with onConflict handling
+        console.log('[DRAAD135] === UPSERT PHASE ===');
+        console.log('[DRAAD135] UPSERT: Inserting/updating assignments with onConflict handling...');
         
-        const deleteStartTime = Date.now();
-        const { error: deleteError } = await supabase
+        const upsertStartTime = Date.now();
+        const { error: upsertError } = await supabase
           .from('roster_assignments')
-          .delete()
-          .eq('roster_id', roster_id)
-          .eq('status', 0);  // ✅ DRAAD134: status=0 instead of source='ort'
+          .upsert(deduplicatedAssignments, {
+            onConflict: 'roster_id,employee_id,date,dagdeel',
+            ignoreDuplicates: false
+          });
         
-        if (deleteError) {
-          console.error('[DRAAD134] DELETE failed:', deleteError.message);
+        if (upsertError) {
+          console.error('[DRAAD135] UPSERT failed:', upsertError.message);
           return NextResponse.json({
-            error: `[DRAAD134] DELETE failed: ${deleteError.message}`,
-            draad134: 'DELETE status=0 unsuccessful'
+            error: `[DRAAD135] UPSERT failed: ${upsertError.message}`,
+            draad135: 'UPSERT unsuccessful'
           }, { status: 500 });
         }
         
-        const deleteTime = Date.now() - deleteStartTime;
-        console.log(`[DRAAD134] ✅ DELETE successful (${deleteTime}ms)`);
-        
-        // INSERT all assignments
-        const insertStartTime = Date.now();
-        console.log(`[DRAAD134] INSERT: Adding ${deduplicatedAssignments.length} new assignments...`);
-        
-        const { error: insertError } = await supabase
-          .from('roster_assignments')
-          .insert(deduplicatedAssignments);
-        
-        if (insertError) {
-          console.error('[DRAAD134] INSERT failed:', insertError.message);
-          return NextResponse.json({
-            error: `[DRAAD134] INSERT failed: ${insertError.message}`,
-            details: {
-              insertCount: deduplicatedAssignments.length,
-              message: 'DELETE succeeded, but INSERT failed'
-            },
-            draad134: 'INSERT unsuccessful after successful DELETE'
-          }, { status: 500 });
-        }
-        
-        const insertTime = Date.now() - insertStartTime;
-        console.log(`[DRAAD134] ✅ INSERT successful (${insertTime}ms)`);
-        console.log('[DRAAD134] === END DELETE+INSERT ===');
+        const upsertTime = Date.now() - upsertStartTime;
+        console.log(`[DRAAD135] ✅ UPSERT successful (${upsertTime}ms)`);
+        console.log('[DRAAD135] === END UPSERT ===');
       }
       
       const { error: updateError } = await supabase
@@ -500,13 +479,14 @@ export async function POST(request: NextRequest) {
           fill_percentage: solverResult.fill_percentage,
           solve_time_seconds: solverResult.solve_time_seconds
         },
-        draad134: {
+        draad135: {
           status: 'IMPLEMENTED',
-          version: draad134Version,
-          timestamp: draad134Timestamp,
-          fix: 'DELETE status=0 (not source=\'ort\')',
-          rationale: 'Remove ALL suggestions, preserve status 1,2,3 (planner assignments)',
-          expected_result: 'Zero duplicate key violations, 100% INSERT success'
+          version: draad135Version,
+          timestamp: draad135Timestamp,
+          method: 'UPSERT with onConflict',
+          fix: 'Removed DELETE, restored DRAAD132 UPSERT pattern',
+          safety: 'roster_assignments records NEVER deleted - INSERT/UPDATE only',
+          rationale: 'Prevent data destruction via DELETE statement'
         },
         total_time_ms: totalTime
       });
@@ -537,7 +517,7 @@ export async function POST(request: NextRequest) {
       {
         error: 'Internal server error',
         message: error.message,
-        draad134_status: 'ERROR'
+        draad135_status: 'ERROR'
       },
       { status: 500 }
     );
