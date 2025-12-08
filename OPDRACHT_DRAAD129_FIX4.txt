@@ -1,0 +1,395 @@
+================================================================================
+OPDRACHT: DRAAD129-FIX4 - THE REAL FIX (TypeScript Deduplication Verification)
+================================================================================
+
+STATUS: 🔴 CRITICAL - Same error after 3 failed attempts
+ROOT CAUSE: Duplicates in batches not properly filtered
+SOLUTION: TypeScript deduplication verification + per-batch validation
+
+================================================================================
+1. CONTEXT
+================================================================================
+
+Previous attempts (FAILED):
+❌ FIX 1: Removed CREATE TEMP TABLE from SQL
+❌ FIX 2: Added DISTINCT ON in SQL
+❌ FIX 3: Used VALUES clause in SQL
+
+All had SAME ERROR: "ON CONFLICT DO UPDATE command cannot affect row a second time"
+
+ROOT CAUSE (IDENTIFIED):
+- Deduplication logic RUNS but output NOT properly used in batch loop
+- Batches contain DUPLICATE keys: (employee_id|date|dagdeel)
+- PostgreSQL detects duplicate within same batch → ERROR
+- Detection shows "No duplicates found" but still fails → KEY FORMAT ISSUE
+
+REAL PROBLEM:
+- Either key format in duplicate detection ≠ ACTUAL duplicate key
+- OR duplicates appear AFTER transformation (service_code → service_id)
+- OR batches not actually using deduplicated array
+
+SOLUTION:
+✅ Add helper functions to LOG AND VERIFY duplicates at multiple stages
+✅ Check BEFORE deduplication (INPUT)
+✅ Check AFTER deduplication (OUTPUT)
+✅ Check EACH BATCH before RPC call
+✅ Keep SQL DISTINCT ON as second defense
+✅ If duplicates found post-dedup → ERROR with details
+✅ If duplicates in batch → ERROR with batch number
+
+================================================================================
+2. IMPLEMENTATIE PLAN (uit DRAAD129_FIX4_PLAN.md)
+================================================================================
+
+FASE 1: Helper Functions (NEW)
+- logDuplicates(assignments, phase): Detailed duplicate analysis
+- findDuplicatesInBatch(batch): Verify batch is clean
+
+FASE 2: Deduplication Verification (UPDATE)
+- After deduplicateAssignments() call
+- Verify result is actually clean
+- Error if duplicates still present
+
+FASE 3: Per-Batch Verification (UPDATE BATCH LOOP)
+- Before each RPC call
+- Check batch has no duplicates
+- Log which batch is checked
+- Error if batch has duplicates
+
+FASE 4: Cache Bust Version (NEW)
+- Create DRAAD129_FIX4.ts
+- Version tracking for this fix
+- Documentation of approach
+
+FASE 5: Update Imports (UPDATE)
+- Import new cache bust version
+- Add logging to execution flow
+
+================================================================================
+3. DETAILED IMPLEMENTATION
+================================================================================
+
+--- FILE 1: Create NEW ---
+Path: app/api/cache-bust/DRAAD129_FIX4.ts
+
+```typescript
+export const CACHE_BUST_DRAAD129_FIX4 = {
+  timestamp: Date.now(),
+  date: new Date().toISOString(),
+  random: Math.floor(Math.random() * 100000),
+  version: 'DRAAD129_FIX4',
+  fix: 'TypeScript deduplication with per-batch verification',
+  problem: 'ON CONFLICT DO UPDATE command cannot affect row a second time',
+  rootCause: 'Duplicates in same batch cause PostgreSQL conflict',
+  solution: [
+    'logDuplicates() - detailed duplicate detection',
+    'findDuplicatesInBatch() - per-batch verification',
+    'Verify BEFORE dedup, AFTER dedup, BEFORE each RPC call',
+    'SQL DISTINCT ON as fallback defense'
+  ],
+  approach: 'Comprehensive logging + verification at 3 checkpoints',
+  benefits: [
+    'Verifiable - logs show exact duplicate keys',
+    'Batch-level - know which batch fails',
+    'Debug-friendly - detailed indices and key format',
+    'Safety-net - SQL still protects'
+  ],
+  expectedBehavior: 'All 1140 assignments upserted without conflict',
+  deployDate: '2025-12-08'
+};
+```
+
+--- FILE 2: Update EXISTING ---
+Path: app/api/roster/solve/route.ts
+
+ADD AT TOP (after imports):
+
+```typescript
+import { CACHE_BUST_DRAAD129_FIX4 } from '@/app/api/cache-bust/DRAAD129_FIX4';
+
+// Helper: Detailed duplicate logging
+interface DuplicateEntry {
+  key: string;
+  count: number;
+  indices: number[];
+  assignments: Assignment[];
+}
+
+const logDuplicates = (assignments: Assignment[], phase: string): DuplicateEntry[] => {
+  const keyMap = new Map<string, { count: number; indices: number[]; assignments: Assignment[] }>();
+  
+  assignments.forEach((a, idx) => {
+    // Use EXACT same key format as deduplication
+    const key = `${a.employee_id}|${a.date}|${a.dagdeel}`;
+    if (!keyMap.has(key)) {
+      keyMap.set(key, { count: 0, indices: [], assignments: [] });
+    }
+    const entry = keyMap.get(key)!;
+    entry.count++;
+    entry.indices.push(idx);
+    entry.assignments.push(a);
+  });
+  
+  const duplicates = Array.from(keyMap.entries())
+    .filter(([_, data]) => data.count > 1)
+    .map(([key, data]) => ({
+      key,
+      count: data.count,
+      indices: data.indices,
+      assignments: data.assignments
+    }))
+    .sort((a, b) => b.count - a.count);
+  
+  if (duplicates.length === 0) {
+    console.log(`[FIX4] ${phase}: ✅ CLEAN - No duplicates found (${assignments.length} total)`);
+  } else {
+    console.error(`[FIX4] ${phase}: 🚨 DUPLICATES FOUND - ${duplicates.length} duplicate keys`);
+    duplicates.forEach((dup, idx) => {
+      console.error(`[FIX4]   #${idx + 1}: key='${dup.key}' appears ${dup.count}x (indices: ${dup.indices.join(', ')})`);
+      // Log first instance details
+      if (dup.assignments.length > 0) {
+        const first = dup.assignments[0];
+        console.error(`[FIX4]     Sample: emp=${first.employee_id} date=${first.date} dagdeel=${first.dagdeel} service=${first.service_id || 'NULL'}`);
+      }
+    });
+  }
+  
+  return duplicates;
+};
+
+const findDuplicatesInBatch = (batch: Assignment[]): DuplicateEntry[] => {
+  const keyMap = new Map<string, number>();
+  
+  batch.forEach((a) => {
+    const key = `${a.employee_id}|${a.date}|${a.dagdeel}`;
+    keyMap.set(key, (keyMap.get(key) || 0) + 1);
+  });
+  
+  const duplicates = Array.from(keyMap.entries())
+    .filter(([_, count]) => count > 1)
+    .map(([key, count]) => ({
+      key,
+      count,
+      indices: [],
+      assignments: []
+    }));
+  
+  return duplicates;
+};
+```
+
+UPDATE EXISTING SECTION: After deduplicateAssignments() call
+
+```typescript
+// DRAAD127: Deduplicate assignments BEFORE UPSERT
+const deduplicatedAssignments = deduplicateAssignments(assignmentsToUpsert);
+
+// FIX4: Verify deduplication actually worked
+console.log(`[DRAAD129] After deduplication: ${deduplicatedAssignments.length} assignments (removed ${assignmentsToUpsert.length - deduplicatedAssignments.length})`);
+
+const duplicatesAfterDedup = logDuplicates(deduplicatedAssignments, 'AFTER_DEDUP');
+
+if (duplicatesAfterDedup.length > 0) {
+  console.error('[FIX4] 🚨 CRITICAL: Deduplication FAILED - Duplicates still present after removal!');
+  console.error('[FIX4] This indicates the deduplication logic is broken.');
+  
+  return NextResponse.json({
+    error: 'Deduplication verification failed',
+    details: {
+      message: 'Duplicates detected after deduplication - logic error',
+      duplicateCount: duplicatesAfterDedup.length,
+      remainingDuplicates: duplicatesAfterDedup.map(d => ({
+        key: d.key,
+        count: d.count,
+        indices: d.indices
+      }))
+    },
+    cacheBustVersion: CACHE_BUST_DRAAD129_FIX4.version
+  }, { status: 500 });
+}
+```
+
+UPDATE EXISTING BATCH LOOP SECTION:
+
+```typescript
+for (let i = 0; i < deduplicatedAssignments.length; i += BATCH_SIZE) {
+  const batch = deduplicatedAssignments.slice(i, i + BATCH_SIZE);
+  const batchNum = Math.floor(i / BATCH_SIZE);
+  const batchStartIdx = i;
+  const batchEndIdx = Math.min(i + BATCH_SIZE, deduplicatedAssignments.length);
+  
+  console.log(`[DRAAD129-STAP2] Batch ${batchNum}/${TOTAL_BATCHES - 1}: processing ${batch.length} assignments (indices ${batchStartIdx}-${batchEndIdx - 1})...`);
+  
+  // FIX4: Check this batch for duplicates BEFORE RPC call
+  const batchDups = findDuplicatesInBatch(batch);
+  
+  if (batchDups.length > 0) {
+    const dupKeys = batchDups.map(d => `${d.key}(x${d.count})`).join(', ');
+    console.error(`[FIX4] 🚨 Batch ${batchNum} CONTAINS DUPLICATES: ${dupKeys}`);
+    console.error(`[FIX4] This should not happen - batch came from deduplicated array!`);
+    
+    return NextResponse.json({
+      error: `Batch ${batchNum} contains duplicates (should not happen)`,
+      details: {
+        batchNum,
+        batchSize: batch.length,
+        duplicates: batchDups.map(d => ({ key: d.key, count: d.count }))
+      },
+      recommendation: 'Debug deduplication or array slicing logic'
+    }, { status: 500 });
+  }
+  
+  console.log(`[FIX4] Batch ${batchNum} verified ✅ CLEAN - proceeding with RPC`);
+  
+  // Validatie: Check for unmapped services in this batch
+  const unmappedCount = batch.filter(a => !a.service_id).length;
+  if (unmappedCount > 0) {
+    console.warn(`[DRAAD129-STAP2] ⚠️  Batch ${batchNum}: ${unmappedCount}/${batch.length} assignments have unmapped service codes`);
+  }
+  
+  // Call RPC for this batch
+  const { data: upsertResult, error: upsertError } = await supabase
+    .rpc('upsert_ort_assignments', {
+      p_assignments: batch
+    });
+  
+  // ... rest of error handling remains same ...
+}
+```
+
+UPDATE LOGGING SECTION (top of function, add):
+
+```typescript
+console.log(`[DRAAD129-FIX4] Cache bust version: ${CACHE_BUST_DRAAD129_FIX4.version}`);
+console.log(`[DRAAD129-FIX4] Approach: ${CACHE_BUST_DRAAD129_FIX4.approach}`);
+```
+
+================================================================================
+4. VALIDATION
+================================================================================
+
+Before committing:
+
+✅ Syntax check: logDuplicates and findDuplicatesInBatch functions
+✅ Key format: Used EXACT same key format in both functions
+✅ Error handling: Returns 500 if duplicates found
+✅ Logging: Detailed output at each checkpoint
+✅ Cache bust: New version DRAAD129_FIX4 created and imported
+✅ Batch loop: Each batch checked before RPC
+✅ SQL: DISTINCT ON still in migration as fallback
+
+================================================================================
+5. TESTING SCENARIO
+================================================================================
+
+When solver returns 1140 assignments:
+
+✅ Expected logs:
+
+[FIX4] INPUT: ✅ CLEAN - No duplicates found (1140 total)
+OR
+[FIX4] INPUT: 🚨 DUPLICATES FOUND - N duplicate keys
+  #1: key='emp3|2025-11-24|O' appears 2x (indices: 5, 120)
+  ...
+
+[FIX4] AFTER_DEDUP: ✅ CLEAN - No duplicates found (1140 total)
+OR
+[FIX4] AFTER_DEDUP: 🚨 CRITICAL: Deduplication FAILED
+→ Error 500 (dedup logic broken)
+
+[FIX4] Batch 0 verified ✅ CLEAN - proceeding with RPC
+[DRAAD129-STAP2] ✅ Batch 0 OK: 50 assignments inserted
+[FIX4] Batch 1 verified ✅ CLEAN - proceeding with RPC
+[DRAAD129-STAP2] ✅ Batch 1 OK: 50 assignments inserted
+...
+[DRAAD129-STAP2] ✅ ALL BATCHES SUCCEEDED: 1140 total assignments
+
+✅ Expected result:
+- All 23 batches complete successfully
+- 1140 assignments in database
+- Roster status changed to 'in_progress'
+- NO duplicate key conflicts
+
+❌ If batch fails:
+
+[FIX4] Batch 5 verified ✅ CLEAN
+[DRAAD129-STAP2] ❌ Batch 5 FAILED: ON CONFLICT DO UPDATE command cannot affect row twice
+→ Means: SQL still detecting duplicates (dedup didn't work)
+→ Debug: Check logDuplicates output - should show the duplicates
+
+================================================================================
+6. DEPLOYMENT
+================================================================================
+
+Steps:
+
+1. Create new file: app/api/cache-bust/DRAAD129_FIX4.ts
+2. Update: app/api/roster/solve/route.ts
+   - Add imports
+   - Add helper functions
+   - Update deduplication section
+   - Update batch loop
+   - Update logging
+3. Syntax check - no errors
+4. Commit to GitHub
+5. Railway auto-deploys
+6. Test: Create roster → Solve → Check logs
+7. Verify: All batches succeed
+
+================================================================================
+7. SUCCESS CRITERIA
+================================================================================
+
+✅ All helper functions compile without errors
+✅ Deduplication verification runs without errors
+✅ Each batch logs "verified ✅ CLEAN"
+✅ All 23 batches complete successfully
+✅ 1140 assignments upserted to database
+✅ Roster status = 'in_progress'
+✅ NO "ON CONFLICT DO UPDATE" errors
+✅ Logs show clear duplicate detection at each stage
+
+================================================================================
+8. COMMIT MESSAGE
+================================================================================
+
+DRAAD129-FIX4: THE REAL FIX - TypeScript deduplication verification
+
+Added:
+- logDuplicates() helper function for detailed analysis
+- findDuplicatesInBatch() for per-batch verification
+- Verification checkpoints: BEFORE dedup, AFTER dedup, BEFORE each RPC
+- New cache bust version DRAAD129_FIX4
+- Comprehensive logging for duplicate detection
+
+Fix:
+- Root cause: Duplicates not properly filtered or used in batch loop
+- Solution: Verify deduplication works + check each batch
+- Logging: Shows exactly which keys are duplicated and indices
+- Error handling: Fails fast with detailed diagnostic info
+
+Expected:
+- All 1140 assignments upserted in 23 batches
+- Zero duplicate key conflicts
+- Clear logs for debugging if issues occur
+
+Fallback:
+- SQL DISTINCT ON still in place as second defense
+- Batch processing prevents timeout on large datasets
+
+================================================================================
+9. IF THIS STILL FAILS
+================================================================================
+
+Then we'll know:
+1. logDuplicates() output shows the exact duplicate keys
+2. Deduplication is WORKING (if AFTER_DEDUP is clean)
+3. Problem is elsewhere in transformation or batching
+4. We have detailed diagnostics to debug further
+
+Otherwise (if this succeeds):
+🎉 Problem solved! All 1140 assignments now process without conflict
+
+================================================================================
+END OPDRACHT
+================================================================================
