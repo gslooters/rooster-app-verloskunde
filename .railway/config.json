@@ -1,0 +1,27 @@
+{
+  "version": "2.0",
+  "deployment": {
+    "trigger": "DRAAD129_STAP3_FIXED",
+    "timestamp": "2025-12-08T20:00:00Z",
+    "status": "ready",
+    "migrations": [
+      "20251208_DRAAD129_STAP3_FIXED_upsert_ort_assignments.sql"
+    ],
+    "updates": [
+      "app/api/roster/solve/route.ts",
+      "app/api/cache-bust/DRAAD129_STAP3_FIXED.ts"
+    ],
+    "features": {
+      "batch_processing": "VALUES + DISTINCT ON",
+      "error_handling": "Improved logging",
+      "cache_busting": "Date.now() + random",
+      "rpc_function": "upsert_ort_assignments()"
+    },
+    "impact": {
+      "batches": "23 batches of 50 assignments",
+      "total_assignments": 1140,
+      "all_atomic": true,
+      "session_conflicts": "FIXED"
+    }
+  }
+}
