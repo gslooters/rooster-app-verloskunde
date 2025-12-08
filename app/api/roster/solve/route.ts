@@ -44,6 +44,13 @@
  * - Now: source='ort' (lowercase) - matches constraint allowed values
  * - Constraint values: ['manual', 'ort', 'system', 'import']
  * 
+ * DRAAD128.8: RPC RESPONSE DEBUGGING
+ * - FIXED: Added detailed logging for upsertResult
+ * - Log full response structure
+ * - Check for null/undefined
+ * - Validate Array.isArray()
+ * - Debug result object contents
+ * 
  * DRAAD127: DUPLICATE PREVENTION (TypeScript + SQL)
  * - FIXED: Solver batch can contain duplicate keys (same employee-date-dagdeel)
  * - NEW: Deduplicate in TypeScript BEFORE UPSERT
@@ -607,10 +614,19 @@ export async function POST(request: NextRequest) {
         // DRAAD128: Use PostgreSQL RPC function for atomic UPSERT
         // Function: upsert_ort_assignments(p_assignments jsonb)
         // Returns: (success boolean, inserted_count integer, error_message text)
+        console.log('[DRAAD128] Calling RPC upsert_ort_assignments...');
+        
         const { data: upsertResult, error: upsertError } = await supabase
           .rpc('upsert_ort_assignments', {
             p_assignments: deduplicatedAssignments  // DRAAD127: Use deduplicated assignments!
           });
+        
+        // DRAAD128.8: Detailed debugging
+        console.log('[DRAAD128.8] RPC Response:');
+        console.log('[DRAAD128.8] - error:', upsertError);
+        console.log('[DRAAD128.8] - data:', upsertResult);
+        console.log('[DRAAD128.8] - data type:', typeof upsertResult);
+        console.log('[DRAAD128.8] - data is array:', Array.isArray(upsertResult));
         
         if (upsertError) {
           console.error('[DRAAD128] RPC UPSERT error:', upsertError);
@@ -620,16 +636,37 @@ export async function POST(request: NextRequest) {
           );
         }
         
-        // Check result
-        if (!upsertResult || !Array.isArray(upsertResult) || upsertResult.length === 0) {
-          console.error('[DRAAD128] UPSERT returned invalid result:', upsertResult);
+        // DRAAD128.8: Add detailed debugging for null/undefined
+        if (!upsertResult) {
+          console.error('[DRAAD128.8] CRITICAL: upsertResult is null/undefined');
+          console.error('[DRAAD128.8] Full response:', { upsertResult, upsertError });
           return NextResponse.json(
-            { error: '[DRAAD128] UPSERT returned invalid result' },
+            { error: '[DRAAD128.8] upsertResult is null/undefined - check RPC function return type' },
+            { status: 500 }
+          );
+        }
+        
+        if (!Array.isArray(upsertResult)) {
+          console.error('[DRAAD128.8] CRITICAL: upsertResult is not an array');
+          console.error('[DRAAD128.8] Type:', typeof upsertResult);
+          console.error('[DRAAD128.8] Value:', upsertResult);
+          return NextResponse.json(
+            { error: `[DRAAD128.8] upsertResult is not array, type: ${typeof upsertResult}` },
+            { status: 500 }
+          );
+        }
+        
+        if (upsertResult.length === 0) {
+          console.error('[DRAAD128.8] CRITICAL: upsertResult array is empty');
+          return NextResponse.json(
+            { error: '[DRAAD128.8] upsertResult array is empty' },
             { status: 500 }
           );
         }
         
         const [result] = upsertResult;
+        console.log('[DRAAD128.8] Result object:', result);
+        console.log('[DRAAD128.8] Result.success:', result?.success);
         
         if (!result.success) {
           console.error('[DRAAD128] UPSERT failed:', result.error_message);
@@ -715,7 +752,8 @@ export async function POST(request: NextRequest) {
           slots_preserved: '✅ All 1365 slots intact',
           no_destructive_delete: 'true',
           solver_hints_stored_in: 'service_id field (via service code mapping) with source=ort marker',
-          source_case_fixed: 'DRAAD128.6 - lowercase ort matches CHECK constraint'
+          source_case_fixed: 'DRAAD128.6 - lowercase ort matches CHECK constraint',
+          debug_info: 'DRAAD128.8 - RPC response validation with detailed logging'
         },
         draad122: {
           fix_applied: 'UPSERT pattern (atomic, race-condition safe)',
