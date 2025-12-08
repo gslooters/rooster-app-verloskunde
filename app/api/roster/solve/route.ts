@@ -59,6 +59,16 @@
  * - SQL function also uses DISTINCT ON for double protection
  * - Prevents: "ON CONFLICT cannot affect row a second time"
  * 
+ * DRAAD129: DIAGNOSTIC LOGGING FOR DUPLICATE DETECTION
+ * - NEW: Detailed logging before deduplication
+ * - Log raw solver output count
+ * - Sample first 5 assignments
+ * - Find duplicate keys (employee_id|date|dagdeel)
+ * - Log duplicates found count
+ * - Compare before/after deduplication
+ * - Identify source of duplicates (solver vs transformation)
+ * - Cache busting: timestamp in logs
+ * 
  * DRAAD121: Database Constraint Fix (now OPTIE E complement)
  * - FIXED: status=0 + service_id violation with ORT suggestions
  * - Database constraint modified: status=0 MAY have service_id!=NULL
@@ -88,8 +98,9 @@
  *    → INFEASIBLE: Skip, return bottleneck_report
  * 6. DRAAD128: Write with PostgreSQL RPC function (atomic, safe)
  * 7. DRAAD127: Deduplicate assignments before UPSERT
- * 8. OPTIE E: Write with ORT tracking fields + service_id mapping
- * 9. Return appropriate response
+ * 8. DRAAD129: Diagnostic logging to identify duplicate source
+ * 9. OPTIE E: Write with ORT tracking fields + service_id mapping
+ * 10. Return appropriate response
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -230,6 +241,10 @@ export async function POST(request: NextRequest) {
   // Used for audit trail: ort_run_id = UUID of this run
   const solverRunId = crypto.randomUUID();
   
+  // DRAAD129: Cache busting - timestamp for this execution
+  const executionTimestamp = new Date().toISOString();
+  const executionMs = Date.now();
+  
   try {
     // 1. Parse request
     const { roster_id } = await request.json();
@@ -244,6 +259,7 @@ export async function POST(request: NextRequest) {
     console.log(`[Solver API] Start solve voor roster ${roster_id}`);
     console.log(`[OPTIE E] solverRunId: ${solverRunId}`);
     console.log(`[DRAAD127] Deduplication enabled`);
+    console.log(`[DRAAD129] Execution timestamp: ${executionTimestamp} (${executionMs})`);
     
     // 2. Initialiseer Supabase client
     const supabase = await createClient();
@@ -593,10 +609,71 @@ export async function POST(request: NextRequest) {
       });
       
       if (assignmentsToUpsert.length > 0) {
-        console.log(`[OPTIE E] ${assignmentsToUpsert.length} assignments to UPSERT with ORT tracking`);
+        console.log(`[OPTIE E] ${assignmentsToUpsert.length} assignments raw from solver`);
+        
+        // ============================================================
+        // DRAAD129: DIAGNOSTIC LOGGING - DUPLICATE DETECTION
+        // ============================================================
+        console.log('[DRAAD129] === DIAGNOSTIC PHASE: Analyzing solver output for duplicates ===');
+        console.log(`[DRAAD129] Raw solver assignments: ${assignmentsToUpsert.length} total`);
+        console.log(`[DRAAD129] Execution timestamp: ${executionTimestamp} | ${executionMs}`);
+        
+        // Build key map to find duplicates
+        const keyMap = new Map<string, number>();
+        const keyInstances = new Map<string, Array<{ index: number; emp: string; date: string; dagdeel: string }> >();
+        
+        assignmentsToUpsert.forEach((a, i) => {
+          // DRAAD129: Use same key format as deduplication
+          const key = `${a.employee_id}|${a.date}|${a.dagdeel}`;
+          keyMap.set(key, (keyMap.get(key) || 0) + 1);
+          
+          // Track all instances of duplicate keys
+          if (!keyInstances.has(key)) {
+            keyInstances.set(key, []);
+          }
+          keyInstances.get(key)!.push({
+            index: i,
+            emp: a.employee_id,
+            date: a.date,
+            dagdeel: a.dagdeel
+          });
+          
+          // Log first 5 samples
+          if (i < 5) {
+            console.log(`[DRAAD129] Sample ${i}: emp=${a.employee_id}, date=${a.date}, dagdeel=${a.dagdeel}, service=${a.service_id ? 'mapped' : 'NULL'}`);
+          }
+        });
+        
+        // Find and log duplicates
+        const duplicateKeys = Array.from(keyMap.entries())
+          .filter(([_, count]) => count > 1)
+          .sort((a, b) => b[1] - a[1]);  // Sort by count descending
+        
+        if (duplicateKeys.length > 0) {
+          console.error(`[DRAAD129] 🚨 DUPLICATES FOUND: ${duplicateKeys.length} duplicate keys detected in solver output`);
+          console.error(`[DRAAD129] Total duplicate instances: ${duplicateKeys.reduce((sum, [_, count]) => sum + (count - 1), 0)}`);
+          
+          duplicateKeys.forEach(([key, count], idx) => {
+            console.error(`[DRAAD129] Duplicate #${idx + 1}: key='${key}' appears ${count} times`);
+            const instances = keyInstances.get(key) || [];
+            instances.forEach(inst => {
+              console.error(`[DRAAD129]   - Index ${inst.index}: emp=${inst.emp}|date=${inst.date}|dagdeel=${inst.dagdeel}`);
+            });
+          });
+        } else {
+          console.log('[DRAAD129] ✅ No duplicates found in raw solver output');
+        }
+        
+        console.log(`[DRAAD129] Unique keys in solver output: ${keyMap.size} / ${assignmentsToUpsert.length}`);
+        
+        // ============================================================
+        // END DRAAD129 DIAGNOSTIC
+        // ============================================================
         
         // DRAAD127: Deduplicate assignments BEFORE UPSERT
         const deduplicatedAssignments = deduplicateAssignments(assignmentsToUpsert);
+        
+        console.log(`[DRAAD129] After deduplication: ${deduplicatedAssignments.length} assignments (removed ${assignmentsToUpsert.length - deduplicatedAssignments.length})`);
         
         // Validatie: Check for unmapped services
         const unmappedCount = deduplicatedAssignments.filter(a => !a.service_id).length;
@@ -737,6 +814,13 @@ export async function POST(request: NextRequest) {
           protection: 'Composite key (roster_id|employee_id|date|dagdeel)',
           notes: 'Prevents ON CONFLICT cannot affect row twice error'
         },
+        draad129: {
+          status: 'DIAGNOSTIC_PHASE',
+          duplicate_detection: 'Detailed analysis logged',
+          execution_timestamp: executionTimestamp,
+          execution_ms: executionMs,
+          cache_busting: 'Timestamp + random execution ID
+        },
         optie_e: {
           status: 'IMPLEMENTED',
           service_code_mapping: 'solver service_code → service_id UUID',
@@ -808,6 +892,10 @@ export async function POST(request: NextRequest) {
           status: 'READY (not applied - INFEASIBLE)',
           reason: 'No feasible solution found - no database writes performed'
         },
+        draad129: {
+          status: 'SKIPPED',
+          reason: 'INFEASIBLE result - no assignments to analyze'
+        },
         total_time_ms: Date.now() - startTime
       });
     } else {
@@ -820,6 +908,10 @@ export async function POST(request: NextRequest) {
         roster_id,
         solver_result: solverResult,
         error: `Solver status ${solverResult.status}`,
+        draad129: {
+          status: 'SKIPPED',
+          reason: `Solver status ${solverResult.status} - no assignments to analyze`
+        },
         total_time_ms: totalTime
       }, {
         status: 500
