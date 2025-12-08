@@ -8,7 +8,7 @@ DRAD108: Bezetting realiseren - exact aantal per dienst/dagdeel/team + systeemdi
 DRAD106: Status semantiek - fixed_assignments (status 1) en blocked_slots (status 2,3).
 DRAD105: Gebruikt roster_employee_services met aantal en actief velden.
 DRAD118A: INFEASIBLE diagnosis met Bottleneck Analysis - capacity gap analysis per service.
-DRAD130: Status 1 FIX - blocked_slots now includes status 1, making Constraint 2 redundant.
+DRAD131: Status 1 FIX - status 1 removed from blocked_slots, now ONLY in fixed_assignments via Constraint 3A.
 """
 
 from ortools.sat.python import cp_model
@@ -193,19 +193,19 @@ class RosterSolver:
         DRAAD117: Removed constraint 5 (max werkdagen/week)
         DRAAD108: Constraints 7-8
         DRAAD106: Constraints 1-4
-        DRAAD130: Constraint 2 is DEPRECATED (status 1 now in blocked_slots)
+        DRAAD131: Constraint 2 is DEPRECATED (status 1 now ONLY in Constraint 3A)
         
         1. Bevoegdheden (HARD)
-        2. DEPRECATED - Beschikbaarheid (HARD) - Status 1 now handled by constraint 3B
+        2. DEPRECATED - Beschikbaarheid (HARD) - Status 1 now in Constraint 3A (fixed_assignments)
         3A. Fixed assignments (status 1, HARD)
-        3B. Blocked slots (status 1,2,3, HARD) - DRAAD130: Now includes status 1!
+        3B. Blocked slots (status 2,3, HARD) - DRAAD131: Status 1 REMOVED!
         4. Een dienst per dagdeel (HARD)
         6. ZZP minimalisatie (via objective, SOFT)
         7. Exact bezetting realiseren (HARD)
         8. Systeemdienst exclusiviteit (HARD)
         """
         self._constraint_1_bevoegdheden()
-        # DRAAD130: Constraint 2 DISABLED - status 1 now in blocked_slots via constraint 3B
+        # DRAAD131: Constraint 2 DISABLED - status 1 now ONLY in Constraint 3A
         # self._constraint_2_beschikbaarheid()  # DEPRECATED
         self._constraint_3a_fixed_assignments()
         self._constraint_3b_blocked_slots()
@@ -248,16 +248,14 @@ class RosterSolver:
     def _constraint_2_beschikbaarheid(self):
         """Constraint 2: DEPRECATED - Beschikbaarheid (structureel_nbh).
         
-        DRAAD130: This constraint is now REDUNDANT.
+        DRAAD131: This constraint is now OBSOLETE.
         
-        Status 1 (fixed assignments) are blocked in constraint 3B.
-        Status 2,3 (blocked slots) are blocked in constraint 3B.
-        
-        Structureel NBH is now handled as blocked_slots via constraint 3B.
+        Status 1 (fixed assignments) are ONLY handled by Constraint 3A (fixed_assignments).
+        Status 2,3 (blocked slots) are handled by Constraint 3B (blocked_slots).
         
         This method is disabled and kept for historical reference only.
         """
-        logger.warning("[DRAAD130] Constraint 2 DEPRECATED - status 1 now in blocked_slots (constraint 3B)")
+        logger.warning("[DRAAD131] Constraint 2 DEPRECATED - status 1 handled by Constraint 3A (fixed_assignments)")
         # Not executed anymore - see _apply_constraints()
         pass
     
@@ -266,6 +264,8 @@ class RosterSolver:
         
         DRAAD106: Status 1 = Handmatig gepland of gefinaliseerd
         ORT MOET deze exact overnemen (HARD CONSTRAINT).
+        
+        DRAAD131: ONLY mechanism for status 1 protection (not in blocked_slots)
         
         🔧 FIX DRAAD120: Replaced 'if var:' with 'if var is not None:'
         CP-SAT IntVar cannot be evaluated as boolean - NotImplementedError
@@ -293,27 +293,41 @@ class RosterSolver:
         logger.info(f"Constraint 3A: {len(self.fixed_assignments)} fixed assignments gefixeerd")
     
     def _constraint_3b_blocked_slots(self):
-        """Constraint 3B: Respecteer status 1, 2, 3 (blocked slots).
+        """Constraint 3B: Respecteer status 2, 3 (blocked slots).
         
-        DRAAD130: Status 1,2,3 = ALLEMAAL geblokkeerd
+        DRAAD131: Status 2,3 = BLOCKED (status 1 REMOVED!)
         DRAAD106: Status 2/3 = Geblokkeerd
         ORT MAG NIET plannen in deze slots voor ENIGE dienst (HARD CONSTRAINT).
         
-        DRAAD130 CHANGE:
-        - Route.ts now includes status 1 in blocked_slots fetch
-        - Before: status [2, 3] only
-        - After: status [1, 2, 3] - includes planner's fixed assignments!
+        DRAAD131 CHANGE:
+        - Route.ts now includes status [2, 3] ONLY in blocked_slots fetch
+        - Before: status [1, 2, 3] (CAUSED CONFLICT)
+        - After: status [2, 3] only - status 1 protection moved to Constraint 3A
+        - Result: No constraint conflict!
+        
+        Logic:
+        - Constraint 3A: Status 1 fixed → var==1 (MUST assign)
+        - Constraint 3B: Status 2,3 blocked → var==0 (MUST NOT assign)
+        - No overlap → FEASIBLE when capacity exists
         
         🔧 FIX DRAAD120: Replaced 'if var:' with 'if var is not None:'
         CP-SAT IntVar cannot be evaluated as boolean - NotImplementedError
         """
-        logger.info("Toevoegen constraint 3B: Blocked slots (including status 1)...")
+        logger.info("Toevoegen constraint 3B: Blocked slots (status 2,3 only - status 1 EXCLUDED)...")
         
         # Log status breakdown
         status_breakdown = {}
         for bs in self.blocked_slots:
             status_breakdown[bs.status] = status_breakdown.get(bs.status, 0) + 1
-        logger.info(f"[DRAAD130] Blocked slots breakdown: {status_breakdown}")
+        
+        # Verify no status 1 in blocked_slots
+        if 1 in status_breakdown:
+            logger.error(f"[DRAAD131] ERROR: Status 1 found in blocked_slots! breakdown={status_breakdown}")
+            logger.error(f"[DRAAD131] This should NOT happen - status 1 must be in fixed_assignments only")
+        else:
+            logger.info(f"[DRAAD131] ✅ No status 1 in blocked_slots (conflict avoided)")
+        
+        logger.info(f"[DRAAD131] Blocked slots breakdown (status 2,3): {status_breakdown}")
         
         for bs in self.blocked_slots:
             # Block ALLE services voor dit slot
@@ -327,7 +341,7 @@ class RosterSolver:
                 else:
                     logger.warning(f"Blocked slot var not found: {bs}")
         
-        logger.info(f"[DRAAD130] Constraint 3B: {len(self.blocked_slots)} blocked slots (status 1,2,3) verboden")
+        logger.info(f"[DRAAD131] Constraint 3B: {len(self.blocked_slots)} blocked slots (status 2,3) verboden")
     
     def _constraint_4_een_dienst_per_dagdeel(self):
         """Constraint 4: Medewerker mag max 1 dienst per dagdeel."""
