@@ -136,6 +136,17 @@
  * - Impact: ORT now respects existing (status=1) assignments WITHOUT conflict
  * - Result: FEASIBLE status when capacity exists
  * 
+ * DRAAD129-FIX4: COMPREHENSIVE DUPLICATE VERIFICATION (THIS PHASE)
+ * - NEW: logDuplicates() helper - detailed INPUT analysis before dedup
+ * - NEW: findDuplicatesInBatch() helper - per-batch verification BEFORE RPC
+ * - NEW: verifyDeduplicationResult() helper - validation after dedup
+ * - Checkpoint 1: Log raw solver output for duplicates
+ * - Checkpoint 2: Verify deduplication result
+ * - Checkpoint 3: Verify EACH batch before RPC call
+ * - If duplicates found: ERROR with full diagnostic details (indices, keys, counts)
+ * - If batch clean: log "verified ✅ CLEAN - proceeding with RPC"
+ * - Prevents: Silent failures where duplicates pass through to PostgreSQL
+ * 
  * Flow:
  * 1. Fetch roster data from Supabase
  * 2. Transform to solver input format (fixed + blocked split)
@@ -147,15 +158,17 @@
  * 6. DRAAD128: Write with PostgreSQL RPC function (atomic, safe)
  * 7. DRAAD127: Deduplicate assignments before UPSERT
  * 8. DRAAD129: Diagnostic logging to identify duplicate source
- * 9. DRAAD129-STAP2: Process assignments in batches (BATCH_SIZE=50)
- * 10. DRAAD129-STAP3-FIXED: RPC uses VALUES + DISTINCT ON (no TEMP TABLE)
- * 11. OPTIE E: Write with ORT tracking fields + service_id mapping
- * 12. Return appropriate response
+ * 9. DRAAD129-FIX4: Comprehensive verification at INPUT → DEDUP → BATCH
+ * 10. DRAAD129-STAP2: Process assignments in batches (BATCH_SIZE=50)
+ * 11. DRAAD129-STAP3-FIXED: RPC uses VALUES + DISTINCT ON (no TEMP TABLE)
+ * 12. OPTIE E: Write with ORT tracking fields + service_id mapping
+ * 13. Return appropriate response
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { CACHE_BUST_DRAAD129_STAP3_FIXED } from '@/app/api/cache-bust/DRAAD129_STAP3_FIXED';
+import { CACHE_BUST_DRAAD129_FIX4 } from '@/app/api/cache-bust/DRAAD129_FIX4';
 import type {
   SolveRequest,
   SolveResponse,
@@ -202,6 +215,171 @@ const findServiceId = (serviceCode: string, services: Service[]): string | null 
   }
   
   return svc.id;
+};
+
+/**
+ * DRAAD129-FIX4: FASE 2 - Helper function to log duplicates in assignment array
+ * 
+ * Analyzes array for duplicate keys: (employee_id|date|dagdeel)
+ * Provides detailed diagnostics if duplicates found
+ * 
+ * @param assignments - Array of assignments to analyze
+ * @param label - Label for logging (e.g., "INPUT", "AFTER_DEDUP", "BATCH_0")
+ * @returns {hasDuplicates, totalCount, uniqueCount, duplicateCount, details}
+ */
+interface DuplicateAnalysis {
+  hasDuplicates: boolean;
+  totalCount: number;
+  uniqueCount: number;
+  duplicateCount: number;
+  duplicateKeys: Array<{key: string; count: number; indices: number[]}>;
+}
+
+const logDuplicates = (assignments: any[], label: string): DuplicateAnalysis => {
+  const keyMap = new Map<string, number[]>();
+  
+  assignments.forEach((a, i) => {
+    const key = `${a.employee_id}|${a.date}|${a.dagdeel}`;
+    if (!keyMap.has(key)) {
+      keyMap.set(key, []);
+    }
+    keyMap.get(key)!.push(i);
+  });
+  
+  const duplicateKeys = Array.from(keyMap.entries())
+    .filter(([_, indices]) => indices.length > 1)
+    .map(([key, indices]) => ({key, count: indices.length, indices}))
+    .sort((a, b) => b.count - a.count);
+  
+  const hasDuplicates = duplicateKeys.length > 0;
+  const uniqueCount = keyMap.size;
+  const duplicateCount = duplicateKeys.reduce((sum, d) => sum + (d.count - 1), 0);
+  
+  if (hasDuplicates) {
+    console.error(`[FIX4] ${label}: 🚨 DUPLICATES FOUND`);
+    console.error(`[FIX4]   - Total assignments: ${assignments.length}`);
+    console.error(`[FIX4]   - Unique keys: ${uniqueCount}`);
+    console.error(`[FIX4]   - Duplicate instances: ${duplicateCount}`);
+    console.error(`[FIX4]   - Duplicate keys: ${duplicateKeys.length}`);
+    
+    duplicateKeys.forEach(d => {
+      console.error(`[FIX4]     - Key "${d.key}" appears ${d.count} times at indices: ${d.indices.join(', ')}`);
+    });
+  } else {
+    console.log(`[FIX4] ${label}: ✅ CLEAN - No duplicates found (${assignments.length} total)`);
+  }
+  
+  return {
+    hasDuplicates,
+    totalCount: assignments.length,
+    uniqueCount,
+    duplicateCount,
+    duplicateKeys
+  };
+};
+
+/**
+ * DRAAD129-FIX4: FASE 3 - Helper function to verify deduplication result
+ * 
+ * Compares before/after arrays to validate deduplication worked correctly
+ * 
+ * @param before - Original array (may have duplicates)
+ * @param after - Deduplicated array
+ * @param label - Label for logging
+ * @returns {success, removed, report}
+ */
+interface DeduplicationVerification {
+  success: boolean;
+  removed: number;
+  report: string;
+}
+
+const verifyDeduplicationResult = (before: any[], after: any[], label: string): DeduplicationVerification => {
+  const removed = before.length - after.length;
+  
+  if (removed === 0) {
+    console.log(`[FIX4] VERIFY ${label}: ✅ Already clean - no duplicates removed`);
+    return {
+      success: true,
+      removed: 0,
+      report: 'No duplicates found - deduplication result valid'
+    };
+  }
+  
+  if (removed < 0) {
+    const errorMsg = `After array (${after.length}) is LONGER than before array (${before.length}) - critical error!`;
+    console.error(`[FIX4] VERIFY ${label}: 🚨 ${errorMsg}`);
+    return {
+      success: false,
+      removed: 0,
+      report: errorMsg
+    };
+  }
+  
+  console.log(`[FIX4] VERIFY ${label}: ✅ Removed ${removed} duplicate(s) (${before.length} → ${after.length})`);
+  
+  return {
+    success: true,
+    removed,
+    report: `Deduplication successful - removed ${removed} duplicate(s)`
+  };
+};
+
+/**
+ * DRAAD129-FIX4: FASE 4 - Helper function to find duplicates in a single batch
+ * 
+ * Used BEFORE each RPC call to verify batch has no duplicates
+ * 
+ * @param batch - Batch of assignments to check
+ * @param batchNumber - Batch index (for logging)
+ * @returns {hasDuplicates, count, keys, indices}
+ */
+interface BatchDuplicateCheck {
+  hasDuplicates: boolean;
+  count: number;
+  keys: string[];
+  details: Array<{key: string; count: number; indices: number[]}>;
+}
+
+const findDuplicatesInBatch = (batch: any[], batchNumber: number): BatchDuplicateCheck => {
+  const keyMap = new Map<string, number[]>();
+  
+  batch.forEach((a, i) => {
+    const key = `${a.employee_id}|${a.date}|${a.dagdeel}`;
+    if (!keyMap.has(key)) {
+      keyMap.set(key, []);
+    }
+    keyMap.get(key)!.push(i);
+  });
+  
+  const duplicates = Array.from(keyMap.entries())
+    .filter(([_, indices]) => indices.length > 1)
+    .map(([key, indices]) => ({key, count: indices.length, indices}))
+    .sort((a, b) => b.count - a.count);
+  
+  const hasDuplicates = duplicates.length > 0;
+  const totalDuplicateInstances = duplicates.reduce((sum, d) => sum + (d.count - 1), 0);
+  
+  if (hasDuplicates) {
+    console.error(`[FIX4] Batch ${batchNumber} verification: 🚨 DUPLICATES DETECTED!`);
+    console.error(`[FIX4]   - Batch size: ${batch.length}`);
+    console.error(`[FIX4]   - Unique keys: ${keyMap.size}`);
+    console.error(`[FIX4]   - Duplicate keys: ${duplicates.length}`);
+    console.error(`[FIX4]   - Total duplicate instances: ${totalDuplicateInstances}`);
+    
+    duplicates.forEach(d => {
+      console.error(`[FIX4]     - Key "${d.key}" appears ${d.count} times at indices: ${d.indices.join(', ')}`);
+    });
+  } else {
+    console.log(`[FIX4] Batch ${batchNumber} verified ✅ CLEAN - proceeding with RPC`);
+  }
+  
+  return {
+    hasDuplicates,
+    count: totalDuplicateInstances,
+    keys: duplicates.map(d => d.key),
+    details: duplicates
+  };
 };
 
 /**
@@ -301,6 +479,10 @@ export async function POST(request: NextRequest) {
   const cacheBustVersion = CACHE_BUST_DRAAD129_STAP3_FIXED.version;
   const cacheBustTimestamp = CACHE_BUST_DRAAD129_STAP3_FIXED.timestamp;
   
+  // DRAAD129-FIX4: Import FIX4 cache bust
+  const fix4Version = CACHE_BUST_DRAAD129_FIX4.version;
+  const fix4Timestamp = CACHE_BUST_DRAAD129_FIX4.timestamp;
+  
   try {
     // 1. Parse request
     const { roster_id } = await request.json();
@@ -319,6 +501,7 @@ export async function POST(request: NextRequest) {
     console.log(`[DRAAD129] Execution timestamp: ${executionTimestamp} (${executionMs})`);
     console.log(`[DRAAD129] Cache busting: ${cacheBustingId}`);
     console.log(`[DRAAD129-STAP3-FIXED] Cache bust version: ${cacheBustVersion} (timestamp: ${cacheBustTimestamp})`);
+    console.log(`[FIX4] DRAAD129-FIX4 ENABLED - version: ${fix4Version} (timestamp: ${fix4Timestamp})`);
     
     // 2. Initialiseer Supabase client
     const supabase = await createClient();
@@ -680,60 +863,74 @@ export async function POST(request: NextRequest) {
         console.log(`[DRAAD129] Execution timestamp: ${executionTimestamp} | ${executionMs}`);
         console.log(`[DRAAD129] Cache busting: ${cacheBustingId}`);
         
-        // Build key map to find duplicates
-        const keyMap = new Map<string, number>();
-        const keyInstances = new Map<string, Array<{ index: number; emp: string; date: string; dagdeel: string }>>();
+        // ============================================================
+        // DRAAD129-FIX4: FASE 4 - Call logDuplicates BEFORE dedup
+        // ============================================================
+        const inputAnalysis = logDuplicates(assignmentsToUpsert, 'INPUT');
         
-        assignmentsToUpsert.forEach((a, i) => {
-          // DRAAD129: Use same key format as deduplication
-          const key = `${a.employee_id}|${a.date}|${a.dagdeel}`;
-          keyMap.set(key, (keyMap.get(key) || 0) + 1);
+        if (inputAnalysis.hasDuplicates) {
+          console.error('[FIX4] 🚨 CRITICAL: Input contains duplicates - this should not happen!');
+          console.error(`[FIX4]   Total duplicate instances: ${inputAnalysis.duplicateCount}`);
           
-          // Track all instances of duplicate keys
-          if (!keyInstances.has(key)) {
-            keyInstances.set(key, []);
-          }
-          keyInstances.get(key)!.push({
-            index: i,
-            emp: a.employee_id,
-            date: a.date,
-            dagdeel: a.dagdeel
-          });
-          
-          // Log first 5 samples
-          if (i < 5) {
-            console.log(`[DRAAD129] Sample ${i}: emp=${a.employee_id}, date=${a.date}, dagdeel=${a.dagdeel}, service=${a.service_id ? 'mapped' : 'NULL'}`);
-          }
-        });
-        
-        // Find and log duplicates
-        const duplicateKeys = Array.from(keyMap.entries())
-          .filter(([_, count]) => count > 1)
-          .sort((a, b) => b[1] - a[1]);  // Sort by count descending
-        
-        if (duplicateKeys.length > 0) {
-          console.error(`[DRAAD129] 🚨 DUPLICATES FOUND: ${duplicateKeys.length} duplicate keys detected in solver output`);
-          console.error(`[DRAAD129] Total duplicate instances: ${duplicateKeys.reduce((sum, [_, count]) => sum + (count - 1), 0)}`);
-          
-          duplicateKeys.forEach(([key, count], idx) => {
-            console.error(`[DRAAD129] Duplicate #${idx + 1}: key='${key}' appears ${count} times`);
-            const instances = keyInstances.get(key) || [];
-            instances.forEach(inst => {
-              console.error(`[DRAAD129]   - Index ${inst.index}: emp=${inst.emp}|date=${inst.date}|dagdeel=${inst.dagdeel}`);
-            });
-          });
-        } else {
-          console.log('[DRAAD129] ✅ No duplicates found in raw solver output');
+          return NextResponse.json({
+            error: `[FIX4] INPUT contains ${inputAnalysis.duplicateCount} duplicate assignments`,
+            details: {
+              duplicateCount: inputAnalysis.duplicateCount,
+              duplicateKeys: inputAnalysis.duplicateKeys,
+              totalAssignments: assignmentsToUpsert.length,
+              uniqueCount: inputAnalysis.uniqueCount
+            },
+            phase: 'DIAGNOSTIC_PHASE_INPUT_CHECK',
+            fix4: 'Duplicate detection found duplicates BEFORE deduplication'
+          }, { status: 400 });
         }
         
-        console.log(`[DRAAD129] Unique keys in solver output: ${keyMap.size} / ${assignmentsToUpsert.length}`);
+        console.log('[DRAAD129] === END DIAGNOSTIC PHASE ===');
         
         // ============================================================
-        // END DRAAD129 DIAGNOSTIC
-        // ============================================================
-        
         // DRAAD127: Deduplicate assignments BEFORE UPSERT
+        // ============================================================
         const deduplicatedAssignments = deduplicateAssignments(assignmentsToUpsert);
+        
+        // ============================================================
+        // DRAAD129-FIX4: FASE 5 - Call verifyDeduplicationResult AFTER dedup
+        // ============================================================
+        const deduplicationVerification = verifyDeduplicationResult(
+          assignmentsToUpsert,
+          deduplicatedAssignments,
+          'DEDUPLICATION'
+        );
+        
+        if (!deduplicationVerification.success) {
+          console.error('[FIX4] 🚨 CRITICAL: Deduplication verification FAILED!');
+          return NextResponse.json({
+            error: `[FIX4] Deduplication verification failed: ${deduplicationVerification.report}`,
+            phase: 'DEDUPLICATION_VERIFICATION',
+            fix4: 'Unexpected issue during deduplication process'
+          }, { status: 500 });
+        }
+        
+        // Verify NO duplicates remain AFTER deduplication
+        const afterDedupAnalysis = logDuplicates(deduplicatedAssignments, 'AFTER_DEDUP');
+        
+        if (afterDedupAnalysis.hasDuplicates) {
+          console.error('[FIX4] 🚨 CRITICAL: Found duplicates AFTER deduplication!');
+          console.error(`[FIX4]   This means deduplication logic FAILED`);
+          console.error(`[FIX4]   Details: ${afterDedupAnalysis.duplicateCount} instances`);
+          
+          return NextResponse.json({
+            error: `[FIX4] Duplicates found AFTER deduplication - deduplication logic failed`,
+            details: {
+              duplicateCount: afterDedupAnalysis.duplicateCount,
+              duplicateKeys: afterDedupAnalysis.duplicateKeys,
+              totalAssignments: deduplicatedAssignments.length,
+              uniqueCount: afterDedupAnalysis.uniqueCount
+            },
+            phase: 'AFTER_DEDUPLICATION_VERIFICATION',
+            fix4: 'Duplicate detection found duplicates AFTER deduplication - logic error',
+            investigation: 'Check if key format in logDuplicates matches actual duplicate detection'
+          }, { status: 500 });
+        }
         
         console.log(`[DRAAD129] After deduplication: ${deduplicatedAssignments.length} assignments (removed ${assignmentsToUpsert.length - deduplicatedAssignments.length})`);
         
@@ -759,6 +956,35 @@ export async function POST(request: NextRequest) {
           const batchEndIdx = Math.min(i + BATCH_SIZE, deduplicatedAssignments.length);
           
           console.log(`[DRAAD129-STAP2] Batch ${batchNum}/${TOTAL_BATCHES - 1}: processing ${batch.length} assignments (indices ${batchStartIdx}-${batchEndIdx - 1})...`);
+          
+          // ============================================================
+          // DRAAD129-FIX4: FASE 6 - Call findDuplicatesInBatch BEFORE RPC
+          // ============================================================
+          const batchDuplicateCheck = findDuplicatesInBatch(batch, batchNum);
+          
+          if (batchDuplicateCheck.hasDuplicates) {
+            const errorMsg = `Batch ${batchNum} contains ${batchDuplicateCheck.count} duplicate(s) - cannot proceed with RPC call!`;
+            console.error(`[FIX4] 🚨 ${errorMsg}`);
+            batchDuplicateCheck.details.forEach(d => {
+              console.error(`[FIX4]   - Key "${d.key}" appears ${d.count} times at indices: ${d.indices.join(', ')}`);
+            });
+            
+            return NextResponse.json({
+              error: `[FIX4] ${errorMsg}`,
+              details: {
+                batchNumber: batchNum,
+                duplicateCount: batchDuplicateCheck.count,
+                duplicateKeys: batchDuplicateCheck.details,
+                batchSize: batch.length,
+                totalBatches: TOTAL_BATCHES
+              },
+              phase: 'BATCH_PROCESSING_PHASE',
+              fix4: 'Per-batch verification detected duplicates before RPC call'
+            }, { status: 500 });
+          }
+          // ============================================================
+          // END DRAAD129-FIX4 FASE 6
+          // ============================================================
           
           // Validatie: Check for unmapped services in this batch
           const unmappedCount = batch.filter(a => !a.service_id).length;
@@ -850,7 +1076,9 @@ export async function POST(request: NextRequest) {
             },
             cacheBustVersion,
             cacheBustTimestamp,
-            draad129_stap3_fixed: 'VALUES + DISTINCT ON approach applied'
+            draad129_stap3_fixed: 'VALUES + DISTINCT ON approach applied',
+            fix4_version: fix4Version,
+            fix4_timestamp: fix4Timestamp
           }, { status: 500 });
         }
         
@@ -949,6 +1177,22 @@ export async function POST(request: NextRequest) {
           migration: '20251208_DRAAD129_STAP3_FIXED_upsert_ort_assignments.sql',
           rpc_function: 'upsert_ort_assignments(p_assignments jsonb)'
         },
+        draad129_fix4: {
+          status: 'IMPLEMENTED',
+          version: fix4Version,
+          timestamp: fix4Timestamp,
+          helper_functions: [
+            'logDuplicates() - detailed INPUT analysis',
+            'verifyDeduplicationResult() - validation after dedup',
+            'findDuplicatesInBatch() - per-batch verification BEFORE RPC'
+          ],
+          checkpoints: [
+            'Checkpoint 1: Input analysis - CLEAN ✅',
+            'Checkpoint 2: After deduplication - CLEAN ✅',
+            'Checkpoint 3: Per-batch before RPC - CLEAN ✅ (all batches verified)'
+          ],
+          outcome: 'All 3 checkpoints passed - no duplicates present at any stage'
+        },
         optie_e: {
           status: 'IMPLEMENTED',
           service_code_mapping: 'solver service_code → service_id UUID',
@@ -1032,6 +1276,12 @@ export async function POST(request: NextRequest) {
           status: 'READY',
           note: 'Fix applied in request, but no assignments to write'
         },
+        draad129_fix4: {
+          status: 'SKIPPED',
+          reason: 'INFEASIBLE result - no assignments to verify',
+          version: fix4Version,
+          timestamp: fix4Timestamp
+        },
         total_time_ms: Date.now() - startTime
       });
     } else {
@@ -1056,6 +1306,12 @@ export async function POST(request: NextRequest) {
           status: 'READY',
           note: 'Fix applied but solver timeout or error occurred'
         },
+        draad129_fix4: {
+          status: 'SKIPPED',
+          reason: `Solver status ${solverResult.status} - no assignments to verify`,
+          version: fix4Version,
+          timestamp: fix4Timestamp
+        },
         total_time_ms: totalTime
       }, {
         status: 500
@@ -1071,7 +1327,9 @@ export async function POST(request: NextRequest) {
         message: error.message || 'Onbekende fout',
         type: error.name || 'Error',
         cacheBustVersion,
-        cacheBustTimestamp
+        cacheBustTimestamp,
+        fix4_version: fix4Version,
+        fix4_timestamp: fix4Timestamp
       },
       { status: 500 }
     );
