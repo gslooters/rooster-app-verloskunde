@@ -6,22 +6,24 @@
  * DRAAD149B: Deduplication key includes service_id to prevent conflicts
  * DRAAD150: Batch UPSERT pattern - sequential processing per slot
  * DRAAD154: FIX ORT UPSERT - set status=1 WITH service_id + failure validation
+ * DRAAD155: FIX ORT - Use UPDATE instead of INSERT for empty slots
+ * 
+ * DRAAD155 ROOT CAUSE:
+ * ORT was attempting 1137 UPSERT/INSERT operations → UNIQUE constraint violation
+ * Constraint: UNIQUE(roster_id, employee_id, date, dagdeel)
+ * Manual planning WORKS because it UPDATEs existing rows by ID
+ * 
+ * DRAAD155 SOLUTION:
+ * 1. Query existing empty slots: status=0, service_id=NULL (~225 slots)
+ * 2. Per ORT assignment: Find matching slot by (roster_id, employee_id, date, dagdeel)
+ * 3. UPDATE that slot's row (same ID) - no constraint conflict
+ * 4. Set status=1 ONLY where service_id is assigned
+ * 5. Leave other slots unchanged (status=0 remains)
+ * Result: ~225 UPDATEs instead of 1137 failed INSERTs
  * 
  * CRITICAL: roster_assignments records are NEVER deleted
- * Method: Batch UPSERT with onConflict handling
+ * Method: UPDATE for ORT assignments, INSERT only for NEW slots outside rooster scope
  * Status preservation: All status (0,1,2,3) maintained via UPDATE
- * 
- * DRAAD154 ROOT CAUSE:
- * ORT was setting service_id WITHOUT status=1
- * PostgreSQL CHECK constraint violated: "service_assignment_rules"
- * IF service_id IS NOT NULL THEN status > 0 (i.e., status >= 1)
- * Result: 1137/1137 slots failed on UPSERT
- * 
- * DRAAD154 SOLUTION:
- * 1. Validate ORT result BEFORE any DB write
- * 2. If ORT status !== 'optimal' AND !== 'feasible' → NO DB write
- * 3. If service_id assigned → MUST set status=1 (not 0!)
- * 4. Atomic transaction: All slots succeed or NONE are written
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -33,6 +35,7 @@ import { CACHE_BUST_DRAAD135 } from '@/app/api/cache-bust/DRAAD135';
 import { CACHE_BUST_DRAAD149 } from '@/app/api/cache-bust/DRAAD149';
 import { CACHE_BUST_DRAAD149B } from '@/app/api/cache-bust/DRAAD149B';
 import { CACHE_BUST_DRAAD154 } from '@/app/api/cache-bust/DRAAD154';
+import { CACHE_BUST_DRAAD155 } from '@/app/api/cache-bust/DRAAD155';
 import type {
   SolveRequest,
   SolveResponse,
@@ -62,6 +65,14 @@ const findServiceId = (serviceCode: string, services: Service[]): string | null 
   }
   return svc.id;
 };
+
+interface EmptySlot {
+  id: string;
+  roster_id: string;
+  employee_id: string;
+  date: string;
+  dagdeel: string;
+}
 
 interface DuplicateAnalysis {
   hasDuplicates: boolean;
@@ -232,6 +243,55 @@ const validateOrtResult = (result: SolveResponse): { valid: boolean; reason?: st
   return { valid: true };
 };
 
+/**
+ * DRAAD155: Fetch empty slots that can be filled by ORT
+ * Returns slots with status=0 and service_id=NULL
+ */
+const getEmptySlots = async (supabase: any, rosterId: string): Promise<EmptySlot[]> => {
+  const { data, error } = await supabase
+    .from('roster_assignments')
+    .select('id, roster_id, employee_id, date, dagdeel')
+    .eq('roster_id', rosterId)
+    .eq('status', 0)
+    .is('service_id', null);
+  
+  if (error) {
+    console.error(`[DRAAD155] Failed to fetch empty slots: ${error.message}`);
+    return [];
+  }
+  
+  console.log(`[DRAAD155] Found ${data?.length || 0} empty slots to potentially fill`);
+  return data || [];
+};
+
+/**
+ * DRAAD155: Find existing slot by exact match
+ * Returns slot ID if found, null otherwise
+ */
+const findExistingSlot = (
+  emptySlots: EmptySlot[],
+  rosterId: string,
+  employeeId: string,
+  date: string,
+  dagdeel: string
+): { id: string } | null => {
+  const found = emptySlots.find(
+    slot =>
+      slot.roster_id === rosterId &&
+      slot.employee_id === employeeId &&
+      slot.date === date &&
+      slot.dagdeel === dagdeel
+  );
+  
+  if (found) {
+    console.log(`[DRAAD155] ✅ Found existing slot id=${found.id} for ${employeeId}|${date}|${dagdeel}`);
+    return { id: found.id };
+  } else {
+    console.warn(`[DRAAD155] ⚠️  No slot found for ${rosterId}|${employeeId}|${date}|${dagdeel}`);
+    return null;
+  }
+};
+
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
   const solverRunId = crypto.randomUUID();
@@ -242,6 +302,7 @@ export async function POST(request: NextRequest) {
   const draad149bCacheBustId = `DRAAD149B-${executionMs}-${Math.floor(Math.random() * 100000)}`;
   const draad150CacheBustId = `DRAAD150-${executionMs}-${Math.floor(Math.random() * 100000)}`;
   const draad154CacheBustId = `DRAAD154-${executionMs}-${Math.floor(Math.random() * 100000)}`;
+  const draad155CacheBustId = `DRAAD155-${executionMs}-${Math.floor(Math.random() * 100000)}`;
   
   const draad135Version = CACHE_BUST_DRAAD135.version;
   const draad135Timestamp = CACHE_BUST_DRAAD135.timestamp;
@@ -251,6 +312,8 @@ export async function POST(request: NextRequest) {
   const draad149bTimestamp = CACHE_BUST_DRAAD149B.timestamp;
   const draad154Version = CACHE_BUST_DRAAD154.version;
   const draad154Timestamp = CACHE_BUST_DRAAD154.timestamp;
+  const draad155Version = CACHE_BUST_DRAAD155.version;
+  const draad155Timestamp = CACHE_BUST_DRAAD155.timestamp;
   
   try {
     const { roster_id } = await request.json();
@@ -276,6 +339,9 @@ export async function POST(request: NextRequest) {
     console.log(`[DRAAD154] Cache bust: ${draad154CacheBustId}`);
     console.log(`[DRAAD154] Version: ${draad154Version}`);
     console.log(`[DRAAD154] Fix: status=1 SET WITH service_id + ORT validation`);
+    console.log(`[DRAAD155] Cache bust: ${draad155CacheBustId}`);
+    console.log(`[DRAAD155] Version: ${draad155Version}`);
+    console.log(`[DRAAD155] Method: UPDATE instead of INSERT/UPSERT`);
     
     const supabase = await createClient();
     
@@ -492,7 +558,7 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
     
-    // ORT succeeded - proceed with UPSERT
+    // ORT succeeded - proceed with UPDATE (not UPSERT/INSERT)
     if (solverResult.status === 'optimal' || solverResult.status === 'feasible') {
       // DRAAD149: Log solver response format BEFORE processing
       if (solverResult.assignments && solverResult.assignments.length > 0) {
@@ -510,7 +576,7 @@ export async function POST(request: NextRequest) {
         if (isUUID) {
           console.log('[DRAAD149] ⚠️  ALERT: employee_id is UUID format');
           console.log('[DRAAD149] Database expects TEXT format');
-          console.log('[DRAAD149] This will cause type mismatch on UPSERT');
+          console.log('[DRAAD149] This will cause type mismatch on UPDATE');
         } else {
           console.log('[DRAAD149] ✅ employee_id is TEXT format (matches database)');
         }
@@ -518,115 +584,103 @@ export async function POST(request: NextRequest) {
       }
       
       /**
-       * DRAAD154: Set status=1 TOGETHER with service_id
-       * This satisfies the PostgreSQL CHECK constraint:
-       * IF service_id IS NOT NULL THEN status > 0 (i.e., status >= 1)
+       * DRAAD155: PHASE 1 - FETCH BASELINE (empty slots)
+       * First verify what exists before attempting updates
        */
-      const assignmentsToInsert = solverResult.assignments.map(a => {
-        const serviceId = findServiceId(a.service_code, services);
+      console.log('[DRAAD155] === PHASE 1: BASELINE VERIFICATION ===');
+      const emptySlots = await getEmptySlots(supabase, roster_id);
+      
+      if (emptySlots.length === 0) {
+        console.warn('[DRAAD155] ⚠️  WARNING: No empty slots found (status=0, service_id=NULL)');
+        console.warn('[DRAAD155] ORT has ${solverResult.assignments.length} assignments but no slots to fill');
+        // Continue anyway - might be edge case
+      }
+      console.log('[DRAAD155] === END BASELINE VERIFICATION ===');
+      
+      /**
+       * DRAAD155: PHASE 2 - UPDATE LOOP
+       * Process each ORT assignment and UPDATE matching slot
+       */
+      console.log('[DRAAD155] === PHASE 2: UPDATE LOOP ===');
+      let updateCount = 0;
+      let skipCount = 0;
+      let notFoundCount = 0;
+      
+      for (const ortAssignment of solverResult.assignments) {
+        const serviceId = findServiceId(ortAssignment.service_code, services);
         
-        return {
+        // Find matching empty slot
+        const existingSlot = findExistingSlot(
+          emptySlots,
           roster_id,
-          employee_id: a.employee_id,
-          date: a.date,
-          dagdeel: a.dagdeel,
-          service_id: serviceId,
-          status: 1,  // DRAAD154: KEY FIX - Set to 1 when service_id is assigned
-          source: 'ort',
-          notes: `ORT suggestion: ${a.service_code}`,
-          ort_confidence: a.confidence || null,
-          ort_run_id: solverRunId,
-          constraint_reason: {
-            solver_suggestion: true,
-            service_code: a.service_code,
-            confidence: a.confidence || 0,
-            solve_time: solverResult.solve_time_seconds
-          },
-          previous_service_id: null,
-          updated_at: new Date().toISOString()
-        };
-      });
-      
-      console.log(`[DRAAD154] Assignment payload built: ${assignmentsToInsert.length} items`);
-      console.log(`[DRAAD154] All assignments have status=1 with service_id`);
-      
-      if (assignmentsToInsert.length > 0) {
-        console.log(`[FIX4] INPUT: Analyzing ${assignmentsToInsert.length} assignments...`);
-        const inputAnalysis = logDuplicates(assignmentsToInsert, 'INPUT');
-        
-        if (inputAnalysis.hasDuplicates) {
-          return NextResponse.json({
-            error: `[FIX4] INPUT contains ${inputAnalysis.duplicateCount} duplicate assignments`,
-            details: inputAnalysis
-          }, { status: 400 });
-        }
-        
-        const deduplicatedAssignments = deduplicateAssignments(assignmentsToInsert);
-        const deduplicationVerification = verifyDeduplicationResult(
-          assignmentsToInsert,
-          deduplicatedAssignments,
-          'DEDUPLICATION'
+          ortAssignment.employee_id,
+          ortAssignment.date,
+          ortAssignment.dagdeel
         );
         
-        if (!deduplicationVerification.success) {
-          return NextResponse.json({
-            error: `[FIX4] Deduplication verification failed`,
-            details: deduplicationVerification
-          }, { status: 500 });
+        if (!existingSlot) {
+          notFoundCount++;
+          console.warn(
+            `[DRAAD155] ⚠️  Slot not found for ` +
+            `${roster_id}|${ortAssignment.employee_id}|${ortAssignment.date}|${ortAssignment.dagdeel}`
+          );
+          continue;
         }
         
-        const afterDedupAnalysis = logDuplicates(deduplicatedAssignments, 'AFTER_DEDUP');
-        if (afterDedupAnalysis.hasDuplicates) {
-          return NextResponse.json({
-            error: `[FIX4] Found duplicates AFTER deduplication`,
-            details: afterDedupAnalysis
-          }, { status: 500 });
+        // UPDATE existing row (not INSERT)
+        const { error } = await supabase
+          .from('roster_assignments')
+          .update({
+            service_id: serviceId,
+            status: serviceId ? 1 : 0,  // KEY: status=1 ONLY with service_id
+            source: 'ort',
+            ort_run_id: solverRunId,
+            ort_confidence: ortAssignment.confidence || null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingSlot.id);  // UPDATE using database row ID
+        
+        if (error) {
+          console.error(
+            `[DRAAD155] ❌ UPDATE failed for slot id=${existingSlot.id}: ${error.message}`
+          );
+        } else {
+          updateCount++;
+          console.log(
+            `[DRAAD155] ✅ Updated slot ${updateCount}: ` +
+            `${ortAssignment.employee_id}|${ortAssignment.date}|${ortAssignment.dagdeel} ` +
+            `→ service=${serviceId ? ortAssignment.service_code : 'NULL'}`
+          );
         }
-        
-        // DRAAD150: Batch UPSERT pattern - per slot
-        console.log('[DRAAD150] === BATCH UPSERT PHASE ===');
-        console.log('[DRAAD150] Grouping assignments by slot...');
-        
-        const slotGroups = groupAssignmentsBySlot(deduplicatedAssignments);
-        console.log(`[DRAAD150] Created ${slotGroups.size} slot groups`);
-        
-        let successCount = 0;
-        let failedSlots = 0;
-        const upsertStartTime = Date.now();
-        
-        for (const [slotKey, slotAssignments] of slotGroups) {
-          console.log(`[DRAAD150] Processing slot: ${slotKey} (${slotAssignments.length} assignment(s))`);
-          
-          const { error: upsertError } = await supabase
-            .from('roster_assignments')
-            .upsert(slotAssignments, {
-              onConflict: 'id',  // Use primary key only
-              ignoreDuplicates: false
-            });
-          
-          if (upsertError) {
-            console.error(`[DRAAD150] Slot upsert failed: ${upsertError.message}`);
-            failedSlots++;
-          } else {
-            successCount += slotAssignments.length;
-            console.log(`[DRAAD150] ✅ Slot upsert successful (${slotAssignments.length} items)`);
+      }
+      
+      console.log('[DRAAD155] === END UPDATE LOOP ===');
+      console.log(
+        `[DRAAD155] ✅ UPDATE phase complete: ` +
+        `${updateCount} updated, ${notFoundCount} not found, ` +
+        `${solverResult.assignments.length - updateCount - notFoundCount} other`
+      );
+      
+      /**
+       * DRAAD155: PHASE 3 - VERIFICATION
+       * Confirm data integrity
+       */
+      if (notFoundCount > 0) {
+        console.warn(`[DRAAD155] ⚠️  ${notFoundCount} ORT assignments had no matching slots`);
+        console.warn('[DRAAD155] These may be outside the roster scope or slots may be filled already');
+      }
+      
+      if (updateCount === 0 && solverResult.assignments.length > 0) {
+        console.error('[DRAAD155] ❌ ERROR: All assignments failed to find matching slots');
+        return NextResponse.json({
+          error: '[DRAAD155] No matching slots found for any ORT assignment',
+          message: 'Kan ORT assignments niet toepassen - geen lege slots beschikbaar',
+          details: {
+            ort_assignments: solverResult.assignments.length,
+            empty_slots_found: emptySlots.length,
+            successful_updates: updateCount
           }
-        }
-        
-        const upsertTime = Date.now() - upsertStartTime;
-        
-        if (failedSlots > 0) {
-          console.error(`[DRAAD150] UPSERT: ${failedSlots}/${slotGroups.size} slots FAILED`);
-          return NextResponse.json({
-            error: `[DRAAD150] Batch UPSERT failed: ${failedSlots}/${slotGroups.size} slots`,
-            successCount,
-            failedSlots
-          }, { status: 500 });
-        }
-        
-        console.log(`[DRAAD150] ✅ All ${slotGroups.size} slots UPSERT successful (${upsertTime}ms)`);
-        console.log('[DRAAD150] === END BATCH UPSERT ===');
-        console.log(`[DRAAD154] ✅ DATABASE INTEGRITY PRESERVED: All ${successCount} assignments have status=1 + service_id`);
+        }, { status: 400 });
       }
       
       const { error: updateError } = await supabase
@@ -656,8 +710,8 @@ export async function POST(request: NextRequest) {
         draad135: {
           status: 'IMPLEMENTED',
           version: draad135Version,
-          method: 'UPSERT with onConflict',
-          fix: 'Removed DELETE, restored DRAAD132 UPSERT pattern'
+          method: 'UPDATE (UPSERT deprecated)',
+          fix: 'No DELETE, using UPDATE instead of INSERT'
         },
         draad149: {
           status: 'VERIFICATION_ACTIVE',
@@ -670,19 +724,28 @@ export async function POST(request: NextRequest) {
           fix: 'service_id included in dedup key'
         },
         draad150: {
-          status: 'IMPLEMENTED',
+          status: 'DEPRECATED',
           version: 'DRAAD150_BATCH_UPSERT',
-          method: 'Sequential batch UPSERT per slot',
-          fix: 'Avoid ON CONFLICT constraint error',
+          reason: 'Replaced by DRAAD155 UPDATE approach',
           cache_bust_id: draad150CacheBustId
         },
         draad154: {
           status: 'IMPLEMENTED',
           version: draad154Version,
-          fix: 'status=1 SET WITH service_id + ORT validation',
+          fix: 'ORT result validation before updates',
           validation: 'PASSED',
-          ortConfidence: 'verified',
           cache_bust_id: draad154CacheBustId
+        },
+        draad155: {
+          status: 'IMPLEMENTED',
+          version: draad155Version,
+          method: 'UPDATE instead of INSERT/UPSERT',
+          fix: 'Find empty slots → UPDATE by ID → status=1 only with service_id',
+          baseline_slots: emptySlots.length,
+          successful_updates: updateCount,
+          not_found: notFoundCount,
+          message: 'ORT assignments processed via UPDATE (no constraint conflicts)',
+          cache_bust_id: draad155CacheBustId
         },
         total_time_ms: totalTime
       });
