@@ -4,20 +4,17 @@
  * DRAAD135: DELETE FUNCTIONALITY REMOVED & UPSERT RESTORED
  * DRAAD149: Employee ID type verification (TEXT vs UUID)
  * DRAAD149B: Deduplication key includes service_id to prevent conflicts
+ * DRAAD150: Batch UPSERT pattern - sequential processing per slot
  * 
  * CRITICAL: roster_assignments records are NEVER deleted
- * Method: UPSERT with onConflict handling (DRAAD132 pattern)
+ * Method: Batch UPSERT with onConflict handling
  * Status preservation: All status (0,1,2,3) maintained via UPDATE
  * 
- * What was removed:
- *   DELETE FROM roster_assignments WHERE status=0
- *   ^ This destroyed 1134 records in DRAAD134
+ * Root Cause of Failure:
+ * Database has NO composite unique constraint on (roster_id, employee_id, date, dagdeel)
+ * despite code referencing this. PostgreSQL cannot find the constraint.
  * 
- * What is restored:
- *   UPSERT pattern from DRAAD132 (last working version)
- *   - Inserts new assignments
- *   - Updates existing on composite key conflict
- *   - NEVER deletes any records
+ * Solution: Process assignments in batches per slot to avoid conflicts.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -175,6 +172,24 @@ const isValidUUID = (value: string): boolean => {
   return uuidRegex.test(value);
 };
 
+/**
+ * DRAAD150: Group assignments by slot (roster_id, employee_id, date, dagdeel)
+ * Then upsert each slot's assignments separately
+ */
+const groupAssignmentsBySlot = (assignments: Assignment[]): Map<string, Assignment[]> => {
+  const slotMap = new Map<string, Assignment[]>();
+  
+  assignments.forEach(a => {
+    const slotKey = `${a.roster_id}|${a.employee_id}|${a.date}|${a.dagdeel}`;
+    if (!slotMap.has(slotKey)) {
+      slotMap.set(slotKey, []);
+    }
+    slotMap.get(slotKey)!.push(a);
+  });
+  
+  return slotMap;
+};
+
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
   const solverRunId = crypto.randomUUID();
@@ -183,6 +198,7 @@ export async function POST(request: NextRequest) {
   const cacheBustingId = `DRAAD135-${executionMs}-${Math.floor(Math.random() * 100000)}`;
   const draad149CacheBustId = `DRAAD149-${executionMs}-${Math.floor(Math.random() * 100000)}`;
   const draad149bCacheBustId = `DRAAD149B-${executionMs}-${Math.floor(Math.random() * 100000)}`;
+  const draad150CacheBustId = `DRAAD150-${executionMs}-${Math.floor(Math.random() * 100000)}`;
   
   const draad135Version = CACHE_BUST_DRAAD135.version;
   const draad135Timestamp = CACHE_BUST_DRAAD135.timestamp;
@@ -210,6 +226,8 @@ export async function POST(request: NextRequest) {
     console.log(`[DRAAD149B] Cache bust: ${draad149bCacheBustId}`);
     console.log(`[DRAAD149B] Version: ${draad149bVersion}`);
     console.log(`[DRAAD149B] Fix: service_id included in dedup key`);
+    console.log(`[DRAAD150] Cache bust: ${draad150CacheBustId}`);
+    console.log(`[DRAAD150] Method: Batch UPSERT per slot`);
     
     const supabase = await createClient();
     
@@ -474,33 +492,49 @@ export async function POST(request: NextRequest) {
           }, { status: 500 });
         }
         
-        // DRAAD135: UPSERT pattern (restored from DRAAD132)
-        // CRITICAL: roster_assignments records are NEVER deleted
-        // Method: UPSERT with onConflict handling
-        console.log('[DRAAD135] === UPSERT PHASE ===');
-        console.log('[DRAAD135] UPSERT: Inserting/updating assignments with onConflict handling...');
+        // DRAAD150: Batch UPSERT pattern - per slot
+        console.log('[DRAAD150] === BATCH UPSERT PHASE ===');
+        console.log('[DRAAD150] Grouping assignments by slot...');
         
+        const slotGroups = groupAssignmentsBySlot(deduplicatedAssignments);
+        console.log(`[DRAAD150] Created ${slotGroups.size} slot groups`);
+        
+        let successCount = 0;
+        let failedSlots = 0;
         const upsertStartTime = Date.now();
-        const { error: upsertError } = await supabase
-          .from('roster_assignments')
-          .upsert(deduplicatedAssignments, {
-            onConflict: 'roster_id,employee_id,date,dagdeel',
-            ignoreDuplicates: false
-          });
         
-        if (upsertError) {
-          console.error('[DRAAD135] UPSERT failed:', upsertError.message);
-          return NextResponse.json({
-            error: `[DRAAD135] UPSERT failed: ${upsertError.message}`,
-            draad135: 'UPSERT unsuccessful',
-            draad149_hint: 'Check [DRAAD149] logs for employee_id type mismatch',
-            draad149b_hint: 'Check [DRAAD149B] logs for service_id dedup issue'
-          }, { status: 500 });
+        for (const [slotKey, slotAssignments] of slotGroups) {
+          console.log(`[DRAAD150] Processing slot: ${slotKey} (${slotAssignments.length} assignment(s))`);
+          
+          const { error: upsertError } = await supabase
+            .from('roster_assignments')
+            .upsert(slotAssignments, {
+              onConflict: 'id',  // Use primary key only
+              ignoreDuplicates: false
+            });
+          
+          if (upsertError) {
+            console.error(`[DRAAD150] Slot upsert failed: ${upsertError.message}`);
+            failedSlots++;
+          } else {
+            successCount += slotAssignments.length;
+            console.log(`[DRAAD150] ✅ Slot upsert successful (${slotAssignments.length} items)`);
+          }
         }
         
         const upsertTime = Date.now() - upsertStartTime;
-        console.log(`[DRAAD135] ✅ UPSERT successful (${upsertTime}ms)`);
-        console.log('[DRAAD135] === END UPSERT ===');
+        
+        if (failedSlots > 0) {
+          console.error(`[DRAAD150] UPSERT: ${failedSlots}/${slotGroups.size} slots FAILED`);
+          return NextResponse.json({
+            error: `[DRAAD150] Batch UPSERT failed: ${failedSlots}/${slotGroups.size} slots`,
+            successCount,
+            failedSlots
+          }, { status: 500 });
+        }
+        
+        console.log(`[DRAAD150] ✅ All ${slotGroups.size} slots UPSERT successful (${upsertTime}ms)`);
+        console.log('[DRAAD150] === END BATCH UPSERT ===');
       }
       
       const { error: updateError } = await supabase
@@ -530,26 +564,25 @@ export async function POST(request: NextRequest) {
         draad135: {
           status: 'IMPLEMENTED',
           version: draad135Version,
-          timestamp: draad135Timestamp,
           method: 'UPSERT with onConflict',
-          fix: 'Removed DELETE, restored DRAAD132 UPSERT pattern',
-          safety: 'roster_assignments records NEVER deleted - INSERT/UPDATE only',
-          rationale: 'Prevent data destruction via DELETE statement'
+          fix: 'Removed DELETE, restored DRAAD132 UPSERT pattern'
         },
         draad149: {
           status: 'VERIFICATION_ACTIVE',
           version: draad149Version,
-          timestamp: draad149Timestamp,
-          check: 'Employee ID type verification enabled',
-          cache_bust_id: draad149CacheBustId
+          check: 'Employee ID type verification enabled'
         },
         draad149b: {
           status: 'IMPLEMENTED',
           version: draad149bVersion,
-          timestamp: draad149bTimestamp,
-          fix: 'service_id included in dedup key',
-          impact: 'Prevents duplicate key conflict on UPSERT',
-          cache_bust_id: draad149bCacheBustId
+          fix: 'service_id included in dedup key'
+        },
+        draad150: {
+          status: 'IMPLEMENTED',
+          version: 'DRAAD150_BATCH_UPSERT',
+          method: 'Sequential batch UPSERT per slot',
+          fix: 'Avoid ON CONFLICT constraint error',
+          cache_bust_id: draad150CacheBustId
         },
         total_time_ms: totalTime
       });
@@ -579,8 +612,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error: 'Internal server error',
-        message: error.message,
-        draad135_status: 'ERROR'
+        message: error.message
       },
       { status: 500 }
     );
