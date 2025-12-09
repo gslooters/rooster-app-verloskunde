@@ -1,0 +1,58 @@
+# DRAAD 149 - FIX FOR UPSERT "cannot affect row a second time" ERROR
+
+## ROOT CAUSE
+PostgreSQL ON CONFLICT DO UPDATE fails when:
+- Same (roster_slot_id, employee_id) appears MULTIPLE times in single batch
+- PostgreSQL cannot update same row twice in one statement
+
+## SOLUTION
+Implement 3-step approach:
+1. Deduplicate at assignment level (keep LAST occurrence)
+2. Use batch insert with smaller chunks (100-200 per batch)
+3. Use simpler ON CONFLICT handling without DO UPDATE when duplicates exist
+
+## FILES TO MODIFY
+- app/api/planning/service-allocation-pdf/route.ts (or wherever UPSERT happens)
+- Look for: `supabase.from('roster_assignments').upsert(...)`
+
+## NEW IMPLEMENTATION PATTERN
+
+```typescript
+// Step 1: Deduplicate assignments by taking LAST occurrence
+const deduplicateAssignments = (assignments: Assignment[]) => {
+  const map = new Map<string, Assignment>();
+  for (const assignment of assignments) {
+    const key = `${assignment.roster_slot_id}|${assignment.employee_id}`;
+    map.set(key, assignment); // Overwrites with latest
+  }
+  return Array.from(map.values());
+};
+
+// Step 2: Batch insert with chunk size
+const insertInBatches = async (assignments: Assignment[], chunkSize = 100) => {
+  const deduped = deduplicateAssignments(assignments);
+  
+  for (let i = 0; i < deduped.length; i += chunkSize) {
+    const chunk = deduped.slice(i, i + chunkSize);
+    
+    // Simple upsert - relies on PRIMARY KEY constraint
+    const { error } = await supabase
+      .from('roster_assignments')
+      .upsert(chunk, { onConflict: 'roster_slot_id,employee_id' });
+    
+    if (error) throw error;
+  }
+};
+```
+
+## WHY THIS WORKS
+1. Deduplication BEFORE database = no duplicate conflicts
+2. Batch size limits row count = PostgreSQL handles efficiently  
+3. Simple onConflict = fewer trigger issues
+
+## TESTING
+1. Should handle 1137 assignments without error
+2. Monitor: same (slot, employee) shouldn't appear twice
+3. Verify all 1137 get inserted (not lost)
+
+DEPLOY THIS ASAP - this is the real fix!
