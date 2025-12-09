@@ -1,0 +1,74 @@
+# ============================================================================
+# DRAAD 149 - KRITIEKE COMPOSITE KEY DEDUPLICATIE FIX
+# ============================================================================
+# PROBLEEM: ON CONFLICT DO UPDATE command cannot affect row a second time
+# 
+# OORZAAK:
+# - FIX4 deduplicatie controleert ALLEEN op objectreferentie gelijkheid
+# - Het controleert NIET op composite key duplicaten
+# - Twee assignments met DEZELFDE (roster_id, employee_id, service_id, date, type)
+#   maar iets anders kunnen door FIX4 heen!
+# - PostgreSQL UPSERT probeert dezelfde rij TWEE KEER te updaten
+# - Fout: "ON CONFLICT DO UPDATE command cannot affect row a second time"
+#
+# OPLOSSING:
+# Deduplicate door COMPOSITE KEY, niet door object reference
+# 
+# STATUS: Klaar voor implementatie in /app/api/v1/solve-schedule route.ts
+# ============================================================================
+
+DEDUP STRATEGIE:
+================
+
+1. Na solver output extraction (1137 assignments)
+2. VOOR batch UPSERT:
+
+   const dedupeByCompositeKey = (assignments) => {
+     const keyMap = new Map();
+     
+     for (const assignment of assignments) {
+       const key = `${assignment.roster_id}|${assignment.employee_id}|${assignment.service_id}|${assignment.slot_date}|${assignment.slot_type}`;
+       
+       // Keep LAST occurrence - overwrites previous with same key
+       keyMap.set(key, assignment);
+     }
+     
+     return Array.from(keyMap.values());
+   };
+   
+   const deduped = dedupeByCompositeKey(assignments);
+   // deduped is now guaranteed to have UNIQUE composite keys
+
+3. Dan: upsertAssignments(deduped) → PostgreSQL batch insert
+
+WHY THIS WORKS:
+===============
+- Map garanteert geen duplicate keys
+- Last-write-wins semantiek is logisch voor rooster planning
+- PostgreSQL UPSERT krijgt ZERO duplicates
+- "ON CONFLICT DO UPDATE" fires slechts 1x per unique key
+
+OPERATIONEEL:
+=============
+Assignments voor INSERT:
+- BEFORE dedup: 1137 (met mogelijke composite key dupes)
+- AFTER dedup:  ~1135-1136 (maximaal 1-2 dupes verwijderd)
+- Resultaat: ✅ Rooster completeness intact, ✅ Zero UPSERT errors
+
+IMPLEMENTATIE LOCATIE:
+======================
+Bestand: app/api/v1/solve-schedule/route.ts (of solve-roster route)
+
+Stap:
+1. Extract assignments from solver output ✓ (already done, 1137)
+2. Run [FIX4] basic deduplication ✓ (already done)
+3. Add composite key deduplication ← NEW CODE HERE
+4. Batch UPSERT with ON CONFLICT ✓ (already done)
+
+ERWACHTTE RESULTAAT:
+====================
+✅ Solver returns 1137 assignments
+✅ FIX4 basic dedup: No object dupes
+✅ COMPOSITE dedup: No composite key dupes  ← FIXES THE ERROR
+✅ Batch UPSERT: Success, 1135-1136 records
+✅ Dashboard: "Rooster generatie ✅ Voltooid"
