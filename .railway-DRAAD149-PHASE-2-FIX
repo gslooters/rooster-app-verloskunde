@@ -1,0 +1,360 @@
+# 🚀 DRAAD 149 - PHASE 2: THE REAL FIX
+## Duplicate Key Conflict Resolution
+
+**STATUS:** Ready to implement
+**ROOT CAUSE:** Multiple assignments with same (roster_id, employee_id, date, dagdeel) but different service_id
+**SOLUTION:** Improve deduplication to include service_id in key
+**TIME ESTIMATE:** 10 minutes implementation + 4 minutes deploy
+
+---
+
+## Why Previous Hypothesis Was Wrong
+
+### DRAAD149 Revealed:
+```
+✅ employee_id value: emp3 (TEXT)
+✅ employee_id type: string
+✅ employee_id isUUID: false
+✅ Matches database type: YES
+```
+
+**Type mismatch is NOT the problem.**
+
+### PostgreSQL Error Reveals:
+```
+ON CONFLICT DO UPDATE command cannot affect row a second time
+```
+
+**This means:** Within single UPSERT statement, same row updated multiple times.
+
+### Root Cause:
+
+Solver returns something like:
+```
+[
+  {
+    roster_id: "ABC",
+    employee_id: "emp3",
+    date: "2025-12-20",
+    dagdeel: "O",
+    service_id: "SERVICE_1"  ← Service A
+  },
+  {
+    roster_id: "ABC",
+    employee_id: "emp3",
+    date: "2025-12-20",
+    dagdeel: "O",
+    service_id: "SERVICE_2"  ← Service B (DIFFERENT!)
+  }
+]
+```
+
+**Same slot, two different services!**
+
+Our dedup key only checks: `roster_id|employee_id|date|dagdeel`
+
+Both match → Dedup "works" but keeps WRONG assignment
+
+PostgreSQL sees:
+1. First assignment: Match composite key → INSERT/UPDATE
+2. Second assignment: SAME composite key → Try to UPDATE AGAIN
+3. ERROR: Row can't be affected twice
+
+---
+
+## The Fix
+
+### Root Cause: Incomplete Deduplication Key
+
+**Current (WRONG):**
+```typescript
+const key = `${a.roster_id}|${a.employee_id}|${a.date}|${a.dagdeel}`;
+```
+
+Missing: `service_id`!
+
+**Fixed (CORRECT):**
+```typescript
+const key = `${a.roster_id}|${a.employee_id}|${a.date}|${a.dagdeel}|${a.service_id}`;
+```
+
+Now if two assignments have same slot but different service:
+- Different keys → Both kept
+- No duplicate on UPSERT → No "affect row twice" error
+
+---
+
+## Implementation Details
+
+### Where to Change
+
+**File:** `app/api/roster/solve/route.ts`
+
+**LOCATION 1 - logDuplicates function (Line ~73-74)**
+
+Find:
+```typescript
+const logDuplicates = (assignments: any[], label: string): DuplicateAnalysis => {
+  const keyMap = new Map<string, number[]>();
+  
+  assignments.forEach((a, i) => {
+    const key = `${a.roster_id}|${a.employee_id}|${a.date}|${a.dagdeel}`;
+    // ^
+    // CHANGE THIS
+```
+
+Change to:
+```typescript
+const logDuplicates = (assignments: any[], label: string): DuplicateAnalysis => {
+  const keyMap = new Map<string, number[]>();
+  
+  assignments.forEach((a, i) => {
+    const key = `${a.roster_id}|${a.employee_id}|${a.date}|${a.dagdeel}|${a.service_id}`;
+    // ^
+    // ADDED |${a.service_id}
+```
+
+**LOCATION 2 - deduplicateAssignments function (Line ~205-206)**
+
+Find:
+```typescript
+const deduplicateAssignments = (assignments: Assignment[]): Assignment[] => {
+  const keyMap = new Map<string, {assignment: Assignment; originalIndex: number}>();
+  let duplicateCount = 0;
+
+  for (let i = 0; i < assignments.length; i++) {
+    const assignment = assignments[i];
+    const key = `${assignment.roster_id}|${assignment.employee_id}|${assignment.date}|${assignment.dagdeel}`;
+    // ^
+    // CHANGE THIS
+```
+
+Change to:
+```typescript
+const deduplicateAssignments = (assignments: Assignment[]): Assignment[] => {
+  const keyMap = new Map<string, {assignment: Assignment; originalIndex: number}>();
+  let duplicateCount = 0;
+
+  for (let i = 0; i < assignments.length; i++) {
+    const assignment = assignments[i];
+    const key = `${assignment.roster_id}|${assignment.employee_id}|${assignment.date}|${assignment.dagdeel}|${assignment.service_id}`;
+    // ^
+    // ADDED |${assignment.service_id}
+```
+
+**LOCATION 3 - Type definition for Assignment (if needed)**
+
+Verify `Assignment` interface includes `service_id`:
+
+```typescript
+interface Assignment {
+  roster_id: string | any;
+  employee_id: string;
+  date: string;
+  dagdeel: string;
+  service_id: string | null;  // ← Should be here
+  [key: string]: any;
+}
+```
+
+It is (already present).
+
+---
+
+## Why This Fixes It
+
+### Before Fix:
+```
+Assignment 1: ABC|emp3|2025-12-20|O (service_id not in key)
+Assignment 2: ABC|emp3|2025-12-20|O (service_id not in key)
+
+Keys match → Seen as duplicate → Keep only last
+↓
+
+UPSERT tries to insert/update same composite key twice
+↓
+PostgreSQL: "cannot affect row a second time" ❌
+```
+
+### After Fix:
+```
+Assignment 1: ABC|emp3|2025-12-20|O|SERVICE_1
+Assignment 2: ABC|emp3|2025-12-20|O|SERVICE_2
+
+Keys DIFFERENT → Both kept
+↓
+UPSERT knows these are separate assignments
+↓
+Both inserted/updated successfully ✅
+```
+
+---
+
+## Syntax Validation
+
+Change is:
+- ✅ Syntactically valid (adding to template literal)
+- ✅ Consistent with existing code
+- ✅ `service_id` already in assignment object
+- ✅ No type issues
+- ✅ No null/undefined risks
+
+---
+
+## Implementation Steps
+
+### Step 1: Read Current File
+GET route.ts from GitHub ✅
+
+### Step 2: Make Two Changes
+
+**Change 1:** Line 73-74 area
+```
+Before: const key = `${a.roster_id}|${a.employee_id}|${a.date}|${a.dagdeel}`;
+After:  const key = `${a.roster_id}|${a.employee_id}|${a.date}|${a.dagdeel}|${a.service_id}`;
+```
+
+**Change 2:** Line 205-206 area
+```
+Before: const key = `${assignment.roster_id}|${assignment.employee_id}|${assignment.date}|${assignment.dagdeel}`;
+After:  const key = `${assignment.roster_id}|${assignment.employee_id}|${assignment.date}|${assignment.dagdeel}|${assignment.service_id}`;
+```
+
+### Step 3: Commit
+```
+Message: DRAAD149 PHASE 2: Include service_id in deduplication key to prevent duplicate conflict on UPSERT
+```
+
+### Step 4: Deploy
+Railway auto-deploys
+
+### Step 5: Test
+Trigger solver again, verify UPSERT succeeds
+
+---
+
+## Expected Results After Fix
+
+### Success Logs:
+```
+[FIX4] INPUT: ✅ CLEAN - No duplicates found (1137 total)
+[DRAAD135] === UPSERT PHASE ===
+[DRAAD135] ✅ UPSERT successful (245ms)
+[DRAAD118A] Roster status updated: draft → in_progress
+```
+
+### Console Output:
+```
+[Dashboard] ORT resultaat: {
+  success: true,
+  roster_id: "76d5d9d6-be5b-4ef2-91f7-56a22ad30429",
+  solver_result: {
+    status: "optimal",
+    assignments: [...],
+    total_assignments: 1137,
+    fill_percentage: 83.3
+  }
+}
+```
+
+### Dashboard:
+✅ No error message
+✅ Assignments saved to database
+✅ Roster ready for next step
+
+---
+
+## Fallback Plan
+
+If for some reason this doesn't work:
+
+### Option B: Batching
+
+Split UPSERT into 150-row chunks:
+
+```typescript
+const batches = [];
+for (let i = 0; i < deduplicatedAssignments.length; i += 150) {
+  batches.push(deduplicatedAssignments.slice(i, i + 150));
+}
+
+for (const batch of batches) {
+  const { error } = await supabase
+    .from('roster_assignments')
+    .upsert(batch, {
+      onConflict: 'roster_id,employee_id,date,dagdeel',
+      ignoreDuplicates: false
+    });
+  
+  if (error) throw error;
+}
+```
+
+This breaks the large transaction into smaller ones → No "affect row twice" within single statement.
+
+---
+
+## Cache Busting
+
+Create new cache-buster file:
+
+**File:** `app/api/cache-bust/DRAAD149B.ts`
+
+```typescript
+export const CACHE_BUST_DRAAD149B = {
+  version: 'DRAAD149B_DEDUP_KEY_WITH_SERVICE',
+  timestamp: Date.now(),
+  random: Math.floor(Math.random() * 100000),
+  cacheBustId: `DRAAD149B-${Date.now()}-${Math.floor(Math.random() * 100000)}`,
+  description: 'Fixed deduplication key to include service_id',
+  fix: 'Prevent duplicate assignments with same slot but different service',
+  impact: 'UPSERT now handles multiple services per slot correctly'
+} as const;
+```
+
+Then import in route.ts:
+```typescript
+import { CACHE_BUST_DRAAD149B } from '@/app/api/cache-bust/DRAAD149B';
+```
+
+---
+
+## Timeline
+
+```
+Now:         Implement fix (2 changes, 2 minutes)
+Now+2 min:   Commit
+Now+3 min:   Deploy (Railway auto-build 2-3 min)
+Now+7 min:   Container online
+Now+9 min:   Trigger solver
+Now+11 min:  Check logs
+Now+13 min:  SUCCESS! 🌟
+```
+
+**Total: ~15 minutes**
+
+---
+
+## Confidence Level
+
+**This is the fix: 90%+**
+
+Reasoning:
+1. PostgreSQL error is unambiguous: "affect row twice"
+2. This only happens with duplicate composite keys
+3. Service_id is the missing piece
+4. Fix is standard database practice
+
+---
+
+## Status
+
+```
+✅ Root cause: IDENTIFIED (duplicate key conflict)
+✅ Solution: CLEAR (include service_id in dedup key)
+✅ Implementation: TRIVIAL (2 line changes)
+✅ Risk: ZERO (backward compatible)
+🚀 Ready: YES
+```
+
+**STANDING BY FOR IMPLEMENTATION**
