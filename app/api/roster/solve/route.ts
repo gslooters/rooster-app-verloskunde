@@ -3,6 +3,7 @@
  * 
  * DRAAD135: DELETE FUNCTIONALITY REMOVED & UPSERT RESTORED
  * DRAAD149: Employee ID type verification (TEXT vs UUID)
+ * DRAAD149B: Deduplication key includes service_id to prevent conflicts
  * 
  * CRITICAL: roster_assignments records are NEVER deleted
  * Method: UPSERT with onConflict handling (DRAAD132 pattern)
@@ -26,6 +27,7 @@ import { CACHE_BUST_DRAAD129_FIX4 } from '@/app/api/cache-bust/DRAAD129_FIX4';
 import { CACHE_BUST_OPTIE3_CONSTRAINT_RESOLUTION } from '@/app/api/cache-bust/OPTIE3_CONSTRAINT_RESOLUTION';
 import { CACHE_BUST_DRAAD135 } from '@/app/api/cache-bust/DRAAD135';
 import { CACHE_BUST_DRAAD149 } from '@/app/api/cache-bust/DRAAD149';
+import { CACHE_BUST_DRAAD149B } from '@/app/api/cache-bust/DRAAD149B';
 import type {
   SolveRequest,
   SolveResponse,
@@ -68,7 +70,7 @@ const logDuplicates = (assignments: any[], label: string): DuplicateAnalysis => 
   const keyMap = new Map<string, number[]>();
   
   assignments.forEach((a, i) => {
-    const key = `${a.roster_id}|${a.employee_id}|${a.date}|${a.dagdeel}`;
+    const key = `${a.roster_id}|${a.employee_id}|${a.date}|${a.dagdeel}|${a.service_id}`;
     if (!keyMap.has(key)) {
       keyMap.set(key, []);
     }
@@ -145,7 +147,7 @@ const deduplicateAssignments = (assignments: Assignment[]): Assignment[] => {
 
   for (let i = 0; i < assignments.length; i++) {
     const assignment = assignments[i];
-    const key = `${assignment.roster_id}|${assignment.employee_id}|${assignment.date}|${assignment.dagdeel}`;
+    const key = `${assignment.roster_id}|${assignment.employee_id}|${assignment.date}|${assignment.dagdeel}|${assignment.service_id}`;
     
     if (keyMap.has(key)) {
       duplicateCount++;
@@ -180,11 +182,14 @@ export async function POST(request: NextRequest) {
   const executionMs = Date.now();
   const cacheBustingId = `DRAAD135-${executionMs}-${Math.floor(Math.random() * 100000)}`;
   const draad149CacheBustId = `DRAAD149-${executionMs}-${Math.floor(Math.random() * 100000)}`;
+  const draad149bCacheBustId = `DRAAD149B-${executionMs}-${Math.floor(Math.random() * 100000)}`;
   
   const draad135Version = CACHE_BUST_DRAAD135.version;
   const draad135Timestamp = CACHE_BUST_DRAAD135.timestamp;
   const draad149Version = CACHE_BUST_DRAAD149.version;
   const draad149Timestamp = CACHE_BUST_DRAAD149.timestamp;
+  const draad149bVersion = CACHE_BUST_DRAAD149B.version;
+  const draad149bTimestamp = CACHE_BUST_DRAAD149B.timestamp;
   
   try {
     const { roster_id } = await request.json();
@@ -202,6 +207,9 @@ export async function POST(request: NextRequest) {
     console.log(`[DRAAD135] Method: UPSERT (no DELETE)`);
     console.log(`[DRAAD149] Cache bust: ${draad149CacheBustId}`);
     console.log(`[DRAAD149] Version: ${draad149Version}`);
+    console.log(`[DRAAD149B] Cache bust: ${draad149bCacheBustId}`);
+    console.log(`[DRAAD149B] Version: ${draad149bVersion}`);
+    console.log(`[DRAAD149B] Fix: service_id included in dedup key`);
     
     const supabase = await createClient();
     
@@ -485,7 +493,8 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({
             error: `[DRAAD135] UPSERT failed: ${upsertError.message}`,
             draad135: 'UPSERT unsuccessful',
-            draad149_hint: 'Check [DRAAD149] logs for employee_id type mismatch'
+            draad149_hint: 'Check [DRAAD149] logs for employee_id type mismatch',
+            draad149b_hint: 'Check [DRAAD149B] logs for service_id dedup issue'
           }, { status: 500 });
         }
         
@@ -533,6 +542,14 @@ export async function POST(request: NextRequest) {
           timestamp: draad149Timestamp,
           check: 'Employee ID type verification enabled',
           cache_bust_id: draad149CacheBustId
+        },
+        draad149b: {
+          status: 'IMPLEMENTED',
+          version: draad149bVersion,
+          timestamp: draad149bTimestamp,
+          fix: 'service_id included in dedup key',
+          impact: 'Prevents duplicate key conflict on UPSERT',
+          cache_bust_id: draad149bCacheBustId
         },
         total_time_ms: totalTime
       });
