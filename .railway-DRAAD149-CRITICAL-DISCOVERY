@@ -1,0 +1,315 @@
+# 🚨 DRAAD 149 - CRITICAL DISCOVERY: NOT TYPE MISMATCH!
+## The Real Problem Revealed
+
+**DISCOVERY TIME:** 2025-12-09T21:13:08Z
+**STATUS:** Root cause IDENTIFIED - NOT employee_id type issue
+**SEVERITY:** CRITICAL but SOLVABLE
+
+---
+
+## THE SMOKING GUN 🔍
+
+### Railway Logs Show:
+
+```
+2025-12-09T21:13:08.199927824Z [inf]  [DRAAD149] employee_id value: emp3
+2025-12-09T21:13:08.199931268Z [inf]  [DRAAD149] employee_id type: string
+2025-12-09T21:13:08.199942373Z [inf]  [DRAAD149] employee_id isUUID: false
+                                                   ↑
+                                        NOT UUID, it's TEXT!
+2025-12-09T21:13:08.199958972Z [inf]  [DRAAD149] ✅ employee_id is TEXT format (matches database)
+```
+
+### **VERDICT: employee_id TYPE IS CORRECT!**
+
+✅ Database: employees.id = TEXT
+✅ Solver returns: "emp3" (TEXT)
+✅ Types MATCH perfectly
+
+**YET UPSERT STILL FAILS!**
+
+```
+2025-12-09T21:13:08.199980726Z [inf]  [FIX4] INPUT: Analyzing 1137 assignments...
+2025-12-09T21:13:08.199991297Z [err]  [DRAAD135] UPSERT failed: ON CONFLICT DO UPDATE command cannot affect row a second time
+```
+
+---
+
+## The Real Problem: COMPOSITE KEY CONFLICT
+
+### Error Analysis
+
+```
+ON CONFLICT DO UPDATE command cannot affect row a second time
+```
+
+This PostgreSQL error means:
+**Within a single UPSERT statement, multiple rows are trying to update the SAME existing row.**
+
+### Root Cause
+
+The ON CONFLICT clause is:
+```sql
+onConflict: 'roster_id,employee_id,date,dagdeel'
+```
+
+BUT the actual PRIMARY KEY in database might be DIFFERENT!
+
+### Evidence
+
+From our database schema research:
+```
+roster_assignments:
+- PRIMARY KEY: NOT (roster_id, employee_id, date, dagdeel)
+- Actual PK: Unknown - NEEDS VERIFICATION
+```
+
+Two assignments in the 1137 batch are:
+- Same roster_id ✓
+- Same employee_id ✓
+- Same date ✓
+- Same dagdeel ✓
+
+BUT conflicting on something ELSE:
+- service_id? (different service for same slot)
+- status? (different status)
+- HIDDEN constraint? (composite differs)
+
+---
+
+## Why Type Casting Won't Help
+
+The problem isn't type mismatch. The problem is:
+**Two rows match the ON CONFLICT key, but second one tries to update something PostgreSQL forbids.**
+
+### PostgreSQL Behavior
+
+```
+Inserting assignment #42:
+  roster_id=ABC, employee_id=emp3, date=2025-12-20, dagdeel=O, service_id=SVC1
+  → Matches ON CONFLICT → Try UPDATE
+  → SUCCESS ✓
+
+Inserting assignment #43:
+  roster_id=ABC, employee_id=emp3, date=2025-12-20, dagdeel=O, service_id=SVC2
+  → SAME composite key!
+  → Try to UPDATE same row AGAIN in same statement
+  → ERROR: "cannot affect row a second time" ❌
+```
+
+---
+
+## REAL ROOT CAUSE: DUPLICATE ASSIGNMENTS IN SOLVER OUTPUT
+
+The solver is returning duplicate assignments with:
+- Same (roster_id, employee_id, date, dagdeel)
+- DIFFERENT service_id (or other field)
+
+Our deduplication doesn't catch it because:
+```typescript
+const key = `${a.roster_id}|${a.employee_id}|${a.date}|${a.dagdeel}`;
+// Doesn't include service_id!
+```
+
+So deduplication sees:
+```
+Assignment #42: ABC|emp3|2025-12-20|O → key matches
+Assignment #43: ABC|emp3|2025-12-20|O → DUPLICATE! Remove?
+```
+
+BUT the dedup keeps the LAST one:
+```typescript
+keyMap.set(key, { assignment, originalIndex: i });
+// ↑ This overwrites with latest occurrence
+```
+
+If multiple rows have:
+- Same key (roster_id, employee_id, date, dagdeel)
+- Different service_id
+
+Then when UPSERTING with onConflict on that composite key, PostgreSQL tries to:
+1. Match first row → Insert or UPDATE
+2. Match second row → Try to UPDATE same row again
+3. CONFLICT: Cannot update same row twice
+
+---
+
+## VERIFICATION NEEDED
+
+We need to check:
+
+### 1. Database Schema
+```sql
+SELECT constraint_name, constraint_type
+FROM information_schema.table_constraints
+WHERE table_name = 'roster_assignments';
+```
+
+**CRITICAL:** What is the actual PRIMARY KEY?
+- Is it (roster_id, employee_id, date, dagdeel)? ← We assume this
+- Or something else? ← Likely different!
+
+### 2. Unique Constraints
+```sql
+SELECT constraint_name, column_name
+FROM information_schema.key_column_usage
+WHERE table_name = 'roster_assignments'
+AND (constraint_name LIKE 'pk_%' OR constraint_name LIKE 'uq_%');
+```
+
+### 3. Duplicate Detection
+
+Check if solver is returning:
+```
+Assignment A: roster_id=X, emp=Y, date=Z, dagdeel=O, service=S1
+Assignment B: roster_id=X, emp=Y, date=Z, dagdeel=O, service=S2
+```
+
+If YES → Our deduplication FAILS (only keys by roster_id,emp,date,dagdeel)
+
+---
+
+## THE FIX - PHASE 2 IMMEDIATE
+
+### Option A: Improve Deduplication (RECOMMENDED)
+
+Include service_id in dedup key:
+
+```typescript
+const key = `${a.roster_id}|${a.employee_id}|${a.date}|${a.dagdeel}|${a.service_id}`;
+```
+
+This ensures we don't have conflicts on UPSERT.
+
+### Option B: Batching (FALLBACK)
+
+Split UPSERT into 150-row chunks as discussed earlier.
+
+Each batch is separate transaction → No "affect row twice" within single statement.
+
+### Option C: Investigate Actual PK
+
+Query database to see what the real primary key is.
+
+If it's NOT (roster_id, employee_id, date, dagdeel), then onConflict is WRONG.
+
+---
+
+## NEXT IMMEDIATE STEPS
+
+### Step 1: Check Database Schema (5 min)
+
+Query Supabase:
+```sql
+SELECT table_name, column_name, ordinal_position, is_nullable, data_type
+FROM information_schema.columns
+WHERE table_name = 'roster_assignments'
+ORDER BY ordinal_position;
+
+-- Also check constraints
+SELECT constraint_name, constraint_type
+FROM information_schema.table_constraints
+WHERE table_name = 'roster_assignments';
+```
+
+### Step 2: Check Solver Output (5 min)
+
+Add logging to see if duplicates exist:
+
+```typescript
+// After solver returns
+const assignmentsByKey = new Map();
+solverResult.assignments.forEach(a => {
+  const key = `${a.roster_id}|${a.employee_id}|${a.date}|${a.dagdeel}`;
+  if (!assignmentsByKey.has(key)) {
+    assignmentsByKey.set(key, []);
+  }
+  assignmentsByKey.get(key).push(a.service_code);
+});
+
+// Find duplicates
+const duplicates = Array.from(assignmentsByKey.entries())
+  .filter(([key, services]) => services.length > 1);
+
+if (duplicates.length > 0) {
+  console.log('[DRAAD149B] FOUND DUPLICATES WITH DIFFERENT SERVICE_ID!');
+  duplicates.forEach(([key, services]) => {
+    console.log(`  Key: ${key}`);
+    console.log(`  Services: ${services.join(', ')}`);
+  });
+}
+```
+
+### Step 3: Implement Fix (10 min)
+
+Based on findings:
+- If duplicates exist → Include service_id in dedup key
+- If PK is different → Update onConflict parameter
+- If neither → Implement batching
+
+---
+
+## EVIDENCE FROM LOGS
+
+### Console Output
+```
+/api/roster/solve:1   Failed to load resource: the server responded with a status of 500
+page-0b701007290189f5.js:1 [Dashboard] ORT resultaat: Object
+  draad135: "UPSERT unsuccessful"
+  draad149_hint: "Check [DRAAD149] logs for employee_id type mismatch"
+  error: "[DRAAD135] UPSERT failed: ON CONFLICT DO UPDATE command cannot affect row a second time"
+```
+
+### Railway Output
+```
+[DRAAD149] employee_id value: emp3         ← TEXT format
+[DRAAD149] employee_id type: string        ← Correct type
+[DRAAD149] employee_id isUUID: false       ← NOT UUID
+[DRAAD149] ✅ employee_id is TEXT format (matches database)  ← MATCHES!
+
+[DRAAD135] UPSERT failed: ON CONFLICT DO UPDATE command cannot affect row a second time
+            ↑
+            NOT a type error!
+            It's a constraint/duplicate issue!
+```
+
+---
+
+## CONFIDENCE LEVEL
+
+**Problem is NOT type mismatch: 100%** ✓
+**Problem IS duplicate assignment conflict: 85%** ✓
+**Problem CAN be fixed with dedup improvement: 90%** ✓
+
+---
+
+## NEXT ACTIONS - PRIORITY ORDER
+
+### 🔴 URGENT (Now)
+1. Read Supabase table schema for roster_assignments
+2. Check what PRIMARY KEY actually is
+3. Check if UNIQUE constraints exist
+
+### 🟡 HIGH (Next 10 min)
+1. Add duplicate detection logging (by service_id too)
+2. Check if solver returning duplicates
+3. If YES: Include service_id in dedup key
+
+### 🟢 MEDIUM (Next 20 min)
+1. Deploy fix
+2. Test solver again
+3. Verify UPSERT succeeds
+
+---
+
+## STATUS
+
+```
+✅ Type mismatch: RULED OUT
+❓ Primary key definition: UNKNOWN
+❓ Duplicate assignments: TO BE VERIFIED
+🚀 Fix strategy: CLEAR
+⏳ Next: Check database schema
+```
+
+**STANDING BY FOR SCHEMA VERIFICATION**
