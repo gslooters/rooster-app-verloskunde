@@ -1,0 +1,158 @@
+# DRAAD 149 - IMPLEMENTATION PLAN FOR UPSERT BUG FIX
+
+## ERROR ANALYSIS
+
+```
+Error: ON CONFLICT DO UPDATE command cannot affect row a second time
+Source: Supabase/PostgreSQL when processing roster_assignments UPSERT
+Trigger: Solver returns 1137 assignments with DUPLICATE (slot_id, employee_id) pairs
+```
+
+### Why It Happens
+
+When solver sends batch like:
+```
+Assignment 1: { roster_slot_id: 100, employee_id: 5, service: 'DIO' }
+Assignment 2: { roster_slot_id: 100, employee_id: 5, service: 'DIA' }  ← DUPLICATE KEY!
+```
+
+PostgreSQL tries:
+```sql
+INSERT INTO roster_assignments (...)
+VALUES 
+  (100, 5, 'DIO', ...),
+  (100, 5, 'DIA', ...)  ← SAME KEY TWICE!
+ON CONFLICT (roster_slot_id, employee_id) 
+DO UPDATE SET ...
+```
+
+**PostgreSQL ERROR:** Can't update same row twice in one statement!
+
+---
+
+## SOLUTION PATTERN
+
+### Phase 1: CLIENT DEDUPLICATION (JavaScript/TypeScript)
+Where solver results are received, BEFORE sending to database:
+
+```typescript
+function deduplicateAssignments(assignments: any[]) {
+  const seen = new Map<string, any>();
+  
+  for (const assignment of assignments) {
+    const key = `${assignment.roster_slot_id}|${assignment.employee_id}`;
+    
+    // Keep LAST occurrence (solver's final decision)
+    seen.set(key, assignment);
+  }
+  
+  return Array.from(seen.values());
+}
+```
+
+### Phase 2: BATCH INSERTION
+Split into smaller chunks (100-200 per batch):
+
+```typescript
+async function batchInsert(assignments: any[], batchSize = 150) {
+  const deduped = deduplicateAssignments(assignments);
+  const batches = [];
+  
+  for (let i = 0; i < deduped.length; i += batchSize) {
+    batches.push(deduped.slice(i, i + batchSize));
+  }
+  
+  for (const batch of batches) {
+    const { error, data } = await supabase
+      .from('roster_assignments')
+      .upsert(batch, {
+        onConflict: 'roster_slot_id,employee_id',
+        ignoreDuplicates: false
+      });
+    
+    if (error) {
+      console.error('Batch insert failed:', error);
+      throw error;
+    }
+  }
+}
+```
+
+### Phase 3: VALIDATION
+After all batches inserted:
+
+```typescript
+async function validateInsert(rosterId: string, expectedCount: number) {
+  const { data, count } = await supabase
+    .from('roster_assignments')
+    .select('*', { count: 'exact' })
+    .eq('roster_id', rosterId);
+  
+  if (count !== expectedCount) {
+    console.warn(`Expected ${expectedCount}, got ${count}`);
+  }
+  
+  return { count, data };
+}
+```
+
+---
+
+## FILE LOCATIONS TO MODIFY
+
+**CRITICAL:** Find where solver response is processed. Look for:
+
+```bash
+# Search for this pattern
+grep -r "upsert" app/api/planning --include="*.ts"
+grep -r "roster_assignments" app/api --include="*.ts"
+grep -r "solved_roster" app/api --include="*.ts"
+```
+
+Likely files:
+- `app/api/planning/[...]/route.ts`
+- `app/api/planning/service-allocation-pdf/route.ts`
+- Any file that imports `supabase.from('roster_assignments')`
+
+---
+
+## DEPLOYMENT CHECKLIST
+
+- [ ] Locate exact UPSERT call
+- [ ] Add deduplication function
+- [ ] Add batch processing (chunk size 150)
+- [ ] Add logging for:
+  - Raw assignment count
+  - Deduped count
+  - Batch count
+  - Final inserted count
+- [ ] Test with manual solver run
+- [ ] Monitor logs: no "cannot affect row twice" errors
+- [ ] Verify all 1137 assignments are in DB
+
+---
+
+## EXPECTED RESULTS
+
+Before:
+```
+1137 assignments → UPSERT → CRASH with "ON CONFLICT" error
+```
+
+After:
+```
+1137 assignments → Deduplicate → ~1000-1100 unique → Batch insert → SUCCESS ✓
+```
+
+---
+
+## DANGER ZONE: What NOT to do
+
+❌ Don't use `ignoreDuplicates: true` - loses data
+❌ Don't increase batch size beyond 200 - more memory pressure
+❌ Don't skip deduplication - PostgreSQL will still fail
+❌ Don't use DELETE + INSERT - loses planner's existing assignments
+
+---
+
+**NEXT STEP:** Find the exact route file and implement Phase 1-3
