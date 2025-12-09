@@ -1,0 +1,416 @@
+# 📋 BRIEFING VOOR DRAAD 150 - VOLLEDIGE INSTRUCTIE
+## Roos-App Verloskunde: DRAAD149 PHASE 2 Implementatie
+
+**VORIGE DRAAD:** Analyse en diagnose van PostgreSQL "cannot affect row a second time" error
+**HUIDIGE DRAAD:** PHASE 2 fix implementeren en testen
+**STATUS:** Klaar om uit te voeren
+**PRIORITY:** 🔴 URGENT - 15 minuten tot oplossing
+
+---
+
+## 🎯 MISSIE
+
+Fix implementeren voor duplicate key conflict in roster_assignments UPSERT.
+
+**PROBLEEM SAMENGEVAT:**
+- Solver genereert 1137 assignments
+- Sommige hebben ZELFDE (roster_id, employee_id, date, dagdeel) maar ANDER service_id
+- UPSERT probeert zelfde rij tweemaal te updaten in één statement
+- PostgreSQL geeft error: "ON CONFLICT DO UPDATE command cannot affect row a second time"
+
+**ROOT CAUSE:**
+- Deduplicatie gebruikt onvolledig key
+- `key = roster_id|employee_id|date|dagdeel` (ZONDER service_id)
+- Twee assignments met zelfde key maar ander service_id worden als duplicaat behandeld
+- UPSERT faalt omdat beide dezelfde rij proberen te updaten
+
+**OPLOSSING:**
+- Voeg `service_id` toe aan deduplicatie-key
+- `key = roster_id|employee_id|date|dagdeel|service_id`
+- Nu zijn twee assignments met ander service_id NIET meer duplicaat
+- UPSERT kan beide succesvol verwerken
+
+---
+
+## 📝 STAP-VOOR-STAP OPDRACHT
+
+### STAP 1: BASELINE VERIFICATIE (5 minuten)
+
+**Doel:** Zeker zijn dat deployment van vorige draad gelukt is
+
+**Acties:**
+1. Check GitHub commits - moeten 5 commits zichtbaar zijn voor DRAAD149
+2. Check Railway container - moet "Running" en "Healthy" zijn
+3. Check of `.railway-DRAAD149-CRITICAL-DISCOVERY` file bestaat in repo
+4. Check of `.railway-DRAAD149-PHASE-2-FIX` file bestaat in repo
+
+**Vervolg als alles OK:** Ga naar STAP 2
+**Vervolg als iets fout:** Fix deployment issue eerst
+
+---
+
+### STAP 2: ROUTE.TS OPHALEN (3 minuten)
+
+**Doel:** Huidige versie van route.ts downloaden van GitHub
+
+**Acties:**
+```
+GET: app/api/roster/solve/route.ts from main branch
+Zoeken naar:
+- Line ~70-75: logDuplicates function
+- Line ~200-210: deduplicateAssignments function
+- Check beide functions hebben: const key = `${...}`
+```
+
+**Wat moet je vinden:**
+```typescript
+// Location 1 - logDuplicates
+const key = `${a.roster_id}|${a.employee_id}|${a.date}|${a.dagdeel}`;
+
+// Location 2 - deduplicateAssignments  
+const key = `${assignment.roster_id}|${assignment.employee_id}|${assignment.date}|${assignment.dagdeel}`;
+```
+
+**Vervolg:** Ga naar STAP 3
+
+---
+
+### STAP 3: TWEE WIJZIGINGEN MAKEN (2 minuten)
+
+**Doel:** Include service_id in beide deduplication keys
+
+**WIJZIGING 1 - logDuplicates function (rond line 73-74):**
+
+```
+ZOEK DEZE REGEL:
+    const key = `${a.roster_id}|${a.employee_id}|${a.date}|${a.dagdeel}`;
+
+VERVANG MET DEZE REGEL:
+    const key = `${a.roster_id}|${a.employee_id}|${a.date}|${a.dagdeel}|${a.service_id}`;
+```
+
+**WIJZIGING 2 - deduplicateAssignments function (rond line 205-206):**
+
+```
+ZOEK DEZE REGEL:
+    const key = `${assignment.roster_id}|${assignment.employee_id}|${assignment.date}|${assignment.dagdeel}`;
+
+VERVANG MET DEZE REGEL:
+    const key = `${assignment.roster_id}|${assignment.employee_id}|${assignment.date}|${assignment.dagdeel}|${assignment.service_id}`;
+```
+
+**Verificatie:**
+- ✅ Beide wijzigingen gemaakt
+- ✅ Geen syntaxfouten
+- ✅ Beide keys identiek (alleen `|${a.service_id}` vs `|${assignment.service_id}` verschil)
+- ✅ Rest van bestand ongewijzigd
+
+**Vervolg:** Ga naar STAP 4
+
+---
+
+### STAP 4: CACHE-BUSTER AANMAKEN (2 minuten)
+
+**Doel:** Nieuwe cache-buster file voor DRAAD149B
+
+**Bestand:** `app/api/cache-bust/DRAAD149B.ts`
+
+**Inhoud:**
+```typescript
+/**
+ * DRAAD149B: Deduplication Key with Service ID
+ * 
+ * Fix: Include service_id in dedup key to prevent duplicate conflict
+ * Problem: Same slot (roster_id, employee_id, date, dagdeel) with different
+ *          service_id caused "affect row a second time" error on UPSERT
+ * Solution: Make dedup key include service_id so different services are not
+ *           seen as duplicates
+ * 
+ * Created: 2025-12-09T21:22:00Z
+ */
+
+export const CACHE_BUST_DRAAD149B = {
+  version: 'DRAAD149B_DEDUP_WITH_SERVICE_ID',
+  timestamp: Date.now(),
+  random: Math.floor(Math.random() * 100000),
+  cacheBustId: `DRAAD149B-${Date.now()}-${Math.floor(Math.random() * 100000)}`,
+  description: 'Include service_id in deduplication key',
+  fix: 'Prevent duplicate assignments with same slot but different service',
+  impact: 'UPSERT now handles multiple services per slot correctly',
+  changelog: [
+    'Changed: logDuplicates key from 4-part to 5-part (added service_id)',
+    'Changed: deduplicateAssignments key from 4-part to 5-part (added service_id)',
+    'Result: No more "affect row a second time" error'
+  ]
+} as const;
+```
+
+**Verificatie:**
+- ✅ File aangemaakt in `app/api/cache-bust/`
+- ✅ Naam is `DRAAD149B.ts`
+- ✅ Export statement correct
+- ✅ Timestamps en random IDs aanwezig
+
+**Vervolg:** Ga naar STAP 5
+
+---
+
+### STAP 5: IMPORT TOEVOEGEN (1 minuut)
+
+**Doel:** Cache-buster importeren in route.ts
+
+**Locatie:** Bovenaan route.ts, bij andere imports (rond line 16)
+
+**Toevoegen deze regel:**
+```typescript
+import { CACHE_BUST_DRAAD149B } from '@/app/api/cache-bust/DRAAD149B';
+```
+
+**Verificatie:**
+- ✅ Import regel toegevoegd
+- ✅ Volgt patroon van andere imports
+- ✅ Path correct
+
+**Vervolg:** Ga naar STAP 6
+
+---
+
+### STAP 6: SYNTAXVALIDATIE (2 minuten)
+
+**Doel:** Zeker zijn dat TypeScript geen fouten geeft
+
+**Checks:**
+1. ✅ Beide `const key = ` wijzigingen syntactisch correct
+2. ✅ Geen unclosed quotes
+3. ✅ Geen missing backticks
+4. ✅ Service_id bestaat als field in alle assignments
+5. ✅ Import statement correct
+6. ✅ Cache-buster file syntax OK
+
+**Foutcheck:**
+```
+Als je deze fouten ziet, STOP en fix:
+- Unexpected token
+- Expected ';'
+- Cannot find name 'service_id'
+- Module not found
+
+Diese mogen NIET voorkomen - code is simpel en veilig
+```
+
+**Vervolg:** Ga naar STAP 7
+
+---
+
+### STAP 7: COMMIT NAAR GITHUB (2 minuten)
+
+**Doel:** Changes committen naar main branch
+
+**Bestanden om te committen:**
+1. `app/api/roster/solve/route.ts` (modified)
+2. `app/api/cache-bust/DRAAD149B.ts` (new)
+
+**Commit message:**
+```
+DRAD149B: Include service_id in deduplication key to prevent duplicate conflict
+
+Fix: Solver returns some assignments with same (roster_id, employee_id, date, dagdeel)
+but different service_id. Previous dedup key only checked 4 fields, missing service_id.
+This caused PostgreSQL "cannot affect row a second time" error on UPSERT.
+
+Solution: Include service_id in dedup key so different services are kept separate.
+
+Changes:
+- logDuplicates: key now includes service_id
+- deduplicateAssignments: key now includes service_id
+- New cache-buster: DRAAD149B.ts
+
+Result: UPSERT can now handle assignments for same slot with different services.
+```
+
+**Verificatie:**
+- ✅ Commit message duidelijk
+- ✅ Twee files in commit
+- ✅ Geen andere files gewijzigd
+- ✅ Pushed naar main
+
+**Vervolg:** Ga naar STAP 8
+
+---
+
+### STAP 8: RAILWAY DEPLOYMENT MONITOREN (4 minuten)
+
+**Doel:** Wachten tot Railway container online gaat
+
+**URL:** https://railway.com/project/90165889-1a50-4236-aefe-b1e1ae44dc7f
+
+**Wat je ziet:**
+1. Container status: Building → Running (2-3 min)
+2. Health checks: Red → Green (10 sec)
+3. Logs: Shows build complete
+
+**Verificatie:**
+- ✅ Container Running
+- ✅ Health checks Passing
+- ✅ Logs show no errors
+
+**Als deployment faalt:**
+- Check logs voor error
+- Likely: Syntax error in code
+- Fix: Go back to STAP 6
+
+**Vervolg:** Ga naar STAP 9
+
+---
+
+### STAP 9: SOLVER TRIGGEREN (1 minuut)
+
+**Doel:** ORT solver draaien om fix te testen
+
+**Hoe:**
+1. Ga naar dashboard
+2. Klik "Roosterbewerking starten"
+3. Volg stappen 1-5
+4. Klik "Roosterbewerking starten" knop onderaan
+
+**Wat je ziet:**
+- Loading spinner
+- Nach 10 seconden: Result
+
+**Vervolg:** Ga naar STAP 10
+
+---
+
+### STAP 10: LOGS CONTROLEREN (3 minuten)
+
+**Doel:** Verifiëren dat fix werkt
+
+**Locatie 1: Browser Console (F12)**
+
+```
+Expected:
+[Dashboard] ORT resultaat: Object
+  success: true (or Object with draad135: "UPSERT successful")
+  
+Niet dit:
+  draad135: "UPSERT unsuccessful"
+  error: "ON CONFLICT..."
+```
+
+**Locatie 2: Railway Logs**
+
+```
+Expected:
+[FIX4] INPUT: ✅ CLEAN - No duplicates found (1137 total)
+[DRAAD135] === UPSERT PHASE ===
+[DRAAD135] ✅ UPSERT successful (XXXms)
+[DRAAD118A] Roster status updated: draft → in_progress
+
+Niet dit:
+[DRAAD135] UPSERT failed: ON CONFLICT...
+```
+
+**Verificatie:**
+- ✅ Geen UPSERT error
+- ✅ Assignments succesvol opgeslagen
+- ✅ Roster status changed naar in_progress
+
+**SUCCESS!** 🎉
+
+**Vervolg:** Ga naar STAP 11
+
+---
+
+### STAP 11: VERIFICATIE EN RAPPORTAGE (2 minuten)
+
+**Doel:** Bevestigen dat oplossing compleet is
+
+**Wat checken:**
+1. ✅ Beide wijzigingen in route.ts aanwezig
+2. ✅ Cache-buster file aanwezig
+3. ✅ Solver draait zonder errors
+4. ✅ UPSERT slaagt
+5. ✅ 1137 assignments opgeslagen
+6. ✅ Roster status updated
+
+**Documenten aanmaken:**
+- `.DRAAD150-SUCCESS-REPORT.md` met:
+  - Wat was het probleem
+  - Hoe werd het opgelost
+  - Logs van succesvolle run
+  - Volgende stappen
+
+**Vervolg:** KLAAR! ✨
+
+---
+
+## ⏱️ TIMELINE
+
+```
+STAP 1 (Baseline):           5 min
+STAP 2 (Ophalen):            3 min
+STAP 3 (Wijzigingen):        2 min
+STAP 4 (Cache-buster):       2 min
+STAP 5 (Import):             1 min
+STAP 6 (Validatie):          2 min
+STAP 7 (Commit):             2 min
+STAP 8 (Deploy):             4 min
+STAP 9 (Trigger):            1 min
+STAP 10 (Logs):              3 min
+STAP 11 (Rapportage):        2 min
+                            -------
+TOTAAL:                     27 minuten
+```
+
+---
+
+## 🚨 KRITIEKEN
+
+**ALS STAP 1 FAALT:**
+- Check of vorige deployment gelukt is
+- Kijk Railway logs
+- Eventueel vorige commits controleren
+
+**ALS STAP 3 FAALT (syntax error):**
+- Zorg dat beide keys IDENTIEK zijn qua patroon
+- Check backticks en pipes
+- Zorg dat je `|${a.service_id}` OF `|${assignment.service_id}` gebruikt (niet beide)
+
+**ALS STAP 8 FAALT (deployment error):**
+- Ga terug naar STAP 6
+- Check of TypeScript errors zijn
+- Fix en re-commit
+
+**ALS STAP 10 FAALT (nog steeds UPSERT error):**
+- Check Railway logs voor exacte error message
+- Fallback plan: Batching implementeren (zie .railway-DRAAD149-PHASE-2-FIX file)
+
+---
+
+## 📚 REFERENTIE DOCUMENTEN
+
+In GitHub staan deze bestanden:
+- `.railway-DRAAD149-CRITICAL-DISCOVERY` - Uitleg waarom het niet type mismatch is
+- `.railway-DRAAD149-PHASE-2-FIX` - Gedetailleerde uitleg van de fix
+- `.railway-DRAAD149-FINAL-SUMMARY` - Samenvatting vorige draad
+
+---
+
+## ✅ KLAAR?
+
+Als je klaar bent met DRAAD150, maak dan een SUCCESS REPORT aan met:
+- Wat je hebt gedaan
+- Welke bestanden je hebt gewijzigd
+- Screenshot van succesvolle solver run
+- Logs die bewijzen dat UPSERT slaagde
+
+---
+
+## 🎯 MISSIE DUIDELIJK?
+
+Dit is een 27-minuten klus om de PostgreSQL "cannot affect row a second time" error op te lossen door:
+1. Service_id toe te voegen aan deduplicatie-key (2 regels wijzigen)
+2. Cache-buster toe te voegen (1 nieuw file)
+3. Testen en verifiëren
+
+**SUCCES!** 🚀
