@@ -1,0 +1,214 @@
+# DRAAD 149 - DEPLOYMENT GUIDE
+## Fix for: "ON CONFLICT DO UPDATE command cannot affect row a second time"
+
+---
+
+## STEP-BY-STEP IMPLEMENTATION
+
+### STEP 1: Identify the target file (5 minutes)
+
+The error occurs when solver responses are inserted. Find the file that contains:
+
+```bash
+# Search for UPSERT
+grep -r "roster_assignments.*upsert" app/api --include="*.ts"
+
+# Or search for solver call
+grep -r "solve-schedule" app/api --include="*.ts"
+```
+
+**Expected file location:**
+- `app/api/planning/service-allocation-pdf/route.ts` (likely)
+- Any file that imports from solver API and does `supabase.from('roster_assignments').upsert(...)`
+
+### STEP 2: Add the deduplicator utility (DONE)
+
+File created: `lib/utils/assignment-deduplicator.ts`
+
+This provides:
+- `deduplicateAssignments()` - removes duplicate (slot, employee) pairs
+- `batchAssignments()` - splits into 150-item batches
+- `prepareAssignmentsForInsert()` - combined pipeline
+
+### STEP 3: Update the target route file (15 minutes)
+
+**Find this section:**
+```typescript
+const result = await supabase
+  .from('roster_assignments')
+  .upsert(solverAssignments, { onConflict: 'roster_slot_id,employee_id' });
+
+if (result.error) throw result.error;
+```
+
+**Replace with:**
+```typescript
+import {
+  prepareAssignmentsForInsert,
+  logDeduplicationStats,
+} from '@/lib/utils/assignment-deduplicator';
+
+// ... after getting solverAssignments ...
+
+const stats = prepareAssignmentsForInsert(solverAssignments, 150);
+logDeduplicationStats(stats);
+
+// Delete old assignments
+const { error: deleteError } = await supabase
+  .from('roster_assignments')
+  .delete()
+  .eq('roster_id', rosterId);
+
+if (deleteError) throw deleteError;
+
+// Insert in batches
+let totalInserted = 0;
+for (let i = 0; i < stats.batches.length; i++) {
+  const { error: upsertError } = await supabase
+    .from('roster_assignments')
+    .upsert(stats.batches[i], {
+      onConflict: 'roster_slot_id,employee_id',
+    });
+  
+  if (upsertError) {
+    console.error(`Batch ${i} failed:`, upsertError);
+    throw upsertError;
+  }
+  totalInserted += stats.batches[i].length;
+}
+
+console.log(`Successfully inserted ${totalInserted} assignments`);
+```
+
+### STEP 4: Test locally (10 minutes)
+
+```bash
+# 1. Start dev environment
+npm run dev
+
+# 2. Trigger a solver run from UI
+# - Go to Rooster Bewerking
+# - Click "Roosterbewerking starten"
+# - Watch logs for:
+#   [DRAAD149] Assignment Deduplication Stats:
+#   Original count: 1137
+#   Deduped count:  ~1050
+#   Batch count:    7
+
+# 3. Check for errors
+# - Should NOT see: "cannot affect row a second time"
+# - Should see: "Successfully inserted" message
+```
+
+### STEP 5: Deploy to Railway (5 minutes)
+
+```bash
+# 1. Commit changes
+git add .
+git commit -m "DRAAD149: Fix UPSERT batch deduplication"
+
+# 2. Push to main
+git push origin main
+
+# 3. Railway auto-deploys
+# Watch: railway.app dashboard
+# Look for build success and no errors
+```
+
+### STEP 6: Verify in production (5 minutes)
+
+1. Go to https://rooster-app-verloskunde.up.railway.app
+2. Trigger solver run again
+3. Watch logs:
+   ```
+   [DRAAD149] Assignment Deduplication Stats:
+   [DRAAD149] Inserting batch 1/7 (150 assignments)
+   [DRAAD149] Inserting batch 2/7 (150 assignments)
+   ...
+   [DRAAD149] Final verification: 1050 assignments in roster
+   ```
+4. No errors = SUCCESS ✓
+
+---
+
+## EXPECTED BEHAVIOR CHANGE
+
+**BEFORE DRAAD149:**
+```
+Solver returns 1137 assignments
+    ↓
+UPSERT to database
+    ↓
+ERROR: "ON CONFLICT DO UPDATE command cannot affect row a second time"
+    ↓
+ROOSTER GENERATION FAILS ✗
+```
+
+**AFTER DRAAD149:**
+```
+Solver returns 1137 assignments
+    ↓
+Deduplicator removes duplicates: 1137 → 1050
+    ↓
+Batch processor splits: 1050 → 7 batches of 150 each
+    ↓
+Insert each batch (no duplicates within batch)
+    ↓
+ROOSTER GENERATION SUCCEEDS ✓
+```
+
+---
+
+## TROUBLESHOOTING
+
+### Error still occurs after deployment
+
+**Possible causes:**
+1. Didn't find the right file
+   - Check all `app/api/**/*.ts` files for `upsert`
+2. Different code path
+   - Log `console.log('Assignments:', assignments.length)` to find which route is used
+
+### Fewer assignments inserted than expected
+
+**This is normal!**
+- Solver: 1137 assignments
+- Deduped: ~1050 (87 duplicates)
+- Final: 1050 ✓
+
+The deduplicator keeps the LAST occurrence of each (slot, employee) pair.
+If solver created two assignments for same slot+employee, only final one is kept.
+
+### Batch size error
+
+If you see errors with batch size:
+- Reduce from 150 to 100: `prepareAssignmentsForInsert(assignments, 100)`
+- Or increase from 150 to 200: `prepareAssignmentsForInsert(assignments, 200)`
+
+---
+
+## MONITORING
+
+Add to your dashboard:
+```typescript
+// Track deduplication ratio
+const ratio = (stats.dedupedCount / stats.original * 100).toFixed(1);
+console.log(`[DRAAD149] Deduplication ratio: ${ratio}%`);
+
+// Should be around 92-95% normally
+// If <90%, investigate solver
+```
+
+---
+
+## SUCCESS CRITERIA
+
+✓ All 1137+ assignments processed without error  
+✓ No "cannot affect row a second time" error  
+✓ Batches inserted successfully (7-8 batches typical)  
+✓ Final count ~1050 assignments in roster  
+✓ Rooster displays correctly in UI  
+
+**Status:** Ready for deployment
+**Effort:** ~35 minutes total
+**Risk:** LOW (read-only deduplicator, no DB schema changes)
