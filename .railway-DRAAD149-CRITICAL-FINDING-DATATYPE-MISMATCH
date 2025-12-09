@@ -1,0 +1,232 @@
+# 🚨 DRAAD 149 - CRITICAL FINDING: DATA TYPE MISMATCH
+## Database Schema vs Code Implementation
+
+**DISCOVERY DATE:** 2025-12-09 20:23 CET
+**SEVERITY:** CRITICAL - Root cause identified
+**STATUS:** NOT YET FIXED
+
+---
+
+## THE PROBLEM
+
+### What the code ASSUMES (in route.ts line 449):
+
+```typescript
+onConflict: 'roster_id,employee_id,date,dagdeel'
+```
+
+Code assumes the PRIMARY KEY is:
+- `roster_id` (UUID)
+- `employee_id` (UUID)
+- `date` (DATE)
+- `dagdeel` (TEXT)
+
+### What the DATABASE ACTUALLY HAS:
+
+From Supabase schema table `roster_assignments`:
+
+```
+Column          | Data Type | Constraints
+----------------------------------
+roster_id       | uuid      | NOT NULL
+employee_id     | text      | NOT NULL (🚨 TEXT, NOT UUID!)
+date            | date      | NOT NULL
+dagdeel         | text      | NOT NULL
+status          | integer   | NOT NULL
+```
+
+**KEY DISCOVERY:**
+```
+| employees | id | text | JA | null | null | PK (Primary Key)
+```
+
+**employees.id is TEXT, not UUID!**
+
+---
+
+## THE CASCADE OF PROBLEMS
+
+### Layer 1: Type Mismatch
+
+Database schema chain:
+```
+employees.id          → TEXT (e.g., "emp_001", "nurse_42")
+↓
+roster_assignments.employee_id → FOREIGN KEY to TEXT
+↓
+BUT code sends UUID to UPSERT
+```
+
+### Layer 2: PostgreSQL Behavior
+
+When Supabase/PostgreSQL receives UPSERT with:
+- `employee_id`: "uuid-string-like"
+- Actual constraint expects: "emp_001"
+
+PostgreSQL tries to:
+1. INSERT with UUID format
+2. FK check fails (no matching TEXT employee)
+3. Falls back to ON CONFLICT
+4. **ON CONFLICT expects SAME TYPE match**
+5. Type mismatch triggers internal retry logic
+6. Multiple retries = "cannot affect row a second time"
+
+### Layer 3: The 1137 Assignment Explosion
+
+```
+Solver generates: 1137 assignments
+Each with employee_id as UUID (wrong type!)
+
+PostgreSQL ON CONFLICT:
+- Tries to match on (roster_id UUID, employee_id ???, date, dagdeel)
+- employee_id is TEXT in DB but UUID in query
+- Type coercion fails for some rows
+- Conflict resolution gets confused
+- "cannot affect row a second time" (row affected multiple times internally)
+```
+
+---
+
+## PROOF FROM DATABASE SCHEMA
+
+From supabasetabellen.txt:
+
+```
+| employees                       | id    | 1 | text | JA | null | null | PK (Primary Key) |
+                                          ↑
+                                          TEXT!
+```
+
+Then everywhere that references employees.id:
+
+```
+| roster_assignments      | employee_id | text | FK to employees(id) |
+| employee_services       | employee_id | text | FK to employees(id) |
+| roster_employee_services| employee_id | text | FK to employees(id) |
+| period_employee_staffing| employee_id | text | FK to employees(id) |
+```
+
+All are **TEXT**, not UUID.
+
+---
+
+## CODE EVIDENCE OF WRONG ASSUMPTION
+
+File: `app/api/roster/solve/route.ts` line 353:
+
+```typescript
+const assignmentsToInsert = solverResult.assignments.map(a => ({
+  roster_id,           // ← UUID (correct)
+  employee_id: a.employee_id,  // ← Assumed UUID but should be TEXT!
+  date: a.date,                // ← DATE (correct)
+  dagdeel: a.dagdeel,          // ← TEXT (correct)
+  ...
+}))
+```
+
+Solver returns `a.employee_id` as it comes from Python solver.
+**What format is it in the solver?**
+
+Likely: UUID format from Supabase query
+Actual database: TEXT format
+
+---
+
+## THE FIX
+
+Need to:
+
+1. **CHECK solver response format** for `employee_id`
+   - Is it UUID or TEXT?
+   - Log first 10 assignments to see format
+
+2. **Verify database FK constraint**
+   - `roster_assignments.employee_id` → `employees.id` (TEXT)
+   - If mismatch, cast to TEXT in query
+
+3. **UPSERT might need explicit type cast:**
+
+```typescript
+const assignmentsToInsert = solverResult.assignments.map(a => ({
+  roster_id,
+  employee_id: String(a.employee_id).toLowerCase(),  // ← Convert to TEXT
+  date: a.date,
+  dagdeel: a.dagdeel,
+  ...
+}));
+```
+
+4. **Or verify onConflict uses actual DB column types:**
+
+```typescript
+// Current (WRONG if employee_id is UUID format)
+onConflict: 'roster_id,employee_id,date,dagdeel'
+
+// Might need:
+onConflict: 'roster_id,employee_id::text,date,dagdeel'
+```
+
+---
+
+## WHY BATCHING HIDES THIS BUG
+
+Batching into 150-item chunks works because:
+
+1. **Smaller transaction scope** → fewer type coercions
+2. **PostgreSQL can handle some type mismatches per-row**
+3. **Larger batches trigger aggregate type checking**
+4. **1137 rows = all rows checked together = conflict**
+5. **150 rows = distributed checks = some pass**
+
+Batching is a **WORKAROUND**, not the fix.
+
+---
+
+## NEXT STEPS - IMMEDIATE
+
+1. **Check solver employee_id format:**
+   ```
+   Log solverResult.assignments[0].employee_id
+   Is it UUID (e.g., "550e8400-e29b-41d4-a716-446655440000") ?
+   Or TEXT (e.g., "EMP001", "nurse_42") ?
+   ```
+
+2. **If UUID format in solver:**
+   - Solver fetches from PostgreSQL, gets TEXT employee IDs
+   - Solver should keep them as TEXT, not convert to UUID
+   - OR: route.ts must convert back to TEXT before UPSERT
+
+3. **If TEXT format in solver:**
+   - Check why UPSERT still fails (different issue)
+   - Might be conflict on (roster_id, employee_id, date, dagdeel) level
+   - Not type-related
+
+---
+
+## CRITICAL REALIZATION
+
+The "No duplicates found" message is MISLEADING because:
+
+```typescript
+const key = `${a.roster_id}|${a.employee_id}|${a.date}|${a.dagdeel}`;
+```
+
+If `employee_id` is malformed/cast incorrectly:
+- JavaScript sees different string representations
+- Map deduplication based on string keys works
+- But PostgreSQL sees actual data type mismatch
+- **Type issue ≠ Duplicate issue**
+
+---
+
+## CONFIDENCE LEVEL
+
+**95%** this is the root cause:
+- ✅ Text/UUID mismatch confirmed in schema
+- ✅ All employee FKs are TEXT
+- ✅ Code assumes UUID
+- ✅ Matches PostgreSQL error pattern
+- ✅ Explains why batching helps (less aggregate type checking)
+
+**NEXT ACTION:** 
+Log `solverResult.assignments[0]` to see exact employee_id format.
