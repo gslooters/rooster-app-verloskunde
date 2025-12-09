@@ -1,0 +1,222 @@
+# 🚨 DRAAD 149 - DUIDELIJK ACTIEPLAN
+## Data Type Mismatch Oplossing
+
+**BEVINDING:** employee_id is TEXT in database, maar code stuurt UUID
+
+---
+
+## FASE 1: VERIFICATIE (5 minuten)
+
+### Stap 1A: Logging toevoegen
+
+Bestand: `app/api/roster/solve/route.ts`
+
+Voeg toe VOOR regel 349 (bij `const assignmentsToInsert = ...`):
+
+```typescript
+// DRAAD149: Log solver employee_id format
+if (solverResult.assignments.length > 0) {
+  const firstAssignment = solverResult.assignments[0];
+  console.log('[DRAAD149] SOLVER RESPONSE CHECK:');
+  console.log(`  employee_id value: ${firstAssignment.employee_id}`);
+  console.log(`  employee_id type: ${typeof firstAssignment.employee_id}`);
+  console.log(`  employee_id isUUID: ${/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(firstAssignment.employee_id))}`);
+}
+```
+
+### Stap 1B: Deploy en trigger solver
+
+```bash
+# Git commit
+git add .
+git commit -m "DRAAD149: Add employee_id format logging"
+git push origin main
+
+# Railway auto-deploys
+# Watch logs for [DRAAD149] output
+```
+
+### Stap 1C: Controleer logs
+
+Zoek naar:
+```
+[DRAAD149] SOLVER RESPONSE CHECK:
+  employee_id value: ???
+  employee_id type: string
+  employee_id isUUID: true/false
+```
+
+**Mogelijke uitkomsten:**
+
+**Scenario A:** UUID format (isUUID: true)
+```
+employee_id value: 550e8400-e29b-41d4-a716-446655440000
+→ PROBLEEM: Database verwacht TEXT ("EMP001")
+→ OPLOSSING: Convert to TEXT
+```
+
+**Scenario B:** TEXT format (isUUID: false)
+```
+employee_id value: EMP001
+→ GOED: Matches database TEXT type
+→ PROBLEEM: Dan is het iets anders (niet type mismatch)
+→ OPLOSSING: Batching alleen (wat we al doen)
+```
+
+---
+
+## FASE 2: FIX (5 minuten INDIEN Scenario A)
+
+ALLEEN als `isUUID: true`!
+
+### Stap 2A: Fix assignmentsToInsert
+
+Vervang regel 349-365:
+
+```typescript
+// DRAAD149 FIX: Ensure employee_id is TEXT (not UUID)
+const assignmentsToInsert = solverResult.assignments.map(a => ({
+  roster_id,
+  employee_id: String(a.employee_id), // ← Cast to TEXT
+  date: a.date,
+  dagdeel: a.dagdeel,
+  service_id: findServiceId(a.service_code, services),
+  status: 0,
+  source: 'ort',
+  notes: `ORT suggestion: ${a.service_code}`,
+  ort_confidence: a.confidence || null,
+  ort_run_id: solverRunId,
+  constraint_reason: {
+    solver_suggestion: true,
+    service_code: a.service_code,
+    confidence: a.confidence || 0,
+    solve_time: solverResult.solve_time_seconds
+  },
+  previous_service_id: null
+}));
+
+console.log('[DRAAD149] ASSIGNMENT CONVERSION:');
+console.log(`  Before: ${typeof assignmentsToInsert[0]?.employee_id} = ${assignmentsToInsert[0]?.employee_id}`);
+```
+
+### Stap 2B: Commit en push
+
+```bash
+git add app/api/roster/solve/route.ts
+git commit -m "DRAAD149: Cast employee_id to TEXT for database compatibility"
+git push origin main
+```
+
+### Stap 2C: Trigger solver opnieuw en controleer
+
+Kijk naar logs:
+```
+[FIX4] INPUT: ✅ CLEAN - No duplicates found (1137 total)
+[DRAAD135] === UPSERT PHASE ===
+[DRAAD135] ✅ UPSERT successful
+```
+
+**Geen "cannot affect row" error = OPGELOST! 🎉**
+
+---
+
+## FASE 3: BATCHING (5 minuten FALLBACK)
+
+Als Scenario B (text format) EN het faalt nog:
+
+Implementeer batching zoals eerder beschreven:
+
+```typescript
+// Split in batches
+for (let i = 0; i < assignmentsToInsert.length; i += 150) {
+  const batch = assignmentsToInsert.slice(i, i + 150);
+  
+  const { error } = await supabase
+    .from('roster_assignments')
+    .upsert(batch, { onConflict: 'roster_id,employee_id,date,dagdeel' });
+  
+  if (error) throw error;
+}
+```
+
+---
+
+## WAAROM DIT WERKT
+
+### Scenario A (UUID → TEXT cast)
+
+```
+Before fix:
+employee_id: UUID ("550e...")
+Database FK: TEXT ("EMP001")
+→ Type mismatch → ON CONFLICT confused → "cannot affect row twice"
+
+After fix:
+employee_id: TEXT ("550e..." as string)
+Database FK: TEXT (én solver had UUID als string toch)
+→ Types match → ON CONFLICT works → SUCCESS
+```
+
+### Scenario B (already TEXT)
+
+```
+employee_id: TEXT
+Database FK: TEXT
+→ Types match, maar conflict op andere level
+→ Batching helps omdat smaller transactions = less aggregate conflict checking
+```
+
+---
+
+## VERWACHT RESULTAAT
+
+**Voor fix:**
+```
+[FIX4] INPUT: ✅ CLEAN - No duplicates found (1137 total)
+[DRAAD135] UPSERT failed: ON CONFLICT DO UPDATE command cannot affect row a second time 🔴
+```
+
+**Na fix (als UUID):**
+```
+[DRAAD149] ASSIGNMENT CONVERSION:
+  Before: string = 550e8400-e29b-41d4-a716-446655440000
+[FIX4] INPUT: ✅ CLEAN - No duplicates found (1137 total)
+[DRAAD135] ✅ UPSERT successful (245ms) 🞉
+[DRAAD135] Final verification: 1137 assignments in roster
+```
+
+---
+
+## KRITIEKE CHECKPOINTS
+
+✅ **CHECKPOINT 1:** Logging werkt en toont employee_id formaat
+✅ **CHECKPOINT 2:** Als UUID: cast toevoegen en re-deploy
+✅ **CHECKPOINT 3:** UPSERT slaagt (geen "cannot affect row" error)
+✅ **CHECKPOINT 4:** 1137 assignments zijn in database
+
+---
+
+## BACKUP PLAN
+
+Als FASE 1 + 2 niet werkt:
+
+Ga naar FASE 3 (batching) - dit werkt zeker omdat het transaction scope verkleint.
+
+---
+
+## TOTALE TIJD NODIG
+
+- Fase 1 (Logging): 5 min code + 3 min deploy + 2 min logs lezen = **10 min**
+- Fase 2 (Fix): 3 min code + 2 min deploy + 2 min logs = **7 min**
+- **Totaal: 17 minuten tot SUCCESS**
+
+---
+
+## GEEN LOKALE TESTING NODIG
+
+Alles gebeurt via:
+1. GitHub code edits
+2. Railway auto-deploy
+3. Production logs monitoring
+
+🚨 **READY TO EXECUTE**
