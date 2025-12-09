@@ -2,6 +2,7 @@
  * API Route: POST /api/roster/solve
  * 
  * DRAAD135: DELETE FUNCTIONALITY REMOVED & UPSERT RESTORED
+ * DRAAD149: Employee ID type verification (TEXT vs UUID)
  * 
  * CRITICAL: roster_assignments records are NEVER deleted
  * Method: UPSERT with onConflict handling (DRAAD132 pattern)
@@ -24,6 +25,7 @@ import { CACHE_BUST_DRAAD129_STAP3_FIXED } from '@/app/api/cache-bust/DRAAD129_S
 import { CACHE_BUST_DRAAD129_FIX4 } from '@/app/api/cache-bust/DRAAD129_FIX4';
 import { CACHE_BUST_OPTIE3_CONSTRAINT_RESOLUTION } from '@/app/api/cache-bust/OPTIE3_CONSTRAINT_RESOLUTION';
 import { CACHE_BUST_DRAAD135 } from '@/app/api/cache-bust/DRAAD135';
+import { CACHE_BUST_DRAAD149 } from '@/app/api/cache-bust/DRAAD149';
 import type {
   SolveRequest,
   SolveResponse,
@@ -163,15 +165,26 @@ const deduplicateAssignments = (assignments: Assignment[]): Assignment[] => {
   return deduplicated;
 };
 
+/**
+ * DRAAD149: Helper to verify employee_id format
+ */
+const isValidUUID = (value: string): boolean => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(value);
+};
+
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
   const solverRunId = crypto.randomUUID();
   const executionTimestamp = new Date().toISOString();
   const executionMs = Date.now();
   const cacheBustingId = `DRAAD135-${executionMs}-${Math.floor(Math.random() * 100000)}`;
+  const draad149CacheBustId = `DRAAD149-${executionMs}-${Math.floor(Math.random() * 100000)}`;
   
   const draad135Version = CACHE_BUST_DRAAD135.version;
   const draad135Timestamp = CACHE_BUST_DRAAD135.timestamp;
+  const draad149Version = CACHE_BUST_DRAAD149.version;
+  const draad149Timestamp = CACHE_BUST_DRAAD149.timestamp;
   
   try {
     const { roster_id } = await request.json();
@@ -187,6 +200,8 @@ export async function POST(request: NextRequest) {
     console.log(`[DRAAD135] Cache bust: ${cacheBustingId}`);
     console.log(`[DRAAD135] Version: ${draad135Version}`);
     console.log(`[DRAAD135] Method: UPSERT (no DELETE)`);
+    console.log(`[DRAAD149] Cache bust: ${draad149CacheBustId}`);
+    console.log(`[DRAAD149] Version: ${draad149Version}`);
     
     const supabase = await createClient();
     
@@ -375,6 +390,29 @@ export async function POST(request: NextRequest) {
     console.log(`[Solver API] Status=${solverResult.status}, assignments=${solverResult.total_assignments}`);
     
     if (solverResult.status === 'optimal' || solverResult.status === 'feasible') {
+      // DRAAD149: Log solver response format BEFORE processing
+      if (solverResult.assignments && solverResult.assignments.length > 0) {
+        const firstAssignment = solverResult.assignments[0];
+        const empIdValue = firstAssignment.employee_id;
+        const empIdType = typeof empIdValue;
+        const isUUID = isValidUUID(String(empIdValue));
+        
+        console.log('[DRAAD149] === SOLVER RESPONSE TYPE VERIFICATION ===');
+        console.log(`[DRAAD149] employee_id value: ${empIdValue}`);
+        console.log(`[DRAAD149] employee_id type: ${empIdType}`);
+        console.log(`[DRAAD149] employee_id isUUID: ${isUUID}`);
+        console.log(`[DRAAD149] Total solver assignments: ${solverResult.assignments.length}`);
+        
+        if (isUUID) {
+          console.log('[DRAAD149] ⚠️  ALERT: employee_id is UUID format');
+          console.log('[DRAAD149] Database expects TEXT format');
+          console.log('[DRAAD149] This will cause type mismatch on UPSERT');
+        } else {
+          console.log('[DRAAD149] ✅ employee_id is TEXT format (matches database)');
+        }
+        console.log('[DRAAD149] === END TYPE VERIFICATION ===');
+      }
+      
       const assignmentsToInsert = solverResult.assignments.map(a => ({
         roster_id,
         employee_id: a.employee_id,
@@ -446,7 +484,8 @@ export async function POST(request: NextRequest) {
           console.error('[DRAAD135] UPSERT failed:', upsertError.message);
           return NextResponse.json({
             error: `[DRAAD135] UPSERT failed: ${upsertError.message}`,
-            draad135: 'UPSERT unsuccessful'
+            draad135: 'UPSERT unsuccessful',
+            draad149_hint: 'Check [DRAAD149] logs for employee_id type mismatch'
           }, { status: 500 });
         }
         
@@ -487,6 +526,13 @@ export async function POST(request: NextRequest) {
           fix: 'Removed DELETE, restored DRAAD132 UPSERT pattern',
           safety: 'roster_assignments records NEVER deleted - INSERT/UPDATE only',
           rationale: 'Prevent data destruction via DELETE statement'
+        },
+        draad149: {
+          status: 'VERIFICATION_ACTIVE',
+          version: draad149Version,
+          timestamp: draad149Timestamp,
+          check: 'Employee ID type verification enabled',
+          cache_bust_id: draad149CacheBustId
         },
         total_time_ms: totalTime
       });
