@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { getRosterIdFromParams } from '@/lib/utils/getRosterIdFromParams';
+import { PlanInformatieModal } from '../componenten/PlanInformatieModal';
 import type {
   DienstenAanpassenData,
   Employee,
@@ -14,6 +15,7 @@ import type {
 /**
  * Client component voor "Diensten per medewerker aanpassen" scherm
  * DRAAD66J - FIX: Terug-knop navigatie naar correct dashboard
+ * DRAAD159 - NEW: Planinformatie modal knop toegevoegd
  */
 export default function DienstenAanpassenClient() {
   const searchParams = useSearchParams();
@@ -24,6 +26,7 @@ export default function DienstenAanpassenClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [savingStates, setSavingStates] = useState<Set<string>>(new Set());
+  const [isPlanInformatieOpen, setIsPlanInformatieOpen] = useState(false);
 
   // Data ophalen bij mount
   useEffect(() => {
@@ -244,6 +247,13 @@ export default function DienstenAanpassenClient() {
 
   return (
     <div className="container mx-auto px-4 py-6">
+      {/* DRAAD159: Modal component */}
+      <PlanInformatieModal 
+        isOpen={isPlanInformatieOpen} 
+        onClose={() => setIsPlanInformatieOpen(false)}
+        rosterId={rosterId || ''}
+      />
+
       {/* Header - DRAAD66J: GEFIXTE navigatie naar Dashboard Rooster Ontwerp */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
@@ -254,12 +264,21 @@ export default function DienstenAanpassenClient() {
             <span>←</span>
             <span>Terug naar Dashboard</span>
           </button>
-          <button
-            onClick={fetchData}
-            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded"
-          >
-            🔄 Vernieuwen
-          </button>
+          <div className="flex gap-2">
+            {/* DRAAD159: Planinformatie button - rechts boven, links naast bestaande knop */}
+            <button
+              onClick={() => setIsPlanInformatieOpen(true)}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium transition-colors flex items-center gap-2"
+            >
+              📊 Planinformatie
+            </button>
+            <button
+              onClick={fetchData}
+              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded"
+            >
+              🔄 Vernieuwen
+            </button>
+          </div>
         </div>
         <h1 className="text-3xl font-bold">
           Diensten Toewijzing AANPASSEN : PERIODE Week {data.roster.startWeek} t/m Week {data.roster.endWeek}
