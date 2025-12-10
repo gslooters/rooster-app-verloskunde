@@ -1,0 +1,7 @@
+DRAAD160-FIX: PostgREST Cache Issue - Force Fresh Modal Data
+Railway Deploy Trigger
+Timestamp: 2025-12-10T17:29:03Z
+Random: 7429846592
+
+This file triggers a new Railway build and deployment.
+Both rooster-app-verloskunde and Solver2 services will rebuild and redeploy.
