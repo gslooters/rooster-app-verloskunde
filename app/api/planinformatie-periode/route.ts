@@ -58,6 +58,11 @@ interface PlanInformatieResponse {
  * - Filter: Alleen diensten met nodig > 0 OR beschikbaar > 0
  * - Sortering: Op service_types.code
  * - Kleur-logica: Rood als aanbod < vraag, Groen als aanbod >= vraag
+ *
+ * DRAAD160-FIX: Added Cache-Control headers to force fresh PostgREST data
+ * - No-cache: Always validate with server before using
+ * - must-revalidate: Don't serve stale data
+ * - max-age=0: Expires immediately
  */
 export async function GET(request: NextRequest) {
   try {
@@ -218,7 +223,7 @@ export async function GET(request: NextRequest) {
     const totalVerschil = totalBeschikbaar - totalNodig;
     const totalStatus = totalBeschikbaar >= totalNodig ? 'groen' : 'rood';
 
-    // 7. Retourneer response
+    // 7. Retourneer response met Cache-Control headers
     const response: PlanInformatieResponse = {
       periode: {
         startWeek,
@@ -235,7 +240,15 @@ export async function GET(request: NextRequest) {
       }
     };
 
-    return NextResponse.json(response);
+    // 🔥 DRAAD160-FIX: Force fresh data - no caching by PostgREST or browser
+    return NextResponse.json(response, {
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+        'X-DRAAD160-FIX': 'Applied - Cache disabled for fresh PostgREST data'
+      }
+    });
   } catch (error) {
     console.error('Error in GET /api/planinformatie-periode:', error);
     return NextResponse.json(
