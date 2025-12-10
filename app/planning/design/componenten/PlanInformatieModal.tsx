@@ -30,6 +30,9 @@ function formatNumber(value: number): string {
 /**
  * DRAAD159 - Planinformatie Modal Component
  * FIX: PDF naming - nu "Planinformatie_YYYYMMDD_HHMM.pdf"
+ * 
+ * DRAAD160-FIX: Added timestamp parameter to bypass browser cache
+ * and ensure fresh data from PostgREST on every modal open
  */
 export function PlanInformatieModal({ isOpen, onClose, rosterId }: PlanInformatieModalProps) {
   const [data, setData] = useState<any>(null);
@@ -44,7 +47,10 @@ export function PlanInformatieModal({ isOpen, onClose, rosterId }: PlanInformati
       try {
         setLoading(true);
         setError(null);
-        const response = await fetch(`/api/planinformatie-periode?rosterId=${rosterId}`);
+        
+        // 🔥 DRAAD160-FIX: Add timestamp parameter to force fresh data
+        const timestamp = Date.now();
+        const response = await fetch(`/api/planinformatie-periode?rosterId=${rosterId}&ts=${timestamp}`);
 
         if (!response.ok) {
           throw new Error('Fout bij ophalen gegevens');
