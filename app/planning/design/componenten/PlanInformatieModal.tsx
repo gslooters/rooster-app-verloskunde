@@ -27,6 +27,10 @@ function formatNumber(value: number): string {
   return value.toString();
 }
 
+/**
+ * DRAAD159 - Planinformatie Modal Component
+ * FIX: PDF naming - nu "Planinformatie_YYYYMMDD_HHMM.pdf"
+ */
 export function PlanInformatieModal({ isOpen, onClose, rosterId }: PlanInformatieModalProps) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -59,9 +63,15 @@ export function PlanInformatieModal({ isOpen, onClose, rosterId }: PlanInformati
     fetchData();
   }, [isOpen, rosterId]);
 
-  // PDF export functie
+  // DRAAD159-FIX: PDF export met betere naamgeving
   const handlePdfExport = useCallback(() => {
     if (!data) return;
+
+    // Genereer bestandsnaam: Planinformatie_20251210_1609.pdf
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`; // HHMM
+    const filename = `Planinformatie_${dateStr}_${timeStr}.pdf`;
 
     // Dynamische HTML voor PDF
     const htmlContent = `
@@ -69,7 +79,7 @@ export function PlanInformatieModal({ isOpen, onClose, rosterId }: PlanInformati
       <html lang="nl">
       <head>
         <meta charset="UTF-8">
-        <title>Planinformatie</title>
+        <title>${filename}</title>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
           body {
