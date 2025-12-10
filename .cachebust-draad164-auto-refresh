@@ -1,0 +1,12 @@
+DRAAD164-FIX: Auto-refresh modal every 3 seconds
+
+Implementation:
+- PlanInformatieModal.tsx: Added useCallback for fetchData function
+- Auto-refresh interval: setInterval(fetchData, 3000) when modal is open
+- Cleanup: clearInterval when modal closes (prevents memory leaks)
+- Cache-busting: fetchNoCache + timestamp parameter on every fetch
+
+Result: Modal always shows fresh data while open, synced with Diensten changes
+
+Timestamp: 2025-12-10T20:52:59Z
+Trigger: 1733878379000
