@@ -40,20 +40,18 @@ function formatNumber(value: number): string {
  * - No 304 Not Modified responses
  * - Fresh data guaranteed on every modal open
  *
- * DRAAD164-FIX: Auto-refresh modal every 3 seconds when open
- * - Add fetchData useCallback to enable interval-based refreshing
- * - When modal is open: setInterval(fetchData, 3000)
- * - When modal closes: clearInterval to prevent memory leaks
- * - Ensures modal always shows latest data from Diensten Toewijzing changes
- * - Fixes sync issue between screens
+ * DRAAD165-FIX: Manual refresh button instead of auto-refresh
+ * - REMOVED: setInterval(fetchData, 3000) from DRAAD164 (caused screen jumping)
+ * - ADDED: "🔄 Vernieuwen" button in footer for manual refresh
+ * - Keep: fetchData useCallback for reusability (initial load + manual refresh)
+ * - Result: Clean UX, no screen jumping, user-controlled updates
  */
 export function PlanInformatieModal({ isOpen, onClose, rosterId }: PlanInformatieModalProps) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // DRAAD164-FIX: Use useCallback for fetchData to enable interval-based refresh
-  // This allows the same function to be used by both initial useEffect and the refresh interval
+  // DRAAD165-FIX: Use useCallback for fetchData (reusable for initial + manual refresh)
   const fetchData = useCallback(async () => {
     if (!rosterId) return;
 
@@ -92,21 +90,14 @@ export function PlanInformatieModal({ isOpen, onClose, rosterId }: PlanInformati
     }
   }, [rosterId]);
 
-  // DRAAD164-FIX: Initial fetch + auto-refresh interval
-  // When modal opens: fetch immediately and start 3-second refresh interval
-  // When modal closes: clear interval to prevent memory leaks and API calls
+  // DRAAD165: Initial fetch when modal opens (NO auto-refresh interval)
   useEffect(() => {
     if (!isOpen || !rosterId) return;
 
     // Fetch immediately when modal opens
     fetchData();
-
-    // DRAAD164: Auto-refresh every 3 seconds while modal is open
-    // This ensures modal always shows latest data from Diensten Toewijzing changes
-    const refreshInterval = setInterval(fetchData, 3000);
-
-    // Cleanup: clear interval when modal closes
-    return () => clearInterval(refreshInterval);
+    
+    // NO setInterval here - user will click "Vernieuwen" button when needed
   }, [isOpen, rosterId, fetchData]);
 
   // DRAAD159-FIX: PDF export met betere naamgeving
@@ -422,10 +413,21 @@ export function PlanInformatieModal({ isOpen, onClose, rosterId }: PlanInformati
             )}
           </div>
 
-          {/* Footer */}
+          {/* Footer - DRAAD165: Add manual Vernieuwen button */}
           <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
-            <p className="text-xs text-gray-500">Auto-refresh elke 3 seconden | 100% zoom aanbevolen voor optimale weergave</p>
+            <p className="text-xs text-gray-500">100% zoom aanbevolen voor optimale weergave</p>
             <div className="flex gap-3">
+              {/* DRAAD165: Manual refresh button (user-controlled, no auto-refresh) */}
+              {data && !error && (
+                <button
+                  onClick={fetchData}
+                  disabled={loading}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg font-medium transition-colors"
+                  title="Gegevens vernieuwen (F5 equivalent)"
+                >
+                  {loading ? '⟳ Laden...' : '🔄 Vernieuwen'}
+                </button>
+              )}
               {data && !loading && !error && (
                 <button
                   onClick={handlePdfExport}
