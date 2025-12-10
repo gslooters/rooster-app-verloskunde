@@ -1,0 +1,7 @@
+DRAAD161-FIX: Supabase SDK Cache Issue - Fresh Client Per Request
+Railway Deploy Trigger
+Timestamp: 2025-12-10T18:12:17Z
+Random: 8374629541
+
+Fix: Fresh Supabase client per request (stateless, no SDK cache)
+Services: rooster-app-verloskunde + Solver2 will rebuild and deploy
