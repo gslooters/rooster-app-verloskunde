@@ -39,54 +39,75 @@ function formatNumber(value: number): string {
  * - fetchNoCache ensures: cache: 'no-store' + aggressive HTTP headers
  * - No 304 Not Modified responses
  * - Fresh data guaranteed on every modal open
+ *
+ * DRAAD164-FIX: Auto-refresh modal every 3 seconds when open
+ * - Add fetchData useCallback to enable interval-based refreshing
+ * - When modal is open: setInterval(fetchData, 3000)
+ * - When modal closes: clearInterval to prevent memory leaks
+ * - Ensures modal always shows latest data from Diensten Toewijzing changes
+ * - Fixes sync issue between screens
  */
 export function PlanInformatieModal({ isOpen, onClose, rosterId }: PlanInformatieModalProps) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Laad data wanneer modal opent
+  // DRAAD164-FIX: Use useCallback for fetchData to enable interval-based refresh
+  // This allows the same function to be used by both initial useEffect and the refresh interval
+  const fetchData = useCallback(async () => {
+    if (!rosterId) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // 🔥 DRAAD162-FIX: Use fetchNoCache utility for aggressive cache-busting
+      // This ensures:
+      // - cache: 'no-store' prevents browser caching
+      // - HTTP headers prevent 304 Not Modified responses
+      // - Fresh data from server on every fetch
+      const timestamp = Date.now();
+      const response = await fetchNoCache(
+        `/api/planinformatie-periode?rosterId=${rosterId}&ts=${timestamp}`,
+        {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0'
+          }
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Fout bij ophalen gegevens');
+      }
+
+      const result = await response.json();
+      setData(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Er is een fout opgetreden');
+      console.error('PlanInformatieModal error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [rosterId]);
+
+  // DRAAD164-FIX: Initial fetch + auto-refresh interval
+  // When modal opens: fetch immediately and start 3-second refresh interval
+  // When modal closes: clear interval to prevent memory leaks and API calls
   useEffect(() => {
     if (!isOpen || !rosterId) return;
 
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        
-        // 🔥 DRAAD162-FIX: Use fetchNoCache utility for aggressive cache-busting
-        // This ensures:
-        // - cache: 'no-store' prevents browser caching
-        // - HTTP headers prevent 304 Not Modified responses
-        // - Fresh data from server on every open
-        const timestamp = Date.now();
-        const response = await fetchNoCache(
-          `/api/planinformatie-periode?rosterId=${rosterId}&ts=${timestamp}`,
-          {
-            method: 'GET',
-            headers: {
-              'Accept': 'application/json',
-              'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0'
-            }
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error('Fout bij ophalen gegevens');
-        }
-
-        const result = await response.json();
-        setData(result);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Er is een fout opgetreden');
-        console.error('PlanInformatieModal error:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
+    // Fetch immediately when modal opens
     fetchData();
-  }, [isOpen, rosterId]);
+
+    // DRAAD164: Auto-refresh every 3 seconds while modal is open
+    // This ensures modal always shows latest data from Diensten Toewijzing changes
+    const refreshInterval = setInterval(fetchData, 3000);
+
+    // Cleanup: clear interval when modal closes
+    return () => clearInterval(refreshInterval);
+  }, [isOpen, rosterId, fetchData]);
 
   // DRAAD159-FIX: PDF export met betere naamgeving
   const handlePdfExport = useCallback(() => {
@@ -403,7 +424,7 @@ export function PlanInformatieModal({ isOpen, onClose, rosterId }: PlanInformati
 
           {/* Footer */}
           <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
-            <p className="text-xs text-gray-500">100% zoom aanbevolen voor optimale weergave</p>
+            <p className="text-xs text-gray-500">Auto-refresh elke 3 seconden | 100% zoom aanbevolen voor optimale weergave</p>
             <div className="flex gap-3">
               {data && !loading && !error && (
                 <button
