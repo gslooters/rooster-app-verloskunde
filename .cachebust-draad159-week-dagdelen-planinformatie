@@ -1,0 +1,14 @@
+DRAAD159-FIX - Planinformatie Button + PDF Naming Fix
+Date: 2025-12-10 16:12 UTC
+Timestamp: 1734251723
+
+Changes:
+- Updated: app/planning/design/componenten/PlanInformatieModal.tsx (PDF naming fix)
+- Updated: components/planning/week-dagdelen/VaststellingHeader.tsx (Added Planinformatie button)
+
+Fixes:
+1. PDF Naming: From generic "print" to "Planinformatie_YYYYMMDD_HHMM.pdf"
+2. Button Placement: Planinformatie button now visible on "Diensten per Dagdeel Aanpassen" screen
+3. Consistent UX: Same button + functionality as "Diensten Toewijzing AANPASSEN" screen
+
+Deployment: Railway auto-deploy on push
