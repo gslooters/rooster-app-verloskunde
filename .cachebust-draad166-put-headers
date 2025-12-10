@@ -1,0 +1,25 @@
+DRAAD166-FIX: PUT endpoint cache-busting headers
+
+Problem:
+- PUT /api/diensten-aanpassen saved data but didn't invalidate caches
+- Modal continued showing stale data even after edits
+- User refreshed button 3x, data still old
+
+Root Cause:
+- GET /api/planinformatie-periode had cache-busting headers
+- PUT /api/diensten-aanpassen had NO headers
+- When user edited Diensten and clicked Vernieuwen, Modal API call still got cached response
+
+Solution:
+- Added same aggressive cache headers to PUT response
+- Now PUT invalidates all caches (browser, proxy, CDN)
+- Modal refreshes get fresh data from database
+
+Result:
+- Edit Diensten (GRB 1→10) → PUT saves
+- PUT response includes cache-busting headers
+- Click Vernieuwen → GET calls fresh API
+- Modal shows NEW data (10) ✓
+
+Timestamp: 2025-12-10T21:10:32Z
+Trigger: 1733880629000
