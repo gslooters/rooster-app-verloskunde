@@ -25,6 +25,7 @@ if (!supabaseUrl || !supabaseKey) {
  * 
  * DRAAD66G: Inclusief dienstwaarde voor gewogen telling
  * DRAAD73D: Force dynamic rendering (geen static generation)
+ * DRAAD162: Cache-Control headers on GET response
  */
 export async function GET(request: NextRequest) {
   try {
@@ -47,7 +48,18 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    // 🔥 DRAAD162-FIX: Use fresh Supabase client per request
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false
+      },
+      global: {
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0'
+        }
+      }
+    });
 
     // 1. Haal roster info op
     const { data: roster, error: rosterError } = await supabase
@@ -175,24 +187,39 @@ export async function GET(request: NextRequest) {
     }) || [];
 
     // 8. Retourneer complete dataset (DRAAD66G: inclusief dienstwaarde)
-    return NextResponse.json({
-      roster: {
-        id: roster.id,
-        startDate: roster.start_date,
-        endDate: roster.end_date,
-        startWeek: startWeek,
-        endWeek: endWeek,
-        status: roster.status
+    // 🔥 DRAAD162-FIX: Add aggressive cache-control headers to GET response
+    return NextResponse.json(
+      {
+        roster: {
+          id: roster.id,
+          startDate: roster.start_date,
+          endDate: roster.end_date,
+          startWeek: startWeek,
+          endWeek: endWeek,
+          status: roster.status
+        },
+        serviceTypes: serviceTypes?.map(st => ({
+          id: st.id,
+          code: st.code,
+          naam: st.naam,
+          kleur: st.kleur,
+          dienstwaarde: st.dienstwaarde || 1 // DRAAD66G: dienstwaarde toevoegen
+        })) || [],
+        employees: employeesWithServices
       },
-      serviceTypes: serviceTypes?.map(st => ({
-        id: st.id,
-        code: st.code,
-        naam: st.naam,
-        kleur: st.kleur,
-        dienstwaarde: st.dienstwaarde || 1 // DRAAD66G: dienstwaarde toevoegen
-      })) || [],
-      employees: employeesWithServices
-    });
+      {
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0, private, no-transform',
+          'Pragma': 'no-cache, no-store',
+          'Expires': '0',
+          'Surrogate-Control': 'no-store',
+          'X-Accel-Expires': '0',
+          'X-Cache': 'BYPASS',
+          'ETag': `"${Date.now()}"`,
+          'X-DRAAD162-FIX': 'Applied - Cache control headers on GET response'
+        }
+      }
+    );
 
   } catch (error) {
     console.error('Error in GET /api/diensten-aanpassen:', error);
