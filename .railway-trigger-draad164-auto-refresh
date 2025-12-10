@@ -1,0 +1,19 @@
+DRAAD164-RAILWAY-TRIGGER
+
+File Purpose: Trigger automatic Railway deployment
+Timestamp: 1733878379000 (2025-12-10T20:52:59Z)
+Random: 9164
+
+Changes deployed:
+1. PlanInformatieModal.tsx: Auto-refresh modal every 3 seconds
+2. Auto-refresh interval: setInterval(fetchData, 3000)
+3. Cleanup interval on modal close
+4. fetchData uses useCallback for proper dependency management
+
+Expected behavior after deployment:
+- Modal refreshes every 3 seconds while open
+- Modal shows fresh data immediately when Diensten values change
+- No memory leaks: interval cleared when modal closes
+- Cache-busting headers prevent stale data
+
+Status: Ready for deployment
