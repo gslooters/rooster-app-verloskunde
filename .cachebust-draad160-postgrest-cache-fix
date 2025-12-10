@@ -1,0 +1,13 @@
+DRAAD160-FIX: PostgREST Cache Issue - Force Fresh Modal Data
+Applied: 2025-12-10 17:29:00 UTC
+Timestamp: 1733862540000
+
+Changes:
+- route.ts: Added Cache-Control headers (no-cache, max-age=0)
+- PlanInformatieModal.tsx: Added timestamp parameter (?ts=Date.now())
+
+Expected Result:
+✅ Modal always shows fresh data (< 500ms delay)
+✅ No stale data visible
+✅ Cache-Control: no-cache enforced
+✅ Fallback timestamp param prevents browser cache
