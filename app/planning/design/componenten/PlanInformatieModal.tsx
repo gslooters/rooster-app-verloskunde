@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { fetchNoCache } from '@/lib/utils/fetchNoCache'; // 🔥 DRAAD162-FIX
 
 interface DiensteRow {
   code: string;
@@ -33,6 +34,11 @@ function formatNumber(value: number): string {
  * 
  * DRAAD160-FIX: Added timestamp parameter to bypass browser cache
  * and ensure fresh data from PostgREST on every modal open
+ * 
+ * DRAAD162-FIX: Use fetchNoCache utility + explicit cache-control headers
+ * - fetchNoCache ensures: cache: 'no-store' + aggressive HTTP headers
+ * - No 304 Not Modified responses
+ * - Fresh data guaranteed on every modal open
  */
 export function PlanInformatieModal({ isOpen, onClose, rosterId }: PlanInformatieModalProps) {
   const [data, setData] = useState<any>(null);
@@ -48,9 +54,22 @@ export function PlanInformatieModal({ isOpen, onClose, rosterId }: PlanInformati
         setLoading(true);
         setError(null);
         
-        // 🔥 DRAAD160-FIX: Add timestamp parameter to force fresh data
+        // 🔥 DRAAD162-FIX: Use fetchNoCache utility for aggressive cache-busting
+        // This ensures:
+        // - cache: 'no-store' prevents browser caching
+        // - HTTP headers prevent 304 Not Modified responses
+        // - Fresh data from server on every open
         const timestamp = Date.now();
-        const response = await fetch(`/api/planinformatie-periode?rosterId=${rosterId}&ts=${timestamp}`);
+        const response = await fetchNoCache(
+          `/api/planinformatie-periode?rosterId=${rosterId}&ts=${timestamp}`,
+          {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+              'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0'
+            }
+          }
+        );
 
         if (!response.ok) {
           throw new Error('Fout bij ophalen gegevens');
