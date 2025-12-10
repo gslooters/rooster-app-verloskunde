@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { getRosterIdFromParams } from '@/lib/utils/getRosterIdFromParams';
+import { fetchNoCache } from '@/lib/utils/fetchNoCache'; // DRAAD163-FIX: Client-side cache busting
 import { PlanInformatieModal } from '../componenten/PlanInformatieModal';
 import type {
   DienstenAanpassenData,
@@ -16,6 +17,7 @@ import type {
  * Client component voor "Diensten per medewerker aanpassen" scherm
  * DRAAD66J - FIX: Terug-knop navigatie naar correct dashboard
  * DRAAD159 - NEW: Planinformatie modal knop toegevoegd
+ * DRAAD163 - FIX: Client-side cache busting met fetchNoCache utility
  */
 export default function DienstenAanpassenClient() {
   const searchParams = useSearchParams();
@@ -39,10 +41,19 @@ export default function DienstenAanpassenClient() {
     fetchData();
   }, [rosterId]);
 
+  // DRAAD163-FIX: Use fetchNoCache instead of plain fetch
   const fetchData = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/diensten-aanpassen?rosterId=${rosterId}`);
+      const response = await fetchNoCache(
+        `/api/diensten-aanpassen?rosterId=${rosterId}`,
+        {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json'
+          }
+        }
+      );
       
       if (!response.ok) {
         throw new Error('Fout bij ophalen gegevens');
