@@ -1,0 +1,24 @@
+DRAAD166-RAILWAY-TRIGGER
+
+File Purpose: Trigger automatic Railway deployment
+Timestamp: 1733880629000 (2025-12-10T21:10:32Z)
+Random: 6781
+
+Changes deployed:
+1. PUT /api/diensten-aanpassen: Added cache-busting headers
+2. Same aggressive headers as GET endpoint
+3. ETag invalidation: Date.now() on each PUT
+4. Result: Modal gets fresh data after edits
+
+Problem Fixed:
+- Edit Diensten data
+- Modal still shows old data on refresh
+- User had to refresh page to see changes
+- Now: Click Vernieuwen = fresh data immediately
+
+Root Cause:
+- PUT had no cache headers
+- GET had cache headers but couldn't bypass stale cache from PUT
+- Now both endpoints coordinate cache invalidation
+
+Status: Ready for deployment
