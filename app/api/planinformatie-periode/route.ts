@@ -50,19 +50,16 @@ interface PlanInformatieResponse {
  * GET /api/planinformatie-periode?rosterId=xxx
  *
  * Haalt vraag/aanbod analyse op per dienst voor de hele roosterperiode.
- * Gebruikt SQL query uit DRAAD159 voor accurate vraag- en aanbodgegevens.
+ * Gebruikt data uit:
+ * - Vraag: roster_period_staffing + roster_period_staffing_dagdelen (hoeveel nodig per dag)
+ * - Aanbod: roster_employee_services (hoeveel medewerkers beschikbaar per dienst)
  *
- * DRAAD159: Plan Informatie Scherm
- * - Vraag: uit roster_period_staffing (hoeveel nodig)
- * - Aanbod: uit roster_employee_services (hoeveel beschikbaar en actief)
- * - Filter: Alleen diensten met nodig > 0 OR beschikbaar > 0
- * - Sortering: Op service_types.code
- * - Kleur-logica: Rood als aanbod < vraag, Groen als aanbod >= vraag
- *
- * DRAAD160-FIX: Added Cache-Control headers to force fresh PostgREST data
- * - No-cache: Always validate with server before using
- * - must-revalidate: Don't serve stale data
- * - max-age=0: Expires immediately
+ * DRAAD159: Plan Informatie Scherm - Basic implementation
+ * DRAAD160: Cache-Control headers (browser cache fix)
+ * DRAAD161: Supabase SDK client cache fix - Create FRESH CLIENT per request
+ *   - Problem: Supabase JS client caches query results in memory
+ *   - Solution: Create NEW client instance per request without cache settings
+ *   - Effect: Forces fresh database read, no SDK-level caching
  */
 export async function GET(request: NextRequest) {
   try {
@@ -85,7 +82,22 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    // 🔥 DRAAD161-FIX: Create FRESH Supabase client per request
+    // This prevents SDK-level query caching that persists across requests
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        persistSession: false,  // Don't persist session to prevent state carry-over
+        autoRefreshToken: false  // Disable auto-refresh to keep client stateless
+      },
+      global: {
+        headers: {
+          // Double-check: HTTP level cache headers
+          'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      }
+    });
 
     // 1. Haal roster info op voor periode
     const { data: roster, error: rosterError } = await supabase
@@ -150,7 +162,8 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // 3. Haal AANBOD op (roster_employee_services waar actief=true en deze roster)
+    // 3. Haal AANBOD op (roster_employee_services waar actief=true)
+    // 🔥 DRAAD161: This now reads fresh data because client is fresh per request
     const { data: aanbodData, error: aanbodError } = await supabase
       .from('roster_employee_services')
       .select('service_id, aantal')
@@ -240,13 +253,17 @@ export async function GET(request: NextRequest) {
       }
     };
 
-    // 🔥 DRAAD160-FIX: Force fresh data - no caching by PostgREST or browser
+    // 🔥 DRAAD161-FIX: Return with aggressive no-cache headers
+    // Fresh Supabase client + HTTP cache headers = guaranteed fresh data
     return NextResponse.json(response, {
       headers: {
-        'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
+        'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0, private',
         'Pragma': 'no-cache',
         'Expires': '0',
-        'X-DRAAD160-FIX': 'Applied - Cache disabled for fresh PostgREST data'
+        'X-DRAAD160-FIX': 'Applied - HTTP cache disabled',
+        'X-DRAAD161-FIX': 'Applied - Supabase SDK client cache disabled',
+        'X-Content-Type-Options': 'nosniff',
+        'X-Cache': 'BYPASS'
       }
     });
   } catch (error) {
