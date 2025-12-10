@@ -1,0 +1,6 @@
+DRAAD161-FIX: Supabase SDK Cache Issue - Fresh Client Per Request
+Applied: 2025-12-10 18:12 UTC
+Timestamp: 1765391537000
+
+Solution: Create fresh client per request to bypass SDK memory cache
+Result: Fresh data on Modal open, no stale responses
