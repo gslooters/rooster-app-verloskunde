@@ -60,6 +60,10 @@ interface PlanInformatieResponse {
  *   - Problem: Supabase JS client caches query results in memory
  *   - Solution: Create NEW client instance per request without cache settings
  *   - Effect: Forces fresh database read, no SDK-level caching
+ * DRAAD162: Aggressive cache-busting - ETag invalidation + comprehensive headers
+ *   - Problem: Browser HTTP cache returns 304 Not Modified (even with no-cache headers)
+ *   - Solution: Add ETag with Date.now() to force full response
+ *   - Result: Fresh data guaranteed on every request
  */
 export async function GET(request: NextRequest) {
   try {
@@ -253,17 +257,32 @@ export async function GET(request: NextRequest) {
       }
     };
 
-    // 🔥 DRAAD161-FIX: Return with aggressive no-cache headers
-    // Fresh Supabase client + HTTP cache headers = guaranteed fresh data
+    // 🔥 DRAAD162-FIX: Return with aggressive no-cache headers + ETag invalidation
+    // Fresh Supabase client + HTTP cache headers + ETag = guaranteed fresh data
+    // ETag with Date.now() forces browser to request full response (no 304)
     return NextResponse.json(response, {
       headers: {
-        'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0, private',
-        'Pragma': 'no-cache',
+        // Aggressive HTTP cache control headers
+        'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0, private, no-transform',
+        'Pragma': 'no-cache, no-store',
         'Expires': '0',
+        'Surrogate-Control': 'no-store',  // Proxy cache bypass
+        'X-Accel-Expires': '0',  // Nginx/reverse proxy bypass
+        
+        // ETag invalidation: Forces full response instead of 304 Not Modified
+        'ETag': `"${Date.now()}"`,  // 🔥 DRAAD162: Date.now() ensures unique ETag on each request
+        'Last-Modified': new Date().toUTCString(),
+        'Vary': 'Accept-Encoding, Cache-Control',
+        
+        // CDN/Proxy bypass
+        'X-Cache': 'BYPASS',
+        'X-Cache-Status': 'BYPASS',
+        'X-Content-Type-Options': 'nosniff',
+        
+        // Fix tracking headers
         'X-DRAAD160-FIX': 'Applied - HTTP cache disabled',
         'X-DRAAD161-FIX': 'Applied - Supabase SDK client cache disabled',
-        'X-Content-Type-Options': 'nosniff',
-        'X-Cache': 'BYPASS'
+        'X-DRAAD162-FIX': 'Applied - Aggressive no-cache headers + ETag invalidation'
       }
     });
   } catch (error) {
