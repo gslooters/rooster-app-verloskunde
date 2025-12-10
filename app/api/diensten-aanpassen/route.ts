@@ -237,6 +237,10 @@ export async function GET(request: NextRequest) {
  * Gebruikt upsert pattern: insert or update.
  * 
  * DRAAD73D: Force dynamic rendering (geen static generation)
+ * DRAAD166-FIX: Add cache-busting headers to PUT response
+ *   - Problem: PUT had no cache headers, so Modal reads stale data
+ *   - Solution: Add same aggressive cache headers as GET
+ *   - Result: Modal gets fresh data after PUT completes
  */
 export async function PUT(request: NextRequest) {
   try {
@@ -287,14 +291,42 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        aantal: data.aantal,
-        actief: data.actief,
-        updated_at: data.updated_at
+    // 🔥 DRAAD166-FIX: Add aggressive cache-busting headers to PUT response
+    // These headers ensure Modal and other endpoints get fresh data
+    // when reading from Planinformatie-periode API after this PUT
+    return NextResponse.json(
+      {
+        success: true,
+        data: {
+          aantal: data.aantal,
+          actief: data.actief,
+          updated_at: data.updated_at
+        }
+      },
+      {
+        headers: {
+          // Aggressive HTTP cache control headers
+          'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0, private, no-transform',
+          'Pragma': 'no-cache, no-store',
+          'Expires': '0',
+          'Surrogate-Control': 'no-store',  // Proxy cache bypass
+          'X-Accel-Expires': '0',  // Nginx/reverse proxy bypass
+          
+          // ETag invalidation: Forces full response instead of 304 Not Modified
+          'ETag': `"${Date.now()}"`,  // 🔥 DRAAD166: Unique ETag on each PUT
+          'Last-Modified': new Date().toUTCString(),
+          'Vary': 'Accept-Encoding, Cache-Control',
+          
+          // CDN/Proxy bypass
+          'X-Cache': 'BYPASS',
+          'X-Cache-Status': 'BYPASS',
+          'X-Content-Type-Options': 'nosniff',
+          
+          // Fix tracking header
+          'X-DRAAD166-FIX': 'Applied - Cache control headers on PUT response (invalidates Modal cache)'
+        }
       }
-    });
+    );
 
   } catch (error) {
     console.error('Error in PUT /api/diensten-aanpassen:', error);
