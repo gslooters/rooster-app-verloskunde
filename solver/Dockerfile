@@ -2,6 +2,10 @@ FROM python:3.12.7-slim
 
 WORKDIR /app
 
+# DRAAD170: Cache bust argument for Railway deployment
+ARG DRAAD170_CACHE_BUST=0
+RUN echo "[Dockerfile] DRAAD170 Cache Bust: ${DRAAD170_CACHE_BUST}"
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     gcc g++ curl \
@@ -18,6 +22,8 @@ COPY . .
 # Environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8000
+ENV DRAAD170_PHASE_1=constraint7_validation+constraint8_reification
+ENV DRAAD170_PHASE_2=async_await+threadpoolexecutor
 
 # Expose port
 EXPOSE 8000
@@ -29,7 +35,8 @@ RUN echo "[Dockerfile] Testing critical imports..." && \
     python -c "from ortools.linear_solver import pywraplp; print('[OK] OR-Tools imported')" && \
     python -c "from models import SolveRequest, SolveResponse; print('[OK] Models imported')" && \
     python -c "from solver_engine import RosterSolver; print('[OK] RosterSolver imported')" && \
-    python -c "from main import app; print('[OK] Main FastAPI app imported')"
+    python -c "from main import app; print('[OK] Main FastAPI app imported')" && \
+    echo "[Dockerfile] All imports successful - container ready for DRAAD170 fixes"
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
