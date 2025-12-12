@@ -1,0 +1,153 @@
+═══════════════════════════════════════════════════════════════════════════════
+DRAAD167 FASE 1 - QUICK START GUIDE
+═══════════════════════════════════════════════════════════════════════════════
+
+ALL PREPARATION DONE ✅
+READY FOR: Apply 5 edits to solver_engine.py
+
+───────────────────────────────────────────────────────────────────────────────
+FILES TO REFERENCE
+───────────────────────────────────────────────────────────────────────────────
+
+📖 DETAILED GUIDE:
+   solver/DRAAD167-FASE1-README.md
+   
+📋 CODE SNIPPETS:
+   solver/solver_patches_draad167.py
+   (Copy/paste code from here)
+
+───────────────────────────────────────────────────────────────────────────────
+QUICK SUMMARY OF FIXES
+───────────────────────────────────────────────────────────────────────────────
+
+FIX 1: Constraint 7 - Softened 80-110% tolerance
+  Problem: Hard exact match (==) causes INFEASIBLE collapse if 1 slot missing
+  Solution: Minimum 80%, soft bonus for exact match
+  Effect: Prevents false INFEASIBLE, still prefers exact
+
+FIX 2: Pre-solve Validation
+  Problem: Solver wastes time on obviously infeasible problems
+  Solution: Check for conflicts BEFORE solver runs
+  Effect: Early detection, clear error messages, saves compute time
+
+───────────────────────────────────────────────────────────────────────────────
+5 EDITS NEEDED (IN ORDER)
+───────────────────────────────────────────────────────────────────────────────
+
+1. ADD METHOD: validate_feasibility_beforehand()
+   Where: After __init__ method (around line 90)
+   Code: From solver_patches_draad167.py → VALIDATE_FEASIBILITY_CODE
+   Lines: ~50 lines
+
+2. UPDATE METHOD: solve()
+   Where: At start, after "start_time = time.time()"
+   Code: From solver_patches_draad167.py → SOLVE_PRESOLVER_ADDITION
+   Lines: ~15 lines (insert)
+
+3. FIND & REPLACE: _apply_constraints()
+   Where: Line with "self._constraint_7_exact_staffing()"
+   Change: "self._constraint_7_exact_staffing_softened()"
+   Lines: 1 line
+
+4. REPLACE METHOD: _constraint_7_exact_staffing()
+   Where: Old method definition (search for "def _constraint_7_exact_staffing")
+   Action: Delete old method, insert new one
+   Code: From solver_patches_draad167.py → CONSTRAINT_7_SOFTENED_CODE
+   Lines: ~60 lines (delete old ~30, add new ~60)
+
+5. UPDATE METHOD: _define_objective()
+   Where: Before "self.model.Maximize(sum(objective_terms))"
+   Code: 
+      # DRAAD167: Add bonus_vars from constraint 7
+      if hasattr(self, 'bonus_vars'):
+          objective_terms.extend(self.bonus_vars)
+   Lines: ~3 lines
+
+───────────────────────────────────────────────────────────────────────────────
+GITHUB WEB UI EDITING STEPS
+───────────────────────────────────────────────────────────────────────────────
+
+1. Go to: https://github.com/gslooters/rooster-app-verloskunde
+   Branch: main
+   File: solver/solver_engine.py
+
+2. Click: "Edit file" (pencil icon)
+
+3. Apply edits 1-5 above
+
+4. At bottom, select:
+   "Create a new branch for this commit and start a pull request"
+   OR
+   "Commit directly to the main branch"
+   
+   (Direct to main is simpler if you prefer)
+
+5. Commit message:
+   [DRAAD167-FASE1] Apply FIXES 1+2: constraint 7 softening + pre-solve validation
+
+6. Click: "Commit changes"
+
+───────────────────────────────────────────────────────────────────────────────
+AUTOMATIC ACTIONS
+───────────────────────────────────────────────────────────────────────────────
+
+When you commit to main:
+
+✓ GitHub detects push
+✓ Railway webhook triggered
+✓ Cache bust files detected
+✓ Fresh clone + Docker build
+✓ solver_engine.py deployed with FASE1 fixes
+✓ Service restarts
+✓ DRAAD167 FASE 1 LIVE ✨
+
+Time: ~3-5 minutes
+
+───────────────────────────────────────────────────────────────────────────────
+VERIFYING DEPLOYMENT
+───────────────────────────────────────────────────────────────────────────────
+
+1. Check Railway logs:
+   https://railway.app/project/90165889-1a50-4236-aefe-b1e1ae44dc7f
+
+2. Look for:
+   "[DRAAD167] validate_feasibility_beforehand() START"
+   "[DRAAD167 FIX 1] Constraint 7: ... (SOFTENED 80-110%)"
+   "draad167_fase1": "presolver_validation_active"
+
+3. Test with sample roster solve
+
+───────────────────────────────────────────────────────────────────────────────
+TROUBLESHOOTING
+───────────────────────────────────────────────────────────────────────────────
+
+Syntax error after commit?
+  → Check Python syntax in solver_patches_draad167.py
+  → Make sure indentation is correct (use spaces, not tabs)
+  → Revert commit via GitHub UI if needed
+
+Deploy fails?
+  → Check Railway logs for error
+  → Look for missing imports (from models import TeamType)
+  → Verify all closing parentheses are correct
+
+Pre-solver validation not running?
+  → Verify edit #2 was applied correctly (in solve() method)
+  → Check log output shows "[DRAAD167] Stap 0:"
+
+───────────────────────────────────────────────────────────────────────────────
+AFTER DEPLOYMENT
+───────────────────────────────────────────────────────────────────────────────
+
+✨ FASE 1 COMPLETE:
+   • Constraint 7 now softened (80-110% tolerance)
+   • Pre-solve validation active
+   • INFEASIBLE collapse prevention: ENABLED
+   • Better diagnostics: ENABLED
+
+🚀 NEXT PHASES:
+   • FASE 2: Improve bottleneck detection
+   • FASE 3: Auto-suggest fixes for violations
+   • FASE 4: Learning algorithm for better initial roster
+
+═══════════════════════════════════════════════════════════════════════════════
