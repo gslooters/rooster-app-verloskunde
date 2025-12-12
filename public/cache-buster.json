@@ -1,10 +1,11 @@
 {
-  "timestamp": 1734010970000,
-  "version": "draad164-001",
+  "timestamp": 1765548698000,
+  "version": "draad164-hotfix-001",
   "draad160": "HTTP cache disabled",
   "draad161": "Supabase SDK client cache disabled",
   "draad162": "ETag invalidation with Date.now()",
-  "draad164": "PostgreSQL RPC function for server-side aggregatie",
-  "lastUpdated": "2025-12-12T13:42:50Z",
-  "notes": "Cache-busting strategy: ETag header contains Date.now() + version suffix for guaranteed fresh data"
+  "draad164": "Server-side aggregatie - HOTFIX: inline Supabase queries (RPC function pending)",
+  "draad164-status": "PGRST202 error fixed with fallback aggregation logic",
+  "lastUpdated": "2025-12-12T13:51:38Z",
+  "notes": "Cache-busting strategy: ETag header contains Date.now() + version suffix for guaranteed fresh data. RPC function pending manual trigger in Supabase (migration exists but not auto-executed)."
 }
