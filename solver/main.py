@@ -6,31 +6,61 @@ Integratie met Next.js app via REST API.
 Authors: Rooster App Team
 Version: 1.1.0
 Date: 2025-12-05
-DRAAD105: Gebruikt roster_employee_services met aantal en actief velden
-DRAAD106: Status semantiek - fixed_assignments en blocked_slots
-DRAAD108: Exacte bezetting realiseren via exact_staffing parameter
-DRAAD113: Production CORS security - specificeer rooster-app domain
+DRAD105: Gebruikt roster_employee_services met aantal en actief velden
+DRAD106: Status semantiek - fixed_assignments en blocked_slots
+DRAD108: Exacte bezetting realiseren via exact_staffing parameter
+DRAD164A: Added verbose startup logging for debugging deployment issues
 """
 
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from datetime import datetime
+import sys
 import logging
+from datetime import datetime
+from typing import Optional
 
-# Local imports
-from models import (
-    SolveRequest, SolveResponse,
-    HealthResponse, VersionResponse,
-    ExactStaffing  # DRAAD108
-)
-from solver_engine import RosterSolver
-
-# Configure logging
+# Configure logging EARLY - before any other imports
 logging.basicConfig(
     level=logging.INFO,
-    format='[%(asctime)s] %(levelname)s - %(message)s'
+    format='[%(asctime)s] %(name)s - %(levelname)s - %(message)s',
+    stream=sys.stdout,
+    force=True  # Override any existing config
 )
 logger = logging.getLogger(__name__)
+
+logger.info("[Solver/main] ============================================================")
+logger.info("[Solver/main] ROOSTER SOLVER SERVICE - STARTUP SEQUENCE INITIATED")
+logger.info(f"[Solver/main] Python version: {sys.version}")
+logger.info(f"[Solver/main] Start time: {datetime.now().isoformat()}")
+
+try:
+    logger.info("[Solver/main] Step 1: Importing FastAPI...")
+    from fastapi import FastAPI, HTTPException
+    logger.info("[Solver/main] ✅ FastAPI imported successfully")
+    
+    logger.info("[Solver/main] Step 2: Importing CORS middleware...")
+    from fastapi.middleware.cors import CORSMiddleware
+    logger.info("[Solver/main] ✅ CORS middleware imported successfully")
+    
+    logger.info("[Solver/main] Step 3: Importing local models...")
+    from models import (
+        SolveRequest, SolveResponse,
+        HealthResponse, VersionResponse,
+        ExactStaffing  # DRAAD108
+    )
+    logger.info("[Solver/main] ✅ Models imported successfully")
+    
+    logger.info("[Solver/main] Step 4: Importing RosterSolver engine...")
+    from solver_engine import RosterSolver
+    logger.info("[Solver/main] ✅ RosterSolver imported successfully")
+    
+except Exception as e:
+    logger.error("[Solver/main] ❌ CRITICAL IMPORT ERROR")
+    logger.error(f"[Solver/main] Error type: {type(e).__name__}")
+    logger.error(f"[Solver/main] Error message: {str(e)}")
+    logger.error(f"[Solver/main] Error details:", exc_info=True)
+    sys.exit(1)
+
+logger.info("[Solver/main] ============================================================")
+logger.info("[Solver/main] ALL IMPORTS SUCCESSFUL - Creating FastAPI app...")
 
 # FastAPI app
 app = FastAPI(
@@ -38,6 +68,8 @@ app = FastAPI(
     description="OR-Tools CP-SAT solver voor roosteroptimalisatie met DRAAD108 bezetting realiseren",
     version="1.1.0-DRAAD108"
 )
+
+logger.info("[Solver/main] ✅ FastAPI application created")
 
 # ============================================================================
 # CORS middleware configuration (DRAAD113: Production-ready)
@@ -61,12 +93,22 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization"],  # Only needed headers
 )
 
-logger.info(f"[CORS] Initialized with allowed origins: {ALLOWED_ORIGINS}")
+logger.info(f"[Solver/main] ✅ CORS middleware configured with {len(ALLOWED_ORIGINS)} allowed origins")
 
 
 # ============================================================================
 # HEALTH CHECK ENDPOINTS
 # ============================================================================
+
+@app.on_event("startup")
+async def startup_event():
+    """Called when FastAPI starts - log successful startup."""
+    logger.info("[Solver/main] ============================================================")
+    logger.info("[Solver/main] ✅ FASTAPI STARTUP COMPLETE")
+    logger.info("[Solver/main] Server is ready to accept requests")
+    logger.info(f"[Solver/main] Started at: {datetime.now().isoformat()}")
+    logger.info("[Solver/main] ============================================================")
+
 
 @app.get("/", response_model=dict)
 async def root():
@@ -209,10 +251,13 @@ async def solve_schedule(request: SolveRequest):
         return response
     
     except Exception as e:
-        logger.error(f"[Solver] Error: {str(e)}", exc_info=True)
+        logger.error(f"[Solver] Error during solving: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
     import uvicorn
+    logger.info("[Solver/main] ============================================================")
+    logger.info("[Solver/main] RUNNING DIRECTLY - Starting uvicorn...")
+    logger.info("[Solver/main] ============================================================")
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
