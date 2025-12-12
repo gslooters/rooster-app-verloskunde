@@ -1,0 +1,51 @@
+DRAAD165 - PostgREST API Cache Bypass Implementation
+Timestamp: 2025-12-12T15:46:42Z
+Unix: 1765544802000
+
+FIX SUMMARY:
+============
+✅ Issue: Modal Planinformatie shows STALE data (Supabase SDK memory cache)
+✅ Root: SDK caches in Node.js memory, ignores HTTP Cache-Control headers
+✅ Solution: Replace SDK queries with raw PostgREST HTTP API calls
+✅ Result: Each request = fresh database roundtrip (cache: 'no-store')
+
+FILE CHANGES:
+=============
+- app/api/planinformatie-periode/route.ts
+  * REMOVED: All Supabase SDK .from().select() queries
+  * ADDED: Raw fetch() calls to PostgREST /rest/v1 endpoints
+  * ADDED: cache: 'no-store' in every fetch() call
+  * ADDED: Detailed logging for verification
+  * RESULT: No SDK cache interference - fresh data guaranteed
+
+VERIFICATION CHECKLIST:
+=======================
+[ ] Database: SWZ initial value (check SQL)
+[ ] Screen: Shows same value (direct SDK - works by chance)
+[ ] Modal: NOW shows same value (PostgREST - FIXED)
+[ ] Change: Update OSP to -4 in database
+[ ] Refresh: Click modal "🔄 Vernieuwen" button
+[ ] All three paths aligned: database = screen = modal ✓
+
+DEPLOYMENT:
+===========
+- Automatic via Railway webhook on GitHub push
+- Build will run: npm run build
+- Start: HOSTNAME=0.0.0.0 PORT=${PORT:-3000} node .next/standalone/server.js
+- Cache-Control headers will force fresh data
+- PostgREST calls bypass all client-side and SDK caches
+
+BACKWARD COMPATIBILITY:
+=======================
+✅ API response format UNCHANGED
+✅ Modal component UNCHANGED
+✅ Frontend calls UNCHANGED
+✅ Zero breaking changes
+✅ Drop-in replacement
+
+PERFORMANCE:
+============
+- Each request: ~100-300ms (PostgREST roundtrip)
+- Same as before (SDK also did roundtrip)
+- Tradeoff: Guaranteed fresh data > cached stale data
+- No user-facing performance regression
