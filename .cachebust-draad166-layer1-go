@@ -1,0 +1,21 @@
+# DRAAD166 - Layer 1 Deployment Cache Buster
+
+Baseline Verification Complete: CONDITIONAL GO
+Solver2 Status: AWAITING VERIFICATION AFTER REBUILD
+Timestamp: 1765544400
+Random: k9m2p5q8x
+Next Action: Monitor Solver2 logs + test health endpoint
+
+Cache-bust files:
+- .DRAAD166-BASELINE-VERIFICATION-REPORT.md (baseline report)
+- .cachebust-draad166-put-headers (from previous commit)
+- This file (deployment trigger)
+
+For Layer 1 deployment to proceed:
+1. Solver2 must start successfully
+2. Health check must pass
+3. OR-Tools imports must complete
+4. /solve endpoint must respond
+
+All fixes applied in DRAAD164a + DRAAD165
+Ready for Layer 1 when Solver2 verified ✅
