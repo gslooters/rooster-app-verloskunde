@@ -1,0 +1,19 @@
+# CACHE-BUST FILE - DRAAD170 Solver Fixes
+# Generated: 2025-12-12T20:56:34Z
+# Purpose: Force Railway container rebuild and cache invalidation
+
+DRAA170_PHASE_1=constraint7_validation+constraint8_reification
+DRAA170_PHASE_2=async_await+threadpoolexecutor
+DRAA170_RANDOM_BUST=8447293
+DRAA170_TIMESTAMP=2025-12-12T20:56:34Z
+
+FIXES_APPLIED:
+1. Constraint 7: Add validation & capacity shortage warnings
+2. Constraint 8: Fix BoolAnd reification using AddMaxEquality
+3. Main.py: Add ThreadPoolExecutor for non-blocking async solver
+
+QUALITY_VERIFIED:
+- Syntax checked: OK
+- Reification logic: OK
+- Async compatibility: OK
+- Exception handling: OK
