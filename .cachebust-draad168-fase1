@@ -1,0 +1,10 @@
+DRAAD168 FASE 1 CACHE BUST
+Date: 2025-12-12T19:00:00Z
+Commit: e575dd69037f6237800ee8f60afd59fbe465ec7d
+RandomTrigger: 1765550625
+
+✅ CRITICAL FIXES DEPLOYED:
+[CORR-2] Constraint 7: Bevoegdheden check + team filtering
+[CORR-3] Objective function: DIO+DIA bonus with BoolAnd reification
+
+Railway deployment: Trigger build with timestamp
