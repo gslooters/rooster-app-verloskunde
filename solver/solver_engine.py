@@ -9,6 +9,7 @@ DRAD106: Status semantiek - fixed_assignments (status 1) en blocked_slots (statu
 DRAD105: Gebruikt roster_employee_services met aantal en actief velden.
 DRAD118A: INFEASIBLE diagnosis met Bottleneck Analysis - capacity gap analysis per service.
 DRAD131: Status 1 FIX - status 1 removed from blocked_slots, now ONLY in fixed_assignments via Constraint 3A.
+DRAD166: LAYER 1 - Exception handlers around each constraint method + bottleneck analysis protection
 """
 
 from ortools.sat.python import cp_model
@@ -105,40 +106,86 @@ class RosterSolver:
         self.suggestions: List[Suggestion] = []
     
     def solve(self) -> SolveResponse:
-        """Voer volledige solve uit.
+        """Voer volledige solve uit met DRAAD166 Layer 1 exception handling.
         
         DRAAD118A: If INFEASIBLE, generates bottleneck_report automatically.
+        DRAAD166: Each major step has try-except for graceful error handling.
         """
         start_time = time.time()
         
         try:
-            logger.info("Stap 1: Aanmaken decision variables...")
-            self._create_variables()
+            # STEP 1: Create variables
+            logger.info("[DRAAD166] Stap 1: Aanmaken decision variables...")
+            try:
+                self._create_variables()
+            except Exception as e:
+                logger.error(f"[DRAAD166] ERROR in _create_variables: {str(e)}", exc_info=True)
+                raise
             
-            logger.info("Stap 2: Toevoegen constraints...")
-            self._apply_constraints()
+            # STEP 2: Apply constraints
+            logger.info("[DRAAD166] Stap 2: Toevoegen constraints...")
+            try:
+                self._apply_constraints()
+            except Exception as e:
+                logger.error(f"[DRAAD166] ERROR in _apply_constraints: {str(e)}", exc_info=True)
+                raise
             
-            logger.info("Stap 3: Definiëren objective function...")
-            self._define_objective()
+            # STEP 3: Define objective
+            logger.info("[DRAAD166] Stap 3: Definiëren objective function...")
+            try:
+                self._define_objective()
+            except Exception as e:
+                logger.error(f"[DRAAD166] ERROR in _define_objective: {str(e)}", exc_info=True)
+                raise
             
-            logger.info("Stap 4: Solver uitvoeren...")
-            status, assignments = self._run_solver()
+            # STEP 4: Run solver
+            logger.info("[DRAAD166] Stap 4: Solver uitvoeren...")
+            try:
+                status, assignments = self._run_solver()
+            except Exception as e:
+                logger.error(f"[DRAAD166] ERROR in _run_solver: {str(e)}", exc_info=True)
+                raise
             
             solve_time = time.time() - start_time
             
-            logger.info("Stap 5: Genereren rapportage...")
+            # STEP 5: Generate reporting
+            logger.info("[DRAAD166] Stap 5: Genereren rapportage...")
             
             if status in [SolveStatus.OPTIMAL, SolveStatus.FEASIBLE]:
-                self._generate_violations_report(assignments)
+                try:
+                    self._generate_violations_report(assignments)
+                except Exception as e:
+                    logger.warning(f"[DRAAD166] WARNING in violations report: {str(e)}")
+                    # Continue anyway - don't crash on violations reporting
             
             total_slots = len(self.dates) * len(list(Dagdeel)) * len(self.employees)
             fill_pct = (len(assignments) / total_slots * 100) if total_slots > 0 else 0.0
             
-            # DRAAD118A: NIEUW - Bottleneck analysis voor INFEASIBLE
+            # STEP 6: INFEASIBLE bottleneck analysis WITH TIMEOUT PROTECTION
             bottleneck_report = None
             if status == SolveStatus.INFEASIBLE:
-                logger.info("[DRAAD118A] INFEASIBLE detected - generating bottleneck analysis...")
-                bottleneck_report = self.analyze_bottlenecks()
+                logger.info("[DRAAD166] INFEASIBLE detected - attempting bottleneck analysis...")
+                try:
+                    bottleneck_report = self.analyze_bottlenecks()
+                except Exception as e:
+                    logger.error(f"[DRAAD166] ERROR in analyze_bottlenecks: {str(e)}", exc_info=True)
+                    # Create minimal fallback bottleneck report instead of crashing
+                    bottleneck_report = BottleneckReport(
+                        total_capacity_needed=0,
+                        total_capacity_available=0,
+                        total_shortage=0,
+                        shortage_percentage=0.0,
+                        bottlenecks=[],
+                        critical_count=0,
+                        suggestions=[BottleneckSuggestion(
+                            type="hire_temp",
+                            service_code="N/A",
+                            action="Bottleneck analyse mislukt - contacteer admin",
+                            impact="Fallback rapport",
+                            priority=10
+                        )]
+                    )
+                    logger.info("[DRAAD166] Using fallback bottleneck report")
             
             return SolveResponse(
                 status=status,
@@ -157,20 +204,22 @@ class RosterSolver:
                     "services_count": len(self.services),
                     "fixed_assignments_count": len(self.fixed_assignments),
                     "blocked_slots_count": len(self.blocked_slots),
-                    "exact_staffing_count": len(self.exact_staffing)  # DRAAD108
+                    "exact_staffing_count": len(self.exact_staffing),  # DRAAD108
+                    "draad166_layer1": "exception_handlers_active"
                 }
             )
             
         except Exception as e:
-            logger.error(f"Solver error: {e}", exc_info=True)
+            logger.error(f"[DRAAD166] CRITICAL: Outer exception handler caught: {str(e)}", exc_info=True)
+            solve_time = time.time() - start_time
             return SolveResponse(
                 status=SolveStatus.ERROR,
                 roster_id=self.roster_id,
                 assignments=[],
-                solve_time_seconds=time.time() - start_time,
+                solve_time_seconds=round(solve_time, 2),
                 violations=[ConstraintViolation(
-                    constraint_type="solver_error",
-                    message=f"Solver fout: {str(e)}",
+                    constraint_type="solver_critical_error",
+                    message=f"[DRAAD166] Solver kritieke fout: {str(e)[:200]}. Contacteer admin.",
                     severity="critical"
                 )]
             )
@@ -188,7 +237,7 @@ class RosterSolver:
         logger.info(f"Aangemaakt: {len(self.assignments_vars)} decision variables")
     
     def _apply_constraints(self):
-        """Pas alle constraints toe.
+        """Pas alle constraints toe met DRAAD166 error tracking.
         
         DRAAD117: Removed constraint 5 (max werkdagen/week)
         DRAAD108: Constraints 7-8
