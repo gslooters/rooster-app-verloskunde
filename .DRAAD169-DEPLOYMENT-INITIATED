@@ -1,0 +1,101 @@
+🚀 DRAAD 169: EMERGENCY DEPLOYMENT INITIATED
+
+Date: 2025-12-12 20:34 CET
+Status: DEPLOYING FIX
+Priority: CRITICAL
+
+════════════════════════════════════════════════════════════════
+FASE A: CONTAINER CACHE BUST
+════════════════════════════════════════════════════════════════
+
+✅ Deployed: .FORCE-REBUILD-DRAAD169
+   - Random trigger: 1765580100
+   - Expected effect: Docker cache cleared
+   - Expected effect: New image built with fresh dependencies
+   - Expected effect: Container restarted with new code
+
+════════════════════════════════════════════════════════════════
+FASE B: DIAGNOSTIC LOGGING ENHANCEMENT
+════════════════════════════════════════════════════════════════
+
+✅ Updated: solver/main.py
+   - Added [DRAAD169] diagnostic logging markers
+   - Track solve_schedule() entry/exit
+   - Track RosterSolver instantiation
+   - Track solver.solve() activation
+   - Track solver status + timing
+   - Lines 13, 15, 70, 160-161, 200-201, 270-271, 300-301, 320-321
+
+════════════════════════════════════════════════════════════════
+CODE CHANGES SUMMARY
+════════════════════════════════════════════════════════════════
+
+File              | Changes                          | Commits
+------------------+----------------------------------+----------
+.FORCE-REBUILD    | NEW - Cache bust trigger         | 4b4ef26
+.BASELINE-VERIFY  | NEW - Status report              | cb286dd
+main.py           | ENHANCED - DRAAD169 logging      | 7e2a2fa
+
+GitHub files deployed: 3
+Total commits: 3
+
+════════════════════════════════════════════════════════════════
+WHAT WILL HAPPEN NEXT
+════════════════════════════════════════════════════════════════
+
+✍️ NEXT STEPS (Automated):
+
+1. Railway detects .FORCE-REBUILD file
+   - Initiates Docker build with NO cache
+   - ~3-5 minutes build time
+
+2. During build:
+   - Dockerfile uses latest base image
+   - requirements.txt reinstalled
+   - solver_engine.py copied (with DRAAD168 fixes)
+   - main.py copied (with DRAAD169 logging)
+   - Container starts fresh
+
+3. Container startup logs will show:
+   - [Solver/main] ROOSTER SOLVER SERVICE - STARTUP SEQUENCE INITIATED
+   - [DRAAD169] 🔍 DIAGNOSTIC LOGGING ENABLED
+   - [Solver/main] ✅ RosterSolver imported successfully
+
+4. When solve_schedule() called:
+   - [DRAAD169] ➡️  SOLVE_SCHEDULE ENDPOINT CALLED
+   - [DRAAD169] Creating RosterSolver instance...
+   - [DRAAD169] ⚙️  CALLING solver.solve()...
+   - [DRAAD169] ✅ solver.solve() COMPLETED
+   - [Solver] Status: OPTIMAL/FEASIBLE/INFEASIBLE/TIMEOUT
+
+5. If solver works:
+   - Assignments generated
+   - Status != UNASSIGNED
+   - Diagnostic logging shows constraint flow
+
+════════════════════════════════════════════════════════════════
+EXPECTED OUTCOME
+════════════════════════════════════════════════════════════════
+
+❌ OLD BEHAVIOR:
+- Pre-planning: 1470 slots created (status 0)
+- Solver: NOT CALLED or silently fails
+- Result: Only 6 assignments
+- Logs: No [DRAAD169] markers
+
+✅ NEW BEHAVIOR:
+- Pre-planning: 1470 slots created (status 0)
+- Solver: CALLED with diagnostics
+- Solver logs: [DRAAD169] markers show flow
+- Result: 100+ assignments OR clear INFEASIBLE reason
+- Logs: Will see solver status + time + violations
+
+════════════════════════════════════════════════════════════════
+AWAIT RAILWAY BUILD (3-5 MINUTES)
+════════════════════════════════════════════════════════════════
+
+Build should complete by: 20:39 CET
+Then run FASE C test to verify solver activation
+
+Monitor Railway logs at:
+https://railway.com/project/90165889-1a50-4236-aefe-b1e1ae44dc7f
