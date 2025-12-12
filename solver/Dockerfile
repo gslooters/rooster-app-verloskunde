@@ -4,7 +4,7 @@ WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    gcc g++ \
+    gcc g++ curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy and install requirements
@@ -22,9 +22,18 @@ ENV PORT=8000
 # Expose port
 EXPOSE 8000
 
+# DEBUG: Test imports before starting service
+RUN echo "[Dockerfile] Testing critical imports..." && \
+    python -c "from fastapi import FastAPI; print('[OK] FastAPI imported')" && \
+    python -c "import uvicorn; print('[OK] Uvicorn imported')" && \
+    python -c "from ortools.linear_solver import pywraplp; print('[OK] OR-Tools imported')" && \
+    python -c "from models import SolveRequest, SolveResponse; print('[OK] Models imported')" && \
+    python -c "from solver_engine import RosterSolver; print('[OK] RosterSolver imported')" && \
+    python -c "from main import app; print('[OK] Main FastAPI app imported')"
+
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+    CMD curl -f http://localhost:${PORT}/health || exit 1
 
-# Start server
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Start server with verbose logging
+CMD ["python", "-u", "-c", "import uvicorn; uvicorn.run('main:app', host='0.0.0.0', port=8000, log_level='info')"]
