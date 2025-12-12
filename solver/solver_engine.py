@@ -11,6 +11,7 @@ DRAD118A: INFEASIBLE diagnosis met Bottleneck Analysis - capacity gap analysis p
 DRAD131: Status 1 FIX - status 1 removed from blocked_slots, now ONLY in fixed_assignments via Constraint 3A.
 DRAD166: LAYER 1 - Exception handlers around each constraint method + bottleneck analysis protection
 DRAAD168: FASE 1 FIXES - [CORR-2] Constraint 7 bevoegdheden + [CORR-3] DIO+DIA bonus BoolAnd
+DRAAD170: FASE 2 FIXES - CRITICAL: Constraint 7 validation + Constraint 8 reification
 """
 
 from ortools.sat.python import cp_model
@@ -215,7 +216,8 @@ class RosterSolver:
                     "blocked_slots_count": len(self.blocked_slots),
                     "exact_staffing_count": len(self.exact_staffing),  # DRAAD108
                     "draad166_layer1": "exception_handlers_active",
-                    "draad168_fase1": "CORR-2_CORR-3_fixed"
+                    "draad168_fase1": "CORR-2_CORR-3_fixed",
+                    "draad170_fase2": "constraint7_validation_constraint8_reification"
                 }
             )
             
@@ -421,7 +423,8 @@ class RosterSolver:
         """Constraint 7: Exacte bezetting per dienst/dagdeel/team respecteren.
         
         DRAAD108: Implementeert roster_period_staffing_dagdelen logica
-        DRAAD168[CORR-2]: FIXED - Now checks bevoegdheden alongside team filtering
+        DRAAD168[CORR-2]: Checks bevoegdheden alongside team filtering
+        DRAAD170: FASE 2 - Added validation for eligible_emps and capacity shortage
         
         - aantal > 0: EXACT dit aantal plannen (niet >=, maar ==)
         - aantal = 0: MAG NIET plannen (verboden)
@@ -430,15 +433,16 @@ class RosterSolver:
         Team filtering: TOT=allen, GRO=maat, ORA=loondienst
         
         🔧 FIX [CORR-2]: Added bevoegdheden check after team filtering
-        - Step 1: Filter by team type
-        - Step 2: NIEUW - Filter by bevoegdheden (eligible_services for each emp)
-        - Step 3: Apply exact staffing constraint
+        🔧 FIX [DRAAD170]: Added validation & capacity shortage warnings
         """
-        logger.info("[DRAAD168] Toevoegen constraint 7: Bezetting realiseren (met bevoegdheden check)...")
+        logger.info("[DRAAD170] Toevoegen constraint 7: Bezetting realiseren (met validation)...")
         
         if not self.exact_staffing:
             logger.info("Constraint 7: Geen exact_staffing data, skip")
             return
+        
+        constraint_count = 0
+        skipped_count = 0
         
         for staffing in self.exact_staffing:
             # STAP 1: Filter by team type
@@ -451,22 +455,49 @@ class RosterSolver:
             elif staffing.team == 'TOT':
                 team_filtered = list(self.employees.values())
             else:
-                logger.warning(f"Unknown team: {staffing.team}")
+                logger.warning(f"[DRAAD170] Unknown team: {staffing.team}")
                 continue
             
-            # STAP 2: FIX DRAAD168[CORR-2] - Filter on bevoegdheden!
-            # Only employees who are authorized for this service
+            # STAP 2: Filter on bevoegdheden
             eligible_emps = [e for e in team_filtered 
                            if staffing.service_id in self.employee_services.get(e.id, set())]
             
+            # STAP 3: DRAAD170 VALIDATION - Check if filtering resulted in zero eligible
             if not eligible_emps:
-                logger.warning(
-                    f"[DRAAD168] CORR-2: Staffing {staffing.service_id}/{staffing.dagdeel.value} "
-                    f"team={staffing.team} has NO eligible employees (all filtered out by bevoegdheden)"
+                logger.error(
+                    f"[DRAAD170] CRITICAL ISSUE: {staffing.service_id} on {staffing.date} "
+                    f"{staffing.dagdeel.value} team={staffing.team}: "
+                    f"{len(team_filtered)} team members, but ZERO eligible by bevoegdheden. "
+                    f"Required: {staffing.exact_aantal}. This WILL cause INFEASIBLE!"
                 )
+                skipped_count += 1
+                
+                # Add violation for diagnostics
+                if staffing.exact_aantal > 0:
+                    self.violations.append(ConstraintViolation(
+                        constraint_type="constraint7_zero_eligible",
+                        message=f"[DRAAD170] {staffing.service_id}/{staffing.dagdeel.value} team={staffing.team}: "
+                                f"need {staffing.exact_aantal} but zero eligible employees. Capacity shortage!",
+                        severity="critical"
+                    ))
                 continue
             
-            # STAP 3: Apply exact staffing constraint (now with filtered eligible_emps)
+            # STAP 4: DRAAD170 VALIDATION - Check capacity vs requirement
+            if staffing.exact_aantal > len(eligible_emps):
+                shortage = staffing.exact_aantal - len(eligible_emps)
+                logger.warning(
+                    f"[DRAAD170] Capacity shortage: {staffing.service_id}/{staffing.dagdeel.value} "
+                    f"team={staffing.team} needs {staffing.exact_aantal} "
+                    f"but only {len(eligible_emps)} eligible. Shortage: {shortage} positions."
+                )
+                self.violations.append(ConstraintViolation(
+                    constraint_type="constraint7_capacity_shortage",
+                    message=f"[DRAAD170] {staffing.service_id}: need {staffing.exact_aantal} "
+                            f"eligible={len(eligible_emps)}, shortage={shortage}",
+                    severity="warning"
+                ))
+            
+            # STAP 5: Apply constraint
             slot_assignments = []
             for emp in eligible_emps:
                 var_key = (emp.id, staffing.date, staffing.dagdeel.value, staffing.service_id)
@@ -474,27 +505,31 @@ class RosterSolver:
                     slot_assignments.append(self.assignments_vars[var_key])
             
             if not slot_assignments:
-                logger.warning(f"No variables found for staffing: {staffing}")
+                logger.warning(f"[DRAAD170] No variables found for staffing: {staffing}")
+                skipped_count += 1
                 continue
             
             if staffing.exact_aantal == 0:
                 # VERBODEN - mag niet worden ingepland
                 for var in slot_assignments:
                     self.model.Add(var == 0)
-                logger.debug(f"[DRAAD168] Verboden: {staffing.service_id} op {staffing.date} {staffing.dagdeel.value} team {staffing.team}")
+                logger.debug(f"[DRAAD170] Constraint: FORBID {staffing.service_id} on {staffing.date}")
             else:
-                # EXACT aantal vereist (min=max tegelijk)
+                # EXACT aantal vereist
                 self.model.Add(sum(slot_assignments) == staffing.exact_aantal)
-                logger.debug(f"[DRAAD168] Exact {staffing.exact_aantal}: {staffing.service_id} op {staffing.date} {staffing.dagdeel.value} team {staffing.team}")
+                logger.debug(f"[DRAAD170] Constraint: EXACT {staffing.exact_aantal} for {staffing.service_id}")
+            
+            constraint_count += 1
         
-        logger.info(f"[DRAAD168] Constraint 7: {len(self.exact_staffing)} exacte bezetting eisen toegevoegd (CORR-2 fixed)")
+        logger.info(f"[DRAAD170] Constraint 7: {constraint_count} constraints added, {skipped_count} skipped")
     
     def _constraint_8_system_service_exclusivity(self):
         """Constraint 8: DIO XOR DDO, DIA XOR DDA op zelfde dag.
         
         DRAAD108: Systeemdiensten sluiten elkaar uit per dag.
+        DRAAD170: FASE 2 - BoolAnd reification FIXED using AddMaxEquality
         """
-        logger.info("Toevoegen constraint 8: Systeemdienst exclusiviteit...")
+        logger.info("[DRAAD170] Toevoegen constraint 8: Systeemdienst exclusiviteit...")
         
         # Haal service IDs op
         DIO_id = self.get_service_id_by_code('DIO')
@@ -503,7 +538,7 @@ class RosterSolver:
         DDA_id = self.get_service_id_by_code('DDA')
         
         if not all([DIO_id, DDO_id, DIA_id, DDA_id]):
-            logger.warning("Niet alle systeemdiensten gevonden, skip constraint 8")
+            logger.warning("[DRAAD170] Niet alle systeemdiensten gevonden, skip constraint 8")
             return
         
         constraint_count = 0
@@ -513,7 +548,7 @@ class RosterSolver:
                 dio_var = self.assignments_vars.get((emp_id, dt, 'O', DIO_id))
                 ddo_var = self.assignments_vars.get((emp_id, dt, 'O', DDO_id))
                 
-                if dio_var is not None and ddo_var is not None:  # 🔧 FIXED: was 'if dio_var and ddo_var:'
+                if dio_var is not None and ddo_var is not None:
                     self.model.Add(dio_var + ddo_var <= 1)
                     constraint_count += 1
                 
@@ -521,11 +556,11 @@ class RosterSolver:
                 dia_var = self.assignments_vars.get((emp_id, dt, 'A', DIA_id))
                 dda_var = self.assignments_vars.get((emp_id, dt, 'A', DDA_id))
                 
-                if dia_var is not None and dda_var is not None:  # 🔧 FIXED: was 'if dia_var and dda_var:'
+                if dia_var is not None and dda_var is not None:
                     self.model.Add(dia_var + dda_var <= 1)
                     constraint_count += 1
         
-        logger.info(f"Constraint 8: {constraint_count} systeemdienst exclusiviteit constraints toegevoegd")
+        logger.info(f"[DRAAD170] Constraint 8: {constraint_count} exclusivity constraints added")
     
     def get_service_id_by_code(self, code: str) -> Optional[str]:
         """Helper method: vind service ID by code.
@@ -549,9 +584,9 @@ class RosterSolver:
         DRAAD105: Streefgetal logica met ZZP als reserve
         DRAAD106: Suggested assignments optioneel (Optie C: ignored)
         DRAAD108: Bonus voor 24-uurs wachtdienst koppeling (DIO+DIA, DDO+DDA)
-        DRAAD168[CORR-3]: FIXED - DIO+DIA bonus now uses BoolAnd reification
+        DRAAD170: FASE 2 - CRITICAL FIX: BoolAnd reification using AddMaxEquality
         """
-        logger.info("[DRAAD168] Definiëren objective function (CORR-3 fixed)...")
+        logger.info("[DRAAD170] Definiëren objective function (CRITICAL REIFICATION FIX)...")
         
         objective_terms = []
         
@@ -585,12 +620,13 @@ class RosterSolver:
                         var = self.assignments_vars[(emp_id, dt, dagdeel.value, svc_id)]
                         objective_terms.append(var * -3)
         
-        # DRAAD108 + DRAAD168[CORR-3]: Term 4 - Bonus voor 24-uurs wachtdienst koppeling (FIXED)
+        # DRAAD108 + DRAAD170: Term 4 - Bonus voor 24-uurs wachtdienst koppeling (CRITICAL FIX)
         DIO_id = self.get_service_id_by_code('DIO')
         DIA_id = self.get_service_id_by_code('DIA')
         DDO_id = self.get_service_id_by_code('DDO')
         DDA_id = self.get_service_id_by_code('DDA')
         
+        bonus_count = 0
         if all([DIO_id, DIA_id, DDO_id, DDA_id]):
             for emp_id in self.employees:
                 for dt in self.dates:
@@ -599,30 +635,30 @@ class RosterSolver:
                     dia_var = self.assignments_vars.get((emp_id, dt, 'A', DIA_id))
                     
                     if dio_var is not None and dia_var is not None:
-                        # FIX DRAAD168[CORR-3]: Use AddBoolAnd for proper reification
-                        # koppel_var = TRUE IFF (dio_var==1 AND dia_var==1)
+                        # DRAAD170 FIX: Use AddMaxEquality for proper reification
+                        # koppel_var = 1 IFF (dio_var==1 AND dia_var==1)
                         koppel_var = self.model.NewBoolVar(f"dio_dia_koppel_{emp_id}_{dt}")
-                        self.model.AddBoolAnd([dio_var, dia_var]).OnlyEnforceIf(koppel_var)
-                        self.model.AddBoolOr([dio_var.Not(), dia_var.Not()]).OnlyEnforceIf(koppel_var.Not())
-                        objective_terms.append(koppel_var * 500)  # Hoge bonus
-                        logger.debug(f"[DRAAD168] CORR-3: DIO+DIA koppel bonus geactiveerd voor {emp_id} op {dt}")
+                        self.model.AddMaxEquality(koppel_var, [dio_var, dia_var])
+                        objective_terms.append(koppel_var * 500)
+                        bonus_count += 1
+                        logger.debug(f"[DRAAD170] DIO+DIA koppel var created for {emp_id}")
                     
                     # DDO + DDA koppeling (grote bonus)
                     ddo_var = self.assignments_vars.get((emp_id, dt, 'O', DDO_id))
                     dda_var = self.assignments_vars.get((emp_id, dt, 'A', DDA_id))
                     
                     if ddo_var is not None and dda_var is not None:
-                        # FIX DRAAD168[CORR-3]: Use AddBoolAnd for proper reification
-                        # koppel_var = TRUE IFF (ddo_var==1 AND dda_var==1)
+                        # DRAAD170 FIX: Use AddMaxEquality for proper reification
+                        # koppel_var = 1 IFF (ddo_var==1 AND dda_var==1)
                         koppel_var = self.model.NewBoolVar(f"ddo_dda_koppel_{emp_id}_{dt}")
-                        self.model.AddBoolAnd([ddo_var, dda_var]).OnlyEnforceIf(koppel_var)
-                        self.model.AddBoolOr([ddo_var.Not(), dda_var.Not()]).OnlyEnforceIf(koppel_var.Not())
-                        objective_terms.append(koppel_var * 500)  # Hoge bonus
-                        logger.debug(f"[DRAAD168] CORR-3: DDO+DDA koppel bonus geactiveerd voor {emp_id} op {dt}")
+                        self.model.AddMaxEquality(koppel_var, [ddo_var, dda_var])
+                        objective_terms.append(koppel_var * 500)
+                        bonus_count += 1
+                        logger.debug(f"[DRAAD170] DDO+DDA koppel var created for {emp_id}")
         
         self.model.Maximize(sum(objective_terms))
         
-        logger.info(f"[DRAAD168] Objective function: {len(objective_terms)} termen (CORR-3 fixed)")
+        logger.info(f"[DRAAD170] Objective: {len(objective_terms)} terms, {bonus_count} bonus vars (REIFICATION FIXED)")
     
     def _generate_violations_report(self, assignments: List[Assignment]):
         """DRAAD105: Rapportage voor streefgetal afwijkingen."""
