@@ -10,6 +10,7 @@ DRAD105: Gebruikt roster_employee_services met aantal en actief velden.
 DRAD118A: INFEASIBLE diagnosis met Bottleneck Analysis - capacity gap analysis per service.
 DRAD131: Status 1 FIX - status 1 removed from blocked_slots, now ONLY in fixed_assignments via Constraint 3A.
 DRAD166: LAYER 1 - Exception handlers around each constraint method + bottleneck analysis protection
+DRAAD168: FASE 1 FIXES - [CORR-2] Constraint 7 bevoegdheden + [CORR-3] DIO+DIA bonus BoolAnd
 """
 
 from ortools.sat.python import cp_model
@@ -89,6 +90,14 @@ class RosterSolver:
         
         # DRAAD105: Target counts per (employee_id, service_id)
         self.target_counts: Dict[Tuple[str, str], int] = {}
+        
+        # DRAAD168: [CORR-2] Build employee service lookup for bevoegdheden check
+        self.employee_services: Dict[str, Set[str]] = {}
+        for res in self.roster_employee_services:
+            if res.actief:
+                if res.employee_id not in self.employee_services:
+                    self.employee_services[res.employee_id] = set()
+                self.employee_services[res.employee_id].add(res.service_id)
         
         # Genereer dagen lijst
         self.dates = []
@@ -205,7 +214,8 @@ class RosterSolver:
                     "fixed_assignments_count": len(self.fixed_assignments),
                     "blocked_slots_count": len(self.blocked_slots),
                     "exact_staffing_count": len(self.exact_staffing),  # DRAAD108
-                    "draad166_layer1": "exception_handlers_active"
+                    "draad166_layer1": "exception_handlers_active",
+                    "draad168_fase1": "CORR-2_CORR-3_fixed"
                 }
             )
             
@@ -411,34 +421,52 @@ class RosterSolver:
         """Constraint 7: Exacte bezetting per dienst/dagdeel/team respecteren.
         
         DRAAD108: Implementeert roster_period_staffing_dagdelen logica
+        DRAAD168[CORR-2]: FIXED - Now checks bevoegdheden alongside team filtering
         
         - aantal > 0: EXACT dit aantal plannen (niet >=, maar ==)
         - aantal = 0: MAG NIET plannen (verboden)
         
         Priority: HARD (is_fixed: true)
         Team filtering: TOT=allen, GRO=maat, ORA=loondienst
+        
+        🔧 FIX [CORR-2]: Added bevoegdheden check after team filtering
+        - Step 1: Filter by team type
+        - Step 2: NIEUW - Filter by bevoegdheden (eligible_services for each emp)
+        - Step 3: Apply exact staffing constraint
         """
-        logger.info("Toevoegen constraint 7: Bezetting realiseren...")
+        logger.info("[DRAAD168] Toevoegen constraint 7: Bezetting realiseren (met bevoegdheden check)...")
         
         if not self.exact_staffing:
             logger.info("Constraint 7: Geen exact_staffing data, skip")
             return
         
         for staffing in self.exact_staffing:
-            # Bepaal eligible medewerkers voor dit team
+            # STAP 1: Filter by team type
             if staffing.team == 'GRO':
-                eligible_emps = [e for e in self.employees.values() 
+                team_filtered = [e for e in self.employees.values() 
                                if e.team == TeamType.MAAT]
             elif staffing.team == 'ORA':
-                eligible_emps = [e for e in self.employees.values() 
+                team_filtered = [e for e in self.employees.values() 
                                if e.team == TeamType.LOONDIENST]
             elif staffing.team == 'TOT':
-                eligible_emps = list(self.employees.values())
+                team_filtered = list(self.employees.values())
             else:
                 logger.warning(f"Unknown team: {staffing.team}")
                 continue
             
-            # Verzamel assignments voor dit specifieke slot
+            # STAP 2: FIX DRAAD168[CORR-2] - Filter on bevoegdheden!
+            # Only employees who are authorized for this service
+            eligible_emps = [e for e in team_filtered 
+                           if staffing.service_id in self.employee_services.get(e.id, set())]
+            
+            if not eligible_emps:
+                logger.warning(
+                    f"[DRAAD168] CORR-2: Staffing {staffing.service_id}/{staffing.dagdeel.value} "
+                    f"team={staffing.team} has NO eligible employees (all filtered out by bevoegdheden)"
+                )
+                continue
+            
+            # STAP 3: Apply exact staffing constraint (now with filtered eligible_emps)
             slot_assignments = []
             for emp in eligible_emps:
                 var_key = (emp.id, staffing.date, staffing.dagdeel.value, staffing.service_id)
@@ -446,20 +474,20 @@ class RosterSolver:
                     slot_assignments.append(self.assignments_vars[var_key])
             
             if not slot_assignments:
-                logger.warning(f"No eligible employees for exact staffing: {staffing}")
+                logger.warning(f"No variables found for staffing: {staffing}")
                 continue
             
             if staffing.exact_aantal == 0:
                 # VERBODEN - mag niet worden ingepland
                 for var in slot_assignments:
                     self.model.Add(var == 0)
-                logger.debug(f"Verboden: {staffing.service_id} op {staffing.date} {staffing.dagdeel.value} team {staffing.team}")
+                logger.debug(f"[DRAAD168] Verboden: {staffing.service_id} op {staffing.date} {staffing.dagdeel.value} team {staffing.team}")
             else:
                 # EXACT aantal vereist (min=max tegelijk)
                 self.model.Add(sum(slot_assignments) == staffing.exact_aantal)
-                logger.debug(f"Exact {staffing.exact_aantal}: {staffing.service_id} op {staffing.date} {staffing.dagdeel.value} team {staffing.team}")
+                logger.debug(f"[DRAAD168] Exact {staffing.exact_aantal}: {staffing.service_id} op {staffing.date} {staffing.dagdeel.value} team {staffing.team}")
         
-        logger.info(f"Constraint 7: {len(self.exact_staffing)} exacte bezetting eisen toegevoegd")
+        logger.info(f"[DRAAD168] Constraint 7: {len(self.exact_staffing)} exacte bezetting eisen toegevoegd (CORR-2 fixed)")
     
     def _constraint_8_system_service_exclusivity(self):
         """Constraint 8: DIO XOR DDO, DIA XOR DDA op zelfde dag.
@@ -521,8 +549,9 @@ class RosterSolver:
         DRAAD105: Streefgetal logica met ZZP als reserve
         DRAAD106: Suggested assignments optioneel (Optie C: ignored)
         DRAAD108: Bonus voor 24-uurs wachtdienst koppeling (DIO+DIA, DDO+DDA)
+        DRAAD168[CORR-3]: FIXED - DIO+DIA bonus now uses BoolAnd reification
         """
-        logger.info("Definiëren objective function...")
+        logger.info("[DRAAD168] Definiëren objective function (CORR-3 fixed)...")
         
         objective_terms = []
         
@@ -556,7 +585,7 @@ class RosterSolver:
                         var = self.assignments_vars[(emp_id, dt, dagdeel.value, svc_id)]
                         objective_terms.append(var * -3)
         
-        # DRAAD108: Term 4 - Bonus voor 24-uurs wachtdienst koppeling (SOFT)
+        # DRAAD108 + DRAAD168[CORR-3]: Term 4 - Bonus voor 24-uurs wachtdienst koppeling (FIXED)
         DIO_id = self.get_service_id_by_code('DIO')
         DIA_id = self.get_service_id_by_code('DIA')
         DDO_id = self.get_service_id_by_code('DDO')
@@ -569,25 +598,31 @@ class RosterSolver:
                     dio_var = self.assignments_vars.get((emp_id, dt, 'O', DIO_id))
                     dia_var = self.assignments_vars.get((emp_id, dt, 'A', DIA_id))
                     
-                    if dio_var is not None and dia_var is not None:  # 🔧 FIXED: was 'if dio_var and dia_var:'
+                    if dio_var is not None and dia_var is not None:
+                        # FIX DRAAD168[CORR-3]: Use AddBoolAnd for proper reification
+                        # koppel_var = TRUE IFF (dio_var==1 AND dia_var==1)
                         koppel_var = self.model.NewBoolVar(f"dio_dia_koppel_{emp_id}_{dt}")
-                        self.model.Add(dio_var + dia_var == 2).OnlyEnforceIf(koppel_var)
-                        self.model.Add(dio_var + dia_var < 2).OnlyEnforceIf(koppel_var.Not())
+                        self.model.AddBoolAnd([dio_var, dia_var]).OnlyEnforceIf(koppel_var)
+                        self.model.AddBoolOr([dio_var.Not(), dia_var.Not()]).OnlyEnforceIf(koppel_var.Not())
                         objective_terms.append(koppel_var * 500)  # Hoge bonus
+                        logger.debug(f"[DRAAD168] CORR-3: DIO+DIA koppel bonus geactiveerd voor {emp_id} op {dt}")
                     
                     # DDO + DDA koppeling (grote bonus)
                     ddo_var = self.assignments_vars.get((emp_id, dt, 'O', DDO_id))
                     dda_var = self.assignments_vars.get((emp_id, dt, 'A', DDA_id))
                     
-                    if ddo_var is not None and dda_var is not None:  # 🔧 FIXED: was 'if ddo_var and dda_var:'
+                    if ddo_var is not None and dda_var is not None:
+                        # FIX DRAAD168[CORR-3]: Use AddBoolAnd for proper reification
+                        # koppel_var = TRUE IFF (ddo_var==1 AND dda_var==1)
                         koppel_var = self.model.NewBoolVar(f"ddo_dda_koppel_{emp_id}_{dt}")
-                        self.model.Add(ddo_var + dda_var == 2).OnlyEnforceIf(koppel_var)
-                        self.model.Add(ddo_var + dda_var < 2).OnlyEnforceIf(koppel_var.Not())
-                        objective_terms.append(koppel_var * 500)
+                        self.model.AddBoolAnd([ddo_var, dda_var]).OnlyEnforceIf(koppel_var)
+                        self.model.AddBoolOr([ddo_var.Not(), dda_var.Not()]).OnlyEnforceIf(koppel_var.Not())
+                        objective_terms.append(koppel_var * 500)  # Hoge bonus
+                        logger.debug(f"[DRAAD168] CORR-3: DDO+DDA koppel bonus geactiveerd voor {emp_id} op {dt}")
         
         self.model.Maximize(sum(objective_terms))
         
-        logger.info(f"Objective function: {len(objective_terms)} termen")
+        logger.info(f"[DRAAD168] Objective function: {len(objective_terms)} termen (CORR-3 fixed)")
     
     def _generate_violations_report(self, assignments: List[Assignment]):
         """DRAAD105: Rapportage voor streefgetal afwijkingen."""
