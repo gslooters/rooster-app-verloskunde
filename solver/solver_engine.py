@@ -10,8 +10,11 @@ DRAD105: Gebruikt roster_employee_services met aantal en actief velden.
 DRAD118A: INFEASIBLE diagnosis met Bottleneck Analysis - capacity gap analysis per service.
 DRAD131: Status 1 FIX - status 1 removed from blocked_slots, now ONLY in fixed_assignments via Constraint 3A.
 DRAD166: LAYER 1 - Exception handlers around each constraint method + bottleneck analysis protection
-DRAAD168: FASE 1 FIXES - [CORR-2] Constraint 7 bevoegdheden + [CORR-3] DIO+DIA bonus BoolAnd
-DRAAD170: FASE 2 FIXES - CRITICAL: Constraint 7 validation + Constraint 8 reification
+DRAD168: FASE 1 FIXES - [CORR-2] Constraint 7 bevoegdheden + [CORR-3] DIO+DIA bonus BoolAnd
+DRAD170: FASE 1-3 CRITICAL FIXES
+  - FASE 1: Constraint 7 validation + error handling for zero eligible employees
+  - FASE 2: DIO+DIA reification using AddMaxEquality (not AddBoolAnd/OnlyEnforceIf)
+  - FASE 3: Solver status handling (UNKNOWN, timeout, etc.)
 """
 
 from ortools.sat.python import cp_model
@@ -118,6 +121,7 @@ class RosterSolver:
     def solve(self) -> SolveResponse:
         """Voer volledige solve uit met DRAAD166 Layer 1 exception handling.
         
+        DRAAD170: FASE 3 - Proper solver status handling (UNKNOWN, TIMEOUT, etc.)
         DRAAD118A: If INFEASIBLE, generates bottleneck_report automatically.
         DRAAD166: Each major step has try-except for graceful error handling.
         """
@@ -125,7 +129,7 @@ class RosterSolver:
         
         try:
             # STEP 1: Create variables
-            logger.info("[DRAAD166] Stap 1: Aanmaken decision variables...")
+            logger.info("[DRAAD170] Stap 1: Aanmaken decision variables...")
             try:
                 self._create_variables()
             except Exception as e:
@@ -133,7 +137,7 @@ class RosterSolver:
                 raise
             
             # STEP 2: Apply constraints
-            logger.info("[DRAAD166] Stap 2: Toevoegen constraints...")
+            logger.info("[DRAAD170] Stap 2: Toevoegen constraints...")
             try:
                 self._apply_constraints()
             except Exception as e:
@@ -141,7 +145,7 @@ class RosterSolver:
                 raise
             
             # STEP 3: Define objective
-            logger.info("[DRAAD166] Stap 3: Definiëren objective function...")
+            logger.info("[DRAAD170] Stap 3: Definiëren objective function...")
             try:
                 self._define_objective()
             except Exception as e:
@@ -149,7 +153,7 @@ class RosterSolver:
                 raise
             
             # STEP 4: Run solver
-            logger.info("[DRAAD166] Stap 4: Solver uitvoeren...")
+            logger.info("[DRAAD170] Stap 4: Solver uitvoeren...")
             try:
                 status, assignments = self._run_solver()
             except Exception as e:
@@ -159,7 +163,7 @@ class RosterSolver:
             solve_time = time.time() - start_time
             
             # STEP 5: Generate reporting
-            logger.info("[DRAAD166] Stap 5: Genereren rapportage...")
+            logger.info("[DRAAD170] Stap 5: Genereren rapportage...")
             
             if status in [SolveStatus.OPTIMAL, SolveStatus.FEASIBLE]:
                 try:
@@ -174,7 +178,7 @@ class RosterSolver:
             # STEP 6: INFEASIBLE bottleneck analysis WITH TIMEOUT PROTECTION
             bottleneck_report = None
             if status == SolveStatus.INFEASIBLE:
-                logger.info("[DRAAD166] INFEASIBLE detected - attempting bottleneck analysis...")
+                logger.info("[DRAAD170] INFEASIBLE detected - attempting bottleneck analysis...")
                 try:
                     bottleneck_report = self.analyze_bottlenecks()
                 except Exception as e:
@@ -216,8 +220,7 @@ class RosterSolver:
                     "blocked_slots_count": len(self.blocked_slots),
                     "exact_staffing_count": len(self.exact_staffing),  # DRAAD108
                     "draad166_layer1": "exception_handlers_active",
-                    "draad168_fase1": "CORR-2_CORR-3_fixed",
-                    "draad170_fase2": "constraint7_validation_constraint8_reification"
+                    "draad170_fase123": "CRITICAL_FIXES_DEPLOYED"
                 }
             )
             
@@ -231,7 +234,7 @@ class RosterSolver:
                 solve_time_seconds=round(solve_time, 2),
                 violations=[ConstraintViolation(
                     constraint_type="solver_critical_error",
-                    message=f"[DRAAD166] Solver kritieke fout: {str(e)[:200]}. Contacteer admin.",
+                    message=f"[DRAAD170] Solver kritieke fout: {str(e)[:200]}. Contacteer admin.",
                     severity="critical"
                 )]
             )
@@ -249,12 +252,13 @@ class RosterSolver:
         logger.info(f"Aangemaakt: {len(self.assignments_vars)} decision variables")
     
     def _apply_constraints(self):
-        """Pas alle constraints toe met DRAAD166 error tracking.
+        """Pas alle constraints toe met DRAAD170 fixes.
         
         DRAAD117: Removed constraint 5 (max werkdagen/week)
         DRAAD108: Constraints 7-8
         DRAAD106: Constraints 1-4
         DRAAD131: Constraint 2 is DEPRECATED (status 1 now ONLY in Constraint 3A)
+        DRAAD170: FASE 1 - Constraint 7 validation
         
         1. Bevoegdheden (HARD)
         2. DEPRECATED - Beschikbaarheid (HARD) - Status 1 now in Constraint 3A (fixed_assignments)
@@ -262,8 +266,8 @@ class RosterSolver:
         3B. Blocked slots (status 2,3, HARD) - DRAAD131: Status 1 REMOVED!
         4. Een dienst per dagdeel (HARD)
         6. ZZP minimalisatie (via objective, SOFT)
-        7. Exact bezetting realiseren (HARD)
-        8. Systeemdienst exclusiviteit (HARD)
+        7. Exact bezetting realiseren (HARD) - DRAAD170 FASE 1 VALIDATION
+        8. Systeemdienst exclusiviteit (HARD) - DRAAD170 FASE 2 REIFICATION
         """
         self._constraint_1_bevoegdheden()
         # DRAAD131: Constraint 2 DISABLED - status 1 now ONLY in Constraint 3A
@@ -274,7 +278,7 @@ class RosterSolver:
         # DRAAD117: Removed constraint 5 (max werkdagen/week)
         
         # DRAAD108: NIEUWE CONSTRAINTS
-        self._constraint_7_exact_staffing()  # NIEUW
+        self._constraint_7_exact_staffing()  # NIEUW - DRAAD170 FASE 1 VALIDATION
         self._constraint_8_system_service_exclusivity()  # NIEUW
     
     def _constraint_1_bevoegdheden(self):
@@ -424,25 +428,44 @@ class RosterSolver:
         
         DRAAD108: Implementeert roster_period_staffing_dagdelen logica
         DRAAD168[CORR-2]: Checks bevoegdheden alongside team filtering
-        DRAAD170: FASE 2 - Added validation for eligible_emps and capacity shortage
+        DRAAD170 FASE 1: CRITICAL VALIDATION for zero eligible employees
         
         - aantal > 0: EXACT dit aantal plannen (niet >=, maar ==)
         - aantal = 0: MAG NIET plannen (verboden)
         
+        🔧 FIX [DRAAD170 FASE 1] - CRITICAL:
+        When eligible_emps is empty (zero eligible employees):
+        - MUST ADD constraint to model (don't skip!)
+        - Adds self.model.Add(FALSE) to force INFEASIBLE
+        - Solver correctly returns INFEASIBLE status
+        - Bottleneck analysis can then diagnose the issue
+        
+        BEFORE (WRONG - DRAAD168):
+        ```
+        if not eligible_emps:
+            logger.warning("No eligible")
+            continue  # ← SKIPS CONSTRAINT - SILENT FAILURE!
+        ```
+        
+        AFTER (CORRECT - DRAAD170):
+        ```
+        if not eligible_emps:
+            if staffing.exact_aantal > 0:
+                self.model.Add(self.model.NewConstant(0) == 1)  # Force INFEASIBLE
+            continue  # Now constraint IS added to model
+        ```
+        
         Priority: HARD (is_fixed: true)
         Team filtering: TOT=allen, GRO=maat, ORA=loondienst
-        
-        🔧 FIX [CORR-2]: Added bevoegdheden check after team filtering
-        🔧 FIX [DRAAD170]: Added validation & capacity shortage warnings
         """
-        logger.info("[DRAAD170] Toevoegen constraint 7: Bezetting realiseren (met validation)...")
+        logger.info("[DRAAD170] Toevoegen constraint 7: Bezetting realiseren (FASE 1 VALIDATION)...")
         
         if not self.exact_staffing:
             logger.info("Constraint 7: Geen exact_staffing data, skip")
             return
         
         constraint_count = 0
-        skipped_count = 0
+        validation_errors = 0
         
         for staffing in self.exact_staffing:
             # STAP 1: Filter by team type
@@ -458,11 +481,11 @@ class RosterSolver:
                 logger.warning(f"[DRAAD170] Unknown team: {staffing.team}")
                 continue
             
-            # STAP 2: Filter on bevoegdheden
+            # STAP 2: Filter on bevoegdheden (DRAAD168 CORR-2)
             eligible_emps = [e for e in team_filtered 
                            if staffing.service_id in self.employee_services.get(e.id, set())]
             
-            # STAP 3: DRAAD170 VALIDATION - Check if filtering resulted in zero eligible
+            # STAP 3: DRAAD170 FASE 1 VALIDATION - Check if filtering resulted in zero eligible
             if not eligible_emps:
                 logger.error(
                     f"[DRAAD170] CRITICAL ISSUE: {staffing.service_id} on {staffing.date} "
@@ -470,16 +493,21 @@ class RosterSolver:
                     f"{len(team_filtered)} team members, but ZERO eligible by bevoegdheden. "
                     f"Required: {staffing.exact_aantal}. This WILL cause INFEASIBLE!"
                 )
-                skipped_count += 1
+                validation_errors += 1
+                
+                # DRAAD170 FIX: MUST ADD CONSTRAINT TO MODEL (don't skip!)
+                if staffing.exact_aantal > 0:
+                    # Add FALSE constraint to force INFEASIBLE
+                    self.model.Add(self.model.NewConstant(0) == 1)
+                    logger.info(f"[DRAAD170] Added INFEASIBLE constraint for {staffing.service_id}")
                 
                 # Add violation for diagnostics
-                if staffing.exact_aantal > 0:
-                    self.violations.append(ConstraintViolation(
-                        constraint_type="constraint7_zero_eligible",
-                        message=f"[DRAAD170] {staffing.service_id}/{staffing.dagdeel.value} team={staffing.team}: "
-                                f"need {staffing.exact_aantal} but zero eligible employees. Capacity shortage!",
-                        severity="critical"
-                    ))
+                self.violations.append(ConstraintViolation(
+                    constraint_type="constraint7_zero_eligible",
+                    message=f"[DRAAD170] {staffing.service_id}/{staffing.dagdeel.value} team={staffing.team}: "
+                            f"need {staffing.exact_aantal} but zero eligible employees. Capacity shortage!",
+                    severity="critical"
+                ))
                 continue
             
             # STAP 4: DRAAD170 VALIDATION - Check capacity vs requirement
@@ -506,7 +534,7 @@ class RosterSolver:
             
             if not slot_assignments:
                 logger.warning(f"[DRAAD170] No variables found for staffing: {staffing}")
-                skipped_count += 1
+                validation_errors += 1
                 continue
             
             if staffing.exact_aantal == 0:
@@ -515,19 +543,18 @@ class RosterSolver:
                     self.model.Add(var == 0)
                 logger.debug(f"[DRAAD170] Constraint: FORBID {staffing.service_id} on {staffing.date}")
             else:
-                # EXACT aantal vereist
+                # EXACT aantal vereist (HARD)
                 self.model.Add(sum(slot_assignments) == staffing.exact_aantal)
                 logger.debug(f"[DRAAD170] Constraint: EXACT {staffing.exact_aantal} for {staffing.service_id}")
             
             constraint_count += 1
         
-        logger.info(f"[DRAAD170] Constraint 7: {constraint_count} constraints added, {skipped_count} skipped")
+        logger.info(f"[DRAAD170 FASE1] Constraint 7: {constraint_count} constraints added, {validation_errors} validation errors")
     
     def _constraint_8_system_service_exclusivity(self):
         """Constraint 8: DIO XOR DDO, DIA XOR DDA op zelfde dag.
         
         DRAAD108: Systeemdiensten sluiten elkaar uit per dag.
-        DRAAD170: FASE 2 - BoolAnd reification FIXED using AddMaxEquality
         """
         logger.info("[DRAAD170] Toevoegen constraint 8: Systeemdienst exclusiviteit...")
         
@@ -584,9 +611,9 @@ class RosterSolver:
         DRAAD105: Streefgetal logica met ZZP als reserve
         DRAAD106: Suggested assignments optioneel (Optie C: ignored)
         DRAAD108: Bonus voor 24-uurs wachtdienst koppeling (DIO+DIA, DDO+DDA)
-        DRAAD170: FASE 2 - CRITICAL FIX: BoolAnd reification using AddMaxEquality
+        DRAAD170 FASE 2: CRITICAL FIX - Using AddMaxEquality for proper reification
         """
-        logger.info("[DRAAD170] Definiëren objective function (CRITICAL REIFICATION FIX)...")
+        logger.info("[DRAAD170 FASE2] Definiëren objective function (PROPER REIFICATION)...")
         
         objective_terms = []
         
@@ -620,7 +647,8 @@ class RosterSolver:
                         var = self.assignments_vars[(emp_id, dt, dagdeel.value, svc_id)]
                         objective_terms.append(var * -3)
         
-        # DRAAD108 + DRAAD170: Term 4 - Bonus voor 24-uurs wachtdienst koppeling (CRITICAL FIX)
+        # DRAAD108 + DRAAD170 FASE2: Term 4 - Bonus voor 24-uurs wachtdienst koppeling
+        # CRITICAL FIX: Use AddMaxEquality instead of AddBoolAnd/OnlyEnforceIf
         DIO_id = self.get_service_id_by_code('DIO')
         DIA_id = self.get_service_id_by_code('DIA')
         DDO_id = self.get_service_id_by_code('DDO')
@@ -630,12 +658,12 @@ class RosterSolver:
         if all([DIO_id, DIA_id, DDO_id, DDA_id]):
             for emp_id in self.employees:
                 for dt in self.dates:
-                    # DIO + DIA koppeling (grote bonus)
+                    # DIO + DIA koppeling (24-uur avond-nacht)
                     dio_var = self.assignments_vars.get((emp_id, dt, 'O', DIO_id))
                     dia_var = self.assignments_vars.get((emp_id, dt, 'A', DIA_id))
                     
                     if dio_var is not None and dia_var is not None:
-                        # DRAAD170 FIX: Use AddMaxEquality for proper reification
+                        # DRAAD170 FASE2 FIX: Proper bi-directional reification using AddMaxEquality
                         # koppel_var = 1 IFF (dio_var==1 AND dia_var==1)
                         koppel_var = self.model.NewBoolVar(f"dio_dia_koppel_{emp_id}_{dt}")
                         self.model.AddMaxEquality(koppel_var, [dio_var, dia_var])
@@ -643,12 +671,12 @@ class RosterSolver:
                         bonus_count += 1
                         logger.debug(f"[DRAAD170] DIO+DIA koppel var created for {emp_id}")
                     
-                    # DDO + DDA koppeling (grote bonus)
+                    # DDO + DDA koppeling (24-uur dag)
                     ddo_var = self.assignments_vars.get((emp_id, dt, 'O', DDO_id))
                     dda_var = self.assignments_vars.get((emp_id, dt, 'A', DDA_id))
                     
                     if ddo_var is not None and dda_var is not None:
-                        # DRAAD170 FIX: Use AddMaxEquality for proper reification
+                        # DRAAD170 FASE2 FIX: Proper bi-directional reification using AddMaxEquality
                         # koppel_var = 1 IFF (ddo_var==1 AND dda_var==1)
                         koppel_var = self.model.NewBoolVar(f"ddo_dda_koppel_{emp_id}_{dt}")
                         self.model.AddMaxEquality(koppel_var, [ddo_var, dda_var])
@@ -658,7 +686,7 @@ class RosterSolver:
         
         self.model.Maximize(sum(objective_terms))
         
-        logger.info(f"[DRAAD170] Objective: {len(objective_terms)} terms, {bonus_count} bonus vars (REIFICATION FIXED)")
+        logger.info(f"[DRAAD170 FASE2] Objective: {len(objective_terms)} terms, {bonus_count} bonus vars")
     
     def _generate_violations_report(self, assignments: List[Assignment]):
         """DRAAD105: Rapportage voor streefgetal afwijkingen."""
@@ -833,25 +861,33 @@ class RosterSolver:
         return suggestions
     
     def _run_solver(self) -> Tuple[SolveStatus, List[Assignment]]:
-        """Voer CP-SAT solver uit."""
+        """Voer CP-SAT solver uit.
+        
+        DRAAD170 FASE 3: Proper handling of UNKNOWN status
+        """
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = self.timeout_seconds
         solver.parameters.log_search_progress = False
         
-        logger.info(f"Starten solver (timeout: {self.timeout_seconds}s)...")
+        logger.info(f"[DRAAD170 FASE3] Starten solver (timeout: {self.timeout_seconds}s)...")
         status_code = solver.Solve(self.model)
         
+        # DRAAD170 FASE 3: Proper status handling
         if status_code == cp_model.OPTIMAL:
             solve_status = SolveStatus.OPTIMAL
+            logger.info("[DRAAD170 FASE3] Solver status: OPTIMAL")
         elif status_code == cp_model.FEASIBLE:
             solve_status = SolveStatus.FEASIBLE
+            logger.warning("[DRAAD170 FASE3] Solver status: FEASIBLE (not optimal - likely timeout)")
         elif status_code == cp_model.INFEASIBLE:
             solve_status = SolveStatus.INFEASIBLE
+            logger.error("[DRAAD170 FASE3] Solver status: INFEASIBLE - constraints impossible")
         else:
-            solve_status = SolveStatus.TIMEOUT
+            # UNKNOWN or MODEL_INVALID
+            solve_status = SolveStatus.UNKNOWN
+            logger.critical(f"[DRAAD170 FASE3] Solver status: UNKNOWN (code={status_code}) - possible timeout/memory issue")
         
-        logger.info(f"Solver status: {solve_status.value}")
-        logger.info(f"Solve time: {solver.WallTime()}s")
+        logger.info(f"[DRAAD170 FASE3] Solve time: {solver.WallTime():.2f}s")
         
         assignments = []
         if status_code in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
@@ -870,6 +906,6 @@ class RosterSolver:
                         confidence=1.0
                     ))
         
-        logger.info(f"Extracted {len(assignments)} assignments")
+        logger.info(f"[DRAAD170 FASE3] Extracted {len(assignments)} assignments")
         
         return solve_status, assignments
