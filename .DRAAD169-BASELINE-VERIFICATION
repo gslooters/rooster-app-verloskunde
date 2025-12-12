@@ -1,0 +1,77 @@
+🔍 DRAAD 169: BASELINE VERIFICATION REPORT
+
+Date: 2025-12-12 20:32 CET
+Status: INITIATING DEBUGGING
+
+════════════════════════════════════════════════════════════════
+KRITIEK PROBLEEM GEIDENTIFICEERD
+════════════════════════════════════════════════════════════════
+
+✅ GitHub Code Status:
+- solver_engine.py: DRAAD168 CORR-2 PRESENT (employee_services lookup at line ~127)
+- solver_engine.py: DRAAD168 CORR-3 PRESENT (AddBoolAnd at line ~650)
+- solver_engine.py: DRAAD166 Layer 1 exception handlers PRESENT
+- All patches_draad167.py (FASE 1-3) deployed
+
+❌ Runtime Status:
+- Railway container: RUNNING OLD CODE
+- Evidence: Only 6 assignments out of 1470 slots
+- Solver: NIET actief of CRASHEND
+- No solver logs in Railway output
+
+════════════════════════════════════════════════════════════════
+WAT ER MISGAAT
+════════════════════════════════════════════════════════════════
+
+🔴 HYPOTHESIS 1: Container cache niet geleegd
+- GitHub code IS gecorrect
+- Docker image IS oude versie
+- Railway build NIET getriggerd door cachebust
+
+🔴 HYPOTHESIS 2: Solver wordt NIET aangeroepen
+- Pre-planning (DRAAD155) werkt ✓ (1470 slots gemaakt)
+- ORT.Solve() call MIST of FAALT SILENTLY
+- Endpoint /feasible-summary geeft 404
+- Betekent: solve() nooit succesvol afgerond
+
+🔴 HYPOTHESIS 3: Model is ONGELDIG
+- Constraints conflicteren nog steeds (DRAAD168 CORR-2 niet werkend)
+- Solver status = INFEASIBLE direct
+- Keine bottleneck analyse output
+- No error handling feedback
+
+════════════════════════════════════════════════════════════════
+FASEN VOOR FIXES
+════════════════════════════════════════════════════════════════
+
+FASE A: CONTAINER REBUILD (URGENT)
+- ✅ New cache bust file met Date.now()
+- ✅ Update alle bestaande cache busters
+- ✅ Trigger Railway build
+- ✅ Wait for container rebuild
+
+FASE B: ADD DIAGNOSTIC LOGGING (URGENT)
+- ✅ Log entry point in main.py
+- ✅ Log when solve() is called
+- ✅ Log solver status + time
+- ✅ Log if endpoint /feasible-summary called
+
+FASE C: VERIFY BASELINE (HIGH)
+- ✅ Test simple roster (1 week, 3 employees)
+- ✅ Verify solver logs appear
+- ✅ Verify status 1 assignments
+- ✅ Check feasible-summary endpoint
+
+FASE D: CONSTRAINT DEBUG (HIGH)
+- ✅ Add per-constraint logging
+- ✅ Verify bevoegdheden filter (CORR-2)
+- ✅ Verify DIO+DIA bonus (CORR-3)
+- ✅ Check conflict detection
+
+════════════════════════════════════════════════════════════════
+EXECUTION PLAN
+════════════════════════════════════════════════════════════════
+
+Now executing FASE A + B immediately
+Then await container rebuild
+Then run FASE C test
