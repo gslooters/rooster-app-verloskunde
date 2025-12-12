@@ -1,0 +1,48 @@
+# Railway Trigger - DRAAD170 FASE 1-3 Critical Solver Fixes
+# Timestamp: 1734103977547
+# Random ID: 7d4a9e2c-1b3f-4f8d-a2e9-8c5d3e1f2a4b
+
+## Trigger Details
+
+**Service**: Solver (rooster-app-verloskunde)
+**Environment**: Production
+**Branch**: main
+**Commit**: a01a6c3117cdc36a33785e7ef2b5ffabfe0ec50f
+
+## Changes to Deploy
+
+1. solver/solver_engine.py
+   - FASE 1: Constraint 7 validation with zero eligible detection
+   - FASE 2: DIO+DIA reification using AddMaxEquality
+   - FASE 3: Proper solver status handling (UNKNOWN detection)
+
+2. solver/.cache-bust-draad170-fase123
+   - New cache busting file for deployment tracking
+
+3. solver/DRAAD170-FASE123-DEPLOYMENT-SUMMARY.md
+   - Comprehensive deployment documentation
+
+## Expected Outcome
+
+- ✅ Solver correctly detects impossible constraints
+- ✅ INFEASIBLE rosters generate bottleneck reports
+- ✅ DIO+DIA couplings properly weighted in objective
+- ✅ Timeout vs INFEASIBLE properly distinguished
+- ✅ No performance regression
+
+## Rollback Option
+
+If critical issue: `git revert a01a6c31`
+
+## Monitoring
+
+Watch for:
+- Solver exception logs
+- Bottleneck report accuracy
+- DIO+DIA coupling success rate
+- Performance metrics (solve time)
+
+---
+
+# DO NOT EDIT BELOW THIS LINE - Auto-generated
+Deployment trigger for Railway CI/CD pipeline.
