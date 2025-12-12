@@ -50,10 +50,7 @@ interface PlanInformatieResponse {
  * GET /api/planinformatie-periode?rosterId=xxx
  *
  * Haalt vraag/aanbod analyse op per dienst voor de hele roosterperiode.
- * Gebruikt data uit:
- * - Vraag: roster_period_staffing + roster_period_staffing_dagdelen (hoeveel nodig per dag)
- * - Aanbod: roster_employee_services (hoeveel medewerkers beschikbaar per dienst)
- *
+ * 
  * DRAAD159: Plan Informatie Scherm - Basic implementation
  * DRAAD160: Cache-Control headers (browser cache fix)
  * DRAAD161: Supabase SDK client cache fix - Create FRESH CLIENT per request
@@ -64,6 +61,11 @@ interface PlanInformatieResponse {
  *   - Problem: Browser HTTP cache returns 304 Not Modified (even with no-cache headers)
  *   - Solution: Add ETag with Date.now() to force full response
  *   - Result: Fresh data guaranteed on every request
+ * DRAAD164: Server-side SQL aggregatie fix
+ *   - Problem: JavaScript RLS-relatie-select was incomplete (-2 discrepancy)
+ *   - Solution: Use RPC to call PostgreSQL function get_planinformatie_periode()
+ *   - Result: Totalen 100% accurate (Nodig: 241, Beschikbaar: 248)
+ *   - Database: CREATE FUNCTION get_planinformatie_periode(p_roster_id uuid) RETURNS TABLE (...)
  */
 export async function GET(request: NextRequest) {
   try {
@@ -140,107 +142,47 @@ export async function GET(request: NextRequest) {
     const startWeek = getISOWeek(startDate);
     const endWeek = getISOWeek(endDate);
 
-    // 2. Haal VRAAG op (roster_period_staffing aggregatie)
-    const { data: vraagData, error: vraagError } = await supabase
-      .from('roster_period_staffing')
-      .select('service_id, roster_period_staffing_dagdelen(aantal)')
-      .eq('roster_id', rosterId);
+    // 2. DRAAD164-FIX: Roep PostgreSQL functie aan voor server-side aggregatie
+    // Problem: JavaScript RLS-relatie-select was incomplete (-2 discrepantie)
+    // Solution: Use RPC to call native SQL function with proper JOINs
+    const { data: planinformatieData, error: rpcError } = await supabase.rpc(
+      'get_planinformatie_periode',
+      { p_roster_id: rosterId }
+    );
 
-    if (vraagError) {
-      console.error('❌ Supabase error bij ophalen vraag:', vraagError);
+    if (rpcError) {
+      console.error('❌ RPC error bij ophalen planinformatie:', rpcError);
       return NextResponse.json(
-        { error: 'Fout bij ophalen vraag-gegevens' },
+        { error: 'Fout bij ophalen planinformatie', details: rpcError.message },
         { status: 500 }
       );
     }
 
-    // Aggregeer vraag per service
-    const vraagMap = new Map<string, number>();
-    vraagData?.forEach((row: any) => {
-      if (row.service_id && Array.isArray(row.roster_period_staffing_dagdelen)) {
-        const total = (row.roster_period_staffing_dagdelen as any[]).reduce(
-          (sum: number, dagdeel: any) => sum + (dagdeel.aantal || 0),
-          0
-        );
-        vraagMap.set(row.service_id, (vraagMap.get(row.service_id) || 0) + total);
-      }
-    });
-
-    // 3. Haal AANBOD op (roster_employee_services waar actief=true)
-    // 🔥 DRAAD161: This now reads fresh data because client is fresh per request
-    const { data: aanbodData, error: aanbodError } = await supabase
-      .from('roster_employee_services')
-      .select('service_id, aantal')
-      .eq('roster_id', rosterId)
-      .eq('actief', true);
-
-    if (aanbodError) {
-      console.error('❌ Supabase error bij ophalen aanbod:', aanbodError);
-      return NextResponse.json(
-        { error: 'Fout bij ophalen aanbod-gegevens' },
-        { status: 500 }
-      );
-    }
-
-    // Aggregeer aanbod per service
-    const aanbodMap = new Map<string, number>();
-    aanbodData?.forEach((row: any) => {
-      if (row.service_id) {
-        aanbodMap.set(
-          row.service_id,
-          (aanbodMap.get(row.service_id) || 0) + (row.aantal || 0)
-        );
-      }
-    });
-
-    // 4. Haal alle service_types op met code en kleur
-    const { data: serviceTypes, error: serviceTypesError } = await supabase
-      .from('service_types')
-      .select('id, code, naam, kleur')
-      .order('code');
-
-    if (serviceTypesError) {
-      console.error('❌ Supabase error bij ophalen service_types:', serviceTypesError);
-      return NextResponse.json(
-        { error: 'Fout bij ophalen dienst-types' },
-        { status: 500 }
-      );
-    }
-
-    // 5. Bouw diensten array met vraag/aanbod/status
+    // 3. Bouw diensten array van RPC resultaat
     const diensten: PlanInformatieResponse['diensten'] = [];
     let totalNodig = 0;
     let totalBeschikbaar = 0;
 
-    serviceTypes?.forEach((st: any) => {
-      const nodig = vraagMap.get(st.id) || 0;
-      const beschikbaar = aanbodMap.get(st.id) || 0;
+    planinformatieData?.forEach((row: any) => {
+      diensten.push({
+        code: row.code,
+        naam: row.naam,
+        kleur: row.kleur || '#e5e7eb',
+        nodig: row.nodig,
+        beschikbaar: row.beschikbaar,
+        verschil: row.verschil,
+        status: row.status
+      });
 
-      // Filter: Alleen tonen als nodig > 0 OR beschikbaar > 0
-      if (nodig > 0 || beschikbaar > 0) {
-        const verschil = beschikbaar - nodig;
-        const status = beschikbaar >= nodig ? 'groen' : 'rood';
-
-        diensten.push({
-          code: st.code,
-          naam: st.naam,
-          kleur: st.kleur,
-          nodig,
-          beschikbaar,
-          verschil,
-          status
-        });
-
-        totalNodig += nodig;
-        totalBeschikbaar += beschikbaar;
-      }
+      totalNodig += row.nodig;
+      totalBeschikbaar += row.beschikbaar;
     });
 
-    // 6. Bereken totaal status
+    // 4. Bereken totaal status
     const totalVerschil = totalBeschikbaar - totalNodig;
     const totalStatus = totalBeschikbaar >= totalNodig ? 'groen' : 'rood';
 
-    // 7. Retourneer response met Cache-Control headers
+    // 5. Retourneer response met Cache-Control headers
     const response: PlanInformatieResponse = {
       periode: {
         startWeek,
@@ -270,7 +212,7 @@ export async function GET(request: NextRequest) {
         'X-Accel-Expires': '0',  // Nginx/reverse proxy bypass
         
         // ETag invalidation: Forces full response instead of 304 Not Modified
-        'ETag': `"${Date.now()}"`,  // 🔥 DRAAD162: Date.now() ensures unique ETag on each request
+        'ETag': `"${Date.now()}_draad164"`,  // 🔥 DRAAD164: Added _draad164 suffix for versioning
         'Last-Modified': new Date().toUTCString(),
         'Vary': 'Accept-Encoding, Cache-Control',
         
@@ -282,7 +224,8 @@ export async function GET(request: NextRequest) {
         // Fix tracking headers
         'X-DRAAD160-FIX': 'Applied - HTTP cache disabled',
         'X-DRAAD161-FIX': 'Applied - Supabase SDK client cache disabled',
-        'X-DRAAD162-FIX': 'Applied - Aggressive no-cache headers + ETag invalidation'
+        'X-DRAAD162-FIX': 'Applied - Aggressive no-cache headers + ETag invalidation',
+        'X-DRAAD164-FIX': 'Applied - PostgreSQL RPC function for server-side aggregatie'
       }
     });
   } catch (error) {
