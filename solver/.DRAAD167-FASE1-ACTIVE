@@ -1,0 +1,15 @@
+[DRAAD167-FASE1] IMPLEMENTATION ACTIVE
+
+Date: 2025-12-12T18:35:00Z
+Status: EXECUTING
+Commit: fc47a287d2854a363a324bc0b6ec77e7d5a7271e
+
+FIX 1: Constraint 7 softening (80-110% tolerance)
+FIX 2: Pre-solve validation (validate_feasibility_beforehand)
+
+Impact:
+- Prevents INFEASIBLE collapse from minor capacity gaps
+- Detects obvious conflicts BEFORE solver runs
+- Saves compute time and provides better diagnostics
+
+Deployment: Auto to Railway on push
