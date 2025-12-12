@@ -1,0 +1,304 @@
+================================================================================
+                    DRAAD167-FASE2 QUICK START GUIDE
+                   Better Diagnostics & Error Messages
+                              2025-12-12
+================================================================================
+
+STATUS: Ready for implementation
+TARGET: Add bottleneck detection + formatted error messages
+DEPENDENCY: FASE 1 (constraint 7 softening + pre-solve validation) must be active
+
+================================================================================
+                            WHAT IS FASE 2?
+================================================================================
+
+FASE 2 builds on FASE 1 by adding BETTER DIAGNOSTICS:
+
+FIX 3: Bottleneck Detection
+  - Analyzes available capacity per dagdeel (ochtend/middag/avond)
+  - Calculates capacity_ratio = available / required
+  - Identifies TIGHT (0.6-0.8) and CRITICAL (<0.6) situations
+  - Provides team-level breakdown (MAAT vs LOONDIENST)
+  - Stores results in solver_metadata for frontendanalyse
+
+FIX 4: Better Error Messages
+  - Formats constraint violations with context-specific suggestions
+  - Adds actionable recommendations per violation type
+  - Logs solver statistics (assignments, solve time, violations)
+  - Improves debugging experience
+
+RESULT:
+  ✅ Faster problem identification
+  ✅ Clearer error messages
+  ✅ Diagnostics available for UI display
+  ✅ Better logging for troubleshooting
+
+================================================================================
+                        IMPLEMENTATION STEPS
+================================================================================
+
+STEP 1: Read the patches file
+   Location: solver/solver_patches_draad167_fase2.py
+   Contains:
+   - DIAGNOSTIC_LOGGER_CODE - FIX 3 implementation
+   - BETTER_ERRORS_CODE - FIX 4 implementation
+   - SOLVE_DIAGNOSTICS_UPDATE - Integration point
+   - SOLVEREQUEST_UPDATE - Response formatting
+
+STEP 2: Add diagnostic methods to solver_engine.py
+   Location: End of RosterSolver class (before closing brace)
+   
+   Add these methods:
+   a) _diagnose_bottlenecks()
+      - Analyzes capacity per dagdeel
+      - Returns diagnostics dict
+   
+   b) _iter_dates() helper
+      - Iterates date range
+      - Used by diagnostics
+   
+   Source code: Copy from solver_patches_draad167_fase2.py → DIAGNOSTIC_LOGGER_CODE
+
+STEP 3: Add error formatting methods to solver_engine.py
+   Location: End of RosterSolver class
+   
+   Add these methods:
+   a) _format_violation_details(violation)
+      - Formats violations with suggestions
+      - Returns human-readable message
+   
+   b) _log_solver_stats(response)
+      - Logs solver statistics
+      - Logs violations summary
+   
+   Source code: Copy from solver_patches_draad167_fase2.py → BETTER_ERRORS_CODE
+
+STEP 4: Update solve() method
+   Location: In solve(), after pre-solve validation (FASE 1)
+   
+   Add diagnostics call:
+   ```python
+   # DRAAD167 FIX 3: Run diagnostics
+   logger.info("[DRAAD167-FASE2] Stap 1: Running diagnostics...")
+   try:
+       diagnostics = self._diagnose_bottlenecks()
+       solver_metadata["diagnostics"] = diagnostics
+   except Exception as e:
+       logger.warning(f"[DRAAD167-FASE2] Diagnostics failed: {e}")
+   ```
+   
+   This runs AFTER the "Stap 0: Pre-solve feasibility validation..." line from FASE 1
+
+STEP 5: Update solve() return statement
+   Location: Before returning SolveResponse
+   
+   Add error formatting:
+   ```python
+   # DRAAD167 FIX 4: Format violations with better details
+   if response.violations:
+       logger.error("[DRAAD167-FASE2] Formatting violation details...")
+       for violation in response.violations:
+           detail_msg = self._format_violation_details(violation)
+           logger.error(detail_msg)
+   
+   # Log solver statistics
+   self._log_solver_stats(response)
+   ```
+
+STEP 6: Add cache bust files
+   Create two new files:
+   
+   a) .DRAAD167-FASE2-ACTIVE
+      Content:
+      ```
+      FASE 2 ACTIVE: 2025-12-12T181000Z
+      FIX 3: Bottleneck diagnostics
+      FIX 4: Better error messages
+      Timestamp: {Date.now()}
+      ```
+      
+   b) .railway-trigger-fase2
+      Content:
+      ```
+      Railway trigger: {random number}
+      Date: 2025-12-12
+      Reason: FASE 2 deployment
+      ```
+
+STEP 7: Verify syntax
+   Run: python -m py_compile solver/solver_engine.py
+   Should complete without errors
+
+STEP 8: Commit and push
+   ```bash
+   git add solver/solver_engine.py
+   git add solver/.DRAAD167-FASE2-ACTIVE
+   git add solver/.railway-trigger-fase2
+   git commit -m "[DRAAD167-FASE2] Apply FIX 3+4: Better diagnostics & error messages"
+   git push origin main
+   ```
+   
+   Railway auto-deploys (takes 2-5 minutes)
+
+STEP 9: Verify deployment
+   Check Railway logs for:
+   - [DRAAD167-FASE2] markers
+   - Diagnostics output
+   - Violation formatting messages
+   
+   Watch: https://railway.com (your project dashboard)
+
+================================================================================
+                            SUCCESS CRITERIA
+================================================================================
+
+MUST HAVE:
+  ✓ No Python syntax errors (_compile works)
+  ✓ _diagnose_bottlenecks() runs without crashing
+  ✓ Diagnostics appear in solver_metadata output
+  ✓ Violations are formatted with suggestions
+  ✓ [DRAAD167-FASE2] log markers appear
+  ✓ Railway deployment succeeds
+
+SHOULD HAVE:
+  ✓ Capacity ratio per dagdeel in diagnostics
+  ✓ Team analysis (MAAT / LOONDIENST)
+  ✓ Status field (OK / TIGHT / CRITICAL) per dagdeel
+  ✓ Violation suggestions in error messages
+  ✓ Solver statistics in logs
+
+OPTIONAL:
+  - Display diagnostics in UI (capacity status)
+  - Use suggestion text in error dialogs
+  - Track historical diagnostics trends
+
+================================================================================
+                        TESTING THE CHANGES
+================================================================================
+
+AFTER DEPLOYMENT, test by:
+
+1. Make a roster request with some constraints
+2. Check Railway logs for [DRAAD167-FASE2] markers
+3. Look for diagnostics output with capacity_ratio values
+4. If there are violations, verify formatted messages appear
+5. Verify solver statistics are logged
+
+QUICK TEST SCENARIO:
+  - Small roster (1-2 weeks)
+  - 5-10 employees
+  - Tight constraints (high exact_staffing counts)
+  - Should trigger diagnostics and show capacity_ratio < 1.0
+
+EXPECTED LOG OUTPUT:
+  ```
+  [DRAAD167-FASE2] Stap 1: Running diagnostics...
+  [DRAAD167-FASE2] FIX 3: Running bottleneck diagnostics...
+  [DRAAD167-FASE2] Diagnostics: {'timestamp': '...', 'by_dagdeel': {...}}
+  [DRAAD167-FASE2] SOLVER STATISTICS:
+    Status: SOLVED
+    Solve time: X.XXs
+    Assignments: N
+    Violations: 0
+  ```
+
+================================================================================
+                            ROLLBACK PLAN
+================================================================================
+
+If something goes wrong:
+
+1. GitHub UI → Navigate to solver/solver_engine.py
+2. Click commit history
+3. Find "[DRAAD167-FASE2] Apply FIX 3+4..." commit
+4. Click "Revert this commit"
+5. Confirm revert
+6. Railway auto-deploys reverted version (2-5 minutes)
+
+No manual steps needed - Git + Railway handle it automatically
+
+================================================================================
+                        FILES MODIFIED
+================================================================================
+
+New files created:
+  ✓ solver/solver_patches_draad167_fase2.py - FASE 2 patch reference
+  ✓ .DRAAD167-FASE2-ACTIVE - Cache bust marker
+  ✓ .railway-trigger-fase2 - Railway deployment trigger
+
+Files to modify:
+  ✓ solver/solver_engine.py - Add FIX 3 + FIX 4 methods
+
+================================================================================
+                          QUICK CHECKLIST
+================================================================================
+
+ BEFORE STARTING:
+  [ ] Read this file completely
+  [ ] Review solver_patches_draad167_fase2.py
+  [ ] Verify FASE 1 is already active in code
+  [ ] Have editor open with solver_engine.py
+
+ IMPLEMENTATION:
+  [ ] Add _diagnose_bottlenecks() method
+  [ ] Add _iter_dates() helper
+  [ ] Add _format_violation_details() method
+  [ ] Add _log_solver_stats() method
+  [ ] Update solve() with diagnostics call
+  [ ] Update solve() return with error formatting
+  [ ] Create .DRAAD167-FASE2-ACTIVE file
+  [ ] Create .railway-trigger-fase2 file
+  [ ] Run python -m py_compile (no errors)
+
+ DEPLOYMENT:
+  [ ] git add solver/solver_engine.py
+  [ ] git add .DRAAD167-FASE2-ACTIVE
+  [ ] git add .railway-trigger-fase2
+  [ ] git commit -m "[DRAAD167-FASE2] Apply FIX 3+4: ..."
+  [ ] git push origin main
+  [ ] Monitor Railway deployment
+
+ VERIFICATION:
+  [ ] Railway deployment succeeds
+  [ ] No error messages in logs
+  [ ] [DRAAD167-FASE2] markers in logs
+  [ ] Test with small roster request
+  [ ] Diagnostics output appears
+  [ ] Violations formatted correctly
+
+================================================================================
+                        NEXT STEPS
+================================================================================
+
+After FASE 2 is live:
+
+1. Monitor production for 24-48 hours
+2. Collect diagnostic data from real rosters
+3. Identify remaining bottlenecks
+4. Plan FASE 3 improvements based on actual patterns
+
+FASE 3 CANDIDATES:
+  - Adaptive constraint relaxation based on diagnostics
+  - Machine learning for capacity prediction
+  - UI integration for diagnostics display
+  - Performance optimizations based on solver stats
+
+================================================================================
+                        QUESTIONS?
+================================================================================
+
+Refer to:
+  - solver_patches_draad167_fase2.py - Code reference
+  - DRAAD167-FASE1-README.md - FASE 1 background
+  - Previous commits - Implementation history
+  - Railway logs - Deployment status
+
+================================================================================
+                          READY TO GO!
+================================================================================
+
+Follows the steps above to implement FASE 2.
+Estimated time: 30-45 minutes
+Deployment time: 2-5 minutes
+
+Good luck!
