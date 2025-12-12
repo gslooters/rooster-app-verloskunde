@@ -1,15 +1,16 @@
 {
-  "timestamp": 1765549237000,
-  "version": "draad165-optie1-001",
-  "randomTrigger": 847392,
+  "timestamp": 1765549448000,
+  "version": "draad165-corrected-001",
+  "randomTrigger": 932847,
   "draad160": "HTTP cache disabled",
   "draad161": "Fresh Supabase client per request",
   "draad162": "ETag invalidation with Date.now()",
   "draad164": "Inline Supabase queries with fallback aggregation",
-  "draad165": "OPTIE 1: SDK cache disabling with X-Client-Cache-Buster header",
-  "draad165-status": "Active - Every request forces fresh database read",
-  "lastUpdated": "2025-12-12T14:07:17Z",
+  "draad165-corrected": "SDK cache disabling - FIXED (removed broken custom headers)",
+  "draad165-status": "Active - Fresh database read guaranteed",
+  "draad165-method": "HTTP cache headers + fresh client (custom X-* headers REMOVED)",
+  "lastUpdated": "2025-12-12T14:24:08Z",
   "sdkCacheBustingActive": true,
-  "expectedDataFreshness": "<2 seconds (was 30+ seconds)",
-  "notes": "DRAAD165 OPTIE 1: Supabase SDK session-level caching disabled via X-Client-Cache-Buster header. This header creates unique token per request, forcing SDK to skip internal query cache. HTTP headers + ETag + SDK cache disabling = guaranteed fresh data."
+  "expectedDataFreshness": "<2 seconds",
+  "notes": "DRAAD165 CORRECTED: Removed custom X-Client-Cache-Buster and X-Request-Timestamp headers that were FORBIDDEN by Supabase SDK (caused TypeError: fetch failed). Solution: Fresh client per request + standard HTTP cache headers = guaranteed fresh data without breaking SDK."
 }
