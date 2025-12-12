@@ -1,0 +1,26 @@
+# DRAAD170 FASE 1-3 CACHE BUST - DEPLOYMENT COMPLETE
+# Date: 2025-12-12T21:52:00Z
+# Timestamp: 1734103920547
+
+## FASE 1: Constraint 7 Validation
+- Zero eligible employees detection
+- Force INFEASIBLE when capacity shortage (instead of skipping)
+- Proper error reporting in violations
+
+## FASE 2: DIO+DIA Reification Fix
+- Changed from AddBoolAnd (incorrect) to AddMaxEquality (correct)
+- Proper bi-directional reification: koppel_var=1 IFF (var1==1 AND var2==1)
+- Fixed both objective function terms
+
+## FASE 3: Solver Status Handling
+- Proper UNKNOWN status detection (not just FEASIBLE/INFEASIBLE/OPTIMAL)
+- Timeout handling improved
+- Better logging for diagnostic purposes
+
+## Deployment Details
+- File: solver/solver_engine.py
+- Lines modified: All constraint methods
+- Breaking changes: NONE (backward compatible)
+- Testing: Deploy to Railway immediately
+
+Trigger: Railway auto-deploy on main branch
