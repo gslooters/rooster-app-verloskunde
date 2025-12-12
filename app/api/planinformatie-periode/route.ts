@@ -56,14 +56,12 @@ interface PlanInformatieResponse {
  * DRAAD161: Supabase SDK client cache fix - Create FRESH CLIENT per request
  * DRAAD162: Aggressive cache-busting - ETag invalidation + comprehensive headers
  * DRAAD164: Server-side SQL aggregatie fix (FALLBACK - inline queries)
- * DRAAD165: SDK cache disabling (CORRECTED)
- *   - Problem: Custom X-* headers are FORBIDDEN by Supabase SDK (fetch failed)
- *   - Root cause: Supabase SDK validates headers and rejects custom ones
- *   - Solution: Use query parameter cache-busting instead of headers
- *   - Implementation: Append _cache_bust={timestamp} to every query
- *   - Result: SDK sees unique query every time = always fresh data
- *   - Performance: Same ~50-100ms, but GUARANTEED fresh
- *   - Data freshness: <2 seconds (was 30+ seconds before any fix)
+ * DRAAD165: SDK cache disabling (CORRECTED) - Fresh client + HTTP headers
+ * DRAAD166: FIX aggregation per item - Debug SWZ mismatch
+ *   - Problem: TOTAL correct (240/248), but SWZ item wrong (2 instead of 5)
+ *   - Root cause: Individual item aggregation broken
+ *   - Solution: Debug vraagMap & aanbodMap for each service
+ *   - Status: Logging enabled for SWZ service ID
  */
 export async function GET(request: NextRequest) {
   try {
@@ -87,38 +85,28 @@ export async function GET(request: NextRequest) {
     }
 
     // 🔥 DRAAD165-FIX (CORRECTED): Create Supabase client WITHOUT custom headers
-    // ═══════════════════════════════════════════════════════════════════
-    // Problem: Custom X-* headers REJECTED by Supabase SDK
-    // Correct approach: Use query parameter cache-busting
-    // SDK will see unique query signature every time = fresh data always
-    // ═══════════════════════════════════════════════════════════════════
-    
     const cacheBustTimestamp = Date.now();
     const cacheBustRandom = Math.random().toString(36).substr(2, 9);
     
     const supabase = createClient(supabaseUrl, supabaseKey, {
       auth: {
-        persistSession: false,  // No session persistence
-        autoRefreshToken: false  // No auto-refresh
+        persistSession: false,
+        autoRefreshToken: false
       },
       global: {
         headers: {
-          // HTTP-level cache control ONLY (these are standard and allowed)
           'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0, private, no-transform',
           'Pragma': 'no-cache, no-store',
           'Expires': '0',
           'Surrogate-Control': 'no-store',
           'X-Accel-Expires': '0'
-          // 🔥 REMOVED: Custom X-* headers that broke fetch()
-          // These were rejected by Supabase SDK causing TypeError: fetch failed
         }
       }
     });
 
-    console.log(`🔥 DRAAD165: Cache bust via query params - timestamp: ${cacheBustTimestamp}, random: ${cacheBustRandom}`);
+    console.log(`🔥 DRAAD166: Cache bust - ts: ${cacheBustTimestamp}, rand: ${cacheBustRandom}`);
 
-    // 1. Haal roster info op voor periode
-    // Add _cache_bust parameter to force unique query signature
+    // 1. Haal roster info op
     const { data: roster, error: rosterError } = await supabase
       .from('roosters')
       .select('id, start_date, end_date, status')
@@ -140,7 +128,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Bereken weeknummers uit datums (ISO week berekening)
+    // Bereken weeknummers
     function getISOWeek(date: Date): number {
       const target = new Date(date.valueOf());
       const dayNr = (date.getDay() + 6) % 7;
@@ -155,16 +143,15 @@ export async function GET(request: NextRequest) {
     const startWeek = getISOWeek(startDate);
     const endWeek = getISOWeek(endDate);
 
-    // 2. DRAAD164-HOTFIX + DRAAD165-FIX: Inline queries with proper cache-busting
-    console.log('📊 DRAAD165 (CORRECTED): Using INLINE queries with query parameter cache-busting');
+    console.log('📊 DRAAD166: Using INLINE queries with detailed aggregation debugging');
 
-    // Step A: Haal VRAAG op (hoeveel nodig per service)
-    // 🔥 Cache-busting via unique query signature, not headers
+    // 🔥 DRAAD166: Step A - Haal VRAAG op met detailed logging
     const { data: vraagData, error: vraagError } = await supabase
       .from('roster_period_staffing')
       .select(`
+        id,
         service_id,
-        roster_period_staffing_dagdelen(aantal)
+        roster_period_staffing_dagdelen(id, aantal)
       `)
       .eq('roster_id', rosterId);
 
@@ -176,23 +163,32 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    console.log(`📊 DRAAD166: vraagData - ${vraagData?.length || 0} parent records`);
+
     // Aggregeer vraag per service
     const vraagMap = new Map<string, number>();
     vraagData?.forEach((row: any) => {
       if (row.service_id && Array.isArray(row.roster_period_staffing_dagdelen)) {
+        const dagdelenCount = row.roster_period_staffing_dagdelen.length;
         const total = (row.roster_period_staffing_dagdelen as any[]).reduce(
           (sum: number, dagdeel: any) => sum + (dagdeel.aantal || 0),
           0
         );
         vraagMap.set(row.service_id, (vraagMap.get(row.service_id) || 0) + total);
+        
+        // 🔥 DRAAD166: Log SWZ specifically
+        if (row.service_id === '6eea2bf8-e2b8-468a-918f-ae96883f7ebd') { // SWZ UUID
+          console.log(`🔍 DRAAD166: SWZ parent=${row.id}, dagdelen=${dagdelenCount}, total=${total}, vraagMap now=${vraagMap.get(row.service_id)}`);
+        }
       }
     });
 
-    // Step B: Haal AANBOD op (hoeveel beschikbaar per service)
-    // 🔥 Fresh query per request due to new client instance
+    console.log(`📊 DRAAD166: vraagMap size=${vraagMap.size}, SWZ value=${vraagMap.get('6eea2bf8-e2b8-468a-918f-ae96883f7ebd')}`);
+
+    // 🔥 DRAAD166: Step B - Haal AANBOD op
     const { data: aanbodData, error: aanbodError } = await supabase
       .from('roster_employee_services')
-      .select('service_id, aantal')
+      .select('id, service_id, aantal, actief')
       .eq('roster_id', rosterId)
       .eq('actief', true);
 
@@ -204,6 +200,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    console.log(`📊 DRAAD166: aanbodData - ${aanbodData?.length || 0} records (actief=true)`);
+
     // Aggregeer aanbod per service
     const aanbodMap = new Map<string, number>();
     aanbodData?.forEach((row: any) => {
@@ -212,11 +210,17 @@ export async function GET(request: NextRequest) {
           row.service_id,
           (aanbodMap.get(row.service_id) || 0) + (row.aantal || 0)
         );
+        
+        // 🔥 DRAAD166: Log SWZ specifically
+        if (row.service_id === '6eea2bf8-e2b8-468a-918f-ae96883f7ebd') { // SWZ UUID
+          console.log(`🔍 DRAAD166: SWZ aanbod record - aantal=${row.aantal}, aanbodMap now=${aanbodMap.get(row.service_id)}`);
+        }
       }
     });
 
-    // Step C: Haal alle service_types op
-    // 🔥 Fresh query per request
+    console.log(`📊 DRAAD166: aanbodMap size=${aanbodMap.size}, SWZ value=${aanbodMap.get('6eea2bf8-e2b8-468a-918f-ae96883f7ebd')}`);
+
+    // 🔥 DRAAD166: Step C - Haal service_types op
     const { data: serviceTypes, error: serviceTypesError } = await supabase
       .from('service_types')
       .select('id, code, naam, kleur')
@@ -230,7 +234,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Step D: Bouw diensten array met vraag/aanbod/status
+    // 🔥 DRAAD166: Find SWZ service type
+    const swzServiceType = serviceTypes?.find((st: any) => st.code === 'SWZ');
+    console.log(`🔍 DRAAD166: SWZ service_type found: id=${swzServiceType?.id}, code=${swzServiceType?.code}`);
+
+    // 🔥 DRAAD166: Step D - Build diensten array with debugging
     const diensten: PlanInformatieResponse['diensten'] = [];
     let totalNodig = 0;
     let totalBeschikbaar = 0;
@@ -238,6 +246,13 @@ export async function GET(request: NextRequest) {
     serviceTypes?.forEach((st: any) => {
       const nodig = vraagMap.get(st.id) || 0;
       const beschikbaar = aanbodMap.get(st.id) || 0;
+
+      // 🔥 DRAAD166: Debug SWZ
+      if (st.code === 'SWZ') {
+        console.log(`🔍 DRAAD166: SWZ final values - nodig=${nodig}, beschikbaar=${beschikbaar}`);
+        console.log(`🔍 DRAAD166: SWZ vraagMap.get(${st.id})=${vraagMap.get(st.id)}`);
+        console.log(`🔍 DRAAD166: SWZ aanbodMap.get(${st.id})=${aanbodMap.get(st.id)}`);
+      }
 
       if (nodig > 0 || beschikbaar > 0) {
         const verschil = beschikbaar - nodig;
@@ -262,7 +277,13 @@ export async function GET(request: NextRequest) {
     const totalVerschil = totalBeschikbaar - totalNodig;
     const totalStatus = totalBeschikbaar >= totalNodig ? 'groen' : 'rood';
 
-    console.log(`✅ DRAAD165 (CORRECTED): Aggregatie compleet - Nodig: ${totalNodig}, Beschikbaar: ${totalBeschikbaar}`);
+    console.log(`✅ DRAAD166: Aggregatie compleet - Nodig: ${totalNodig}, Beschikbaar: ${totalBeschikbaar}`);
+    console.log(`📊 DRAAD166: Diensten count: ${diensten.length}`);
+    diensten.forEach(d => {
+      if (d.code === 'SWZ') {
+        console.log(`🔍 DRAAD166: Final SWZ in response - ${d.nodig}/${d.beschikbaar}`);
+      }
+    });
 
     // Step F: Retourneer response
     const response: PlanInformatieResponse = {
@@ -281,35 +302,21 @@ export async function GET(request: NextRequest) {
       }
     };
 
-    // 🔥 DRAAD165-FIX (CORRECTED): Response headers WITHOUT custom X-* headers
-    // Using standard HTTP cache control + unique ETag per request
     return NextResponse.json(response, {
       headers: {
-        // HTTP-level cache control (standard headers, always allowed)
         'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0, private, no-transform',
         'Pragma': 'no-cache, no-store',
         'Expires': '0',
         'Surrogate-Control': 'no-store',
         'X-Accel-Expires': '0',
-        
-        // ETag with cache-bust timestamp (unique per request)
         'ETag': `"${cacheBustTimestamp}_${cacheBustRandom}"`,
         'Last-Modified': new Date().toUTCString(),
         'Vary': 'Accept-Encoding, Cache-Control',
-        
-        // CDN bypass
         'X-Cache': 'BYPASS',
         'X-Cache-Status': 'BYPASS',
         'X-Content-Type-Options': 'nosniff',
-        
-        // Fix tracking headers
-        'X-DRAAD160-FIX': 'Applied - HTTP cache disabled',
-        'X-DRAAD161-FIX': 'Applied - Fresh Supabase client per request',
-        'X-DRAAD162-FIX': 'Applied - Aggressive no-cache headers + ETag invalidation',
-        'X-DRAAD164-FIX': 'Applied - Inline Supabase queries (RPC fallback)',
-        'X-DRAAD165-FIX': 'Applied (CORRECTED) - Query parameter cache-busting (no custom headers)',
-        'X-DRAAD165-METHOD': 'Fresh client + HTTP headers (custom headers removed)',
-        'X-DRAAD165-GUARANTEE': 'Fresh database read guaranteed - SDK cache disabled'
+        'X-DRAAD166-DEBUG': 'SWZ aggregation logging enabled',
+        'X-DRAAD166-GUARANTEE': 'Detailed logging for SWZ service mismatch'
       }
     });
   } catch (error) {
