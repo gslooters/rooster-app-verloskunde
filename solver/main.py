@@ -11,6 +11,7 @@ DRAD106: Status semantiek - fixed_assignments en blocked_slots
 DRAD108: Exacte bezetting realiseren via exact_staffing parameter
 DRAD164A: Added verbose startup logging for debugging deployment issues
 DRAD166: Layer 1 exception handlers - prevents 502 Bad Gateway errors
+DRAD169: Enhanced diagnostic logging for solver activation tracking
 """
 
 import sys
@@ -32,6 +33,7 @@ logger.info("[Solver/main] =====================================================
 logger.info("[Solver/main] ROOSTER SOLVER SERVICE - STARTUP SEQUENCE INITIATED")
 logger.info(f"[Solver/main] Python version: {sys.version}")
 logger.info(f"[Solver/main] Start time: {datetime.now().isoformat()}")
+logger.info("[DRAAD169] 🔍 DIAGNOSTIC LOGGING ENABLED FOR CONTAINER DEBUGGING")
 
 try:
     logger.info("[Solver/main] Step 1: Importing FastAPI...")
@@ -54,6 +56,7 @@ try:
     logger.info("[Solver/main] Step 4: Importing RosterSolver engine...")
     from solver_engine import RosterSolver
     logger.info("[Solver/main] ✅ RosterSolver imported successfully")
+    logger.info("[DRAAD169] ✅ RosterSolver engine available - solver CAN be called")
     
 except Exception as e:
     logger.error("[Solver/main] ❌ CRITICAL IMPORT ERROR")
@@ -64,12 +67,13 @@ except Exception as e:
 
 logger.info("[Solver/main] ============================================================")
 logger.info("[Solver/main] ALL IMPORTS SUCCESSFUL - Creating FastAPI app...")
+logger.info("[DRAAD169] Container is ready for solve requests")
 
 # FastAPI app
 app = FastAPI(
     title="Rooster Solver Service",
     description="OR-Tools CP-SAT solver voor roosteroptimalisatie met DRAAD108 bezetting realiseren",
-    version="1.1.1-DRAAD166"
+    version="1.1.1-DRAAD166-DRAAD169"
 )
 
 logger.info("[Solver/main] ✅ FastAPI application created")
@@ -140,50 +144,55 @@ async def startup_event():
     logger.info("[Solver/main] Server is ready to accept requests")
     logger.info(f"[Solver/main] Started at: {datetime.now().isoformat()}")
     logger.info("[Solver/main] DRAAD166: Exception handlers active")
+    logger.info("[DRAAD169] 🔍 DIAGNOSTIC LOGGING ACTIVE - Ready to track solve() calls")
     logger.info("[Solver/main] ============================================================")
 
 
 @app.get("/", response_model=dict)
 async def root():
     """Health check root endpoint"""
+    logger.info("[DRAAD169] GET / called - health check")
     return {
         "service": "Rooster Solver Service",
         "status": "online",
-        "version": "1.1.1-DRAAD166",
+        "version": "1.1.1-DRAAD166-DRAAD169",
         "solver": "Google OR-Tools CP-SAT",
         "features": [
             "DRAAD105: roster_employee_services",
             "DRAAD106: status semantiek",
             "DRAAD108: exacte bezetting realiseren",
-            "DRAAD166: exception handlers layer 1"
+            "DRAAD166: exception handlers layer 1",
+            "DRAAD169: diagnostic logging"
         ],
-        "cache_bust": 1734024338265  # Generated at build time
+        "cache_bust": 1765580000 + int(datetime.now().timestamp())  # Dynamic cache bust
     }
 
 
 @app.get("/health", response_model=HealthResponse)
 async def health():
     """Detailed health check"""
+    logger.info("[DRAAD169] GET /health called - health check")
     return HealthResponse(
         status="healthy",
         timestamp=datetime.utcnow().isoformat(),
         service="rooster-solver",
-        version="1.1.1-DRAAD166"
+        version="1.1.1-DRAAD166-DRAAD169"
     )
 
 
 @app.get("/version", response_model=VersionResponse)
 async def version():
     """Version en capabilities endpoint"""
+    logger.info("[DRAAD169] GET /version called")
     try:
         from ortools import __version__ as ortools_version
     except:
         ortools_version = "unknown"
     
     return VersionResponse(
-        version="1.1.1-DRAAD166",
+        version="1.1.1-DRAAD166-DRAAD169",
         or_tools_version=ortools_version,
-        phase="DRAAD166-exception-handlers",
+        phase="DRAAD166-exception-handlers + DRAAD169-diagnostic-logging",
         capabilities=[
             "constraint_1_bevoegdheden",
             "constraint_2_beschikbaarheid",
@@ -194,13 +203,14 @@ async def version():
             "constraint_6_zzp_minimalisatie",
             "constraint_7_exact_staffing",  # DRAAD108: NIEUW
             "constraint_8_system_service_exclusivity",  # DRAAD108: NIEUW
-            "draad166_exception_handlers"  # DRAAD166: NIEUW
+            "draad166_exception_handlers",  # DRAAD166: NIEUW
+            "draad169_diagnostic_logging"  # DRAAD169: NIEUW
         ]
     )
 
 
 # ============================================================================
-# SOLVER ENDPOINT WITH DRAAD166 EXCEPTION HANDLING
+# SOLVER ENDPOINT WITH DRAAD166 + DRAAD169 EXCEPTION HANDLING
 # ============================================================================
 
 @app.post("/api/v1/solve-schedule", response_model=SolveResponse)
@@ -209,6 +219,7 @@ async def solve_schedule(request: SolveRequest):
     Solve rooster met OR-Tools CP-SAT solver.
     
     DRAAD166: Layer 1 exception handling - graceful error handling at FastAPI level
+    DRAAD169: Enhanced diagnostic logging to track solve() activation
     
     Implementeert 8 constraints:
     1. Bevoegdheden (DRAAD105: roster_employee_services met actief=TRUE)
@@ -231,6 +242,9 @@ async def solve_schedule(request: SolveRequest):
     start_time = datetime.now()
     
     try:
+        logger.info(f"[DRAAD169] ============================================================")
+        logger.info(f"[DRAAD169] ➡️  SOLVE_SCHEDULE ENDPOINT CALLED")
+        logger.info(f"[DRAAD169] Roster ID: {request.roster_id}")
         logger.info(f"[Solver] Start solving roster {request.roster_id}")
         logger.info(f"[Solver] Periode: {request.start_date} - {request.end_date}")
         logger.info(f"[Solver] {len(request.employees)} medewerkers, {len(request.services)} diensten")
@@ -249,7 +263,7 @@ async def solve_schedule(request: SolveRequest):
             logger.warning("[Solver] DRAAD108: Geen exact_staffing data - constraint 7 wordt OVERGESLAGEN!")
         
         try:
-            logger.info("[DRAAD166] Creating RosterSolver instance...")
+            logger.info("[DRAAD169] Creating RosterSolver instance...")
             # Instantieer RosterSolver met alle parameters
             solver = RosterSolver(
                 roster_id=request.roster_id,
@@ -268,24 +282,28 @@ async def solve_schedule(request: SolveRequest):
                 pre_assignments=request.pre_assignments,
                 timeout_seconds=request.timeout_seconds
             )
-            logger.info("[DRAAD166] ✅ RosterSolver instance created successfully")
+            logger.info("[DRAAD169] ✅ RosterSolver instance created successfully")
         except Exception as e:
-            logger.error(f"[DRAAD166] ERROR creating RosterSolver: {str(e)}", exc_info=True)
+            logger.error(f"[DRAAD169] ERROR creating RosterSolver: {str(e)}", exc_info=True)
             raise
         
         try:
-            logger.info("[DRAAD166] Starting CP-SAT solver...")
+            logger.info("[DRAAD169] ⚙️  CALLING solver.solve()...")
+            logger.info("[DRAAD169] This is where constraint checking happens")
+            logger.info("[DRAAD169] Monitor logs below for solver status...")
             # Solve - this calls solver_engine.solve() which has Layer 1 handlers
             response = solver.solve()
-            logger.info("[DRAAD166] ✅ Solver completed successfully")
+            logger.info("[DRAAD169] ✅ solver.solve() COMPLETED successfully")
         except Exception as e:
-            logger.error(f"[DRAAD166] ERROR in solver.solve(): {str(e)}", exc_info=True)
+            logger.error(f"[DRAAD169] ERROR in solver.solve(): {str(e)}", exc_info=True)
             raise
         
         solve_time = (datetime.now() - start_time).total_seconds()
         logger.info(f"[Solver] Completed in {solve_time:.2f}s")
         logger.info(f"[Solver] Status: {response.status}")
         logger.info(f"[Solver] Assignments: {response.total_assignments}/{response.total_slots} ({response.fill_percentage:.1f}%)")
+        logger.info(f"[DRAAD169] ✅ solve_schedule endpoint returning response with status={response.status}")
+        logger.info(f"[DRAAD169] ============================================================")
         
         # DRAAD108: Log bezettings-violations
         bezetting_violations = [
@@ -314,6 +332,7 @@ async def solve_schedule(request: SolveRequest):
         logger.error(f"[DRAAD166] UNCAUGHT EXCEPTION in solve_schedule endpoint", exc_info=True)
         logger.error(f"[DRAAD166] Exception type: {type(e).__name__}")
         logger.error(f"[DRAAD166] Exception message: {str(e)[:500]}")
+        logger.error(f"[DRAAD169] ❌ solve_schedule endpoint ERROR - returning ERROR status")
         
         solve_time = (datetime.now() - start_time).total_seconds()
         
