@@ -1,0 +1,24 @@
+DRAAD 164A - Solver2 Deployment Failure Analysis
+
+Date: 2025-12-12T15:56:00Z
+Issue: Railway deployment of Solver2 failed with 'Container failed to start'
+
+Status: BUILD SUCCESS - Runtime Failure
+  - ✅ Docker build completed (4.38 seconds)
+  - ❌ Container startup crashed silently  
+  - ❌ No error output in Railway logs
+
+Root Cause Analysis:
+1. Dockerfile & requirements.txt are CORRECT
+2. main.py, models.py verified
+3. Most likely: solver_engine.py import failure during startup
+4. OR-Tools wheel compatibility with Python 3.12.7
+
+Solution Strategy:
+1. Add verbose startup logging to detect import errors
+2. Verify solver_engine.py imports complete
+3. Test OR-Tools installation in container
+4. Add healthcheck that runs before uvicorn
+5. Force Railway rebuild with cache-bust
+
+Status: IN PROGRESS
