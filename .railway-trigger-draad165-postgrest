@@ -1,0 +1,37 @@
+DRAAD165: Railway Deployment Trigger
+Timestamp: 2025-12-12T15:46:53Z
+Random: kx7n9q2m8p
+Trigger ID: railway-draad165-postgrest-000
+
+DEPLOYMENT INSTRUCTIONS:
+=======================
+1. This file triggers Railway webhook
+2. Railway detects push to main branch
+3. Automatic build starts: npm run build
+4. Cache busting via this file + timestamp
+5. Deployment: HOSTNAME=0.0.0.0 PORT=${PORT:-3000} node .next/standalone/server.js
+6. Live in ~2-3 minutes
+
+VERIFICATION AFTER DEPLOYMENT:
+==============================
+1. Open app at: https://rooster-app-verloskunde-production.up.railway.app
+2. Test route: Week Dagdelen page
+3. Click "Planinformatie" button in toolbar
+4. Verify modal loads with FRESH data
+5. Click "🔄 Vernieuwen" to refresh
+6. Check browser console for logs:
+   - Should see: "PostgREST HTTP API (NO SDK cache)"
+   - Should see: Step 1-5 logging in Network tab
+   - Should see: Fresh timestamp on each request
+
+ROLLBACK (if needed):
+====================
+Revert commit 5cc1f7e53b1a271b6ceece4096d549b874e0b357
+Then commit new change to trigger redeploy
+
+MONITORING:
+===========
+- Check Railway logs: /logs endpoint
+- Look for DRAAD165-FINAL messages
+- Monitor response times: should be <300ms
+- Verify no SDK cache errors
