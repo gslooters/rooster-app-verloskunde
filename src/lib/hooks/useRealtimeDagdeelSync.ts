@@ -17,7 +17,7 @@ import { useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
 interface DagdeelChange {
-  old: Record<string, any>;
+  old: Record<string, any> | null;
   new: Record<string, any>;
 }
 
