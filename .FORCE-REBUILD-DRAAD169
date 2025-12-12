@@ -1,0 +1,23 @@
+🚀 FORCE REBUILD - DRAAD169 CONTAINER CACHE BUST
+
+Timestamp: 2025-12-12T20:33:00Z
+Random Trigger: 1765580100
+
+⚡ ACTION: Clear Docker cache + rebuild
+⚡ REASON: Container running outdated code
+⚡ PRIORITY: CRITICAL
+
+Old version issue:
+- solver_engine.py in container: MISSING DRAAD168 fixes
+- GitHub version: HAS DRAAD168 CORR-2 + CORR-3 fixes
+- Status: Only 6/1470 assignments (solver nicht running)
+
+Force rebuild will:
+1. ✅ Clear Docker image cache
+2. ✅ Reinstall dependencies from requirements.txt
+3. ✅ Copy latest solver_engine.py
+4. ✅ Start fresh container with new code
+5. ✅ Trigger new solver run
+
+Estimated time: 3-5 minutes
+Expected result: Solver logs appear in Railway
