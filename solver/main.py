@@ -4,7 +4,7 @@ FastAPI service die rooster optimalisatie uitvoert met Google OR-Tools CP-SAT so
 Integratie met Next.js app via REST API.
 
 Authors: Rooster App Team
-Version: 1.1.1
+Version: 1.1.2
 Date: 2025-12-12
 DRAD105: Gebruikt roster_employee_services met aantal en actief velden
 DRAD106: Status semantiek - fixed_assignments en blocked_slots
@@ -12,12 +12,15 @@ DRAD108: Exacte bezetting realiseren via exact_staffing parameter
 DRAD164A: Added verbose startup logging for debugging deployment issues
 DRAD166: Layer 1 exception handlers - prevents 502 Bad Gateway errors
 DRAD169: Enhanced diagnostic logging for solver activation tracking
+DRAAD170: ThreadPoolExecutor for non-blocking async solver execution
 """
 
 import sys
 import logging
+import asyncio
 from datetime import datetime
 from typing import Optional
+from concurrent.futures import ThreadPoolExecutor
 import traceback
 
 # Configure logging EARLY - before any other imports
@@ -34,6 +37,7 @@ logger.info("[Solver/main] ROOSTER SOLVER SERVICE - STARTUP SEQUENCE INITIATED")
 logger.info(f"[Solver/main] Python version: {sys.version}")
 logger.info(f"[Solver/main] Start time: {datetime.now().isoformat()}")
 logger.info("[DRAAD169] 🔍 DIAGNOSTIC LOGGING ENABLED FOR CONTAINER DEBUGGING")
+logger.info("[DRAAD170] 🚀 ASYNC/AWAIT + THREADPOOLEXECUTOR ENABLED FOR NON-BLOCKING SOLVER")
 
 try:
     logger.info("[Solver/main] Step 1: Importing FastAPI...")
@@ -73,10 +77,23 @@ logger.info("[DRAAD169] Container is ready for solve requests")
 app = FastAPI(
     title="Rooster Solver Service",
     description="OR-Tools CP-SAT solver voor roosteroptimalisatie met DRAAD108 bezetting realiseren",
-    version="1.1.1-DRAAD166-DRAAD169"
+    version="1.1.2-DRAAD170-ASYNC"
 )
 
 logger.info("[Solver/main] ✅ FastAPI application created")
+
+# ============================================================================
+# DRAAD170: ThreadPoolExecutor for non-blocking solver execution
+# ============================================================================
+# Create a thread pool for running sync solver in executor
+# max_workers=2: Allow max 2 concurrent solver operations
+# This prevents Railway timeouts on long-running solves
+SOLVER_EXECUTOR = ThreadPoolExecutor(
+    max_workers=2,
+    thread_name_prefix="solver-worker"
+)
+
+logger.info("[DRAAD170] ✅ ThreadPoolExecutor created with max_workers=2")
 
 # ============================================================================
 # CORS middleware configuration (DRAAD113: Production-ready)
@@ -145,6 +162,7 @@ async def startup_event():
     logger.info(f"[Solver/main] Started at: {datetime.now().isoformat()}")
     logger.info("[Solver/main] DRAAD166: Exception handlers active")
     logger.info("[DRAAD169] 🔍 DIAGNOSTIC LOGGING ACTIVE - Ready to track solve() calls")
+    logger.info("[DRAAD170] ⚙️  ThreadPoolExecutor active - async solver ready")
     logger.info("[Solver/main] ============================================================")
 
 
@@ -155,14 +173,16 @@ async def root():
     return {
         "service": "Rooster Solver Service",
         "status": "online",
-        "version": "1.1.1-DRAAD166-DRAAD169",
+        "version": "1.1.2-DRAAD170-ASYNC",
         "solver": "Google OR-Tools CP-SAT",
+        "async_mode": "ThreadPoolExecutor (non-blocking)",
         "features": [
             "DRAAD105: roster_employee_services",
             "DRAAD106: status semantiek",
             "DRAAD108: exacte bezetting realiseren",
             "DRAAD166: exception handlers layer 1",
-            "DRAAD169: diagnostic logging"
+            "DRAAD169: diagnostic logging",
+            "DRAAD170: async/await + threadpoolexecutor"
         ],
         "cache_bust": 1765580000 + int(datetime.now().timestamp())  # Dynamic cache bust
     }
@@ -176,7 +196,7 @@ async def health():
         status="healthy",
         timestamp=datetime.utcnow().isoformat(),
         service="rooster-solver",
-        version="1.1.1-DRAAD166-DRAAD169"
+        version="1.1.2-DRAAD170-ASYNC"
     )
 
 
@@ -190,9 +210,9 @@ async def version():
         ortools_version = "unknown"
     
     return VersionResponse(
-        version="1.1.1-DRAAD166-DRAAD169",
+        version="1.1.2-DRAAD170-ASYNC",
         or_tools_version=ortools_version,
-        phase="DRAAD166-exception-handlers + DRAAD169-diagnostic-logging",
+        phase="DRAAD170-async-await + DRAAD169-diagnostic-logging",
         capabilities=[
             "constraint_1_bevoegdheden",
             "constraint_2_beschikbaarheid",
@@ -204,20 +224,97 @@ async def version():
             "constraint_7_exact_staffing",  # DRAAD108: NIEUW
             "constraint_8_system_service_exclusivity",  # DRAAD108: NIEUW
             "draad166_exception_handlers",  # DRAAD166: NIEUW
-            "draad169_diagnostic_logging"  # DRAAD169: NIEUW
+            "draad169_diagnostic_logging",  # DRAAD169: NIEUW
+            "draad170_async_threadpool"  # DRAAD170: NIEUW
         ]
     )
 
 
 # ============================================================================
-# SOLVER ENDPOINT WITH DRAAD166 + DRAAD169 EXCEPTION HANDLING
+# DRAAD170: SYNC SOLVER LOGIC (runs in thread pool)
+# ============================================================================
+
+def _do_solve(request: SolveRequest) -> SolveResponse:
+    """DRAAD170: Sync solve logic - runs in ThreadPoolExecutor.
+    
+    This function contains the actual sync solver execution.
+    It's called from the async endpoint via loop.run_in_executor().
+    
+    This keeps the async event loop responsive while solver computes.
+    """
+    start_time = datetime.now()
+    
+    try:
+        logger.info("[DRAAD170-SYNC] Thread pool: Starting sync solve logic...")
+        
+        # Instantieer RosterSolver
+        try:
+            logger.info("[DRAAD170-SYNC] Creating RosterSolver instance...")
+            solver = RosterSolver(
+                roster_id=request.roster_id,
+                employees=request.employees,
+                services=request.services,
+                roster_employee_services=request.roster_employee_services,
+                start_date=request.start_date,
+                end_date=request.end_date,
+                # DRAAD106 parameters
+                fixed_assignments=request.fixed_assignments,
+                blocked_slots=request.blocked_slots,
+                suggested_assignments=request.suggested_assignments,
+                # DRAAD108 parameter - NIEUW!
+                exact_staffing=request.exact_staffing,
+                # DEPRECATED maar backwards compatible
+                pre_assignments=request.pre_assignments,
+                timeout_seconds=request.timeout_seconds
+            )
+            logger.info("[DRAAD170-SYNC] ✅ RosterSolver instance created")
+        except Exception as e:
+            logger.error(f"[DRAAD170-SYNC] ERROR creating RosterSolver: {str(e)}", exc_info=True)
+            raise
+        
+        try:
+            logger.info("[DRAAD170-SYNC] Calling solver.solve()...")
+            # This is the blocking call - but we're in a thread, so event loop is NOT blocked
+            response = solver.solve()
+            logger.info("[DRAAD170-SYNC] ✅ solver.solve() completed")
+        except Exception as e:
+            logger.error(f"[DRAAD170-SYNC] ERROR in solver.solve(): {str(e)}", exc_info=True)
+            raise
+        
+        sync_time = (datetime.now() - start_time).total_seconds()
+        logger.info(f"[DRAAD170-SYNC] Completed in {sync_time:.2f}s")
+        logger.info(f"[DRAAD170-SYNC] Status: {response.status}")
+        logger.info(f"[DRAAD170-SYNC] Assignments: {response.total_assignments}")
+        
+        return response
+    
+    except Exception as e:
+        logger.error("[DRAAD170-SYNC] UNCAUGHT EXCEPTION in sync solve", exc_info=True)
+        sync_time = (datetime.now() - start_time).total_seconds()
+        
+        return SolveResponse(
+            status=SolveStatus.ERROR,
+            roster_id=request.roster_id,
+            assignments=[],
+            solve_time_seconds=round(sync_time, 2),
+            violations=[ConstraintViolation(
+                constraint_type="sync_solve_error",
+                message=f"[DRAAD170-SYNC] Error: {str(e)[:150]}",
+                severity="critical"
+            )]
+        )
+
+
+# ============================================================================
+# SOLVER ENDPOINT WITH DRAAD170 ASYNC/AWAIT OPTIMIZATION
 # ============================================================================
 
 @app.post("/api/v1/solve-schedule", response_model=SolveResponse)
 async def solve_schedule(request: SolveRequest):
     """
-    Solve rooster met OR-Tools CP-SAT solver.
+    Solve rooster met OR-Tools CP-SAT solver (ASYNC-compatible).
     
+    DRAAD170: Uses ThreadPoolExecutor to run sync solver without blocking async event loop
     DRAAD166: Layer 1 exception handling - graceful error handling at FastAPI level
     DRAAD169: Enhanced diagnostic logging to track solve() activation
     
@@ -242,9 +339,10 @@ async def solve_schedule(request: SolveRequest):
     start_time = datetime.now()
     
     try:
-        logger.info(f"[DRAAD169] ============================================================")
-        logger.info(f"[DRAAD169] ➡️  SOLVE_SCHEDULE ENDPOINT CALLED")
-        logger.info(f"[DRAAD169] Roster ID: {request.roster_id}")
+        logger.info(f"[DRAAD170] ============================================================")
+        logger.info(f"[DRAAD170] ➡️  ASYNC SOLVE_SCHEDULE ENDPOINT CALLED")
+        logger.info(f"[DRAAD170] Roster ID: {request.roster_id}")
+        logger.info(f"[DRAAD170] Scheduling solve in ThreadPoolExecutor (non-blocking)...")
         logger.info(f"[Solver] Start solving roster {request.roster_id}")
         logger.info(f"[Solver] Periode: {request.start_date} - {request.end_date}")
         logger.info(f"[Solver] {len(request.employees)} medewerkers, {len(request.services)} diensten")
@@ -263,57 +361,40 @@ async def solve_schedule(request: SolveRequest):
             logger.warning("[Solver] DRAAD108: Geen exact_staffing data - constraint 7 wordt OVERGESLAGEN!")
         
         try:
-            logger.info("[DRAAD169] Creating RosterSolver instance...")
-            # Instantieer RosterSolver met alle parameters
-            solver = RosterSolver(
-                roster_id=request.roster_id,
-                employees=request.employees,
-                services=request.services,
-                roster_employee_services=request.roster_employee_services,
-                start_date=request.start_date,
-                end_date=request.end_date,
-                # DRAAD106 parameters
-                fixed_assignments=request.fixed_assignments,
-                blocked_slots=request.blocked_slots,
-                suggested_assignments=request.suggested_assignments,
-                # DRAAD108 parameter - NIEUW!
-                exact_staffing=request.exact_staffing,
-                # DEPRECATED maar backwards compatible
-                pre_assignments=request.pre_assignments,
-                timeout_seconds=request.timeout_seconds
+            logger.info("[DRAAD170-ASYNC] Getting event loop...")
+            loop = asyncio.get_event_loop()
+            logger.info("[DRAAD170-ASYNC] ✅ Event loop obtained")
+            
+            logger.info("[DRAAD170-ASYNC] Running solver in ThreadPoolExecutor...")
+            # Run sync solve in thread pool WITHOUT blocking async event loop
+            response = await loop.run_in_executor(
+                SOLVER_EXECUTOR,
+                _do_solve,
+                request
             )
-            logger.info("[DRAAD169] ✅ RosterSolver instance created successfully")
+            logger.info("[DRAAD170-ASYNC] ✅ ThreadPoolExecutor returned response")
+            
         except Exception as e:
-            logger.error(f"[DRAAD169] ERROR creating RosterSolver: {str(e)}", exc_info=True)
+            logger.error(f"[DRAAD170-ASYNC] ERROR in executor call: {str(e)}", exc_info=True)
             raise
         
-        try:
-            logger.info("[DRAAD169] ⚙️  CALLING solver.solve()...")
-            logger.info("[DRAAD169] This is where constraint checking happens")
-            logger.info("[DRAAD169] Monitor logs below for solver status...")
-            # Solve - this calls solver_engine.solve() which has Layer 1 handlers
-            response = solver.solve()
-            logger.info("[DRAAD169] ✅ solver.solve() COMPLETED successfully")
-        except Exception as e:
-            logger.error(f"[DRAAD169] ERROR in solver.solve(): {str(e)}", exc_info=True)
-            raise
-        
-        solve_time = (datetime.now() - start_time).total_seconds()
-        logger.info(f"[Solver] Completed in {solve_time:.2f}s")
+        async_time = (datetime.now() - start_time).total_seconds()
+        logger.info(f"[DRAAD170-ASYNC] Total async time (including thread overhead): {async_time:.2f}s")
         logger.info(f"[Solver] Status: {response.status}")
         logger.info(f"[Solver] Assignments: {response.total_assignments}/{response.total_slots} ({response.fill_percentage:.1f}%)")
-        logger.info(f"[DRAAD169] ✅ solve_schedule endpoint returning response with status={response.status}")
-        logger.info(f"[DRAAD169] ============================================================")
+        logger.info(f"[DRAAD170] ✅ Returning response with status={response.status}")
+        logger.info(f"[DRAAD170] ============================================================")
         
         # DRAAD108: Log bezettings-violations
-        bezetting_violations = [
-            v for v in response.violations 
-            if v.constraint_type == "bezetting_realiseren"
-        ]
-        if bezetting_violations:
-            logger.warning(f"[Solver] DRAAD108: {len(bezetting_violations)} bezetting violations")
-            for v in bezetting_violations[:5]:  # Log eerste 5
-                logger.warning(f"  - {v.message}")
+        if response.violations:
+            bezetting_violations = [
+                v for v in response.violations 
+                if v.constraint_type == "bezetting_realiseren"
+            ]
+            if bezetting_violations:
+                logger.warning(f"[Solver] DRAAD108: {len(bezetting_violations)} bezetting violations")
+                for v in bezetting_violations[:5]:  # Log eerste 5
+                    logger.warning(f"  - {v.message}")
         
         # DRAAD166: Log if response contains error status
         if response.status == SolveStatus.ERROR:
@@ -329,12 +410,12 @@ async def solve_schedule(request: SolveRequest):
     
     except Exception as e:
         # DRAAD166: Catch ANY exception and return SolveResponse with ERROR status
-        logger.error(f"[DRAAD166] UNCAUGHT EXCEPTION in solve_schedule endpoint", exc_info=True)
+        logger.error(f"[DRAAD166] UNCAUGHT EXCEPTION in async solve_schedule endpoint", exc_info=True)
         logger.error(f"[DRAAD166] Exception type: {type(e).__name__}")
         logger.error(f"[DRAAD166] Exception message: {str(e)[:500]}")
-        logger.error(f"[DRAAD169] ❌ solve_schedule endpoint ERROR - returning ERROR status")
+        logger.error(f"[DRAAD170] ❌ Async endpoint ERROR - returning ERROR status")
         
-        solve_time = (datetime.now() - start_time).total_seconds()
+        async_time = (datetime.now() - start_time).total_seconds()
         
         # Return SolveResponse with ERROR status instead of raising
         # This prevents FastAPI from returning 500 and being caught by reverse proxy as 502
@@ -342,10 +423,10 @@ async def solve_schedule(request: SolveRequest):
             status=SolveStatus.ERROR,
             roster_id=request.roster_id,
             assignments=[],
-            solve_time_seconds=round(solve_time, 2),
+            solve_time_seconds=round(async_time, 2),
             violations=[ConstraintViolation(
                 constraint_type="solver_endpoint_error",
-                message=f"[DRAAD166] Solver endpoint fout: {str(e)[:150]}. Details in server logs.",
+                message=f"[DRAAD166] Async endpoint fout: {str(e)[:150]}. Details in server logs.",
                 severity="critical"
             )]
         )
