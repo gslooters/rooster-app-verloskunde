@@ -1,0 +1,24 @@
+Railway Deployment Trigger - FASE 2
+Date: 2025-12-12T181052Z
+Reason: FASE 2 deployment - Better diagnostics & error messages
+Trigger ID: fase2_20251212_181052
+Random: 7e2f4a9c1b3d5f8e
+
+Deploy config:
+- Service: Solver2 (rooster-app-verloskunde/solver)
+- Environment: production
+- Trigger type: Git push with cache bust
+- Expected build time: 2-5 minutes
+
+Changes:
+- solver/solver_engine.py (FIX 3 + FIX 4 implementation)
+- solver/solver_patches_draad167_fase2.py (FASE 2 patches)
+- solver/DRAAD167-FASE2-QUICK-START.txt (Documentation)
+- solver/.DRAAD167-FASE2-ACTIVE (Cache marker)
+
+Expected output in logs:
+- [DRAAD167-FASE2] Bottleneck diagnostics enabled
+- [DRAAD167-FASE2] Error formatting enabled  
+- [DRAAD167-FASE2] Stap 1: Running diagnostics...
+
+Monitor: https://railway.app/project/90165889-1a50-4236-aefe-b1e1ae44dc7f
