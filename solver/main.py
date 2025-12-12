@@ -4,18 +4,20 @@ FastAPI service die rooster optimalisatie uitvoert met Google OR-Tools CP-SAT so
 Integratie met Next.js app via REST API.
 
 Authors: Rooster App Team
-Version: 1.1.0
-Date: 2025-12-05
+Version: 1.1.1
+Date: 2025-12-12
 DRAD105: Gebruikt roster_employee_services met aantal en actief velden
 DRAD106: Status semantiek - fixed_assignments en blocked_slots
 DRAD108: Exacte bezetting realiseren via exact_staffing parameter
 DRAD164A: Added verbose startup logging for debugging deployment issues
+DRAD166: Layer 1 exception handlers - prevents 502 Bad Gateway errors
 """
 
 import sys
 import logging
 from datetime import datetime
 from typing import Optional
+import traceback
 
 # Configure logging EARLY - before any other imports
 logging.basicConfig(
@@ -44,7 +46,8 @@ try:
     from models import (
         SolveRequest, SolveResponse,
         HealthResponse, VersionResponse,
-        ExactStaffing  # DRAAD108
+        ExactStaffing,  # DRAAD108
+        SolveStatus, ConstraintViolation  # DRAAD166: Voor error responses
     )
     logger.info("[Solver/main] ✅ Models imported successfully")
     
@@ -66,7 +69,7 @@ logger.info("[Solver/main] ALL IMPORTS SUCCESSFUL - Creating FastAPI app...")
 app = FastAPI(
     title="Rooster Solver Service",
     description="OR-Tools CP-SAT solver voor roosteroptimalisatie met DRAAD108 bezetting realiseren",
-    version="1.1.0-DRAAD108"
+    version="1.1.1-DRAAD166"
 )
 
 logger.info("[Solver/main] ✅ FastAPI application created")
@@ -97,6 +100,35 @@ logger.info(f"[Solver/main] ✅ CORS middleware configured with {len(ALLOWED_ORI
 
 
 # ============================================================================
+# GLOBAL EXCEPTION HANDLER (DRAAD166: Layer 1 - Fallback handler)
+# ============================================================================
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    """DRAAD166: Global fallback exception handler - prevents 502 Bad Gateway.
+    
+    If ANY unhandled exception occurs, return 500 with meaningful error.
+    This prevents FastAPI from crashing and returning 502 from reverse proxy.
+    """
+    logger.error(f"[DRAAD166] GLOBAL EXCEPTION HANDLER TRIGGERED", exc_info=True)
+    logger.error(f"[DRAAD166] Exception type: {type(exc).__name__}")
+    logger.error(f"[DRAAD166] Exception message: {str(exc)}")
+    logger.error(f"[DRAAD166] Traceback:\n{traceback.format_exc()}")
+    
+    return SolveResponse(
+        status=SolveStatus.ERROR,
+        roster_id="unknown",
+        assignments=[],
+        solve_time_seconds=0.0,
+        violations=[ConstraintViolation(
+            constraint_type="global_exception",
+            message=f"[DRAAD166] Critieke fout: {str(exc)[:200]}. Contacteer admin.",
+            severity="critical"
+        )]
+    )
+
+
+# ============================================================================
 # HEALTH CHECK ENDPOINTS
 # ============================================================================
 
@@ -107,6 +139,7 @@ async def startup_event():
     logger.info("[Solver/main] ✅ FASTAPI STARTUP COMPLETE")
     logger.info("[Solver/main] Server is ready to accept requests")
     logger.info(f"[Solver/main] Started at: {datetime.now().isoformat()}")
+    logger.info("[Solver/main] DRAAD166: Exception handlers active")
     logger.info("[Solver/main] ============================================================")
 
 
@@ -116,13 +149,15 @@ async def root():
     return {
         "service": "Rooster Solver Service",
         "status": "online",
-        "version": "1.1.0-DRAAD108",
+        "version": "1.1.1-DRAAD166",
         "solver": "Google OR-Tools CP-SAT",
         "features": [
             "DRAAD105: roster_employee_services",
             "DRAAD106: status semantiek",
-            "DRAAD108: exacte bezetting realiseren"
-        ]
+            "DRAAD108: exacte bezetting realiseren",
+            "DRAAD166: exception handlers layer 1"
+        ],
+        "cache_bust": 1734024338265  # Generated at build time
     }
 
 
@@ -133,7 +168,7 @@ async def health():
         status="healthy",
         timestamp=datetime.utcnow().isoformat(),
         service="rooster-solver",
-        version="1.1.0-DRAAD108"
+        version="1.1.1-DRAAD166"
     )
 
 
@@ -146,9 +181,9 @@ async def version():
         ortools_version = "unknown"
     
     return VersionResponse(
-        version="1.1.0-DRAAD108",
+        version="1.1.1-DRAAD166",
         or_tools_version=ortools_version,
-        phase="DRAAD108-implementation",
+        phase="DRAAD166-exception-handlers",
         capabilities=[
             "constraint_1_bevoegdheden",
             "constraint_2_beschikbaarheid",
@@ -158,19 +193,22 @@ async def version():
             "constraint_5_max_werkdagen",
             "constraint_6_zzp_minimalisatie",
             "constraint_7_exact_staffing",  # DRAAD108: NIEUW
-            "constraint_8_system_service_exclusivity"  # DRAAD108: NIEUW
+            "constraint_8_system_service_exclusivity",  # DRAAD108: NIEUW
+            "draad166_exception_handlers"  # DRAAD166: NIEUW
         ]
     )
 
 
 # ============================================================================
-# SOLVER ENDPOINT
+# SOLVER ENDPOINT WITH DRAAD166 EXCEPTION HANDLING
 # ============================================================================
 
 @app.post("/api/v1/solve-schedule", response_model=SolveResponse)
 async def solve_schedule(request: SolveRequest):
     """
     Solve rooster met OR-Tools CP-SAT solver.
+    
+    DRAAD166: Layer 1 exception handling - graceful error handling at FastAPI level
     
     Implementeert 8 constraints:
     1. Bevoegdheden (DRAAD105: roster_employee_services met actief=TRUE)
@@ -210,28 +248,39 @@ async def solve_schedule(request: SolveRequest):
         else:
             logger.warning("[Solver] DRAAD108: Geen exact_staffing data - constraint 7 wordt OVERGESLAGEN!")
         
-        # Instantieer RosterSolver met alle parameters
-        solver = RosterSolver(
-            roster_id=request.roster_id,
-            employees=request.employees,
-            services=request.services,
-            roster_employee_services=request.roster_employee_services,
-            start_date=request.start_date,
-            end_date=request.end_date,
-            # DRAAD106 parameters
-            fixed_assignments=request.fixed_assignments,
-            blocked_slots=request.blocked_slots,
-            suggested_assignments=request.suggested_assignments,
-            # DRAAD108 parameter - NIEUW!
-            exact_staffing=request.exact_staffing,
-            # DEPRECATED maar backwards compatible
-            pre_assignments=request.pre_assignments,
-            timeout_seconds=request.timeout_seconds
-        )
+        try:
+            logger.info("[DRAAD166] Creating RosterSolver instance...")
+            # Instantieer RosterSolver met alle parameters
+            solver = RosterSolver(
+                roster_id=request.roster_id,
+                employees=request.employees,
+                services=request.services,
+                roster_employee_services=request.roster_employee_services,
+                start_date=request.start_date,
+                end_date=request.end_date,
+                # DRAAD106 parameters
+                fixed_assignments=request.fixed_assignments,
+                blocked_slots=request.blocked_slots,
+                suggested_assignments=request.suggested_assignments,
+                # DRAAD108 parameter - NIEUW!
+                exact_staffing=request.exact_staffing,
+                # DEPRECATED maar backwards compatible
+                pre_assignments=request.pre_assignments,
+                timeout_seconds=request.timeout_seconds
+            )
+            logger.info("[DRAAD166] ✅ RosterSolver instance created successfully")
+        except Exception as e:
+            logger.error(f"[DRAAD166] ERROR creating RosterSolver: {str(e)}", exc_info=True)
+            raise
         
-        # Solve
-        logger.info("[Solver] Starten CP-SAT solver...")
-        response = solver.solve()
+        try:
+            logger.info("[DRAAD166] Starting CP-SAT solver...")
+            # Solve - this calls solver_engine.solve() which has Layer 1 handlers
+            response = solver.solve()
+            logger.info("[DRAAD166] ✅ Solver completed successfully")
+        except Exception as e:
+            logger.error(f"[DRAAD166] ERROR in solver.solve(): {str(e)}", exc_info=True)
+            raise
         
         solve_time = (datetime.now() - start_time).total_seconds()
         logger.info(f"[Solver] Completed in {solve_time:.2f}s")
@@ -248,11 +297,39 @@ async def solve_schedule(request: SolveRequest):
             for v in bezetting_violations[:5]:  # Log eerste 5
                 logger.warning(f"  - {v.message}")
         
+        # DRAAD166: Log if response contains error status
+        if response.status == SolveStatus.ERROR:
+            logger.error(f"[DRAAD166] Solver returned ERROR status")
+            if response.violations:
+                logger.error(f"[DRAAD166] Violations: {[v.message for v in response.violations[:3]]}")
+        
         return response
     
+    except HTTPException:
+        # Re-raise HTTP exceptions (these are intentional)
+        raise
+    
     except Exception as e:
-        logger.error(f"[Solver] Error during solving: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        # DRAAD166: Catch ANY exception and return SolveResponse with ERROR status
+        logger.error(f"[DRAAD166] UNCAUGHT EXCEPTION in solve_schedule endpoint", exc_info=True)
+        logger.error(f"[DRAAD166] Exception type: {type(e).__name__}")
+        logger.error(f"[DRAAD166] Exception message: {str(e)[:500]}")
+        
+        solve_time = (datetime.now() - start_time).total_seconds()
+        
+        # Return SolveResponse with ERROR status instead of raising
+        # This prevents FastAPI from returning 500 and being caught by reverse proxy as 502
+        return SolveResponse(
+            status=SolveStatus.ERROR,
+            roster_id=request.roster_id,
+            assignments=[],
+            solve_time_seconds=round(solve_time, 2),
+            violations=[ConstraintViolation(
+                constraint_type="solver_endpoint_error",
+                message=f"[DRAAD166] Solver endpoint fout: {str(e)[:150]}. Details in server logs.",
+                severity="critical"
+            )]
+        )
 
 
 if __name__ == "__main__":
