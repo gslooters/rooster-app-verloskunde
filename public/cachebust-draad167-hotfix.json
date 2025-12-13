@@ -1,0 +1,27 @@
+{
+  "timestamp": 1734077985000,
+  "draad": "167-HOTFIX",
+  "severity": "CRITICAL",
+  "description": "Roosterperiode grensvalidatie hotfix - verwijder duplicate records",
+  "issue": "DDA op laatste dag (enddate) creeerde 2 extra records op 29-12",
+  "fix": "Voeg enddate checks toe aan INSERT en UPDATE scenarios",
+  "components": [
+    "trigger_roster_assignment_status_management()",
+    "DELETE duplicate records op/na enddate",
+    "INSERT periodecheck: IF NEW.date >= v_roster_enddate THEN RETURN NEW",
+    "UPDATE periodecheck: AND NEW.date < v_roster_enddate"
+  ],
+  "files_changed": [
+    "20251213_DRAAD167_HOTFIX_enddate_check.sql",
+    "20241203_trigger_roster_auto_blocking.sql (synced)"
+  ],
+  "database_impact": {
+    "duplicates_removed": 2,
+    "expected_final_count": 1470,
+    "status": "clean"
+  },
+  "deployment": "DRAAD_167_HOTFIX_IMMEDIATE",
+  "cache_version": "1.0.167-HOTFIX",
+  "builtAt": "2025-12-13T17:39:58Z",
+  "priority": "IMMEDIATE"
+}
