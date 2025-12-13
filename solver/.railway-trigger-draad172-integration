@@ -1,0 +1,49 @@
+# Railway Deployment Trigger - DRAAD172 INTEGRATION
+# Timestamp: 2025-12-13T09:35:40Z
+# Random Trigger ID: 382951
+#
+# DEPLOYMENT INSTRUCTIONS FOR RAILWAY:
+# 1. Detect this file change in rooster-app-verloskunde repo
+# 2. Trigger rebuild of Solver2 service
+# 3. Wait for Python dependencies to install
+# 4. Check startup logs for DRAAD172 selector initialization
+# 5. Verify both solvers available (DRAAD170 + DRAAD172)
+# 6. Clear Redis cache to invalidate old solver responses
+#
+# EXPECTED STARTUP MESSAGES:
+# [Solver/main] ✅ SolverSelector imported successfully
+# [DRAAD172] ✅ Sequential Greedy Solver selector available
+# [DRAAD170] ✅ ThreadPoolExecutor created
+# [Solver/main] ✅ FASTAPI STARTUP COMPLETE
+#
+# VERIFICATION STEPS:
+# 1. Check /health endpoint returns 200 OK
+# 2. Check /version endpoint shows "1.2.0-DRAAD172-SELECTOR"
+# 3. Check "secondary" solver in root / endpoint
+# 4. Send test solve request - logs should show selected strategy
+#
+# ROLLBACK PLAN (if issues):
+# 1. If DRAAD172 selector fails: app falls back to CP-SAT automatically
+# 2. If main.py fails to load: selector import is guarded with try/except
+# 3. Service continues with CP-SAT only (DRAAD170 mode)
+# 4. No service downtime expected
+#
+# ENVIRONMENT VARIABLES:
+# Set SOLVER_STRATEGY in Railway config to override default:
+#   SOLVER_STRATEGY=draad170  # Force CP-SAT (current default)
+#   SOLVER_STRATEGY=draad172  # Force Sequential Greedy (new)
+#
+# MONITORING:
+# Watch logs for:
+# - "Using strategy=draad172" -> Sequential Greedy working
+# - "Using strategy=draad170" -> CP-SAT working
+# - "ERROR in SolverSelector" -> Fallback to CP-SAT
+# - "sequential_solve ERROR" -> Issue with DRAAD172
+
+DEPLOYMENT_TIMESTAMP=1765590940
+RAILWAY_TRIGGER_ID=382951
+SERVICE=Solver2
+ACTION=REBUILD_WITH_DRAAD172_SELECTOR
+EXPECTED_VERSION=1.2.0-DRAAD172-SELECTOR
+AUTO_FALLBACK=true
+ZERO_DOWNTIME=true
