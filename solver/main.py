@@ -4,8 +4,8 @@ FastAPI service die rooster optimalisatie uitvoert met Google OR-Tools CP-SAT so
 Integratie met Next.js app via REST API.
 
 Authors: Rooster App Team
-Version: 1.1.2
-Date: 2025-12-12
+Version: 1.2.0
+Date: 2025-12-13
 DRAD105: Gebruikt roster_employee_services met aantal en actief velden
 DRAD106: Status semantiek - fixed_assignments en blocked_slots
 DRAD108: Exacte bezetting realiseren via exact_staffing parameter
@@ -13,6 +13,7 @@ DRAD164A: Added verbose startup logging for debugging deployment issues
 DRAD166: Layer 1 exception handlers - prevents 502 Bad Gateway errors
 DRAD169: Enhanced diagnostic logging for solver activation tracking
 DRAAD170: ThreadPoolExecutor for non-blocking async solver execution
+DRAAD172: Sequential Greedy Solver with priority-based assignment (DRAFT)
 """
 
 import sys
@@ -38,6 +39,7 @@ logger.info(f"[Solver/main] Python version: {sys.version}")
 logger.info(f"[Solver/main] Start time: {datetime.now().isoformat()}")
 logger.info("[DRAAD169] 🔍 DIAGNOSTIC LOGGING ENABLED FOR CONTAINER DEBUGGING")
 logger.info("[DRAAD170] 🚀 ASYNC/AWAIT + THREADPOOLEXECUTOR ENABLED FOR NON-BLOCKING SOLVER")
+logger.info("[DRAAD172] 📋 SEQUENTIAL GREEDY SOLVER SELECTOR AVAILABLE (DRAFT)")
 
 try:
     logger.info("[Solver/main] Step 1: Importing FastAPI...")
@@ -62,6 +64,17 @@ try:
     logger.info("[Solver/main] ✅ RosterSolver imported successfully")
     logger.info("[DRAAD169] ✅ RosterSolver engine available - solver CAN be called")
     
+    logger.info("[Solver/main] Step 5: Importing DRAAD172 solver selector...")
+    try:
+        from solver_selector import SolverSelector
+        logger.info("[Solver/main] ✅ SolverSelector imported successfully")
+        logger.info("[DRAAD172] ✅ Sequential Greedy Solver selector available")
+        DRAAD172_AVAILABLE = True
+    except ImportError as e:
+        logger.warning(f"[Solver/main] ⚠️  SolverSelector import failed: {str(e)}")
+        logger.warning("[DRAAD172] ⚠️  Sequential Greedy Solver NOT available - using CP-SAT only")
+        DRAAD172_AVAILABLE = False
+    
 except Exception as e:
     logger.error("[Solver/main] ❌ CRITICAL IMPORT ERROR")
     logger.error(f"[Solver/main] Error type: {type(e).__name__}")
@@ -76,8 +89,8 @@ logger.info("[DRAAD169] Container is ready for solve requests")
 # FastAPI app
 app = FastAPI(
     title="Rooster Solver Service",
-    description="OR-Tools CP-SAT solver voor roosteroptimalisatie met DRAAD108 bezetting realiseren",
-    version="1.1.2-DRAAD170-ASYNC"
+    description="OR-Tools CP-SAT solver + DRAAD172 Sequential Greedy solver voor roosteroptimalisatie",
+    version="1.2.0-DRAAD172-SELECTOR"
 )
 
 logger.info("[Solver/main] ✅ FastAPI application created")
@@ -163,6 +176,10 @@ async def startup_event():
     logger.info("[Solver/main] DRAAD166: Exception handlers active")
     logger.info("[DRAAD169] 🔍 DIAGNOSTIC LOGGING ACTIVE - Ready to track solve() calls")
     logger.info("[DRAAD170] ⚙️  ThreadPoolExecutor active - async solver ready")
+    if DRAAD172_AVAILABLE:
+        logger.info("[DRAAD172] 📋 Sequential Greedy Solver ACTIVE (selector ready)")
+    else:
+        logger.warning("[DRAAD172] ⚠️  Sequential Greedy Solver NOT available (import failed)")
     logger.info("[Solver/main] ============================================================")
 
 
@@ -173,8 +190,11 @@ async def root():
     return {
         "service": "Rooster Solver Service",
         "status": "online",
-        "version": "1.1.2-DRAAD170-ASYNC",
-        "solver": "Google OR-Tools CP-SAT",
+        "version": "1.2.0-DRAAD172-SELECTOR",
+        "solvers": {
+            "primary": "Google OR-Tools CP-SAT (DRAAD170)",
+            "secondary": "Sequential Greedy (DRAAD172)" if DRAAD172_AVAILABLE else "NOT AVAILABLE"
+        },
         "async_mode": "ThreadPoolExecutor (non-blocking)",
         "features": [
             "DRAAD105: roster_employee_services",
@@ -182,9 +202,10 @@ async def root():
             "DRAAD108: exacte bezetting realiseren",
             "DRAAD166: exception handlers layer 1",
             "DRAAD169: diagnostic logging",
-            "DRAAD170: async/await + threadpoolexecutor"
+            "DRAAD170: async/await + threadpoolexecutor",
+            "DRAAD172: sequential greedy selector" if DRAAD172_AVAILABLE else "DRAAD172: NOT AVAILABLE"
         ],
-        "cache_bust": 1765580000 + int(datetime.now().timestamp())  # Dynamic cache bust
+        "cache_bust": 1765590000 + int(datetime.now().timestamp())  # Dynamic cache bust
     }
 
 
@@ -196,7 +217,7 @@ async def health():
         status="healthy",
         timestamp=datetime.utcnow().isoformat(),
         service="rooster-solver",
-        version="1.1.2-DRAAD170-ASYNC"
+        version="1.2.0-DRAAD172-SELECTOR"
     )
 
 
@@ -210,9 +231,9 @@ async def version():
         ortools_version = "unknown"
     
     return VersionResponse(
-        version="1.1.2-DRAAD170-ASYNC",
+        version="1.2.0-DRAAD172-SELECTOR",
         or_tools_version=ortools_version,
-        phase="DRAAD170-async-await + DRAAD169-diagnostic-logging",
+        phase="DRAAD172-selector + DRAAD170-async-await + DRAAD169-diagnostic-logging",
         capabilities=[
             "constraint_1_bevoegdheden",
             "constraint_2_beschikbaarheid",
@@ -225,61 +246,50 @@ async def version():
             "constraint_8_system_service_exclusivity",  # DRAAD108: NIEUW
             "draad166_exception_handlers",  # DRAAD166: NIEUW
             "draad169_diagnostic_logging",  # DRAAD169: NIEUW
-            "draad170_async_threadpool"  # DRAAD170: NIEUW
+            "draad170_async_threadpool",  # DRAAD170: NIEUW
+            "draad172_sequential_greedy_selector" if DRAAD172_AVAILABLE else "draad172_NOT_AVAILABLE"  # DRAAD172: NIEUW
         ]
     )
 
 
 # ============================================================================
-# DRAAD170: SYNC SOLVER LOGIC (runs in thread pool)
+# DRAAD170+DRAAD172: SYNC SOLVER LOGIC (runs in thread pool)
 # ============================================================================
 
-def _do_solve(request: SolveRequest) -> SolveResponse:
-    """DRAAD170: Sync solve logic - runs in ThreadPoolExecutor.
+def _do_solve(request: SolveRequest, strategy: str = None) -> SolveResponse:
+    """DRAAD170+DRAAD172: Sync solve logic - runs in ThreadPoolExecutor.
+    
+    Supports both CP-SAT (DRAAD170) and Sequential Greedy (DRAAD172).
     
     This function contains the actual sync solver execution.
     It's called from the async endpoint via loop.run_in_executor().
     
     This keeps the async event loop responsive while solver computes.
+    
+    Args:
+        request: SolveRequest
+        strategy: Optional solver strategy ('draad172' or 'draad170')
+                 None = use default from selector
     """
     start_time = datetime.now()
     
     try:
         logger.info("[DRAAD170-SYNC] Thread pool: Starting sync solve logic...")
         
-        # Instantieer RosterSolver
-        try:
-            logger.info("[DRAAD170-SYNC] Creating RosterSolver instance...")
-            solver = RosterSolver(
-                roster_id=request.roster_id,
-                employees=request.employees,
-                services=request.services,
-                roster_employee_services=request.roster_employee_services,
-                start_date=request.start_date,
-                end_date=request.end_date,
-                # DRAAD106 parameters
-                fixed_assignments=request.fixed_assignments,
-                blocked_slots=request.blocked_slots,
-                suggested_assignments=request.suggested_assignments,
-                # DRAAD108 parameter - NIEUW!
-                exact_staffing=request.exact_staffing,
-                # DEPRECATED maar backwards compatible
-                pre_assignments=request.pre_assignments,
-                timeout_seconds=request.timeout_seconds
-            )
-            logger.info("[DRAAD170-SYNC] ✅ RosterSolver instance created")
-        except Exception as e:
-            logger.error(f"[DRAAD170-SYNC] ERROR creating RosterSolver: {str(e)}", exc_info=True)
-            raise
-        
-        try:
-            logger.info("[DRAAD170-SYNC] Calling solver.solve()...")
-            # This is the blocking call - but we're in a thread, so event loop is NOT blocked
-            response = solver.solve()
-            logger.info("[DRAAD170-SYNC] ✅ solver.solve() completed")
-        except Exception as e:
-            logger.error(f"[DRAAD170-SYNC] ERROR in solver.solve(): {str(e)}", exc_info=True)
-            raise
+        # DRAAD172: Use selector if available and not explicitly requesting CP-SAT
+        if DRAAD172_AVAILABLE and strategy != 'draad170':
+            logger.info("[DRAAD172-SYNC] Using SolverSelector...")
+            try:
+                response = SolverSelector.solve(request, strategy=strategy)
+                logger.info("[DRAAD172-SYNC] ✅ SolverSelector.solve() completed")
+            except Exception as e:
+                logger.error(f"[DRAAD172-SYNC] ERROR in SolverSelector: {str(e)}", exc_info=True)
+                logger.warning("[DRAAD172-SYNC] Falling back to CP-SAT...")
+                # Fall back to CP-SAT
+                response = _do_solve_cpsat(request, start_time)
+        else:
+            logger.info("[DRAAD170-SYNC] Using CP-SAT solver directly...")
+            response = _do_solve_cpsat(request, start_time)
         
         sync_time = (datetime.now() - start_time).total_seconds()
         logger.info(f"[DRAAD170-SYNC] Completed in {sync_time:.2f}s")
@@ -305,20 +315,88 @@ def _do_solve(request: SolveRequest) -> SolveResponse:
         )
 
 
+def _do_solve_cpsat(request: SolveRequest, start_time: datetime = None) -> SolveResponse:
+    """DRAAD170: CP-SAT solve logic.
+    
+    Args:
+        request: SolveRequest
+        start_time: Start time for timing (optional)
+    
+    Returns:
+        SolveResponse
+    """
+    if start_time is None:
+        start_time = datetime.now()
+    
+    try:
+        # Instantieer RosterSolver
+        try:
+            logger.info("[DRAAD170-CPSAT] Creating RosterSolver instance...")
+            solver = RosterSolver(
+                roster_id=request.roster_id,
+                employees=request.employees,
+                services=request.services,
+                roster_employee_services=request.roster_employee_services,
+                start_date=request.start_date,
+                end_date=request.end_date,
+                # DRAAD106 parameters
+                fixed_assignments=request.fixed_assignments,
+                blocked_slots=request.blocked_slots,
+                suggested_assignments=request.suggested_assignments,
+                # DRAAD108 parameter - NIEUW!
+                exact_staffing=request.exact_staffing,
+                # DEPRECATED maar backwards compatible
+                pre_assignments=request.pre_assignments,
+                timeout_seconds=request.timeout_seconds
+            )
+            logger.info("[DRAAD170-CPSAT] ✅ RosterSolver instance created")
+        except Exception as e:
+            logger.error(f"[DRAAD170-CPSAT] ERROR creating RosterSolver: {str(e)}", exc_info=True)
+            raise
+        
+        try:
+            logger.info("[DRAAD170-CPSAT] Calling solver.solve()...")
+            # This is the blocking call - but we're in a thread, so event loop is NOT blocked
+            response = solver.solve()
+            logger.info("[DRAAD170-CPSAT] ✅ solver.solve() completed")
+        except Exception as e:
+            logger.error(f"[DRAAD170-CPSAT] ERROR in solver.solve(): {str(e)}", exc_info=True)
+            raise
+        
+        return response
+    
+    except Exception as e:
+        logger.error("[DRAAD170-CPSAT] UNCAUGHT EXCEPTION in CP-SAT solve", exc_info=True)
+        sync_time = (datetime.now() - start_time).total_seconds()
+        
+        return SolveResponse(
+            status=SolveStatus.ERROR,
+            roster_id=request.roster_id,
+            assignments=[],
+            solve_time_seconds=round(sync_time, 2),
+            violations=[ConstraintViolation(
+                constraint_type="cpsat_solve_error",
+                message=f"[DRAAD170-CPSAT] Error: {str(e)[:150]}",
+                severity="critical"
+            )]
+        )
+
+
 # ============================================================================
-# SOLVER ENDPOINT WITH DRAAD170 ASYNC/AWAIT OPTIMIZATION
+# SOLVER ENDPOINT WITH DRAAD170+DRAAD172 OPTIMIZATION
 # ============================================================================
 
 @app.post("/api/v1/solve-schedule", response_model=SolveResponse)
 async def solve_schedule(request: SolveRequest):
     """
-    Solve rooster met OR-Tools CP-SAT solver (ASYNC-compatible).
+    Solve rooster met OR-Tools CP-SAT solver of DRAAD172 Sequential Greedy.
     
-    DRAAD170: Uses ThreadPoolExecutor to run sync solver without blocking async event loop
-    DRAAD166: Layer 1 exception handling - graceful error handling at FastAPI level
-    DRAAD169: Enhanced diagnostic logging to track solve() activation
+    DRAAD172: Uses SolverSelector if available (can be overridden with env var)
+    DRAAD170: Uses ThreadPoolExecutor for non-blocking async execution
+    DRAAD166: Layer 1 exception handling - graceful error handling
+    DRAAD169: Enhanced diagnostic logging
     
-    Implementeert 8 constraints:
+    Implementeert 8 constraints (DRAAD170 CP-SAT):
     1. Bevoegdheden (DRAAD105: roster_employee_services met actief=TRUE)
     2. Beschikbaarheid (structureel NBH)
     3A. Fixed assignments (DRAAD106: status 1)
@@ -328,6 +406,12 @@ async def solve_schedule(request: SolveRequest):
     6. ZZP minimalisatie (via objective)
     7. DRAAD108: Exacte bezetting realiseren
     8. DRAAD108: Systeemdienst exclusiviteit (DIO XOR DDO, DIA XOR DDA)
+    
+    DRAAD172 Features (Sequential Greedy):
+    - 3-layer priority: System → TOT → GRO/ORA
+    - Per-dagdeel system ordering: DIO→DDO (ochtend), DIA→DDA (avond)
+    - Deterministic results
+    - Fast execution
     
     DRAAD108 Features:
     - Exacte bezetting per dienst/dagdeel/team via exact_staffing parameter
@@ -370,7 +454,8 @@ async def solve_schedule(request: SolveRequest):
             response = await loop.run_in_executor(
                 SOLVER_EXECUTOR,
                 _do_solve,
-                request
+                request,
+                None  # strategy parameter (None = use default)
             )
             logger.info("[DRAAD170-ASYNC] ✅ ThreadPoolExecutor returned response")
             
