@@ -1,0 +1,11 @@
+DRAAD: 167-HOTFIX
+TRIGGER_ID: rwy-trigger-167-hotfix-9847-duplicate-removal
+DEPLOYMENT_TIMESTAMP: 1734077985000
+RANDOM_SEED: 7639284156
+COMPONENT: supabase/migrations/20251213_DRAAD167_HOTFIX_enddate_check.sql
+TARGET: Fix duplicate records on rooster.enddate boundary
+MODE: IMMEDIATE deployment - Critical hotfix
+STATUS: ACTIVE
+PRIORITY: CRITICAL
+ACTION: DELETE 2 duplicate records + apply trigger fix
+EXPECTED_RESULT: roster_assignments count = 1470
