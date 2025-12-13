@@ -1,0 +1,113 @@
+DRAAD173 DEPLOYMENT FAILURE ANALYSIS & FIX
+Status: FIXED ✅
+Date: 2025-12-13T12:26:00Z
+
+=================================================================
+FAILURE ROOT CAUSE
+=================================================================
+
+Docker build FAILED met:
+  NameError: name 'SOLVER_STRATEGY_ENV' is not defined. 
+  Did you mean: 'Solver_STRATEGY_ENV'?
+
+Location: solver/solver_selector.py, Line 31
+
+=================================================================
+ROOT CAUSE ANALYSIS
+=================================================================
+
+Variabele typo in solver_selector.py:
+
+LINE 30 (INCORRECT):
+  Solver_STRATEGY_ENV = os.getenv('SOLVER_STRATEGY', 'draad170')
+  ↑ WRONG: Hoofdletter 'S' in variabele naam
+
+LINE 31 (FAILS):
+  if SOLVER_STRATEGY_ENV.lower() in ['draad172', 'sequential', 'greedy']:
+     ↑ CORRECT NAAM, maar variabele bestaat niet!
+     → NameError: name 'SOLVER_STRATEGY_ENV' is not defined
+
+=================================================================
+SOLUTION APPLIED
+=================================================================
+
+BEFORE (INCORRECT):
+  Solver_STRATEGY_ENV = os.getenv('SOLVER_STRATEGY', 'draad170')
+  if SOLVER_STRATEGY_ENV.lower() in ['draad172', 'sequential', 'greedy']:
+     ↑ MISMATCH: variabele naam != gebruikte naam
+
+AFTER (CORRECT):
+  SOLVER_STRATEGY_ENV = os.getenv('SOLVER_STRATEGY', 'draad170')
+  if SOLVER_STRATEGY_ENV.lower() in ['draad172', 'sequential', 'greedy']:
+     ✅ Consistent naming throughout
+
+=================================================================
+FILE CHANGES
+=================================================================
+
+File: solver/solver_selector.py
+  SHA (before): 301f989cd8ecb4070f605e351daa001254123f22
+  SHA (after):  4bdd325b7f50e4a738c5f4b24edc152fae978b77
+  Change: Line 30 - Fixed variable name case
+  Impact: Import will now succeed, Docker build will complete
+
+=================================================================
+IMPACT ASSESSMENT
+=================================================================
+
+✅ Fixes:
+  - solver_selector.py now imports without NameError
+  - main.py can now import SolverSelector successfully
+  - Dockerfile build step 8 (import test) will pass
+  - Container will start and be ready for requests
+
+✅ Safety:
+  - No logic changes, only syntax fix
+  - Behavior is identical to intended design
+  - All other imports remain unchanged
+  - DRAAD172 selector integration ready
+
+=================================================================
+NEXT STEPS
+=================================================================
+
+1. Railway will rebuild with the fix
+2. Docker build will complete successfully
+3. Container will start and log startup sequence
+4. Service will be ready to accept solve requests
+5. Both CP-SAT (DRAAD170) and Sequential (DRAAD172) solvers available
+
+=================================================================
+VERIFICATION
+=================================================================
+
+After deployment, verify:
+  1. GET /health returns 200 OK
+  2. GET /version shows both solver capabilities
+  3. POST /api/v1/solve-schedule accepts and processes requests
+  4. Logs show proper startup sequence without NameError
+
+=================================================================
+DESIGN NOTES
+=================================================================
+
+SOLVER_STRATEGY environment variable:
+  - Valid values: 'draad170' (default), 'draad172', 'sequential', 'greedy'
+  - If set to draad172/sequential/greedy: uses Sequential Greedy Solver
+  - Otherwise: defaults to CP-SAT (DRAAD170)
+  - Can be overridden per-request via strategy_override parameter
+
+=================================================================
+QUALITY ASSURANCE
+=================================================================
+
+Code review checklist:
+  ✅ Variable naming is now consistent
+  ✅ Import statement will succeed
+  ✅ Logger initialization will not fail
+  ✅ Both solver paths (DRAAD170 + DRAAD172) preserved
+  ✅ Error handling unchanged
+  ✅ No breaking changes to API
+  ✅ Backward compatible
+
+=================================================================
