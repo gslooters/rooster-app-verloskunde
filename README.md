@@ -6,9 +6,29 @@ Een Next.js applicatie voor roosterplanning in de verloskunde praktijk.
 
 ## 📦 DEPLOYMENT STATUS
 
-**Laatste deployment:** DRAAD74 - Team Kleuren Fix via Employee Snapshot (28 nov 2025, 23:09 CET)  
-**Status:** ✅ FORCE REBUILD ACTIEF - Trigger: 8477  
-**Build verwachting:** ✅ SUCCESS op commit 18290988
+**Huidige deployment:** DRAAD176 - Sequential Solver Data JOIN Fix (13 dec 2025, 14:49 CET)  
+**Status:** ✅ LIVE ON MAIN - Cache bust actief  
+**Build verwachting:** ✅ Railway rebuild triggered
+
+### 🔧 DRAAD176 - Sequential Solver JOIN Fix (13 dec 2025)
+- ✅ Sequential Solver queried child tabel → Fixed to query parent table
+- ✅ Missing 'date' field issue → Now has date from parent roster_period_staffing
+- ✅ `row.get('date')` returned None → Now gets date from parent properly
+- ✅ _parse_date(None) crashes → Now has defensive checks
+- ✅ Requirements load from parent + nested JOIN of child dagdelen
+- ✅ Cache-busting: DRAAD176 timestamp + random deployment token
+- ✅ Railway rebuild trigger included
+- ✅ Complete evaluation documentation added
+
+**Problem:** Sequential Solver crashed with `'NoneType' object has no attribute 'split'`  
+**Root Cause:** Queried roster_period_staffing_dagdelen (child) instead of roster_period_staffing (parent)  
+**Solution:** Query parent table with nested select of children → date field now available  
+**Status:** DEPLOYED TO MAIN - awaiting Railway rebuild  
+
+---
+
+**Vorige deployment:** DRAAD74 - Team Kleuren Fix via Employee Snapshot (28 nov 2025, 23:09 CET)  
+**Status:** ✅ LIVE
 
 ### DRAAD74 - Team Kleuren Fix via Employee Snapshot
 - ✅ RosterEmployee interface uitgebreid met team/voornaam/achternaam/dienstverband
@@ -198,6 +218,13 @@ lib/
 │   └── daytype-staffing-storage.ts  # Enhanced storage
 └── export/              # Export functionality
     └── daytype-staffing-export.ts   # Enhanced exports
+
+solver/
+├── sequential_solver_v2.py  # Sequential Solver - DRAAD176 fixed
+└── ...
+
+railway/
+└── DRAAD176-deployment-trigger.env  # Railway rebuild trigger
 ```
 
 ## Features
@@ -207,6 +234,13 @@ lib/
 - Team-scope selectie per dienst
 - Real-time validatie van regels
 - Visual feedback voor actieve team-scope
+
+### Sequential Solver (DRAAD176)
+- Deterministic sequential priority queue solver
+- Loads requirements from parent table with proper date fields
+- Correctly handles parent-child data relationships
+- Defensive error handling with clear messages
+- Sorts by 3-layer priority (dagdeel → service → team)
 
 ### Export Mogelijkheden
 - **Excel/CSV**: Complete data export met team informatie
@@ -228,6 +262,9 @@ De applicatie wordt automatisch gedeployed naar Railway.app:
 - **Auto-deployment**: Push naar `main` branch triggert automatisch deployment
 - **Build tijd**: ~2-3 minuten
 - **Environment**: Production
+- **Solver Services**: 
+  - rooster-app-verloskunde (Frontend + API)
+  - Solver2 (Sequential Solver service - DRAAD176 deployed)
 
 ### Deployment Proces
 
@@ -237,11 +274,21 @@ De applicatie wordt automatisch gedeployed naar Railway.app:
 4. Bij succesvolle build: automatische deployment
 5. Applicatie is live binnen 2-3 minuten
 
+### DRAAD176 Deployment (Sequential Solver)
+
+Speciale deployment instructies voor Solver2 service:
+
+1. **Cache Busting**: Included in `railway/DRAAD176-deployment-trigger.env`
+2. **Force Rebuild**: New deployment token triggers fresh build
+3. **Monitoring**: Check logs for `Loaded X requirements from Y parent records`
+4. **Verification**: No more `'NoneType' object has no attribute 'split'` errors
+
 ### Monitoring
 
 - Railway Dashboard: https://railway.com/project/90165889-1a50-4236-aefe-b1e1ae44dc7f
 - Build logs beschikbaar in Railway dashboard
 - Deploy status zichtbaar in GitHub commit
+- Solver logs: Monitor for data load success indicators
 
 ## Development Notes
 
@@ -253,13 +300,26 @@ This project uses:
 - localStorage for local data persistence
 - Component-based architecture
 - Railway.app for hosting
+- Python 3.10+ for Sequential Solver service
+- Supabase Python client for database access
 
 ## Important Documentation
 
 - **Route Mapping**: [ROUTE_MAPPING.md](./ROUTE_MAPPING.md) - Complete overzicht van alle routes
 - **Critical Analysis**: [DRAAD36L_CRITICAL_ANALYSIS.md](./DRAAD36L_CRITICAL_ANALYSIS.md) - Lessons learned van route problemen
+- **DRAAD176 Evaluation**: [docs/DRAAD176-EVALUATION.md](./docs/DRAAD176-EVALUATION.md) - Complete technical evaluation
+- **Deployment Summary**: [DEPLOYMENT-SUMMARY-DRAAD176.md](./DEPLOYMENT-SUMMARY-DRAAD176.md) - Quick reference guide
 
 ## Recent Updates
+
+### v2.6 - DRAAD176 Sequential Solver JOIN Fix (13 dec 2025)
+- ✅ Fixed Sequential Solver querying wrong table (child vs parent)
+- ✅ Added parent table query with nested child JOIN
+- ✅ Made _parse_date() defensive with None checks
+- ✅ Cache-busting with Date.now() tokens
+- ✅ Railway deployment triggers included
+- ✅ Complete evaluation documentation
+- ✅ Deployment ready for Solver2 service
 
 ### v2.5 - DRAAD74 Team Kleuren Fix (28 nov 2025)
 - ✅ RosterEmployee uitgebreid met team/voornaam/achternaam/dienstverband
@@ -312,3 +372,4 @@ This project uses:
 - [Railway Documentation](https://docs.railway.app)
 - [Supabase Documentation](https://supabase.com/docs)
 - [Tailwind CSS](https://tailwindcss.com/docs)
+- [Python Supabase Client](https://supabase.com/docs/reference/python/introduction)
