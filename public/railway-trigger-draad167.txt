@@ -1,0 +1,8 @@
+DRAAD: 167
+TRIGGER_ID: rwy-trigger-167-8742-enddate-validation
+DEPLOYMENT_TIMESTAMP: 1734077136000
+RANDOM_SEED: 9642715843
+COMPONENT: supabase/migrations/20241203_trigger_roster_auto_blocking.sql
+TARGET: Roosterperiode grensvalidatie (>= enddate check)
+MODE: Automatic trigger for Railway.com deployment
+STATUS: ACTIVE
