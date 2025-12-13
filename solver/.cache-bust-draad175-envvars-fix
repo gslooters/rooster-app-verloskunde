@@ -1,0 +1,25 @@
+DRAAD175 CACHE BUST & RAILWAY TRIGGER
+Version: 2.0.0-DRAAD175
+Date: 2025-12-13 14:47:44 UTC
+Timestamp: 1765632464000
+Random: 8734629
+
+FIXES IMPLEMENTED:
+✅ FIX #1: Environment variable validation (solver_selector.py)
+✅ FIX #2: HTTP error response details (main.py)
+⏳ FIX #3-6: Model & Logic fixes (in progress)
+
+DEPLOYMENT TRIGGER:
+This file triggers Railway rebuild with new environment validation
+
+NEXT STEPS:
+1. Push this file to main
+2. Railway detects git commit
+3. Docker rebuild starts
+4. New environment validation runs at startup
+5. Better error messages appear in logs
+
+MONITORING:
+- Check Railway logs for [ENVCHECK] status
+- Look for SUPABASE_URL and SUPABASE_KEY presence
+- Verify solver strategy selection in logs
