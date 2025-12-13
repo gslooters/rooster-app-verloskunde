@@ -2,7 +2,7 @@
 -- DRAAD 99A: TRIGGER FUNCTION VOOR AUTOMATISCHE BLOKKERING
 -- =====================================================
 -- Datum: 3 dec 2025
--- Update: 13 dec 2025 (DRAAD 167: enddate check toegevoegd)
+-- Update: 13 dec 2025 (DRAAD 167: enddate check toegevoegd + hotfix)
 -- Doel: Automatisch blokkeren van dagdelen bij INSERT/UPDATE/DELETE van diensten
 --
 -- Blokkeerlogica:
@@ -12,7 +12,7 @@
 -- - DDA (nachtdienst A): blokkeert O+M van volgende dag
 --
 -- KRITIEK: Status 3 (structureel NB) mag NOOIT worden overschreven!
--- KRITIEK: Datums >= rooster.enddate worden geblokkeerd (grensvalidatie)
+-- KRITIEK: Datums >= rooster.enddate worden GENEGEERD (voorkomen duplicates op grensdag)
 -- =====================================================
 
 -- Drop trigger en functie als ze al bestaan (voor herhaalde uitvoering)
@@ -27,7 +27,7 @@ RETURNS TRIGGER AS $$
 DECLARE
     v_blocked_rec RECORD;
     v_service_code TEXT;
-    v_roster_enddate DATE;
+    v_roster_enddate DATE;  -- 🔴 DRAAD 167: Voor grensvalidatie
 BEGIN
     -- ===================================================
     -- SCENARIO 1: INSERT - Nieuwe dienst ingepland
@@ -36,14 +36,15 @@ BEGIN
         -- Alleen acteren als status van 0 naar 1 gaat (inplanning)
         IF NEW.status = 1 AND NEW.service_id IS NOT NULL THEN
             
-            -- GRENSVALIDATIE: Haal rooster enddate op
+            -- 🔴 DRAAD 167: GRENSVALIDATIE - Haal rooster enddate op
             SELECT enddate INTO v_roster_enddate 
             FROM roosters 
             WHERE id = NEW.roster_id;
             
-            -- Blokkeer als datum op of na rooster.enddate is
+            -- 🔴 DRAAD 167: Blokkeer als datum op of na rooster.enddate is
+            -- Dit voorkomt blokkeringen BUITEN de roosterperiode
             IF NEW.date >= v_roster_enddate THEN
-                RETURN NEW;
+                RETURN NEW;  -- Exit zonder blokkering
             END IF;
             
             -- Haal alle te blokkeren dagdelen op via de functie uit vorige sessie
@@ -103,7 +104,7 @@ BEGIN
         -- Check of de service_id is gewijzigd
         IF (OLD.service_id IS DISTINCT FROM NEW.service_id) THEN
             
-            -- GRENSVALIDATIE: Haal rooster enddate op
+            -- 🔴 DRAAD 167: GRENSVALIDATIE - Haal rooster enddate op
             SELECT enddate INTO v_roster_enddate 
             FROM roosters 
             WHERE id = NEW.roster_id;
@@ -127,7 +128,8 @@ BEGIN
                     AND blocked_by_dagdeel = OLD.dagdeel;
             END IF;
             
-            -- STAP 2: Blokkeer nieuwe dienst (als die bestaat en binnen periode is)
+            -- STAP 2: Blokkeer nieuwe dienst (als die bestaat en BINNEN periode is)
+            -- 🔴 DRAAD 167: Check NEW.date < v_roster_enddate!
             IF NEW.service_id IS NOT NULL AND NEW.status = 1 AND NEW.date < v_roster_enddate THEN
                 FOR v_blocked_rec IN 
                     SELECT block_date, block_dagdeel 
@@ -222,22 +224,28 @@ COMMENT ON FUNCTION trg_roster_assignment_status_management() IS
      - Bij INSERT (status 0→1): Blokkeer benodigde dagdelen (status 0→2)
      - Bij UPDATE (dienst wijzigt): Deblokkeer oude dienst, blokkeer nieuwe dienst  
      - Bij DELETE: Deblokkeer alle geblokkeerde dagdelen
-     - GRENSVALIDATIE: Datums >= rooster.enddate worden genegeerd
-     - KRITIEK: Status 3 (structureel NB) wordt NOOIT automatisch overschreven!';
+     - GRENSVALIDATIE: Datums >= rooster.enddate worden GENEGEERD (voorkomen duplicates)
+     - Status 3 (structureel NB) wordt NOOIT automatisch overschreven
+     - DRAAD 167 HOTFIX: 13 dec 2025';
 
 COMMENT ON TRIGGER trg_roster_assignment_auto_blocking ON roster_assignments IS
     'Automatische blokkering van dagdelen obv service_types.blokkeert_volgdag.
      Gebruikt get_blocked_dagdelen_info() functie voor blokkeerlogica.
+     Met ENDDATE-CHECK om duplicates op grensdag te voorkomen.
      Geïmplementeerd: DRAAD 99A (3 dec 2025)
-     Update: DRAAD 167 - roosterperiode grensvalidatie (13 dec 2025)';
+     Update: DRAAD 167 - roosterperiode grensvalidatie (13 dec 2025)
+     Hotfix: DRAAD 167 HOTFIX (13 dec 2025 17:39 UTC)';
 
 -- Success message
 DO $$
 BEGIN
-    RAISE NOTICE '✅ DRAAD 167: Trigger trg_roster_assignment_auto_blocking SUCCESVOL geupdate!';
-    RAISE NOTICE '📋 Functie: trg_roster_assignment_status_management()';
+    RAISE NOTICE '✅ DRAAD 167 HOTFIX: Trigger trg_roster_assignment_auto_blocking SUCCESVOL geupdate!';
+    RAISE NOTICE '🔴 ENDDATE CHECKS TOEGEVOEGD:';
+    RAISE NOTICE '   INSERT: IF NEW.date >= v_roster_enddate THEN RETURN NEW END IF';
+    RAISE NOTICE '   UPDATE: AND NEW.date < v_roster_enddate';
     RAISE NOTICE '🔒 Blokkeerlogica actief voor: DIO, DDO, DIA, DDA';
     RAISE NOTICE '⚠️  Status 3 (structureel NB) wordt NOOIT overschreven';
     RAISE NOTICE '📅 GRENSVALIDATIE: Datums >= rooster.enddate worden genegeerd';
     RAISE NOTICE '🛡️  Voorkomt duplicate records op roosterperiode-grens';
+    RAISE NOTICE '✨ FIX ACTIEF - duplicate records buiten periode voorkomen';
 END $$;
