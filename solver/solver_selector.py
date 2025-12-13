@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 # DRAAD172: Strategy Selection
 # ==========================================================================
 
-Solver_STRATEGY_ENV = os.getenv('SOLVER_STRATEGY', 'draad170')  # Default: CP-SAT
+SOLVER_STRATEGY_ENV = os.getenv('SOLVER_STRATEGY', 'draad170')  # Default: CP-SAT
 if SOLVER_STRATEGY_ENV.lower() in ['draad172', 'sequential', 'greedy']:
     DEFAULT_SOLVER_STRATEGY = 'draad172'
 else:
