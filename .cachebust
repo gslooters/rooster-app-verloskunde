@@ -1,21 +1,18 @@
-# Global Cache Bust File
-# DRAAD99B - Updated: 2025-12-03 11:29 CET
+# Global Cache Bust File - DRAAD173B FASE 4
+# Updated: 2025-12-13 14:26 CET
 
-DRAAD99B_TIMESTAMP=1733225340000
-DRAAD99B_PHASE=constraint_cleanup
-DRAAD99B_RANDOM=47289
+DRAD173B_TIMESTAMP=1765632960000
+DRAD173B_PHASE=fase4_testing_polish
+DRAD173B_RANDOM=7829
 
-# Alle vorige cache busts blijven geldig
-# Dit is een cumulatieve update
+# DRAAD173B: FASE 4 TESTING & DEPLOYMENT
+# ✅ Fresh OR-Tools Solver V2 (FASE 1) - COMPLETE
+# ✅ Sequential Solver V2 (FASE 2) - COMPLETE  
+# ✅ SolverSelector V2 Integration (FASE 3) - COMPLETE
+# ✅ Cache-busting (FASE 4) - ACTIVE
+# ✅ Unit + Integration Tests (FASE 4) - PENDING
+# ✅ Smoke Tests (FASE 4) - PENDING
 
-# DRAAD 99B: VERWIJDEREN PLANREGELS - CONSTRAINT RECORDS
-# ✅ service-blocking-rules.ts verwijderd
-# ✅ preplanning-storage.ts imports/calls verwijderd
-# ✅ Database: blokkeert_volgdag kolom blijft bestaan
-# ✅ Frontend: blokkeert_volgdag UI blijft bestaan
-# ✅ Types: blokkeert_volgdag types blijven bestaan
-
-# DRAAD97A - Previous: 2025-12-02 23:10 CET
-DRAAD97A_TIMESTAMP=1733176200000
-DRAAD97A_PHASE=fase1_solver_implementation
-DRAAD97A_RANDOM=928374
+# Cumulative history:
+DRAD99B_TIMESTAMP=1733225340000
+DRAD97A_TIMESTAMP=1733176200000
