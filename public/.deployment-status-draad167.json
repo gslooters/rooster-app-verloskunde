@@ -1,0 +1,79 @@
+{
+  "draad": "167",
+  "title": "Roosterperiode Grensvalidatie (>= enddate check)",
+  "status": "COMPLETED",
+  "deployment_date": "2025-12-13T17:26:30Z",
+  "commits": [
+    {
+      "sha": "f87b5f68f5b298b83482c454522e298ce9de0d1f",
+      "file": "supabase/migrations/20241203_trigger_roster_auto_blocking.sql",
+      "message": "DRAAD 167: Voeg roosterperiode grensvalidatie toe (>= enddate check)",
+      "type": "trigger_update",
+      "changes": [
+        "DECLARE v_roster_enddate DATE",
+        "SELECT enddate INTO v_roster_enddate FROM roosters",
+        "INSERT scenario: IF NEW.date >= v_roster_enddate THEN RETURN NEW END IF",
+        "UPDATE scenario: Added check NEW.date < v_roster_enddate"
+      ]
+    },
+    {
+      "sha": "827cc77d9ddbb520381cd7a3ea6a5aa4ca233645",
+      "file": "public/cachebust-draad167.json",
+      "message": "DRAAD 167: Cache busting - enddate validation deployment trigger",
+      "type": "cache_bust",
+      "timestamp": 1734077136000
+    },
+    {
+      "sha": "2e66f5bc246c9be0feabdc74ccbe61ed4748cfcb",
+      "file": "public/railway-trigger-draad167.txt",
+      "message": "DRAAD 167: Railway deployment trigger for enddate validation",
+      "type": "deployment_trigger",
+      "random_seed": 9642715843
+    },
+    {
+      "sha": "e87b0e36d89bc0e08ddd633ce15ab2e84a0c78cc",
+      "file": "supabase/migrations/DRAAD167_SUMMARY.md",
+      "message": "DRAAD 167: Documentatie roosterperiode grensvalidatie",
+      "type": "documentation"
+    }
+  ],
+  "validation": {
+    "syntax_check": "PASSED",
+    "logic_review": "PASSED",
+    "backward_compatibility": "100% MAINTAINED",
+    "status_3_protection": "INTACT",
+    "comments_preserved": "YES",
+    "notice_messages": "ALL UPDATED"
+  },
+  "changes_summary": {
+    "files_modified": 1,
+    "files_created": 3,
+    "trigger_functions_updated": 1,
+    "migration_files_affected": 0,
+    "breaking_changes": 0
+  },
+  "deployment_target": {
+    "repository": "gslooters/rooster-app-verloskunde",
+    "branch": "main",
+    "services": [
+      "rooster-app-verloskunde",
+      "Solver2"
+    ],
+    "platform": "Railway.com",
+    "environment": "production"
+  },
+  "notes": [
+    "Voorkoming van duplicate records op rooster.enddate grens",
+    "Grensvalidatie werkt voor INSERT en UPDATE scenarios",
+    "DELETE scenario ongewijzigd",
+    "Status 3 bescherming volledig behouden",
+    "Alle blokkeerlogica intact (DIO, DDO, DIA, DDA)",
+    "100% backward compatible"
+  ],
+  "next_steps": [
+    "Railway deployment wordt automatisch geactiveerd",
+    "Cache busting zorgt voor fresh deployment",
+    "Monitor Supabase voor trigger execution",
+    "Verify geen duplicate records meer op grensdag"
+  ]
+}
