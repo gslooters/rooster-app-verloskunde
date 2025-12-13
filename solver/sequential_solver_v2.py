@@ -181,34 +181,60 @@ class RequirementQueue:
         self.services_cache: Dict[str, Service] = {}
     
     def load_from_db(self, services: Dict[str, Service]) -> List[Requirement]:
-        """Load requirements from roster_period_staffing_dagdelen."""
+        """Load requirements from roster_period_staffing with joined dagdelen data.
+        
+        DRAAD176 FIX: Query parent table (roster_period_staffing) with nested select
+        of dagdelen child records. This ensures we have the 'date' field from parent.
+        """
         logger.info(f"Loading requirements for roster {self.roster_id}...")
         self.services_cache = services
         
         try:
-            # Get all required staffing per dagdeel
-            response = self.db.table('roster_period_staffing_dagdelen')\
-                .select('*')\
+            # ✅ CORRECT: Get parent table with nested child data
+            # This ensures we have the 'date' field from roster_period_staffing
+            response = self.db.table('roster_period_staffing')\
+                .select('*, roster_period_staffing_dagdelen(id, dagdeel, team, status, aantal)')\
+                .eq('roster_id', self.roster_id)\
                 .execute()
             
             requirements = []
-            for row in response.data:
-                # Only process rows for this roster
-                # Note: Need to join through parent table if necessary
+            
+            # Process each parent record (one per service/date combination)
+            for parent_row in response.data:
+                parent_date = self._parse_date(parent_row.get('date'))  # ✅ NOW EXISTS
+                parent_service_id = parent_row.get('service_id', '')
                 
-                req = Requirement(
-                    service_id=row.get('service_id', ''),
-                    date=self._parse_date(row.get('date')),
-                    dagdeel=row.get('dagdeel', 'O'),
-                    team=row.get('team', 'TOT'),
-                    priority=self._calculate_priority(row),
-                    count_needed=row.get('aantal', 0),
-                    service_code=self._get_service_code(row.get('service_id', ''))
-                )
-                requirements.append(req)
+                # Get nested child records (dagdelen breakdowns)
+                dagdelen_list = parent_row.get('roster_period_staffing_dagdelen', [])
+                
+                if not dagdelen_list:
+                    # No dagdelen specified - create single requirement for all staff
+                    req = Requirement(
+                        service_id=parent_service_id,
+                        date=parent_date,
+                        dagdeel='O',  # Default
+                        team='TOT',   # Default
+                        priority=self._calculate_priority(parent_row),
+                        count_needed=0,
+                        service_code=self._get_service_code(parent_service_id)
+                    )
+                    requirements.append(req)
+                else:
+                    # Create one requirement per dagdeel breakdown
+                    for dagdeel_row in dagdelen_list:
+                        req = Requirement(
+                            service_id=parent_service_id,
+                            date=parent_date,  # ✅ From parent
+                            dagdeel=dagdeel_row.get('dagdeel', 'O'),
+                            team=dagdeel_row.get('team', 'TOT'),
+                            priority=self._calculate_priority(parent_row),
+                            count_needed=dagdeel_row.get('aantal', 0),
+                            service_code=self._get_service_code(parent_service_id)
+                        )
+                        requirements.append(req)
             
             self.requirements = requirements
-            logger.info(f"Loaded {len(requirements)} requirements")
+            logger.info(f"Loaded {len(requirements)} requirements from {len(response.data)} parent records")
             return requirements
         
         except Exception as e:
@@ -266,12 +292,35 @@ class RequirementQueue:
         return sorted_reqs
     
     def _parse_date(self, date_str: str) -> date:
-        """Parse date from database."""
+        """Parse date from database with defensive checks.
+        
+        DRAAD176 FIX: Added explicit None check to catch data join errors early.
+        """
+        # Defensive: Check for None first
+        if date_str is None:
+            raise ValueError(
+                f"CRITICAL: date_str is None in load_from_db. "
+                f"Verify SQL query includes parent roster_period_staffing table with 'date' field."
+            )
+        
+        # If already a date object, return as-is
         if isinstance(date_str, date):
             return date_str
-        # Expected format: YYYY-MM-DD
-        parts = date_str.split('-')
-        return date(int(parts[0]), int(parts[1]), int(parts[2]))
+        
+        # Must be a string
+        if not isinstance(date_str, str):
+            raise TypeError(
+                f"Expected str or date, got {type(date_str).__name__}: {date_str}"
+            )
+        
+        try:
+            # Expected format: YYYY-MM-DD
+            parts = date_str.split('-')
+            if len(parts) != 3:
+                raise ValueError(f"Invalid date format (expected YYYY-MM-DD): {date_str}")
+            return date(int(parts[0]), int(parts[1]), int(parts[2]))
+        except (ValueError, IndexError) as e:
+            raise ValueError(f"Failed to parse date '{date_str}': {str(e)}")
     
     def _calculate_priority(self, row: Dict) -> int:
         """
