@@ -1,0 +1,17 @@
+DRAAD173 RAILWAY REBUILD TRIGGER
+Purpose: Trigger new Docker build after NameError fix
+Timestamp: 2025-12-13T12:26:46Z
+Random: 7382
+
+Fixed Issue:
+  - solver_selector.py: Corrected variable name case (Solver_STRATEGY_ENV → SOLVER_STRATEGY_ENV)
+  - Docker build will now complete successfully
+  - Container will start without NameError
+
+Expected Outcome:
+  ✅ Docker build succeeds
+  ✅ All imports complete successfully
+  ✅ Service starts and is ready for requests
+  ✅ Both DRAAD170 (CP-SAT) and DRAAD172 (Sequential) solvers available
+
+Deployment Status: READY FOR REBUILD
