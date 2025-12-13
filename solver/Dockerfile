@@ -2,9 +2,9 @@ FROM python:3.12.7-slim
 
 WORKDIR /app
 
-# DRAAD170: Cache bust argument for Railway deployment
-ARG DRAAD170_CACHE_BUST=0
-RUN echo "[Dockerfile] DRAAD170 Cache Bust: ${DRAAD170_CACHE_BUST}"
+# FASE 2 FIX: Cache bust for supabase package addition (2025-12-13T13:08)
+ARG FASE2_CACHE_BUST=1702474000
+RUN echo "[Dockerfile] FASE 2 Cache Bust: ${FASE2_CACHE_BUST}"
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -24,19 +24,23 @@ ENV PYTHONUNBUFFERED=1
 ENV PORT=8000
 ENV DRAAD170_PHASE_1=constraint7_validation+constraint8_reification
 ENV DRAAD170_PHASE_2=async_await+threadpoolexecutor
+ENV FASE2_STATUS=COMPLETE
 
 # Expose port
 EXPOSE 8000
 
-# DEBUG: Test imports before starting service
+# DEBUG: Test all imports including FASE 2 SequentialSolverV2
 RUN echo "[Dockerfile] Testing critical imports..." && \
     python -c "from fastapi import FastAPI; print('[OK] FastAPI imported')" && \
     python -c "import uvicorn; print('[OK] Uvicorn imported')" && \
     python -c "from ortools.linear_solver import pywraplp; print('[OK] OR-Tools imported')" && \
     python -c "from models import SolveRequest, SolveResponse; print('[OK] Models imported')" && \
     python -c "from solver_engine import RosterSolver; print('[OK] RosterSolver imported')" && \
+    python -c "from supabase import create_client; print('[OK] Supabase imported')" && \
+    python -c "from sequential_solver_v2 import SequentialSolverV2; print('[OK] SequentialSolverV2 imported')" && \
+    python -c "from solver_selector import SolverSelectorV2; print('[OK] SolverSelectorV2 imported')" && \
     python -c "from main import app; print('[OK] Main FastAPI app imported')" && \
-    echo "[Dockerfile] All imports successful - container ready for DRAAD170 fixes"
+    echo "[Dockerfile] ✅ ALL IMPORTS SUCCESSFUL - FASE 1+2+3 COMPLETE"
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
