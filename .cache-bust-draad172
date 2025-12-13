@@ -1,13 +1,26 @@
-# Cache-bust DRAAD172 Live Integration Test
-# Generated: 2025-12-13T09:55:00Z
-# Timestamp: 1734081300000
-# Random: 7429586134
-#
-# This file triggers Railway cache invalidation for:
-# - rooster-app-verloskunde (Frontend)
-# - Solver2 (Backend CP-SAT)
-#
-# Purpose: Ensure live Supabase data fetch and solver execution
-# Test: test_live_5week_roster_draad172.py
-#
-# Status: ACTIVE FOR LIVE TESTING
+Cache-bust DRAAD172 Sequential Solver (Aanpassingen v2.0)
+Timestamp: 2025-12-13T09:10:00Z
+Version: draad172-v2.0-sequential-greedy-aangepast
+Status: IMPLEMENTATION COMPLETE
+
+Random trigger: 1734083400000
+
+===== DEPLOYMENT MARKERS =====
+Files deployed:
+- solver/requirement_queue.py (RequirementQueue with 3-layer priority)
+- solver/employee_availability.py (EmployeeAvailabilityTracker)
+- solver/sequential_solver.py (SequentialSolver greedy algorithm)
+- solver/assignment_report.py (AssignmentReport generator)
+- solver/test_requirement_queue_priority.py (Complete test suite)
+
+Key feature: Correct 3-layer priority sorting per DRAAD172-AANGEPAST
+- System services FIRST (per dagdeel: DIO/DDO for O, DIA/DDA for A)
+- TOT services SECOND (alphabetic)
+- Team services THIRD (GRO/ORA, alphabetic)
+
+No interspersing between priority groups within dagdeel.
+
+===== RAILWAY TRIGGER =====
+Build trigger: Priority rebuild
+Services to redeploy: Solver2
+Expected change: Sequential solver active
