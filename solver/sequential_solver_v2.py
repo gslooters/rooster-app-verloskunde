@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """
 Sequential Solver V2 - Complete Implementation
-
-FASE 2: Sequential Priority Queue Solver
+EVA4 UPDATE: ORT Sequential Solver with Iterative Record Updates
 
 Doel: Implement a deterministic sequential solver that:
-  1. Loads real requirements from database
-  2. Sorts by correct 3-layer priority (dagdeel -> service -> team)
-  3. Tracks employee availability correctly
-  4. Assigns employees sequentially
-  5. Reports failures gracefully
+  1. ✅ Loads ALLE 1470 records uit roster_assignments (status 0)
+  2. ✅ Bouwt cache: (emp_id, date, dagdeel) → record dict
+  3. ✅ Zoekt bestaand record (GEEN INSERT)
+  4. ✅ UPDATE status 0→1, vul service_id
+  5. ✅ RE-READ na update (triggers kunnen werken!)
+  6. ✅ Update cache met verse data
+  7. ✅ Iteratief = ~474 DB calls @ 50ms = 23sec
+
+FASE 2: Sequential Priority Queue Solver met iteratieve UPDATE+RE-READ
 
 Based on DRAAD172 template but with REAL DATABASE, correct logic, proper error handling.
 """
@@ -22,6 +25,7 @@ from enum import Enum
 import os
 from supabase import create_client, Client
 import json
+import time
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -347,6 +351,55 @@ class RequirementQueue:
         return "UNK"
 
 
+class ExistingAssignmentsCache:
+    """EVA4: Load and cache ALLE 1470 bestaande roster_assignments records."""
+    
+    def __init__(self, roster_id: str, db: Client):
+        self.roster_id = roster_id
+        self.db = db
+        # Cache key: (emp_id, date, dagdeel) → full record dict
+        self.cache: Dict[Tuple[str, date, str], Dict] = {}
+        self._load_all_assignments()
+    
+    def _load_all_assignments(self):
+        """Load ALLE 1470 roster_assignments records."""
+        logger.info(f"EVA4: Loading ALL 1470 roster_assignments for roster {self.roster_id}...")
+        try:
+            response = self.db.table('roster_assignments')\
+                .select('*')\
+                .eq('roster_id', self.roster_id)\
+                .execute()
+            
+            for record in response.data:
+                emp_id = record['employee_id']
+                rec_date = self._parse_date(record['date'])
+                dagdeel = record['dagdeel']
+                key = (emp_id, rec_date, dagdeel)
+                self.cache[key] = record
+            
+            logger.info(f"EVA4: Loaded {len(self.cache)} records into cache")
+        except Exception as e:
+            logger.error(f"EVA4 ERROR loading assignments: {str(e)}", exc_info=True)
+            raise
+    
+    def get_record(self, emp_id: str, rec_date: date, dagdeel: str) -> Optional[Dict]:
+        """Get cached record or None."""
+        key = (emp_id, rec_date, dagdeel)
+        return self.cache.get(key)
+    
+    def update_cache(self, emp_id: str, rec_date: date, dagdeel: str, record: Dict):
+        """Update cache with fresh data after UPDATE."""
+        key = (emp_id, rec_date, dagdeel)
+        self.cache[key] = record
+    
+    def _parse_date(self, date_str: str) -> date:
+        """Parse date from database."""
+        if isinstance(date_str, date):
+            return date_str
+        parts = date_str.split('-')
+        return date(int(parts[0]), int(parts[1]), int(parts[2]))
+
+
 class EmployeeAvailabilityTracker:
     """Track employee availability throughout solve."""
     
@@ -440,7 +493,16 @@ class EmployeeAvailabilityTracker:
 
 
 class SequentialSolverV2:
-    """Sequential Priority Queue Solver - V2 with real database integration."""
+    """Sequential Priority Queue Solver - V2 with iterative UPDATE+RE-READ.
+    
+    EVA4 CRITICAL: ORT UPDATE bestaande records iteratief:
+    - Load ALLE 1470 records
+    - Zoek bestaand record (status 0)
+    - UPDATE status 0→1, vul service_id
+    - RE-READ om triggers effect te zien
+    - Update cache
+    - Iteratief proces
+    """
     
     def __init__(self, roster_id: str, db: Client):
         self.roster_id = roster_id
@@ -448,16 +510,22 @@ class SequentialSolverV2:
         self.assignments: List[Assignment] = []
         self.failures: List[Dict] = []
         self.tracker: Optional[EmployeeAvailabilityTracker] = None
+        self.existing_cache: Optional[ExistingAssignmentsCache] = None
         self.employees: Dict[str, Employee] = {}
         self.services: Dict[str, Service] = {}
+        self.update_count = 0
+        self.reread_count = 0
     
     def solve(self) -> SolveResponse:
         """Main sequential solve loop."""
         logger.info("=== SequentialSolverV2.solve() START ===")
-        import time
         start_time = time.time()
         
         try:
+            # Step 0: EVA4 - Load existing assignments cache
+            logger.info("Step 0: Loading existing assignments cache (ALL 1470)...")
+            self.existing_cache = ExistingAssignmentsCache(self.roster_id, self.db)
+            
             # Step 1: Load data
             logger.info("Step 1: Loading employees, services...")
             self._load_data()
@@ -480,7 +548,7 @@ class SequentialSolverV2:
             self.tracker = EmployeeAvailabilityTracker(self.roster_id, self.db, self.employees)
             
             # Step 5: Main assignment loop
-            logger.info("Step 5: Starting assignment loop...")
+            logger.info("Step 5: Starting assignment loop (iteratief UPDATE+RE-READ)...")
             for requirement in requirements:
                 self._process_requirement(requirement)
             
@@ -488,17 +556,18 @@ class SequentialSolverV2:
             solve_time = time.time() - start_time
             response = self._build_response(solve_time)
             logger.info(f"=== Solve complete: {len(self.assignments)} assignments, "
-                       f"{len(self.failures)} failures, {solve_time:.2f}s ===")
+                       f"{len(self.failures)} failures, {self.update_count} UPDATEs, "
+                       f"{self.reread_count} RE-READs, {solve_time:.2f}s ===")
             return response
         
         except Exception as e:
             logger.error(f"CRITICAL ERROR in sequential solve: {str(e)}", exc_info=True)
-            import time as time_module
+            solve_time = time.time() - start_time
             return SolveResponse(
                 status=SolveStatus.ERROR,
                 roster_id=self.roster_id,
                 assignments=[],
-                solve_time_seconds=round(time_module.time() - start_time, 2),
+                solve_time_seconds=round(solve_time, 2),
                 violations=[ConstraintViolation(
                     constraint_type="sequential_error",
                     message=f"Sequential solver error: {str(e)[:200]}",
@@ -507,7 +576,10 @@ class SequentialSolverV2:
             )
     
     def _process_requirement(self, requirement: Requirement):
-        """Process one requirement - assign needed employees."""
+        """Process one requirement - assign needed employees.
+        
+        EVA4: CRITICAL - UPDATE bestaande records iteratief!
+        """
         logger.debug(f"Processing: {requirement}")
         
         # Filter eligible employees
@@ -533,18 +605,27 @@ class SequentialSolverV2:
                 break
             
             if self.tracker.is_available(employee.id, requirement.date, requirement.dagdeel):
-                # Create assignment
-                self.tracker.assign(employee.id, requirement.service_id, 
-                                   requirement.date, requirement.dagdeel)
-                self.assignments.append(Assignment(
-                    employee_id=employee.id,
-                    employee_name=employee.name,
-                    date=requirement.date,
-                    dagdeel=Dagdeel(requirement.dagdeel),
-                    service_id=requirement.service_id,
-                    service_code=requirement.service_code
-                ))
-                assigned += 1
+                # EVA4 CRITICAL: UPDATE bestaande record, NIET INSERT!
+                success = self._update_existing_assignment(
+                    employee.id, requirement.service_id,
+                    requirement.date, requirement.dagdeel
+                )
+                
+                if success:
+                    # Update tracker
+                    self.tracker.assign(employee.id, requirement.service_id,
+                                      requirement.date, requirement.dagdeel)
+                    self.assignments.append(Assignment(
+                        employee_id=employee.id,
+                        employee_name=employee.name,
+                        date=requirement.date,
+                        dagdeel=Dagdeel(requirement.dagdeel),
+                        service_id=requirement.service_id,
+                        service_code=requirement.service_code
+                    ))
+                    assigned += 1
+                else:
+                    logger.warning(f"Failed to update existing assignment for {employee.name}")
         
         if assigned < requirement.count_needed:
             shortage = requirement.count_needed - assigned
@@ -555,6 +636,74 @@ class SequentialSolverV2:
                 'shortage': shortage,
                 'assigned': assigned
             })
+    
+    def _update_existing_assignment(self, emp_id: str, service_id: str,
+                                   date_val: date, dagdeel: str) -> bool:
+        """EVA4 CRITICAL: UPDATE bestaande record iteratief.
+        
+        Workflow:
+        1. Get bestaand record uit cache
+        2. Check status = 0 (vrij)
+        3. UPDATE status 0→1, vul service_id
+        4. RE-READ om triggers effect te zien
+        5. Update cache
+        
+        Returns True als UPDATE succesvol
+        """
+        try:
+            # Step 1: Get bestaand record uit cache
+            existing_record = self.existing_cache.get_record(emp_id, date_val, dagdeel)
+            if not existing_record:
+                logger.warning(f"EVA4: No existing record found for {emp_id} {date_val} {dagdeel}")
+                return False
+            
+            record_id = existing_record['id']
+            current_status = existing_record.get('status', 0)
+            
+            # Check status = 0 (vrij)
+            if current_status != 0:
+                logger.debug(f"EVA4: Record {record_id} status={current_status}, skip (not free)")
+                return False
+            
+            # Step 2: UPDATE status 0→1, vul service_id
+            logger.debug(f"EVA4: Updating record {record_id} status 0→1, service={service_id}")
+            update_response = self.db.table('roster_assignments')\
+                .update({
+                    'status': 1,
+                    'service_id': service_id,
+                    'source': 'ort'
+                })\
+                .eq('id', record_id)\
+                .execute()
+            
+            self.update_count += 1
+            
+            # Step 3: RE-READ om triggers effect te zien
+            logger.debug(f"EVA4: RE-READ after UPDATE (triggers)...")
+            reread_response = self.db.table('roster_assignments')\
+                .select('*')\
+                .eq('id', record_id)\
+                .execute()
+            
+            self.reread_count += 1
+            
+            if not reread_response.data:
+                logger.error(f"EVA4: RE-READ failed - record not found {record_id}")
+                return False
+            
+            fresh_record = reread_response.data[0]
+            fresh_status = fresh_record.get('status', 1)
+            
+            logger.debug(f"EVA4: RE-READ result - status={fresh_status}")
+            
+            # Step 4: Update cache
+            self.existing_cache.update_cache(emp_id, date_val, dagdeel, fresh_record)
+            
+            return True
+        
+        except Exception as e:
+            logger.error(f"EVA4 ERROR updating record: {str(e)}", exc_info=True)
+            return False
     
     def _filter_eligible_employees(self, requirement: Requirement) -> List[Employee]:
         """Filter employees eligible for this requirement."""
@@ -643,9 +792,12 @@ class SequentialSolverV2:
             total_assignments=len(self.assignments),
             violations=violations,
             solver_metadata={
-                "version": "v2_sequential",
-                "method": "sequential_priority_queue",
-                "failures": len(self.failures)
+                "version": "v2_sequential_eva4",
+                "method": "sequential_priority_queue_iterative_update",
+                "failures": len(self.failures),
+                "update_count": self.update_count,
+                "reread_count": self.reread_count,
+                "eva4_mode": "active"
             }
         )
 
@@ -680,5 +832,7 @@ if __name__ == "__main__":
     
     print(f"\nStatus: {response.status.value}")
     print(f"Assignments: {response.total_assignments}")
+    print(f"UPDATEs: {response.solver_metadata.get('update_count', 0)}")
+    print(f"RE-READs: {response.solver_metadata.get('reread_count', 0)}")
     print(f"Failures: {len(response.violations)}")
     print(f"Time: {response.solve_time_seconds}s")

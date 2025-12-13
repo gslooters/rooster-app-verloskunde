@@ -1,0 +1,15 @@
+# Cache Buster - DRAAD177 EVA4
+# ORT UPDATE bestaande records iteratief lezen
+# Sequential Solver V2 with Iterative UPDATE+RE-READ
+
+TIMESTAMP: 1734093900
+BUILD_ID: eva4-iterative-updates
+MODE: Sequential UPDATE (status 0→1) + RE-READ triggers
+
+# Key changes:
+# - ExistingAssignmentsCache: Load ALLE 1470 records
+# - _update_existing_assignment: UPDATE bestaand record, GEEN INSERT
+# - Iteratief: UPDATE + RE-READ per record
+# - tracking: update_count, reread_count metrics
+
+Status: READY FOR DEPLOYMENT

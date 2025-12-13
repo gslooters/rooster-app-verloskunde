@@ -1,0 +1,21 @@
+# Railway Deployment Trigger - DRAAD177 EVA4
+# ORT Sequential Solver V2 with Iterative UPDATE+RE-READ
+
+DEPLOY_SIGNAL: eva4_iterative_updates
+DEPLOY_VERSION: v2_sequential_eva4
+DEPLOY_TIMESTAMP: 1734093900
+DEPLOY_RANDOM_ID: 7483920
+
+# Service: Solver2
+# Branch: feature/ort-update-iterative
+# Docker rebuild trigger
+
+KEY_FEATURES:
+  - ExistingAssignmentsCache: Load ALL 1470 records
+  - Iterative UPDATE+RE-READ for status 0→1
+  - Trigger-aware: Waits for DB triggers after each UPDATE
+  - Metrics: update_count, reread_count
+  - Performance: ~23 seconds for 237 updates @ 50ms/call
+
+STATUS: READY
+ACTION: Deploy to Railway
