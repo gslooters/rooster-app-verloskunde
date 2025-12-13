@@ -1,0 +1,11 @@
+# Railway Deployment Trigger - DRAAD172
+# Root level marker for deployment automation
+# Timestamp: 2025-12-13T09:55:00Z
+# Version: draad172-v1.0-live-integration
+#
+# Services Affected:
+# - Solver2 (CP-SAT solver backend)
+# - rooster-app-verloskunde (Frontend)
+#
+# Test Suite: test_live_5week_roster_draad172.py
+# Expected Status: LIVE INTEGRATION VALIDATED

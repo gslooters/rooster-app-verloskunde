@@ -1,0 +1,14 @@
+# Railway Trigger - DRAAD172 Live Integration
+# Deployment: Solver2 + rooster-app-verloskunde
+# Timestamp: 2025-12-13T09:55:00Z
+# Random: 7429586134
+#
+# This marker triggers:
+# 1. Cache invalidation (.cache-bust-draad172)
+# 2. Solver2 service rebuild + restart
+# 3. Frontend cache clear
+#
+# Test Associated: test_live_5week_roster_draad172.py
+# Metrics: Performance, coverage, violations logged
+#
+# Status: READY FOR DEPLOYMENT
