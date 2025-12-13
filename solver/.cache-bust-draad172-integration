@@ -1,0 +1,21 @@
+# DRAAD172 Integration Cache-Bust Marker
+# Generated: 2025-12-13T09:35:01Z
+# Timestamp: 1765590901
+# 
+# Commits:
+# 1. accf4f0409d73845044f0d3ea30352847f613f1c - Create solver_selector.py
+# 2. 5a937d5732b3c5d418266f99f79a9c5bdf9d2c30 - Integrate into main.py
+#
+# Changes:
+# - NEW: solver_selector.py (SolverSelector class for strategy selection)
+# - UPDATE: main.py (add DRAAD172 selector imports and conditional execution)
+# - FEATURE: Environment variable SOLVER_STRATEGY for runtime selection
+# - FEATURE: Fallback from sequential greedy to CP-SAT on error
+#
+# Status: READY FOR DEPLOYMENT
+# Next Step: Cache-bust trigger to Railway for rebuild
+
+DRAARD172_INTEGRATION="2025-12-13T09:35:01Z"
+SOLVER_SELECTOR_ACTIVE=true
+CP_SAT_FALLBACK=true
+ENV_OVERRIDE_SUPPORTED=true
