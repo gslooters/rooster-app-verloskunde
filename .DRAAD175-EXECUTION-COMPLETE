@@ -1,0 +1,183 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║                    DRAAD175 - EXECUTION COMPLETE                           ║
+║              ORT SOLVER - KRITIEKE FOUTEN ANALYSE & FIXES                  ║
+║                          12 December 2025                                   ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+## 📋 PROBLEEM SAMENVATTING
+
+Dashboard rapport:  "Fout bij Rooster Generatie"
+                   "ORT validation failed: UNEXPECTED_STATUS_error"
+                   "ORT kon geen geldige roostering vinden"
+
+Status verdeling:   1211 records (82%) → status=0 (available, not assigned)
+                     5 records  (0.3%) → status=1 (scheduled) ✓
+                    251 records (17%) → status=3 (unavailable)
+                      3 records (0.2%) → status=2 (blocked)
+
+CONCLUSIE: Solver was NOOIT succesvol uitgevoerd (>80% unscheduled)
+
+---
+
+## 🔴 6 KRITIEKE FOUTEN GEÏDENTIFICEERD
+
+### FOUT #1: ENVIRONMENT VARIABLES ONTBREKEN [KRITIEK]
+**Locatie:** solver_selector.py - SequentialSolverV2.__init__()
+**Probleem:**  Railway secrets niet geladen in container
+               ValueError: SUPABASE_URL and SUPABASE_KEY required
+**Impact:**    Solver kon niet starten → HTTP 400 response (generiek)
+**Oorzaak:**   Environment variabelen niet doorgegeven aan solver process
+
+### FOUT #2: HTTP 400 RESPONSE ZONDER DETAILS [HOOG]
+**Locatie:**  main.py - Exception handlers
+**Probleem:** Backend werpt error maar stuurt generic "success=false"
+             Frontend ontvangt geen error details
+**Impact:**   Onmogelijk debugging (no error context)
+**Oorzaak:**  Global exception handler geeft minimize error info
+
+### FOUT #3: STATUS=4 UNDEFINED IN MODEL [HOOG]
+**Locatie:** models.py - Assignment.status enum
+**Probleem:** Status kan 0,1,2,3,4 zijn maar 4 is UNDEFINED
+             CP-SAT kan onverwacht status=4 genereren
+**Impact:**   Database validation fouten
+**Oorzaak:**  Model design niet aligned met DB schema
+
+### FOUT #4: SERVICE_BLOCKING_RULES TABEL ONTBREEKT [HOOG]
+**Locatie:** Frontend & Supabase schema
+**Probleem:** Frontend probeert 'service_blocking_rules' te laden
+             Tabel bestaat NIET in Supabase
+**Impact:**   Incompatible services kunnen samen worden ingepland
+**Oorzaak:**  Schema mismatch tussen app-verwachting en DB
+
+### FOUT #5: CP-SAT PARAMETERS SUBOPTIMAAL [MEDIUM]
+**Locatie:** RosterSolverV2.py - Solver parameter initialization
+**Probleem:** max_time_in_seconds=60 → te lang voor kleine instances
+             search_strategy=AUTOMATIC → niet optimaal voor scheduling
+             No objective weights → geen optimize goal
+**Impact:**   Solver inefficiënt, langzame convergentie
+**Oorzaak:**  Generic CP-SAT parameters not tuned for rostering
+
+### FOUT #6: CONSTRAINT COVERAGE LINKS BROKEN [MEDIUM]
+**Locatie:** RosterSolverV2.py & sequential_solver_v2.py
+**Probleem:** Constraint dagdelen (roster_period_staffing_dagdelen)
+             NIET explicitly gelinkt aan assignment variables
+             Coverage-check ontbreekt
+**Impact:**   Solver weet niet hoeveel medewerkers nodig zijn/dag
+**Oorzaak:**  Model linking incomplete
+
+---
+
+## ✅ IMPLEMENTATIE STATUS
+
+### DRAAD175 FIX #1: Environment Variable Validation ✅ COMPLETE
+**File:** solver/solver_selector.py
+**Changes:**
+  - Added _validate_env_vars() function at startup
+  - Explicit SUPABASE_URL, SUPABASE_KEY validation
+  - Better error messages for missing env vars
+  - Detailed logging of environment status
+  - Graceful error handling in Sequential solver init
+
+**Commit:** d2626b8f52cd11e2b2d364c5f00a493c89492b96
+**Impact:** Solver will now show clear error messages if env vars missing
+
+### DRAAD175 FIX #2: HTTP Error Response Details ✅ COMPLETE
+**File:** solver/main.py
+**Changes:**
+  - Improved global exception handler with error details
+  - Include exception type, message, timestamp in responses
+  - Better logging of error context
+  - Structured error responses with full information
+  - Traceback logging for debugging
+
+**Commit:** 3fd78d5d3bc359b8d8fefacdf882623f92e320d5
+**Impact:** Frontend now receives detailed error information in HTTP 400
+
+### DRAAD175 DEPLOYMENT TRIGGER ✅ COMPLETE
+**File:** solver/.cache-bust-draad175-envvars-fix
+**Trigger:** Railway detects commit → Docker rebuild → New deployment
+**Status:**  Cache bust file created
+**ETA:**    Railway deployment ~2-5 minutes after push
+
+---
+
+## 🎯 REMAINING WORK (FASES 3-6)
+
+These fixes are QUEUED for next implementation phase:
+
+### FIX #3: Model Status Validation (Priority: HOOG)
+- Remove or define status=4 in models.py
+- Add enum validation
+- Update database constraints
+
+### FIX #4: Service Blocking Rules (Priority: HOOG)
+- Create table in Supabase: service_blocking_rules
+- Link to employee-service compatibility
+- Add backend validation
+
+### FIX #5: CP-SAT Parameter Tuning (Priority: MEDIUM)
+- Reduce max_time_in_seconds to 10 (from 60)
+- Set search_strategy to GUIDED_LOCAL_SEARCH
+- Add objective weights for fairness
+
+### FIX #6: Constraint Coverage Links (Priority: MEDIUM)
+- Add explicit roster_period_staffing_dagdelen constraints
+- Create coverage_required variables
+- Link to assignment variables properly
+
+---
+
+## 📊 DEPLOYMENT CHECKLIST
+
+✅ Step 1: Push changes to GitHub main
+✅ Step 2: DRAAD175 FIX #1 committed (env var validation)
+✅ Step 3: DRAAD175 FIX #2 committed (error response details)
+✅ Step 4: Cache bust file created (triggers Railway rebuild)
+⏳ Step 5: Railway detects git commit and rebuilds Docker image
+⏳ Step 6: New container deployed to production
+⏳ Step 7: Monitor logs for [ENVCHECK] status
+⏳ Step 8: Test solver with dashboard
+
+---
+
+## 🔍 NEXT STEPS (Na deployment)
+
+1. **Check Railway Logs:**
+   - Look for "[ENVCHECK]" messages
+   - Verify SUPABASE_URL and SUPABASE_KEY presence
+   - Check solver strategy selection
+
+2. **Test Solver:**
+   - Dashboard → "Roosterbewerking starten"
+   - Check error messages in response
+   - Should see detailed error instead of generic "ORT validation failed"
+
+3. **Implement Remaining Fixes (FASE 3-6):**
+   - FIX #3: Fix model status enum
+   - FIX #4: Create service_blocking_rules table
+   - FIX #5: Tune CP-SAT parameters
+   - FIX #6: Fix constraint coverage links
+
+4. **Root Cause Prevention:**
+   - Ensure Railway environment secrets are properly configured
+   - Add startup validation for all critical env vars
+   - Implement comprehensive logging
+   - Add health checks for solver availability
+
+---
+
+## 📝 RAPPORTERING
+
+**Probleem:**    Solver "ORT validation failed" → 1211 unscheduled records
+**Analyse:**     6 kritieke fouten + 3 design issues
+**Fixes:**       FIX #1 (env vars), FIX #2 (error response)
+**Deployment:**  Cache bust triggered, Railway rebuild queued
+**Status:**      DRAAD175 FASE 1-2 COMPLETE - Awaiting Railway rebuild
+**Verwacht:**    Dashboard should show better error messages after deploy
+
+---
+
+**Version:** 2.0.0-DRAAD175
+**Executed:** 2025-12-13 14:47:56 UTC
+**Author:** Rooster App Team
+**Status:** ✅ EXECUTION COMPLETE - Awaiting Railway Deployment
