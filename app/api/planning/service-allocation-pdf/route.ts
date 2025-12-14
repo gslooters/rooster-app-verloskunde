@@ -12,6 +12,7 @@ export const runtime = 'nodejs';
 // Update: Added service_types.kleur for V3 colored badges
 // DRAAD60A: Added date filtering on rooster.start_date and end_date
 // DRAAD73D: Force dynamic rendering (geen static generation)
+// DRAAD179-FASE3: FIXED - Replaced roster_period_staffing with roster_period_staffing_dagdelen
 // ============================================================================
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -73,46 +74,17 @@ export async function GET(request: NextRequest) {
     }
 
     // ========================================================================
-    // STEP 2A: Fetch roster_period_staffing (base records)
-    // DRAAD60A: Added date filtering to exclude records outside roster period
+    // STEP 2: Fetch roster_period_staffing_dagdelen (DRAAD179-FASE3: FIXED)
+    // Direct query naar denormaliseerde tabel (NO parent join)
     // ========================================================================
-    const { data: staffingRecords, error: staffingError } = await supabase
-      .from('roster_period_staffing')
-      .select('id, roster_id, service_id, date')
+    const { data: dagdelenRecords, error: dagdelenError } = await supabase
+      .from('roster_period_staffing_dagdelen')
+      .select('id, roster_id, service_id, date, dagdeel, team, status, aantal')
       .eq('roster_id', rosterId)
       .gte('date', rosterInfo.start_date)
       .lte('date', rosterInfo.end_date)
-      .order('date', { ascending: true });
-
-    if (staffingError) {
-      console.error('[PDF-API] Staffing fetch error:', staffingError);
-      return NextResponse.json(
-        { error: 'Fout bij ophalen staffing data: ' + staffingError.message },
-        { status: 500 }
-      );
-    }
-
-    if (!staffingRecords || staffingRecords.length === 0) {
-      return NextResponse.json({
-        roster: rosterInfo,
-        data: {},
-        serviceTypes: [],
-        isEmpty: true,
-        message: 'Geen staffing records gevonden voor deze roosterperiode'
-      });
-    }
-
-    // ========================================================================
-    // STEP 2B: Fetch roster_period_staffing_dagdelen (details with aantal > 0)
-    // ========================================================================
-    const staffingIds = staffingRecords.map(r => r.id);
-    
-    const { data: dagdelenRecords, error: dagdelenError } = await supabase
-      .from('roster_period_staffing_dagdelen')
-      .select('id, roster_period_staffing_id, dagdeel, team, status, aantal')
-      .in('roster_period_staffing_id', staffingIds)
       .gt('aantal', 0)
-      .order('dagdeel', { ascending: true });
+      .order('date', { ascending: true });
 
     if (dagdelenError) {
       console.error('[PDF-API] Dagdelen fetch error:', dagdelenError);
@@ -133,9 +105,9 @@ export async function GET(request: NextRequest) {
     }
 
     // ========================================================================
-    // STEP 2C: Fetch service_types (for codes + KLEUREN V3)
+    // STEP 3: Fetch service_types (for codes + KLEUREN V3)
     // ========================================================================
-    const serviceIds = [...new Set(staffingRecords.map(r => r.service_id))];
+    const serviceIds = [...new Set(dagdelenRecords.map(r => r.service_id))];
     
     const { data: serviceTypes, error: serviceError } = await supabase
       .from('service_types')
@@ -151,37 +123,23 @@ export async function GET(request: NextRequest) {
     }
 
     // ========================================================================
-    // STEP 3: Create lookup Maps for efficiency
+    // STEP 4: Create lookup Map for efficiency
     // ========================================================================
     const serviceMap = new Map<string, { code: string; naam: string }>();
     (serviceTypes || []).forEach(st => {
       serviceMap.set(st.id, { code: st.code, naam: st.naam });
     });
 
-    const staffingMap = new Map<string, { date: string; serviceId: string }>();
-    staffingRecords.forEach(sr => {
-      staffingMap.set(sr.id, { 
-        date: sr.date, 
-        serviceId: sr.service_id 
-      });
-    });
-
     // ========================================================================
-    // STEP 4: Transform & group data in memory
+    // STEP 5: Transform & group data in memory
+    // DRAAD179-FASE3: Direct grouping van denormaliseerde records
     // ========================================================================
     const grouped: GroupedData = {};
 
     dagdelenRecords.forEach(dagdeel => {
-      const staffing = staffingMap.get(dagdeel.roster_period_staffing_id);
-      
-      if (!staffing) {
-        console.warn('[PDF-API] Orphaned dagdeel record:', dagdeel.id);
-        return;
-      }
-
-      const service = serviceMap.get(staffing.serviceId);
+      const service = serviceMap.get(dagdeel.service_id);
       const code = service?.code || 'N/A';
-      const date = staffing.date;
+      const date = dagdeel.date;
       const team = dagdeel.team;
       const dagdeelName = dagdeel.dagdeel;
       const status = dagdeel.status;
@@ -200,7 +158,7 @@ export async function GET(request: NextRequest) {
     });
 
     // ========================================================================
-    // STEP 5: Prepare service types array with kleuren for V3
+    // STEP 6: Prepare service types array with kleuren for V3
     // ========================================================================
     const serviceTypesArray: ServiceType[] = (serviceTypes || []).map(st => ({
       code: st.code,
@@ -208,7 +166,7 @@ export async function GET(request: NextRequest) {
     }));
 
     // ========================================================================
-    // STEP 6: Return structured data with serviceTypes
+    // STEP 7: Return structured data with serviceTypes
     // ========================================================================
     return NextResponse.json({
       roster: rosterInfo,
