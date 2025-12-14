@@ -1,7 +1,6 @@
-1733427022
-Last update: 2025-12-05T20:10:22+01:00
-Build trigger: DRAAD108-DEPLOY railway.json Dockerfile fix
-Change: NIXPACKS → DOCKERFILE builder
-Path: solver/docker/Dockerfile
-Railway rebuild - CRITICAL DEPLOYMENT FIX
-Expected: Solver v1.1.0-DRAAD108 with OR-Tools constraints 7 & 8
+DRAAD-181 Cache Buster
+Date: 2025-12-14T21:41:00Z
+Random: 7f3e9a2c-draad-181
+Timestamp: 1734271260000
+Version: greedy-engine-1.0.0
+Status: Railway rebuild triggered
