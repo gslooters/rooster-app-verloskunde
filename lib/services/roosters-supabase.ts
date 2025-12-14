@@ -46,7 +46,8 @@ export async function getAllRoosters(): Promise<Roster[]> {
 }
 
 /**
- * Haal een specifiek rooster op basis van ID
+ * DRAAD178: Fix - Haal een specifiek rooster op basis van ID
+ * ✅ Toegevoegd .single() - was missing
  * @param id - Rooster ID
  * @returns Rooster object of null als niet gevonden
  */
