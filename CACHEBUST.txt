@@ -1,24 +1,7 @@
-CACHE INVALIDATION TRIGGER
-==========================
-
-Random Number: 92847
-Timestamp: 1733220286000
-Date: Tue Dec 03 2025 10:44:46 GMT+0100
-
-Last Update: DRAAD99 Database Schema Fixes
-Commit: d6cc659e15ad7b7685847f1ff6fa91de52087b99
-
-DEPLOYMENT STATUS:
-- Railway auto-deploy: ACTIVE
-- Cache: INVALIDATED
-- Build: TRIGGERED
-
-CHANGES IN THIS DEPLOYMENT:
-- Fixed all database type mismatches (int->str for IDs)
-- Employee model: voornaam+achternaam, aantalwerkdagen
-- All models conform to Supabase schema
-- Dictionary comprehension bug fixed
-- solver_engine.py fully compatible with DB
-
-This file forces Railway to rebuild and deploy.
-Random number ensures unique commits.
+DRAAD-181-FINAL-CACHE-BUST
+Deployment: 2025-12-14T21:43:36Z
+Phase: Post-merge Railway trigger
+Random: 5f2e9d1c-final-greedy
+Merge SHA: f4a97cbde030ceae7890222954d0f8cef81384fe
+Status: Railway rebuild should start
+Version: greedy-engine-1.0.0-production-ready
