@@ -1,2 +1,5 @@
-Build cache buster - generated 2025-12-14T16:11:35Z
-Removing dead components to fix TypeScript compilation error.
+Build cache buster - generated 2025-12-14T16:23:30Z
+DayCell.tsx TypeScript type error FIXED
+Reason: Convert STRING status to NUMBER for getBezettingTag()
+Timestamp: 1765604610000
+Random: draad176-fix-daycell-${Math.random()}
