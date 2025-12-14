@@ -3,7 +3,8 @@
 command = "npm install && npm run build"
 
 # 🔧 EXPLICIT Node versioning voor Railway compatibility
-nixpacks = "node-20.18.0"
+# FIXED: Was "node-20.18.0" (not found), now "node-20" (LTS)
+nixpacks = "node-20"
 
 [deploy]
 # 🔥 CRITICAL FIX: Correct standalone server path
@@ -18,5 +19,5 @@ healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
-# Cache-busting deployment trigger: 1734181380 (14-12-2025 14:43)
+# Cache-busting deployment trigger: 1734184011 (14-12-2025 15:26)
 # Force clean rebuild, geen cache collision
