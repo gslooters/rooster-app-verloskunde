@@ -1,0 +1,18 @@
+DRAAD-176A: Node Version Fix Deployment
+===========================================
+Timestamp: 2025-12-14T14:47:00Z
+
+ROOT CAUSE:
+- Railway Railpack kon Node 20.18.0 NIET lokaliseren
+- Log error: "Failed to resolve version 20.18.0 of node"
+
+FIXES APPLIED:
+1. package.json: "node": "20.18.0" → "node": ">=20.0.0"
+2. railway.toml: nixpacks = "node-20.18.0" → nixpacks = "node-20"
+
+BENEFITS:
+- Flexibel versie-beheer (node-20 is LTS)
+- Railpack kan nu beschikbare LTS-versie gebruiken
+- Geen hardcoded versie-constraint
+
+STATUS: Ready for deployment via Railway
