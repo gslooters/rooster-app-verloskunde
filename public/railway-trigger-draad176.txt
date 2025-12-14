@@ -1,0 +1,24 @@
+# DRAAD176 - DENORMALISERING ROSTER STAFFING
+# Deployment Trigger File
+# Created: 2025-12-14T14:38:00Z
+# Random Trigger: 924837560
+
+Deployment Status: READY FOR PRODUCTION
+
+SQL Migrations:
+✅ Stap 1: Kolommen toegevoegd (roster_id, service_id, date, invulling)
+✅ Stap 2: Foreign Keys ingesteld
+✅ Stap 3: Indexes aangemaakt (5 indexes)
+✅ Stap 4: Unique constraint vervangen
+✅ Stap 5: Oude FK kolom verwijderd
+✅ Stap 6: Parent tabel verwijderd
+✅ Stap 7: Schema geverifieerd
+
+Code Changes:
+✅ FASE 2: Type definitions updated (roster-period-staffing-dagdeel.ts)
+✅ FASE 3: Storage service updated (roster-period-staffing-dagdelen-storage.ts)
+✅ FASE 4: Planning service rewritten (roster-period-staffing-storage.ts)
+✅ FASE 5: Cache-busting & deployment
+
+Deployment: AUTOMATIC TRIGGER
+Target: Production on Railway.com
