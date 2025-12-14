@@ -1,0 +1,37 @@
+DRAAD178A - FASE 4 CACHE BUSTER
+================================
+
+TIMESTAMP: ${Date.now()}
+ISO: ${new Date().toISOString()}
+
+🔥 CRITICAL FIX: PostgREST API direct dagdelen query
+- Removed parent table reference (DRAAD176)
+- Direct denormalized query: roster_period_staffing_dagdelen
+- PostgREST HTTP API (complete cache bypass)
+- New response headers for tracking
+
+✅ FILE: app/api/planinformatie-periode/route.ts
+   - Status: VERIFIED CORRECT
+   - Query: Direct dagdelen (NO parent join)
+   - Aggregation: Per service_id
+   - Headers: Cache-Control with no-cache, no-store
+
+📋 VERIFICATION:
+   ✓ Step 1: Fetch rooster info via PostgREST
+   ✓ Step 2: Fetch vraag from dagdelen (DENORMALIZED)
+   ✓ Step 3: Fetch aanbod from roster_employee_services
+   ✓ Step 4: Fetch service_types
+   ✓ Step 5: Build diensten array
+   ✓ Step 6: Calculate totals
+   ✓ Step 7: Return response with headers
+
+🎯 CACHE BUSTING:
+   - New Date.now() timestamp on every request
+   - PostgREST headers: Cache-Control: no-cache, no-store
+   - X-DRAAD178A-TIMESTAMP header for debugging
+   - Vary header for Accept-Encoding
+
+🚀 DEPLOY STATUS: Ready for Railway trigger
+
+---
+Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
