@@ -1,0 +1,20 @@
+# DRAAD176 AAA - FORCE FRESH SNAPSHOT REBUILD
+# Issue: Railway Railpack using STALE snapshot from BEFORE railway.toml fix
+# Action: Create new file to force Railway to discard cache and build fresh
+# 
+# SNAPSHOT ISSUE:
+# - Railway log shows: sha256:39ad8b0ae3342c33a5ea4274... (STALE)
+# - This snapshot predates our railway.toml fix commits
+# - Railpack must discard this and fetch fresh source
+#
+# FORCE FRESH BUILD:
+# - This file triggers new git commits
+# - Railway sees new HEAD SHA
+# - Forces snapshot refresh
+# - Pulls fresh railway.toml (WITHOUT nixpacks line)
+# - Build detects Node from package.json engines
+# - Build succeeds!
+#
+# TIMESTAMP: 2025-12-14T16:03:00Z
+# TRIGGER: Force Railway to use fresh snapshot
+# EXPECTED: Successful build with Node 20.x auto-detection
