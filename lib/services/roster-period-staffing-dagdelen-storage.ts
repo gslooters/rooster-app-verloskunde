@@ -1,7 +1,7 @@
 // lib/services/roster-period-staffing-dagdelen-storage.ts
 // ============================================================================
-// DRAAD36A: Roster Period Staffing Dagdelen Storage
-// Datum: 2025-11-17
+// DRAAD176: Roster Period Staffing Dagdelen Storage (DENORMALISERING)
+// Datum: 2025-12-14
 // ============================================================================
 
 import { supabase } from '@/lib/supabase';
@@ -15,7 +15,9 @@ import {
   isValidDagdeel,
   isValidTeamDagdeel,
   isValidDagdeelStatus,
-  isValidAantal
+  isValidAantal,
+  isValidUUID,
+  isValidISODate
 } from '@/lib/types/roster-period-staffing-dagdeel';
 
 // ============================================================================
@@ -23,7 +25,7 @@ import {
 // ============================================================================
 
 /**
- * Maak één dagdeel regel aan
+ * Maak één dagdeel regel aan (DRAAD176: Denormalisering)
  */
 export async function createDagdeelRegel(
   regel: CreateDagdeelRegel
@@ -31,9 +33,15 @@ export async function createDagdeelRegel(
   try {
     console.log('[createDagdeelRegel] Aanmaken regel:', regel);
     
-    // Validatie
-    if (!regel.roster_period_staffing_id) {
-      throw new Error('roster_period_staffing_id is verplicht');
+    // Validatie (DRAAD176: Nieuwe velden)
+    if (!isValidUUID(regel.roster_id)) {
+      throw new Error('roster_id is verplicht en moet geldige UUID zijn');
+    }
+    if (!isValidUUID(regel.service_id)) {
+      throw new Error('service_id is verplicht en moet geldige UUID zijn');
+    }
+    if (!isValidISODate(regel.date)) {
+      throw new Error('date is verplicht (YYYY-MM-DD format)');
     }
     if (!isValidDagdeel(regel.dagdeel)) {
       throw new Error(`Ongeldige dagdeel: ${regel.dagdeel}`);
@@ -48,9 +56,20 @@ export async function createDagdeelRegel(
       throw new Error(`Ongeldig aantal: ${regel.aantal}`);
     }
     
+    const insertPayload = {
+      roster_id: regel.roster_id,
+      service_id: regel.service_id,
+      date: regel.date,
+      dagdeel: regel.dagdeel,
+      team: regel.team,
+      status: regel.status,
+      aantal: regel.aantal,
+      invulling: regel.invulling ?? 0
+    };
+    
     const { data, error } = await supabase
       .from('roster_period_staffing_dagdelen')
-      .insert(regel)
+      .insert(insertPayload)
       .select()
       .single();
     
@@ -68,7 +87,8 @@ export async function createDagdeelRegel(
 }
 
 /**
- * Bulk create dagdeel regels
+ * DRAAD176: Bulk create dagdeel regels (DENORMALISERING)
+ * Gebruikt directe inserts (geen parent tabel meer)
  */
 export async function bulkCreateDagdeelRegels(
   regels: CreateDagdeelRegel[]
@@ -79,45 +99,65 @@ export async function bulkCreateDagdeelRegels(
   }
   
   try {
-    console.log('[bulkCreateDagdeelRegels] Aanmaken van', regels.length, 'regels');
+    console.log('[bulkCreateDagdeelRegels] Aanmaken van', regels.length, 'regels (DRAAD176)');
     
     // Valideer alle regels
-    for (const regel of regels) {
-      if (!regel.roster_period_staffing_id) {
-        throw new Error('Alle regels moeten roster_period_staffing_id hebben');
+    for (let i = 0; i < regels.length; i++) {
+      const regel = regels[i];
+      if (!isValidUUID(regel.roster_id)) {
+        throw new Error(`Regel ${i}: roster_id is verplicht UUID`);
+      }
+      if (!isValidUUID(regel.service_id)) {
+        throw new Error(`Regel ${i}: service_id is verplicht UUID`);
+      }
+      if (!isValidISODate(regel.date)) {
+        throw new Error(`Regel ${i}: date moet YYYY-MM-DD zijn`);
       }
       if (!isValidDagdeel(regel.dagdeel)) {
-        throw new Error(`Ongeldige dagdeel: ${regel.dagdeel}`);
+        throw new Error(`Regel ${i}: Ongeldige dagdeel: ${regel.dagdeel}`);
       }
       if (!isValidTeamDagdeel(regel.team)) {
-        throw new Error(`Ongeldig team: ${regel.team}`);
+        throw new Error(`Regel ${i}: Ongeldig team: ${regel.team}`);
       }
       if (!isValidDagdeelStatus(regel.status)) {
-        throw new Error(`Ongeldige status: ${regel.status}`);
+        throw new Error(`Regel ${i}: Ongeldige status: ${regel.status}`);
       }
       if (!isValidAantal(regel.aantal)) {
-        throw new Error(`Ongeldig aantal: ${regel.aantal}`);
+        throw new Error(`Regel ${i}: Ongeldig aantal: ${regel.aantal}`);
       }
     }
     
-    // Batch insert in chunks van 100
+    // Batch insert in chunks van 100 (Supabase limit)
     const chunkSize = 100;
-    for (let i = 0; i < regels.length; i += chunkSize) {
-      const chunk = regels.slice(i, i + chunkSize);
+    const insertPayloads = regels.map(r => ({
+      roster_id: r.roster_id,
+      service_id: r.service_id,
+      date: r.date,
+      dagdeel: r.dagdeel,
+      team: r.team,
+      status: r.status,
+      aantal: r.aantal,
+      invulling: r.invulling ?? 0
+    }));
+    
+    for (let i = 0; i < insertPayloads.length; i += chunkSize) {
+      const chunk = insertPayloads.slice(i, i + chunkSize);
       
       const { error } = await supabase
         .from('roster_period_staffing_dagdelen')
         .insert(chunk);
       
       if (error) {
-        console.error('[bulkCreateDagdeelRegels] ❌ Supabase error:', error);
+        console.error('[bulkCreateDagdeelRegels] ❌ Chunk error:', error);
         throw error;
       }
       
-      console.log(`[bulkCreateDagdeelRegels] ✅ Chunk ${Math.floor(i / chunkSize) + 1} aangemaakt`);
+      const chunkNum = Math.floor(i / chunkSize) + 1;
+      const totalChunks = Math.ceil(insertPayloads.length / chunkSize);
+      console.log(`[bulkCreateDagdeelRegels] ✅ Chunk ${chunkNum}/${totalChunks} aangemaakt (${chunk.length} records)`);
     }
     
-    console.log('[bulkCreateDagdeelRegels] ✅ Alle regels succesvol aangemaakt');
+    console.log('[bulkCreateDagdeelRegels] ✅ Alle', regels.length, 'regels succesvol aangemaakt');
     return true;
   } catch (err) {
     console.error('[bulkCreateDagdeelRegels] ❌ Fout:', err);
@@ -130,50 +170,70 @@ export async function bulkCreateDagdeelRegels(
 // ============================================================================
 
 /**
- * Haal alle dagdeel regels op voor een roster_period_staffing record
+ * DRAAD176: Haal alle dagdeel regels op voor een specifieke dag + dienst
  */
-export async function getDagdeelRegels(
-  rosterPeriodStaffingId: string
+export async function getDagdeelRegelsPerDag(
+  rosterId: string,
+  date: string,
+  serviceId: string
 ): Promise<RosterPeriodStaffingDagdeel[]> {
   try {
+    if (!isValidUUID(rosterId) || !isValidUUID(serviceId) || !isValidISODate(date)) {
+      throw new Error('Ongeldige parameters');
+    }
+    
     const { data, error } = await supabase
       .from('roster_period_staffing_dagdelen')
       .select('*')
-      .eq('roster_period_staffing_id', rosterPeriodStaffingId)
+      .eq('roster_id', rosterId)
+      .eq('date', date)
+      .eq('service_id', serviceId)
       .order('team', { ascending: true })
       .order('dagdeel', { ascending: true });
     
     if (error) {
-      console.error('[getDagdeelRegels] Supabase error:', error);
+      console.error('[getDagdeelRegelsPerDag] Supabase error:', error);
       throw error;
     }
     
     return (data || []) as RosterPeriodStaffingDagdeel[];
   } catch (err) {
-    console.error('[getDagdeelRegels] Fout:', err);
+    console.error('[getDagdeelRegelsPerDag] Fout:', err);
     return [];
   }
 }
 
 /**
- * Haal specifieke dagdeel regel op
+ * DRAAD176: Haal specifieke dagdeel regel op
  */
 export async function getDagdeelRegel(
-  rosterPeriodStaffingId: string,
+  rosterId: string,
+  date: string,
+  serviceId: string,
   dagdeel: Dagdeel,
   team: TeamDagdeel
 ): Promise<RosterPeriodStaffingDagdeel | null> {
   try {
+    if (!isValidUUID(rosterId) || !isValidUUID(serviceId) || !isValidISODate(date)) {
+      throw new Error('Ongeldige parameters');
+    }
+    if (!isValidDagdeel(dagdeel) || !isValidTeamDagdeel(team)) {
+      throw new Error('Ongeldige dagdeel of team');
+    }
+    
     const { data, error } = await supabase
       .from('roster_period_staffing_dagdelen')
       .select('*')
-      .eq('roster_period_staffing_id', rosterPeriodStaffingId)
+      .eq('roster_id', rosterId)
+      .eq('date', date)
+      .eq('service_id', serviceId)
       .eq('dagdeel', dagdeel)
       .eq('team', team)
       .single();
     
     if (error) {
       if (error.code === 'PGRST116') {
+        console.log('[getDagdeelRegel] Record niet gevonden');
         return null;
       }
       throw error;
@@ -206,6 +266,9 @@ export async function updateDagdeelRegel(
     }
     if (updates.aantal !== undefined && !isValidAantal(updates.aantal)) {
       throw new Error(`Ongeldig aantal: ${updates.aantal}`);
+    }
+    if (updates.invulling !== undefined && updates.invulling < 0) {
+      throw new Error(`Invulling mag niet negatief zijn`);
     }
     
     const { error } = await supabase
@@ -283,25 +346,62 @@ export async function updateDagdeelRegelSmart(
 // ============================================================================
 
 /**
- * Verwijder alle dagdeel regels voor een roster_period_staffing record
+ * DRAAD176: Verwijder alle dagdeel regels voor een rooster
  */
-export async function deleteDagdeelRegels(
-  rosterPeriodStaffingId: string
+export async function deleteDagdeelRegelsVoorRooster(
+  rosterId: string
 ): Promise<boolean> {
   try {
+    if (!isValidUUID(rosterId)) {
+      throw new Error('Ongeldige rosterId');
+    }
+    
     const { error } = await supabase
       .from('roster_period_staffing_dagdelen')
       .delete()
-      .eq('roster_period_staffing_id', rosterPeriodStaffingId);
+      .eq('roster_id', rosterId);
     
     if (error) {
-      console.error('[deleteDagdeelRegels] Supabase error:', error);
+      console.error('[deleteDagdeelRegelsVoorRooster] Supabase error:', error);
+      throw error;
+    }
+    
+    console.log('[deleteDagdeelRegelsVoorRooster] ✅ Alle dagdelen voor rooster verwijderd');
+    return true;
+  } catch (err) {
+    console.error('[deleteDagdeelRegelsVoorRooster] ❌ Fout:', err);
+    return false;
+  }
+}
+
+/**
+ * DRAAD176: Verwijder alle dagdeel regels voor specifieke dag + dienst
+ */
+export async function deleteDagdeelRegelsPerDag(
+  rosterId: string,
+  date: string,
+  serviceId: string
+): Promise<boolean> {
+  try {
+    if (!isValidUUID(rosterId) || !isValidUUID(serviceId) || !isValidISODate(date)) {
+      throw new Error('Ongeldige parameters');
+    }
+    
+    const { error } = await supabase
+      .from('roster_period_staffing_dagdelen')
+      .delete()
+      .eq('roster_id', rosterId)
+      .eq('date', date)
+      .eq('service_id', serviceId);
+    
+    if (error) {
+      console.error('[deleteDagdeelRegelsPerDag] Supabase error:', error);
       throw error;
     }
     
     return true;
   } catch (err) {
-    console.error('[deleteDagdeelRegels] Fout:', err);
+    console.error('[deleteDagdeelRegelsPerDag] Fout:', err);
     return false;
   }
 }
@@ -311,48 +411,83 @@ export async function deleteDagdeelRegels(
 // ============================================================================
 
 /**
- * Haal alle dagdeel regels op voor een volledig rooster (meerdere datums)
+ * DRAAD176: Haal alle dagdeel regels op voor een volledig rooster
+ * DENORMALISERING: Direct uit roster_period_staffing_dagdelen (geen parent tabel meer)
  */
 export async function getDagdeelRegelsVoorRooster(
   rosterId: string
 ): Promise<Map<string, RosterPeriodStaffingDagdeel[]>> {
   try {
-    // Eerst alle roster_period_staffing IDs ophalen
-    const { data: rpsData, error: rpsError } = await supabase
-      .from('roster_period_staffing')
-      .select('id, service_id, date')
-      .eq('roster_id', rosterId);
+    console.log('[getDagdeelRegelsVoorRooster] Ophalen voor rosterId:', rosterId);
     
-    if (rpsError) throw rpsError;
-    
-    if (!rpsData || rpsData.length === 0) {
-      return new Map();
+    if (!isValidUUID(rosterId)) {
+      throw new Error('Ongeldige rosterId');
     }
     
-    const rpsIds = rpsData.map(r => r.id);
-    
-    // Haal alle dagdeel regels op
+    // DRAAD176: Direct uit child tabel (geen parent join meer!)
     const { data: dagdeelData, error: dagdeelError } = await supabase
       .from('roster_period_staffing_dagdelen')
       .select('*')
-      .in('roster_period_staffing_id', rpsIds);
+      .eq('roster_id', rosterId)
+      .order('date', { ascending: true })
+      .order('service_id', { ascending: true })
+      .order('dagdeel', { ascending: true })
+      .order('team', { ascending: true });
     
-    if (dagdeelError) throw dagdeelError;
+    if (dagdeelError) {
+      console.error('[getDagdeelRegelsVoorRooster] Supabase error:', dagdeelError);
+      throw dagdeelError;
+    }
     
-    // Groepeer per roster_period_staffing_id
+    if (!dagdeelData || dagdeelData.length === 0) {
+      console.log('[getDagdeelRegelsVoorRooster] Geen records gevonden');
+      return new Map();
+    }
+    
+    // DRAAD176: Groepeer naar (date|service_id) combinatie (vervang oude parent ID grouping)
     const resultMap = new Map<string, RosterPeriodStaffingDagdeel[]>();
     
-    for (const rps of rpsData) {
-      const regelsVoorRps = (dagdeelData || []).filter(
-        d => d.roster_period_staffing_id === rps.id
-      ) as RosterPeriodStaffingDagdeel[];
+    for (const record of dagdeelData) {
+      // Key: "date|service_id"
+      const key = `${record.date}|${record.service_id}`;
       
-      resultMap.set(rps.id, regelsVoorRps);
+      if (!resultMap.has(key)) {
+        resultMap.set(key, []);
+      }
+      resultMap.get(key)!.push(record as RosterPeriodStaffingDagdeel);
     }
+    
+    console.log('[getDagdeelRegelsVoorRooster] ✅ Fetched', dagdeelData.length, 'records');
+    console.log('[getDagdeelRegelsVoorRooster] Grouped into', resultMap.size, 'date|service combinations');
     
     return resultMap;
   } catch (err) {
-    console.error('[getDagdeelRegelsVoorRooster] Fout:', err);
+    console.error('[getDagdeelRegelsVoorRooster] ❌ Fout:', err);
     return new Map();
+  }
+}
+
+/**
+ * DRAAD176: Haal totale dagdeel count op voor rooster
+ */
+export async function getDagdeelCountVoorRooster(
+  rosterId: string
+): Promise<number> {
+  try {
+    if (!isValidUUID(rosterId)) {
+      throw new Error('Ongeldige rosterId');
+    }
+    
+    const { count, error } = await supabase
+      .from('roster_period_staffing_dagdelen')
+      .select('*', { count: 'exact', head: true })
+      .eq('roster_id', rosterId);
+    
+    if (error) throw error;
+    
+    return count ?? 0;
+  } catch (err) {
+    console.error('[getDagdeelCountVoorRooster] Fout:', err);
+    return 0;
   }
 }
