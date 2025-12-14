@@ -5,6 +5,16 @@ import { nl } from 'date-fns/locale';
 import { getWeekBoundary } from './weekBoundaryCalculator';
 
 /**
+ * 🔥 DRAAD179 FASE 2 FIX
+ * 
+ * PROBLEEM: Query gebruikte niet-bestaande "roster_period_staffing" tabel
+ * OORZAAK: DRAAD176 denormalisering - parent tabel verwijderd
+ * 
+ * OPLOSSING:
+ * - Direct query naar "roster_period_staffing_dagdelen" (denormalized)
+ * - Geen JOIN meer nodig - alle velden direct beschikbaar
+ * - roster_id, service_id, date zijn nu direct in dagdelen
+ * 
  * DRAAD62: UTC-SAFE WEEK DAGDELEN DATA
  * 
  * Deze module gebruikt consistent UTC-safe datum utilities voor:
@@ -88,17 +98,19 @@ export async function getWeekDagdelenData(
     
     if (hasNoOverlap) return null;
     
-    // Fetch period data from database
+    // 🔥 DRAAD179 FASE 2 FIX: Direct dagdelen query (denormalized)
+    // OUD: .from('roster_period_staffing').select(...JOIN...)
+    // NIEUW: .from('roster_period_staffing_dagdelen').select(*)
     const { data: periodData, error: periodError } = await supabase
-      .from('roster_period_staffing')
-      .select(`id,date,service_id,roster_period_staffing_dagdelen (id,dagdeel,team,status,aantal)`)
+      .from('roster_period_staffing_dagdelen')
+      .select('*')
       .eq('roster_id', rosterId)
       .gte('date', weekStartStr)
       .lte('date', weekEndStr)
       .order('date', { ascending: true });
     
     if (periodError) {
-      console.error('🔴 [DRAAD62] Database query error:', periodError);
+      console.error('🚠 [DRAAD179-FASE2] Database query error:', periodError);
       return null;
     }
     
@@ -115,7 +127,7 @@ export async function getWeekDagdelenData(
     // Max 7 dagen per week
     if (periodData && periodData.length > 7) periodData.splice(7);
     
-    // 🔥 DRAAD62 FIX: UTC-safe datum generatie
+    // 🔥 DRAAD179 FASE 2: UTC-safe datum generatie
     const days: DayDagdeelData[] = [];
     const startDate = parseUTCDate(weekStartStr);  // ✅ UTC!
     
@@ -126,51 +138,52 @@ export async function getWeekDagdelenData(
       // Nederlandse dag naam (date-fns locale formatting is OK, data is UTC)
       const dayName = format(currentDate, 'EEEE', { locale: nl });
       
-      const dayPeriod = periodData?.find(p => p.date === dateStr);
-      const dagdelenRecords = dayPeriod?.roster_period_staffing_dagdelen || [];
-      const dayServiceId = dayPeriod?.service_id;
+      // 🔥 DRAAD179 FASE 2: Direct match op dagdelen velden
+      // OUD: periodData?.find(p => p.roster_period_staffing_id === ...)
+      // NIEUW: periodData?.filter by date + service
+      const dayRecords = periodData?.filter(p => p.date === dateStr) || [];
       
       // DRAAD61A: Direct filteren op dagdeel letter ('O','M','A','N')
       // Database heeft uppercase letters, geen toLowerCase nodig
       const dagdelen = {
-        ochtend: dagdelenRecords
+        ochtend: dayRecords
           .filter(d => d.dagdeel === 'O')
           .map(d => ({ 
             team: d.team || '', 
             aantal: d.aantal || 0, 
             status: d.status || 'NIET_TOEGEWEZEN', 
-            serviceId: dayServiceId 
+            serviceId: d.service_id 
           })),
-        middag: dagdelenRecords
+        middag: dayRecords
           .filter(d => d.dagdeel === 'M')
           .map(d => ({ 
             team: d.team || '', 
             aantal: d.aantal || 0, 
             status: d.status || 'NIET_TOEGEWEZEN', 
-            serviceId: dayServiceId 
+            serviceId: d.service_id 
           })),
-        avond: dagdelenRecords
+        avond: dayRecords
           .filter(d => d.dagdeel === 'A')
           .map(d => ({ 
             team: d.team || '', 
             aantal: d.aantal || 0, 
             status: d.status || 'NIET_TOEGEWEZEN', 
-            serviceId: dayServiceId 
+            serviceId: d.service_id 
           })),
-        nacht: dagdelenRecords
+        nacht: dayRecords
           .filter(d => d.dagdeel === 'N')
           .map(d => ({ 
             team: d.team || '', 
             aantal: d.aantal || 0, 
             status: d.status || 'NIET_TOEGEWEZEN', 
-            serviceId: dayServiceId 
+            serviceId: d.service_id 
           })),
       };
       
       days.push({ datum: dateStr, dagNaam: dayName, dagdelen });
     }
     
-    // 🔥 DRAAD62 FIX: UTC-safe display datum formatting
+    // 🔥 DRAAD179 FASE 2: UTC-safe display datum formatting
     const result = {
       rosterId,
       weekNummer,
@@ -190,7 +203,7 @@ export async function getWeekDagdelenData(
     
     return result;
   } catch (error) {
-    console.error('🔴 [DRAAD62] getWeekDagdelenData error:', error);
+    console.error('🚠 [DRAAD179-FASE2] getWeekDagdelenData error:', error);
     return null;
   }
 }
@@ -209,7 +222,7 @@ export async function getWeekNavigatieBounds(
     };
     return bounds;
   } catch (error) {
-    console.error('🔴 [DRAAD62] getWeekNavigatieBounds error:', error);
+    console.error('🚠 [DRAAD179-FASE2] getWeekNavigatieBounds error:', error);
     return {
       minWeek: 1,
       maxWeek: 5,
