@@ -51,37 +51,19 @@ interface PlanInformatieResponse {
  *
  * Haalt vraag/aanbod analyse op per dienst voor de hele roosterperiode.
  * 
- * ✅ DRAAD165-FINAL-FIX: Bypass Supabase SDK memory cache
+ * ✅ DRAAD178A-FASE4-FIX: Direct dagdelen query (DENORMALISERING)
  * ==================================================
- * PROBLEM IDENTIFIED (DRAAD165):
- *   - Supabase SDK caches query results in Node.js server memory
- *   - HTTP Cache-Control headers do NOT affect SDK cache
- *   - Even new Supabase client instances don't clear SDK internal cache
- *   - Result: Modal shows STALE data while screen shows FRESH data
- *   - Database has correct values, but modal gets cached old values
+ * DRAAD176 CHANGE:
+ *   - Parent tabel `roster_period_staffing` is VERWIJDERD
+ *   - Alle data is nu DENORMALISEERD in `roster_period_staffing_dagdelen`
+ *   - Query moet DIRECT uit dagdelen tabel lezen
+ *   - Daarna aggregeren per service
  *
- * ROOT CAUSE ANALYSIS:
- *   1. Database: SWZ=5, OSP=38 (TRUE VALUES)
- *   2. Screen (direct SDK query): shows SWZ=5, OSP=38 ✓ (works sometimes)
- *   3. Modal (API endpoint): shows SWZ=2, OSP=42 ✗ (STALE SDK CACHE)
- *   4. Each SDK instance has OWN memory cache
- *   5. cache: 'no-store' in fetch() is IGNORED by SDK
- *
- * SOLUTION IMPLEMENTED:
- *   - Replace ALL Supabase SDK queries with raw PostgREST HTTP API
- *   - Use native Node.js fetch() with cache: 'no-store'
- *   - Direct HTTP calls bypass SDK memory cache completely
- *   - Each request = fresh database roundtrip
- *   - Result: Modal ALWAYS shows fresh data ✓
- *
- * VERIFICATION CHECKLIST:
- *   ✅ Database SWZ=2 (initial)
- *   ✅ Screen shows SWZ=2
- *   ✅ Modal now ALSO shows SWZ=2 (was showing 5 - FIXED!)
- *   ✅ Change database OSP to 38 (-4 from 42)
- *   ✅ Screen shows OSP=38
- *   ✅ Modal click "Vernieuwen" → shows OSP=38 (was showing 42 - FIXED!)
- *   ✅ All three data paths ALIGNED: database = screen = modal
+ * IMPLEMENTATIE:
+ *   - Use PostgREST HTTP API to bypass SDK cache (DRAAD165)
+ *   - Query dagdelen direct (geen parent join meer)
+ *   - Aggregeer aantal per service
+ *   - Rest logica blijft hetzelfde
  */
 export async function GET(request: NextRequest) {
   try {
@@ -104,10 +86,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.log(`🔥 DRAAD165-FINAL: Using raw PostgREST HTTP API (NO SDK cache)`);
+    console.log(`🔥 DRAAD178A-FASE4: Direct dagdelen query (NO parent table)`);
     console.log(`📊 Request timestamp: ${new Date().toISOString()}`);
 
-    // 🔥 DRAAD165-FINAL: Use raw PostgREST HTTP API to COMPLETELY bypass SDK cache
+    // 🔥 DRAAD178A-FASE4: Use raw PostgREST HTTP API to COMPLETELY bypass SDK cache
     const postgrestUrl = `${supabaseUrl}/rest/v1`;
     const headers = {
       'apikey': supabaseKey,
@@ -167,12 +149,13 @@ export async function GET(request: NextRequest) {
     const startWeek = getISOWeek(startDate);
     const endWeek = getISOWeek(endDate);
 
-    // Step 2: Get vraag (demand) data via PostgREST
+    // Step 2: DRAAD178A-FASE4: Get vraag (demand) data DIRECTLY from dagdelen
     let vraagData: any[] = [];
     try {
-      console.log(`📍 Step 2: Fetching vraag data...`);
+      console.log(`📍 Step 2: Fetching vraag data from dagdelen (DENORMALIZED)...`);
+      // DIRECT query dagdelen (parent tabel BESTAAT NIET MEER)
       const vraagResponse = await fetch(
-        `${postgrestUrl}/roster_period_staffing?roster_id=eq.${rosterId}&select=id,service_id,roster_period_staffing_dagdelen(id,aantal)`,
+        `${postgrestUrl}/roster_period_staffing_dagdelen?roster_id=eq.${rosterId}&select=service_id,aantal`,
         {
           method: 'GET',
           headers,
@@ -185,7 +168,7 @@ export async function GET(request: NextRequest) {
       }
       
       vraagData = await vraagResponse.json();
-      console.log(`✅ Vraag data: ${vraagData?.length || 0} records`);
+      console.log(`✅ Vraag data: ${vraagData?.length || 0} dagdeel records`);
     } catch (error) {
       console.error('❌ Fout bij ophalen vraag-gegevens:', error);
       return NextResponse.json(
@@ -194,15 +177,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Aggregeer vraag per service
+    // Aggregeer vraag per service (DRAAD176: Direct van dagdelen)
     const vraagMap = new Map<string, number>();
     vraagData?.forEach((row: any) => {
-      if (row.service_id && Array.isArray(row.roster_period_staffing_dagdelen)) {
-        const total = (row.roster_period_staffing_dagdelen as any[]).reduce(
-          (sum: number, dagdeel: any) => sum + (dagdeel.aantal || 0),
-          0
+      if (row.service_id) {
+        vraagMap.set(
+          row.service_id,
+          (vraagMap.get(row.service_id) || 0) + (row.aantal || 0)
         );
-        vraagMap.set(row.service_id, (vraagMap.get(row.service_id) || 0) + total);
       }
     });
     console.log(`📊 Vraag aggregation: ${vraagMap.size} unique services`);
@@ -308,7 +290,7 @@ export async function GET(request: NextRequest) {
     const totalVerschil = totalBeschikbaar - totalNodig;
     const totalStatus = totalBeschikbaar >= totalNodig ? 'groen' : 'rood';
 
-    console.log(`✅ DRAAD165-FINAL: Data collection complete!`);
+    console.log(`✅ DRAAD178A-FASE4: Data collection complete!`);
     console.log(`📊 TOTALS: Nodig=${totalNodig}, Beschikbaar=${totalBeschikbaar}, Verschil=${totalVerschil}, Status=${totalStatus}`);
     console.log(`📊 Diensten count: ${diensten.length}`);
 
@@ -330,7 +312,7 @@ export async function GET(request: NextRequest) {
     };
 
     const timestamp = new Date().toISOString();
-    console.log(`✅ DRAAD165-FINAL: Response ready at ${timestamp}`);
+    console.log(`✅ DRAAD178A-FASE4: Response ready at ${timestamp}`);
 
     return NextResponse.json(response, {
       headers: {
@@ -340,9 +322,9 @@ export async function GET(request: NextRequest) {
         'Surrogate-Control': 'no-store',
         'X-Accel-Expires': '0',
         'X-Content-Type-Options': 'nosniff',
-        'X-DRAAD165-STATUS': 'PostgREST API with cache bypass - Fresh data guaranteed',
-        'X-DRAAD165-TIMESTAMP': timestamp,
-        'X-DRAAD165-METHOD': 'Raw PostgREST HTTP (NO SDK cache)',
+        'X-DRAAD178A-STATUS': 'PostgREST API with dagdelen direct query',
+        'X-DRAAD178A-TIMESTAMP': timestamp,
+        'X-DRAAD178A-METHOD': 'Raw PostgREST HTTP (DENORMALIZED dagdelen)',
         'Vary': 'Accept-Encoding'
       }
     });
