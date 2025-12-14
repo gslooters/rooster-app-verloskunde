@@ -1,7 +1,8 @@
 // lib/types/roster-period-staffing-dagdeel.ts
 // ============================================================================
-// DRAAD36A: Roster Period Staffing Dagdelen Types
-// Datum: 2025-11-17
+// DRAAD176: Roster Period Staffing Dagdelen Types (DENORMALISERING)
+// Datum: 2025-12-14
+// Update: Toegevoegd roster_id, service_id, date, invulling velden
 // ============================================================================
 
 /**
@@ -30,26 +31,38 @@ export type TeamDagdeel = 'TOT' | 'GRO' | 'ORA';
 export type DagdeelStatus = 'MOET' | 'MAG' | 'MAG_NIET' | 'AANGEPAST';
 
 /**
- * Dagdeel regel voor een specifiek team op een specifieke datum
+ * DRAAD176: Dagdeel regel voor een specifiek team op een specifieke datum
+ * DENORMALISEERD - bevat nu ook roster_id, service_id, date
+ * Oude FK naar roster_period_staffing_id VERWIJDERD
  */
 export interface RosterPeriodStaffingDagdeel {
-  id: string;
-  roster_period_staffing_id: string;
-  dagdeel: Dagdeel;
-  team: TeamDagdeel;
-  status: DagdeelStatus;
-  aantal: number; // 0-9
-  created_at: string;
-  updated_at: string;
+  id: string;                    // PK (uuid)
+  roster_id: string;             // FK → roosters (NEW - DRAAD176)
+  service_id: string;            // FK → service_types (NEW - DRAAD176)
+  date: string;                  // YYYY-MM-DD format (NEW - DRAAD176)
+  dagdeel: Dagdeel;              // 'O', 'M', 'A'
+  team: TeamDagdeel;             // 'TOT', 'GRO', 'ORA'
+  status: DagdeelStatus;          // 'MOET', 'MAG', 'MAG_NIET', 'AANGEPAST'
+  aantal: number;                // 0-9 (verplicht aantal per dagdeel/team)
+  invulling: number;             // 0+ (werkelijke inplanningen) (NEW - DRAAD176)
+  created_at: string;            // ISO 8601
+  updated_at: string;            // ISO 8601
 }
 
 /**
  * Input voor het aanmaken van een nieuwe dagdeel regel
+ * DRAAD176: Inclusief roster_id, service_id, date
  */
-export type CreateDagdeelRegel = Omit<
-  RosterPeriodStaffingDagdeel,
-  'id' | 'created_at' | 'updated_at'
->;
+export interface CreateDagdeelRegel {
+  roster_id: string;             // FK → roosters (REQUIRED - DRAAD176)
+  service_id: string;            // FK → service_types (REQUIRED - DRAAD176)
+  date: string;                  // YYYY-MM-DD (REQUIRED - DRAAD176)
+  dagdeel: Dagdeel;              // REQUIRED
+  team: TeamDagdeel;             // REQUIRED
+  status: DagdeelStatus;          // REQUIRED
+  aantal: number;                // REQUIRED
+  invulling?: number;            // OPTIONAL, default 0 (DRAAD176)
+}
 
 /**
  * Input voor het updaten van een dagdeel regel
@@ -57,6 +70,7 @@ export type CreateDagdeelRegel = Omit<
 export interface UpdateDagdeelRegel {
   status?: DagdeelStatus;
   aantal?: number;
+  invulling?: number;            // NEW - DRAAD176
 }
 
 /**
@@ -172,4 +186,22 @@ export function isValidDagdeelStatus(value: unknown): value is DagdeelStatus {
 
 export function isValidAantal(value: number): boolean {
   return Number.isInteger(value) && value >= 0 && value <= 9;
+}
+
+/**
+ * DRAAD176: Valideer UUID formaat
+ */
+export function isValidUUID(value: string): boolean {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(value);
+}
+
+/**
+ * DRAAD176: Valideer YYYY-MM-DD date format
+ */
+export function isValidISODate(value: string): boolean {
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!dateRegex.test(value)) return false;
+  const date = new Date(value);
+  return date instanceof Date && !isNaN(date.getTime());
 }
