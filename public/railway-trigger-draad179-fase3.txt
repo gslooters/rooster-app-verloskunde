@@ -1,0 +1,42 @@
+🚀 DRAAD179 - FASE 3: EXPORT & PDF REPAIR - RAILWAY DEPLOYMENT TRIGGER
+========================================================================
+
+✅ FASE 3 COMPLETE
+
+Fixed Files:
+  ✅ app/api/planning/service-allocation-pdf/route.ts
+  ✅ lib/services/preplanning-storage.ts
+
+Changes Summary:
+  • Replaced all references to roster_period_staffing (parent table - deleted)
+  • Using roster_period_staffing_dagdelen directly (denormalized table)
+  • Direct queries with: roster_id, service_id, date filters
+  • No parent table joins needed
+
+Database Schema:
+  Parent table: roster_period_staffing ❌ REMOVED (DRAAD176)
+  Child table: roster_period_staffing_dagdelen ✅ ACTIVE
+  Denormalized fields: roster_id, service_id, date (direct FK)
+
+Deployment Info:
+  Timestamp: 2025-12-14T19:37:31Z
+  Priority: HIGH
+  Environment: Production (Railway)
+  Expected Deploy Time: 2-3 minutes
+  
+Railway Webhook:
+  Trigger: true
+  Auto-deploy: Enabled
+  Cache invalidation: true
+
+Test URLs After Deploy:
+  GET /api/planning/service-allocation-pdf?rosterId=xxx
+  Expected: 200 OK with PDF data
+  
+Expected Results:
+  ✅ PDF export functionality restored
+  ✅ Pre-planning module staffing filtering works
+  ✅ No more "relation does not exist" errors
+  ✅ Denormalized data queries perform efficiently
+
+🎯 Status: Ready for Railway Deployment
