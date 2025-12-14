@@ -13,6 +13,7 @@
  * DRAAD 99B: Verwijderd service blocking rules (constraints disabled)
  * HERSTEL: Service blocking rules ge-integreerd in getServicesForEmployee + getServicesForEmployeeFiltered
  * DRAAD 100B: FIX getEmployeeServiceCodes - resolve service_code via JOIN met service_types
+ * DRAAD179-FASE3: FIXED - Replaced roster_period_staffing with roster_period_staffing_dagdelen
  */
 
 import { supabase } from '@/lib/supabase';
@@ -317,11 +318,12 @@ export async function getServicesForEmployee(
 /**
  * DRAAD 90: Nieuwe functie - Gefilterde diensten ophalen
  * Haal diensten op die beschikbaar zijn voor specifieke medewerker op datum/dagdeel
- * Filtert op basis van roster_period_staffing status (NIET status='MAG_NIET')
+ * Filtert op basis van roster_period_staffing_dagdelen status (NIET status='MAG_NIET')
  * HERSTEL: Service blocking rules integratie
  * 
  * DRAAD 91: Fix TypeScript type error - toegevoegd type casting as any[]
  * DRAAD 92: Fix status filtering - !== 'MAG_NIET' ipv === 'MAG', verwijder onjuist actief filter
+ * DRAAD179-FASE3: FIXED - Replaced roster_period_staffing with roster_period_staffing_dagdelen
  * 
  * Status waarden:
  * - 'MAG' = toegestaan (toon)
@@ -414,19 +416,13 @@ export async function getServicesForEmployeeFiltered(
     // DRAAD 91: FIX - Type casting toegevoegd voor TypeScript build
     for (const service of baseServices) {
       // Check staffing status voor deze dienst op datum/dagdeel
+      // DRAAD179-FASE3: FIXED - Query direct uit roster_period_staffing_dagdelen (no parent join)
       const { data: staffingData, error: staffingError } = await supabase
-        .from('roster_period_staffing')
-        .select(`
-          id,
-          roster_period_staffing_dagdelen (
-            dagdeel,
-            status
-          )
-        `)
+        .from('roster_period_staffing_dagdelen')
+        .select('dagdeel, status')
         .eq('roster_id', rosterId)
         .eq('service_id', service.id)
-        .eq('date', date)
-        .single();
+        .eq('date', date);
 
       if (staffingError) {
         console.warn(
@@ -437,7 +433,7 @@ export async function getServicesForEmployeeFiltered(
         continue;
       }
       
-      if (!staffingData) {
+      if (!staffingData || staffingData.length === 0) {
         console.warn(
           `[getServicesForEmployeeFiltered] No staffing record for service ${service.code} ` +
           `on ${date} dagdeel ${dagdeel} - service may not be configured for this date`
@@ -447,7 +443,7 @@ export async function getServicesForEmployeeFiltered(
       
       // DRAAD 92: FIX - Check of dagdeel NIET status='MAG_NIET' heeft (ipv === 'MAG')
       // Dit toont nu MAG, MOET en AANGEPAST, maar NIET MAG_NIET
-      const dagdeelData = (staffingData.roster_period_staffing_dagdelen || []).find(
+      const dagdeelData = staffingData.find(
         (d: any) => d.dagdeel === dagdeel && d.status !== 'MAG_NIET'
       );
       
