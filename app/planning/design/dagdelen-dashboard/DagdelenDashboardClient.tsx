@@ -36,7 +36,10 @@ export default function DagdelenDashboardClient() {
   
   const supabase = createClientComponentClient();
 
-  // 🔧 DRAAD2A FIX: useCallback voor loadWeekData om dependency issues te voorkomen
+  // 🔥 DRAAD179 FASE 2 FIX
+  // PROBLEEM: Query gebruikte niet-bestaande "roster_period_staffing" tabel
+  // OORZAAK: DRAAD176 denormalisering - parent tabel verwijderd
+  // OPLOSSING: Direct query naar "roster_period_staffing_dagdelen" (denormalized)
   const loadWeekData = useCallback(async () => {
     try {
       // ✅ Reset states
@@ -87,19 +90,12 @@ export default function DagdelenDashboardClient() {
         const weekStartStr = formatDateForQuery(weekStart);
         const weekEndStr = formatDateForQuery(weekEnd);
         
-        console.log(`🔎 Supabase query: roster_period_staffing.date >= ${weekStartStr} AND date <= ${weekEndStr}`);
+        console.log(`🔎 Supabase query: roster_period_staffing_dagdelen.date >= ${weekStartStr} AND date <= ${weekEndStr}`);
 
-        // ✅ Query parent tabel + JOIN naar dagdelen
-        const { data: parentRecords, error: queryError } = await supabase
-          .from('roster_period_staffing')
-          .select(`
-            id,
-            date,
-            roster_period_staffing_dagdelen (
-              updated_at,
-              status
-            )
-          `)
+        // 🔥 DRAAD179 FASE 2 FIX: Direct dagdelen query (geen parent tabel)
+        const { data: dagdelenRecords, error: queryError } = await supabase
+          .from('roster_period_staffing_dagdelen')
+          .select('*')
           .eq('roster_id', rosterId)
           .gte('date', weekStartStr)
           .lte('date', weekEndStr);
@@ -107,21 +103,15 @@ export default function DagdelenDashboardClient() {
         if (queryError) {
           console.error(`❌ Supabase error week ${weekIndex}:`, queryError);
         } else {
-          console.log(`📊 Week ${weekIndex}: ${parentRecords?.length || 0} parent records opgehaald`);
+          console.log(`📋 Week ${weekIndex}: ${dagdelenRecords?.length || 0} dagdelen records opgehaald`);
         }
 
         // 🔧 DRAAD2A: Verbeterde defensieve data extractie
-        const dagdelenRecords = Array.isArray(parentRecords) 
-          ? parentRecords.flatMap(parent => {
-              if (!parent || typeof parent !== 'object') return [];
-              const dagdelen = parent.roster_period_staffing_dagdelen;
-              return Array.isArray(dagdelen) ? dagdelen : [];
-            })
-          : [];
+        const records = Array.isArray(dagdelenRecords) ? dagdelenRecords : [];
         
-        console.log(`📊 Week ${weekIndex}: ${dagdelenRecords.length} dagdelen records gevonden`);
+        console.log(`📋 Week ${weekIndex}: ${records.length} dagdelen records gevonden`);
         
-        const modifiedChanges = dagdelenRecords.filter((d: any) => 
+        const modifiedChanges = records.filter((d: any) => 
           d && typeof d === 'object' && d.status === 'AANGEPAST'
         );
 
@@ -158,7 +148,7 @@ export default function DagdelenDashboardClient() {
       }
 
       // 🔧 DRAAD2A: Debug logging vóór setState
-      console.log('📊 Gegenereerde weken:', weeks.map(w => `Week ${w.weekIndex} (ISO: ${w.weekNumber}): ${w.startDate}-${w.endDate}`).join(', '));
+      console.log('📋 Gegenereerde weken:', weeks.map(w => `Week ${w.weekIndex} (ISO: ${w.weekNumber}): ${w.startDate}-${w.endDate}`).join(', '));
       
       // ✅ DRAAD2A FIX: Validatie voordat state wordt gezet
       if (!Array.isArray(weeks) || weeks.length === 0) {
@@ -265,7 +255,7 @@ export default function DagdelenDashboardClient() {
     }
     
     console.log(`🔗 Navigeren naar week INDEX ${weekIndex}`);
-    console.log(`📝 Parameters: rosterId=${rosterId}, weekIndex=${weekIndex}, periodStart=${periodStart}`);
+    console.log(`🗒 Parameters: rosterId=${rosterId}, weekIndex=${weekIndex}, periodStart=${periodStart}`);
     
     router.push(
       `/planning/design/week-dagdelen/${rosterId}/${weekIndex}?period_start=${periodStart}`
@@ -563,7 +553,7 @@ export default function DagdelenDashboardClient() {
 
         {process.env.NODE_ENV === 'development' && (
           <div className="mt-6 bg-gray-800 text-gray-100 rounded-lg p-4 text-xs font-mono">
-            <div className="font-bold mb-2">🐛 Debug Info (DRAAD54-FIX):</div>
+            <div className="font-bold mb-2">🐛 Debug Info (DRAAD179-FASE2):</div>
             <div>isLoading: {String(isLoading)}</div>
             <div>hasError: {String(hasError)}</div>
             <div>isDataReady: {String(isDataReady)}</div>
@@ -571,9 +561,9 @@ export default function DagdelenDashboardClient() {
             <div>roster_id: {rosterId}</div>
             <div>period_start: {periodStart}</div>
             <div>pdfGenerating: {String(pdfGenerating)}</div>
-            <div className="mt-2 text-green-400">✅ DRAAD54-FIX: V3 PDF generator met gekleurde badges actief</div>
-            <div className="text-green-400">✅ Import: service-allocation-generator-v3</div>
-            <div className="text-green-400">✅ Functie: generateServiceAllocationPDFV3 + serviceTypes</div>
+            <div className="mt-2 text-green-400">✅ DRAAD179-FASE2: Direct dagdelen query (denormalized)</div>
+            <div className="text-green-400">✅ Query: roster_period_staffing_dagdelen (no parent table)</div>
+            <div className="text-green-400">✅ Schema: roster_id, service_id, date are denormalized</div>
           </div>
         )}
       </div>
