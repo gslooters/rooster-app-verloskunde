@@ -2,6 +2,7 @@
 // ============================================================================
 // DRAAD176: Roster Period Staffing Dagdelen Storage (DENORMALISERING)
 // Datum: 2025-12-14
+// FASE 2: ADD FUNCTIONS voor denormalized data retrieval (DRAAD178A)
 // ============================================================================
 
 import { supabase } from '@/lib/supabase';
@@ -166,11 +167,69 @@ export async function bulkCreateDagdeelRegels(
 }
 
 // ============================================================================
-// READ
+// READ - FASE 2: Denormalized data retrieval functions
 // ============================================================================
 
 /**
- * DRAAD176: Haal alle dagdeel regels op voor een specifieke dag + dienst
+ * FASE 2: Haal ALL dagdeel records voor een rooster
+ * Groepeerd naar (date|service_id) key voor efficient UI rendering
+ * DENORMALISERING: Direct uit roster_period_staffing_dagdelen (geen parent join)
+ */
+export async function getDagdeelRegelsVoorRooster(
+  rosterId: string
+): Promise<Map<string, RosterPeriodStaffingDagdeel[]>> {
+  try {
+    console.log('[getDagdeelRegelsVoorRooster] Ophalen voor rosterId:', rosterId);
+    
+    if (!isValidUUID(rosterId)) {
+      throw new Error('Ongeldige rosterId');
+    }
+    
+    // DRAAD176: Direct uit child tabel (geen parent join meer!)
+    const { data: dagdeelData, error: dagdeelError } = await supabase
+      .from('roster_period_staffing_dagdelen')
+      .select('*')
+      .eq('roster_id', rosterId)
+      .order('date', { ascending: true })
+      .order('service_id', { ascending: true })
+      .order('dagdeel', { ascending: true })
+      .order('team', { ascending: true });
+    
+    if (dagdeelError) {
+      console.error('[getDagdeelRegelsVoorRooster] Supabase error:', dagdeelError);
+      throw dagdeelError;
+    }
+    
+    if (!dagdeelData || dagdeelData.length === 0) {
+      console.log('[getDagdeelRegelsVoorRooster] Geen records gevonden');
+      return new Map();
+    }
+    
+    // DRAAD176: Groepeer naar (date|service_id) combinatie (vervang oude parent ID grouping)
+    const resultMap = new Map<string, RosterPeriodStaffingDagdeel[]>();
+    
+    for (const record of dagdeelData) {
+      // Key: "date|service_id"
+      const key = `${record.date}|${record.service_id}`;
+      
+      if (!resultMap.has(key)) {
+        resultMap.set(key, []);
+      }
+      resultMap.get(key)!.push(record as RosterPeriodStaffingDagdeel);
+    }
+    
+    console.log('[getDagdeelRegelsVoorRooster] ✅ Fetched', dagdeelData.length, 'records');
+    console.log('[getDagdeelRegelsVoorRooster] Grouped into', resultMap.size, 'date|service combinations');
+    
+    return resultMap;
+  } catch (err) {
+    console.error('[getDagdeelRegelsVoorRooster] ❌ Fout:', err);
+    return new Map();
+  }
+}
+
+/**
+ * FASE 2: Haal dagdeel records voor specifieke dag + dienst combinatie
  */
 export async function getDagdeelRegelsPerDag(
   rosterId: string,
@@ -204,7 +263,7 @@ export async function getDagdeelRegelsPerDag(
 }
 
 /**
- * DRAAD176: Haal specifieke dagdeel regel op
+ * FASE 2: Haal specifieke dagdeel regel (single record)
  */
 export async function getDagdeelRegel(
   rosterId: string,
@@ -246,12 +305,45 @@ export async function getDagdeelRegel(
   }
 }
 
+/**
+ * FASE 2: Bulk retrieve - haal meerdere rules in één query op basis van filter
+ */
+export async function getDagdeelRegelsVoorServicePerPeriode(
+  rosterId: string,
+  serviceId: string
+): Promise<RosterPeriodStaffingDagdeel[]> {
+  try {
+    if (!isValidUUID(rosterId) || !isValidUUID(serviceId)) {
+      throw new Error('Ongeldige parameters');
+    }
+    
+    const { data, error } = await supabase
+      .from('roster_period_staffing_dagdelen')
+      .select('*')
+      .eq('roster_id', rosterId)
+      .eq('service_id', serviceId)
+      .order('date', { ascending: true })
+      .order('dagdeel', { ascending: true })
+      .order('team', { ascending: true });
+    
+    if (error) {
+      console.error('[getDagdeelRegelsVoorServicePerPeriode] Supabase error:', error);
+      throw error;
+    }
+    
+    return (data || []) as RosterPeriodStaffingDagdeel[];
+  } catch (err) {
+    console.error('[getDagdeelRegelsVoorServicePerPeriode] Fout:', err);
+    return [];
+  }
+}
+
 // ============================================================================
 // UPDATE
 // ============================================================================
 
 /**
- * Update een dagdeel regel
+ * FASE 2: UPDATE dagdeel regel fields
  */
 export async function updateDagdeelRegel(
   id: string,
@@ -286,6 +378,34 @@ export async function updateDagdeelRegel(
   } catch (err) {
     console.error('[updateDagdeelRegel] ❌ Fout:', err);
     return false;
+  }
+}
+
+/**
+ * FASE 2: Bulk update invulling (aantal assigned)
+ */
+export async function bulkUpdateInvulling(
+  updates: Array<{ id: string; invulling: number }>
+): Promise<void> {
+  if (!updates.length) {
+    console.log('[bulkUpdateInvulling] Geen updates');
+    return;
+  }
+  
+  try {
+    console.log('[bulkUpdateInvulling] Bulk update van', updates.length, 'records');
+    
+    const promises = updates.map(({ id, invulling }) =>
+      updateDagdeelRegel(id, { invulling })
+    );
+    
+    const results = await Promise.all(promises);
+    const successful = results.filter(r => r).length;
+    
+    console.log('[bulkUpdateInvulling] ✅ Bulk update voltooid:', successful, '/', updates.length, 'successful');
+  } catch (err) {
+    console.error('[bulkUpdateInvulling] ❌ Fout:', err);
+    throw err;
   }
 }
 
@@ -407,65 +527,8 @@ export async function deleteDagdeelRegelsPerDag(
 }
 
 // ============================================================================
-// BULK OPERATIONS
+// STATISTICS & COUNTS
 // ============================================================================
-
-/**
- * DRAAD176: Haal alle dagdeel regels op voor een volledig rooster
- * DENORMALISERING: Direct uit roster_period_staffing_dagdelen (geen parent tabel meer)
- */
-export async function getDagdeelRegelsVoorRooster(
-  rosterId: string
-): Promise<Map<string, RosterPeriodStaffingDagdeel[]>> {
-  try {
-    console.log('[getDagdeelRegelsVoorRooster] Ophalen voor rosterId:', rosterId);
-    
-    if (!isValidUUID(rosterId)) {
-      throw new Error('Ongeldige rosterId');
-    }
-    
-    // DRAAD176: Direct uit child tabel (geen parent join meer!)
-    const { data: dagdeelData, error: dagdeelError } = await supabase
-      .from('roster_period_staffing_dagdelen')
-      .select('*')
-      .eq('roster_id', rosterId)
-      .order('date', { ascending: true })
-      .order('service_id', { ascending: true })
-      .order('dagdeel', { ascending: true })
-      .order('team', { ascending: true });
-    
-    if (dagdeelError) {
-      console.error('[getDagdeelRegelsVoorRooster] Supabase error:', dagdeelError);
-      throw dagdeelError;
-    }
-    
-    if (!dagdeelData || dagdeelData.length === 0) {
-      console.log('[getDagdeelRegelsVoorRooster] Geen records gevonden');
-      return new Map();
-    }
-    
-    // DRAAD176: Groepeer naar (date|service_id) combinatie (vervang oude parent ID grouping)
-    const resultMap = new Map<string, RosterPeriodStaffingDagdeel[]>();
-    
-    for (const record of dagdeelData) {
-      // Key: "date|service_id"
-      const key = `${record.date}|${record.service_id}`;
-      
-      if (!resultMap.has(key)) {
-        resultMap.set(key, []);
-      }
-      resultMap.get(key)!.push(record as RosterPeriodStaffingDagdeel);
-    }
-    
-    console.log('[getDagdeelRegelsVoorRooster] ✅ Fetched', dagdeelData.length, 'records');
-    console.log('[getDagdeelRegelsVoorRooster] Grouped into', resultMap.size, 'date|service combinations');
-    
-    return resultMap;
-  } catch (err) {
-    console.error('[getDagdeelRegelsVoorRooster] ❌ Fout:', err);
-    return new Map();
-  }
-}
 
 /**
  * DRAAD176: Haal totale dagdeel count op voor rooster
@@ -488,6 +551,33 @@ export async function getDagdeelCountVoorRooster(
     return count ?? 0;
   } catch (err) {
     console.error('[getDagdeelCountVoorRooster] Fout:', err);
+    return 0;
+  }
+}
+
+/**
+ * FASE 2: Get count per service in rooster
+ */
+export async function getDagdeelCountPerService(
+  rosterId: string,
+  serviceId: string
+): Promise<number> {
+  try {
+    if (!isValidUUID(rosterId) || !isValidUUID(serviceId)) {
+      throw new Error('Ongeldige parameters');
+    }
+    
+    const { count, error } = await supabase
+      .from('roster_period_staffing_dagdelen')
+      .select('*', { count: 'exact', head: true })
+      .eq('roster_id', rosterId)
+      .eq('service_id', serviceId);
+    
+    if (error) throw error;
+    
+    return count ?? 0;
+  } catch (err) {
+    console.error('[getDagdeelCountPerService] Fout:', err);
     return 0;
   }
 }
