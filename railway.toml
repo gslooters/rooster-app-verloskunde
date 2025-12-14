@@ -1,6 +1,9 @@
 [build]
-# Force clean build - geen cache
+# Force clean build - geen cache, Railway versie-resolver fix
 command = "npm install && npm run build"
+
+# 🔧 EXPLICIT Node versioning voor Railway compatibility
+nixpacks = "node-20.18.0"
 
 [deploy]
 # 🔥 CRITICAL FIX: Correct standalone server path
@@ -15,4 +18,5 @@ healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
-# Deployment trigger: 1733998080
+# Cache-busting deployment trigger: 1734181380 (14-12-2025 14:43)
+# Force clean rebuild, geen cache collision
