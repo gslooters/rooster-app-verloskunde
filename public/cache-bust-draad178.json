@@ -1,0 +1,11 @@
+{
+  "timestamp": "2025-12-14T18:06:50Z",
+  "busted_at": 1755357210000,
+  "random": 4873291648,
+  "purpose": "DRAAD178-BUGFIX: Cache bust for getRosterById .single() fix and getCelData FK fix",
+  "fixes": [
+    "lib/services/roosters-supabase.ts - Added .single() to getRosterById",
+    "lib/planning/getCelData.ts - Fixed FK query from roster_period_staffing_id to direct roster_id/service_id/date"
+  ],
+  "status": "deployed"
+}
