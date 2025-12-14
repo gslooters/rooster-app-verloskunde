@@ -1,38 +1,32 @@
 import { useState } from 'react';
-import { RosterPeriodStaffing } from '@/lib/planning/roster-period-staffing-storage';
+import { RosterPeriodStaffingDagdeel } from '@/lib/types/roster-period-staffing-dagdeel';
 import { getBezettingTag, getBezettingTagClass } from '@/lib/utils/bezetting-tags';
 
 interface Props {
-  record: RosterPeriodStaffing;
+  record: RosterPeriodStaffingDagdeel;
   isHoliday: boolean;
   isWeekend: boolean;
-  onChange: (id: string, min: number, max: number) => void;
+  onChange: (id: string, aantal: number) => void;
 }
 
 export function DayCell({ record, isHoliday, isWeekend, onChange }: Props) {
-  const [min, setMin] = useState(record.min_staff);
-  const [max, setMax] = useState(record.max_staff);
+  const [aantal, setAantal] = useState(record.aantal);
   const [hasChanges, setHasChanges] = useState(false);
 
   function handleBlur() {
-    if (min !== record.min_staff || max !== record.max_staff) {
-      onChange(record.id, min, max);
+    if (aantal !== record.aantal) {
+      onChange(record.id, aantal);
       setHasChanges(false);
     }
   }
 
-  function handleMinChange(value: number) {
-    setMin(value);
+  function handleAantalChange(value: number) {
+    setAantal(value);
     setHasChanges(true);
   }
 
-  function handleMaxChange(value: number) {
-    setMax(value);
-    setHasChanges(true);
-  }
-
-  const tag = getBezettingTag(min, max);
-  const tagClass = getBezettingTagClass(min, max);
+  const tag = getBezettingTag(record.status, aantal);
+  const tagClass = getBezettingTagClass(record.status, aantal);
   const bgClass = isHoliday 
     ? 'bg-red-50 hover:bg-red-100' 
     : isWeekend 
@@ -47,14 +41,14 @@ export function DayCell({ record, isHoliday, isWeekend, onChange }: Props) {
         hasChanges ? 'ring-2 ring-blue-400 ring-inset' : ''
       }`}
     >
-      {/* MIN | MAX inputs */}
+      {/* AANTAL input */}
       <div className="flex items-center justify-center gap-1 mb-1.5">
         <input
           type="number"
           min={0}
-          max={99}
-          value={min}
-          onChange={e => handleMinChange(Number(e.target.value))}
+          max={9}
+          value={aantal}
+          onChange={e => handleAantalChange(Number(e.target.value))}
           onBlur={handleBlur}
           onKeyDown={e => {
             if (e.key === 'Enter') {
@@ -63,31 +57,14 @@ export function DayCell({ record, isHoliday, isWeekend, onChange }: Props) {
             }
           }}
           className="w-7 h-7 text-center text-xs font-semibold border border-gray-300 rounded focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all hover:border-gray-400"
-          title="Minimum aantal medewerkers"
-        />
-        <span className="text-gray-400 text-xs font-bold">|</span>
-        <input
-          type="number"
-          min={0}
-          max={99}
-          value={max}
-          onChange={e => handleMaxChange(Number(e.target.value))}
-          onBlur={handleBlur}
-          onKeyDown={e => {
-            if (e.key === 'Enter') {
-              handleBlur();
-              e.currentTarget.blur();
-            }
-          }}
-          className="w-7 h-7 text-center text-xs font-semibold border border-gray-300 rounded focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all hover:border-gray-400"
-          title="Maximum aantal medewerkers"
+          title="Aantal medewerkers"
         />
       </div>
 
       {/* Auto-label */}
       <div
         className={`text-[9px] text-center px-1 py-1 rounded border font-semibold uppercase ${tagClass} transition-all`}
-        title={`Bezetting: ${tag} (min: ${min}, max: ${max})`}
+        title={`Status: ${record.status} (aantal: ${aantal})`}
       >
         {tag}
       </div>
