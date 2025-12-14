@@ -19,33 +19,19 @@ interface WeekDagdelenVaststellingTableProps {
 }
 
 /**
- * 🔥 DRAAD42G FIX - COMPLETE ROUTING FIX
+ * 🔥 DRAAD179 FASE 2 FIX
  * 
- * FOUT #1 (OPGELOST - DRAAD42D): 
- * - Query gebruikte "datum" maar database kolom heet "date"
- * - OPLOSSING: Alle "datum" vervangen door "date" ✅
+ * PROBLEEM: Query gebruikte niet-bestaande "roster_period_staffing" tabel
+ * OORZAAK: DRAAD176 denormalisering - parent tabel verwijderd
  * 
- * FOUT #2 (OPGELOST - DRAAD43):
- * - Query gebruikte "serviceid" maar database kolom heet "service_id"
- * - OPLOSSING: Alle "serviceid" vervangen door "service_id" ✅
+ * OPLOSSING:
+ * - Direct query naar "roster_period_staffing_dagdelen" (denormalized)
+ * - Geen JOIN meer nodig - alle velden direct beschikbaar
+ * - roster_id, service_id, date zijn nu direct in dagdelen
  * 
- * FOUT #3 (OPGELOST - DRAAD42F):
- * - Query gebruikte "roster_period_id" maar database kolom heet "roster_id"
- * - OPLOSSING: "roster_period_id" vervangen door "roster_id" ✅
- * 
- * FOUT #4 (OPGELOST - DRAAD42G #1):
- * - Terug knop miste period_start parameter in URL
- * - OPLOSSING: periodStart prop toegevoegd en doorgegeven aan VaststellingHeader ✅
- * 
- * FOUT #5 (OPGELOST - DRAAD42G #2):
- * - Week navigatie links misten period_start parameter
- * - OPLOSSING: periodStart prop doorgegeven aan WeekNavigation ✅
- * 
- * Functionaliteit:
- * - Client-side data fetching voor staffing dagdelen
- * - Passes initial data + periodStart to child components
- * - Child components kunnen nu correct terug navigeren EN tussen weken navigeren
- * - Coordinatie tussen header, navigatie en data tabel
+ * SCHEMA VERANDERING:
+ * OUD: .from('roster_period_staffing') → JOIN naar _dagdelen
+ * NIEUW: .from('roster_period_staffing_dagdelen') → direct select *
  */
 export default function WeekDagdelenVaststellingTable({
   rosterId,
@@ -55,7 +41,7 @@ export default function WeekDagdelenVaststellingTable({
   weekStart,
   weekEnd,
   serviceTypes,
-  periodStart, // 🔥 DRAAD42G: NIEUW
+  periodStart,
 }: WeekDagdelenVaststellingTableProps) {
   const [staffingData, setStaffingData] = useState<StaffingDagdeel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -71,46 +57,26 @@ export default function WeekDagdelenVaststellingTable({
       setIsLoading(true);
       setError(null);
 
-      // ✅ DRAAD42D FIX: Gebruik "date" in plaats van "datum"
-      // ✅ DRAAD43 FIX: Gebruik "service_id" in plaats van "serviceid"
-      // ✅ DRAAD42F FIX: Gebruik "roster_id" in plaats van "roster_period_id"
-      const { data: staffingRecords, error: staffingError } = await supabase
-        .from('roster_period_staffing')
-        .select('id, date, service_id')
+      // 🔥 DRAAD179 FASE 2 FIX: Direct query naar denormalized tabel
+      // ✅ Geen parent tabel meer - direct naar dagdelen
+      // ✅ roster_id, service_id, date zijn denormaliseerd in tabel
+      const { data: dagdelenRecords, error: dagdelenError } = await supabase
+        .from('roster_period_staffing_dagdelen')
+        .select('*')
         .eq('roster_id', rosterId)
         .gte('date', weekStart.split('T')[0])
-        .lte('date', weekEnd.split('T')[0]);
+        .lte('date', weekEnd.split('T')[0])
+        .order('date', { ascending: true });
 
-      if (staffingError) throw staffingError;
+      if (dagdelenError) throw dagdelenError;
 
-      if (!staffingRecords || staffingRecords.length === 0) {
+      if (!dagdelenRecords || dagdelenRecords.length === 0) {
         setStaffingData([]);
         setIsLoading(false);
         return;
       }
 
-      const staffingIds = staffingRecords.map(r => r.id);
-
-      // Haal dagdelen data op
-      const { data: dagdelenData, error: dagdelenError } = await supabase
-        .from('roster_period_staffing_dagdelen')
-        .select('*')
-        .in('roster_period_staffing_id', staffingIds);
-
-      if (dagdelenError) throw dagdelenError;
-
-      // ✅ DRAAD42D FIX: Gebruik "date" property
-      // ✅ DRAAD43 FIX: Gebruik "service_id" property
-      const enrichedData = (dagdelenData || []).map(dagdeel => {
-        const staffingRecord = staffingRecords.find(r => r.id === dagdeel.roster_period_staffing_id);
-        return {
-          ...dagdeel,
-          service_id: staffingRecord?.service_id,
-          date: staffingRecord?.date,
-        };
-      });
-
-      setStaffingData(enrichedData as StaffingDagdeel[]);
+      setStaffingData(dagdelenRecords as StaffingDagdeel[]);
     } catch (err) {
       console.error('Error fetching staffing data:', err);
       setError('Fout bij ophalen van data');
@@ -137,7 +103,6 @@ export default function WeekDagdelenVaststellingTable({
 
   return (
     <div className="min-h-screen w-full bg-gray-50">
-      {/* 🔥 DRAAD42G FIX #1: periodStart toegevoegd voor terug navigatie */}
       <VaststellingHeader
         weekNummer={actualWeekNumber}
         weekStart={weekStart}
@@ -147,7 +112,6 @@ export default function WeekDagdelenVaststellingTable({
         periodStart={periodStart}
       />
 
-      {/* 🔥 DRAAD42G FIX #2: periodStart toegevoegd voor week navigatie */}
       <WeekNavigation
         currentWeek={weekNummer}
         totalWeeks={5}
