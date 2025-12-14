@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { RosterPeriodStaffingDagdeel } from '@/lib/types/roster-period-staffing-dagdeel';
+import { RosterPeriodStaffingDagdeel, DEFAULT_AANTAL_PER_STATUS } from '@/lib/types/roster-period-staffing-dagdeel';
 import { getBezettingTag, getBezettingTagClass } from '@/lib/utils/bezetting-tags';
 
 interface Props {
@@ -25,8 +25,15 @@ export function DayCell({ record, isHoliday, isWeekend, onChange }: Props) {
     setHasChanges(true);
   }
 
-  const tag = getBezettingTag(record.status, aantal);
-  const tagClass = getBezettingTagClass(record.status, aantal);
+  // DRAAD176 FIX: Convert status STRING to min/max NUMBERS for getBezettingTag
+  // record.status is DagdeelStatus string ('MOET' | 'MAG' | 'MAG_NIET' | 'AANGEPAST')
+  // record.aantal is the actual number (0-9)
+  // getBezettingTag expects (min: number, max: number)
+  const statusMin = record.status === 'MAG_NIET' ? 0 : DEFAULT_AANTAL_PER_STATUS[record.status] || 0;
+  const statusMax = aantal;  // Current value is the max
+  
+  const tag = getBezettingTag(statusMin, statusMax);
+  const tagClass = getBezettingTagClass(statusMin, statusMax);
   const bgClass = isHoliday 
     ? 'bg-red-50 hover:bg-red-100' 
     : isWeekend 
