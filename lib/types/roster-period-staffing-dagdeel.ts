@@ -3,6 +3,7 @@
 // DRAAD176: Roster Period Staffing Dagdelen Types (DENORMALISERING)
 // Datum: 2025-12-14
 // Update: Toegevoegd roster_id, service_id, date, invulling velden
+// DRAAD177: FIX - Include 'AANGEPAST' in DEFAULT_AANTAL_PER_STATUS to prevent TypeScript error
 // ============================================================================
 
 /**
@@ -162,11 +163,13 @@ export const DAGDEEL_STATUS_BG_COLORS: Record<DagdeelStatus, string> = {
 
 /**
  * Standaard waarden per status
+ * DRAAD177: Include 'AANGEPAST' with default value of 1
  */
-export const DEFAULT_AANTAL_PER_STATUS: Record<Exclude<DagdeelStatus, 'AANGEPAST'>, number> = {
+export const DEFAULT_AANTAL_PER_STATUS: Record<DagdeelStatus, number> = {
   MOET: 1,
   MAG: 1,
-  MAG_NIET: 0
+  MAG_NIET: 0,
+  AANGEPAST: 1      // Default to 1 for custom values (DRAAD177 FIX)
 };
 
 /**
