@@ -29,7 +29,8 @@ export function DayCell({ record, isHoliday, isWeekend, onChange }: Props) {
   // record.status is DagdeelStatus string ('MOET' | 'MAG' | 'MAG_NIET' | 'AANGEPAST')
   // record.aantal is the actual number (0-9)
   // getBezettingTag expects (min: number, max: number)
-  const statusMin = record.status === 'MAG_NIET' ? 0 : DEFAULT_AANTAL_PER_STATUS[record.status] || 0;
+  // DRAAD177: Added defensive check - DEFAULT_AANTAL_PER_STATUS now includes 'AANGEPAST'
+  const statusMin = record.status === 'MAG_NIET' ? 0 : (DEFAULT_AANTAL_PER_STATUS[record.status] ?? 1);
   const statusMax = aantal;  // Current value is the max
   
   const tag = getBezettingTag(statusMin, statusMax);
