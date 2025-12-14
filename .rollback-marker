@@ -1,0 +1,5 @@
+ROLLBACK EXECUTED: 2025-12-14 16:56 UTC
+Target: Revert PR #77 merge (d81260564) to stable baseline (5419cf2d)
+Reason: PR #77 introduced breaking changes
+Timestamp: 1765600560000
+Action: Force push to restore working state
