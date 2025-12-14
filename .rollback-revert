@@ -1,0 +1,12 @@
+REVERT COMMIT EXECUTED
+
+This file marks that we're using git revert to cleanly undo PR #77 merge.
+
+Command equivalent:
+git revert -m 1 d81260564e997ee3e969d056741bd5c11af8972b
+
+This creates a revert commit on top of current HEAD, safely undoing PR #77
+without changing history of commits before the merge.
+
+Generated: 2025-12-14 16:57 UTC
+Timestamp: 1765600620000
