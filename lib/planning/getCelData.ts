@@ -22,10 +22,11 @@
  * 2. Find roster_period_staffing_dagdelen WHERE rps.id + dagdeel + team
  * 3. Return {status, aantal} of fallback
  * 
- * DRAAD46 FIX:
- * - DAGDEEL_MAP nu direct 'O'/'M'/'A' (was 'ochtend'/'middag'/'avond')
- * - Database gebruikt nu ook 'O'/'M'/'A' als waarden
- * - Verbeterde debug logging met dagdeel/team info
+ * DRAAD178 FIX:
+ * - Changed query to directly select from roster_period_staffing_dagdelen
+ * - Direct filter on roster_id, service_id, date (no rpsData lookup)
+ * - Removed intermediate roster_period_staffing lookup
+ * - Dagdelen table now has roster_id and service_id columns
  */
 
 import { getSupabaseServer } from '@/lib/supabase-server';
@@ -67,10 +68,10 @@ export async function getCelData(
   
   const dagdeelStr = DAGDEEL_MAP[dagdeel];
   
-  // ✅ DRAAD46: Verbeterde logging met alle parameters
-  console.log('[DRAAD46] 🔍 getCelData START:', {
+  // ✅ DRAAD178: Improved logging met alle parameters
+  console.log('[DRAAD178] 🔍 getCelData START:', {
     rosterId: rosterId.substring(0, 8) + '...',
-    dienstId: dienstId.substring(0, 8) + '...',
+    dienstId,
     datum,
     dagdeel_input: dagdeel,
     dagdeel_mapped: dagdeelStr,
@@ -80,52 +81,36 @@ export async function getCelData(
   try {
     const supabase = getSupabaseServer();
     
-    // STAP 1: Find roster_period_staffing record
-    // Match op: roster_id + service_id + date
-    const { data: rpsData, error: rpsError } = await supabase
-      .from('roster_period_staffing')
-      .select('id')
-      .eq('roster_id', rosterId)
-      .eq('service_id', dienstId)
-      .eq('date', datum)
-      .maybeSingle(); // maybeSingle instead of single (no error when not found)
+    // ✅ DRAAD178 FIX: Direct query to roster_period_staffing_dagdelen
+    // Changed from: multi-step lookup via roster_period_staffing.id
+    // To: Direct filter on roster_id, service_id, date columns
+    // 
+    // The dagdelen table now has these columns:
+    // - roster_id (from parent rooster_period_staffing)
+    // - service_id (from parent rooster_period_staffing)  
+    // - date (from parent rooster_period_staffing)
+    // This allows direct lookup without intermediate join
     
-    if (rpsError) {
-      console.error('[DRAAD46] ❌ roster_period_staffing query error:', rpsError);
-      return { status: 'MAG_NIET', aantal: 0 };
-    }
-    
-    if (!rpsData) {
-      console.log('[DRAAD46] ⚠️  No roster_period_staffing match:', {
-        rosterId: rosterId.substring(0, 8) + '...',
-        dienstId: dienstId.substring(0, 8) + '...',
-        datum
-      });
-      return { status: 'MAG_NIET', aantal: 0 };
-    }
-    
-    console.log('[DRAAD46] ✅ roster_period_staffing found:', {
-      rpsId: rpsData.id.substring(0, 8) + '...'
-    });
-    
-    // STAP 2: Find roster_period_staffing_dagdelen record
-    // Match op: roster_period_staffing_id + dagdeel + team
     const { data: dagdeelData, error: dagdeelError } = await supabase
       .from('roster_period_staffing_dagdelen')
       .select('status, aantal')
-      .eq('roster_period_staffing_id', rpsData.id)
+      .eq('roster_id', rosterId)
+      .eq('service_id', dienstId)
+      .eq('date', datum)
       .eq('dagdeel', dagdeelStr)
       .eq('team', team)
       .maybeSingle();
     
     if (dagdeelError) {
-      console.error('[DRAAD46] ❌ roster_period_staffing_dagdelen query error:', dagdeelError);
+      console.error('[DRAAD178] ❌ roster_period_staffing_dagdelen query error:', dagdeelError);
       return { status: 'MAG_NIET', aantal: 0 };
     }
     
     if (!dagdeelData) {
-      console.log('[DRAAD46] ⚠️  No dagdelen match:', {
-        rpsId: rpsData.id.substring(0, 8) + '...',
+      console.log('[DRAAD178] ⚠️  No dagdelen match:', {
+        rosterId: rosterId.substring(0, 8) + '...',
+        dienstId,
+        datum,
         dagdeel_searched: dagdeelStr,
         team_searched: team,
         hint: 'Controleer of deze combinatie bestaat in roster_period_staffing_dagdelen'
@@ -139,7 +124,7 @@ export async function getCelData(
       aantal: dagdeelData.aantal
     };
     
-    console.log('[DRAAD46] ✅ SUCCESS - Cel data found:', {
+    console.log('[DRAAD178] ✅ SUCCESS - Cel data found:', {
       datum,
       dagdeel,
       team,
@@ -150,11 +135,11 @@ export async function getCelData(
     return result;
     
   } catch (error) {
-    console.error('[DRAAD46] ❌ EXCEPTION in getCelData:', {
+    console.error('[DRAAD178] ❌ EXCEPTION in getCelData:', {
       error: error instanceof Error ? error.message : String(error),
       input: { 
         rosterId: rosterId.substring(0, 8) + '...', 
-        dienstId: dienstId.substring(0, 8) + '...', 
+        dienstId, 
         datum, 
         dagdeel, 
         team 
