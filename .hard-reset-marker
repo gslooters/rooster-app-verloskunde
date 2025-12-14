@@ -1,0 +1,13 @@
+HARD RESET EXECUTION: 2025-12-14 17:21 UTC
+
+STATUS: Verified baseline and root cause identified
+
+TARGET: Reset main to commit 5419cf2d (15:04:55 UTC)
+REASON: Commits after rollback introduced TypeScript error in DayCell.tsx
+
+ERROR: Type 'string' not assignable to parameter of type 'number'
+FILE: components/planning/period-staffing/DayCell.tsx:28
+CAUSE: record.status (STRING) passed to getBezettingTag() which expects NUMBER
+
+ACTION: Hard reset, fix type mismatch, cache-bust, redeploy
+TIMESTAMP: 1765604460000
