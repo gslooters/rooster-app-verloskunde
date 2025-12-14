@@ -1,15 +1,9 @@
 [build]
-# Force clean build - geen cache, Railway versie-resolver fix
+# Clean build command
 command = "npm ci && npm run build"
 
-# 🔧 EXPLICIT Node versioning voor Railway compatibility
-# FIXED: Gebruik nixpacks waarvoor LTS Node 20.x beschikbaar is
-# Railway Railpack resolves Node 20.x via nixpacks (20.18.0, 20.17.0, etc. automatisch)
-nixpacks = "node-20"
-
 [deploy]
-# 🔥 CRITICAL FIX: Correct standalone server path
-# Gebruik HOSTNAME=0.0.0.0 voor Railway networking
+# Correct standalone server path
 startCommand = "HOSTNAME=0.0.0.0 PORT=$PORT node .next/standalone/server.js"
 
 # Health check
@@ -20,5 +14,6 @@ healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
-# Cache-busting deployment trigger: 1734186649 (14-12-2025 15:50:49)
-# Force clean rebuild, geen cache collision
+# Cache-busting deployment trigger: 1734283800
+# DRAAD176: Fixed Node version resolution by removing invalid nixpacks line
+# Railway auto-detects Node 20.x from package.json engines field
