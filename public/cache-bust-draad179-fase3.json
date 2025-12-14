@@ -1,0 +1,34 @@
+{
+  "draad": "DRAAD179-FASE3",
+  "title": "Export & PDF Fix - FASE 3 Complete Repair",
+  "description": "FASE 3 Reparatie van export- en pre-planning functies",
+  "timestamp": "2025-12-14T19:37:22Z",
+  "timestamp_ms": 1734190642000,
+  "execution_time_ms": 85000,
+  "fixed_files": [
+    "app/api/planning/service-allocation-pdf/route.ts",
+    "lib/services/preplanning-storage.ts"
+  ],
+  "fixes": {
+    "service_allocation_pdf": {
+      "status": "FIXED",
+      "changes": "Replaced roster_period_staffing with roster_period_staffing_dagdelen - direct denormalized query",
+      "reason": "Parent table deleted in DRAAD176, using denormalized data directly"
+    },
+    "preplanning_storage": {
+      "status": "FIXED",
+      "changes": "Updated getServicesForEmployeeFiltered() to query roster_period_staffing_dagdelen directly",
+      "reason": "No parent table - direct query on child table with denormalized roster_id, service_id, date fields"
+    }
+  },
+  "database_schema": "DRAAD176 - Denormalisierung Complete",
+  "parent_table_status": "REMOVED",
+  "child_table_status": "ACTIVE with denormalized fields (roster_id, service_id, date)",
+  "cache_buster_version": "2025-12-14-19:37:22Z-fase3-complete",
+  "deployment_priority": "HIGH",
+  "estimated_impact": "Export functionality and pre-planning module now functional",
+  "git_commit": "Both FASE 3 files committed together",
+  "railway_trigger_required": true,
+  "qa_status": "Ready for Railway deployment",
+  "notes": "All FASE 3 fixes applied. PDF export and pre-planning staffing queries now use denormalized roster_period_staffing_dagdelen table directly."
+}
