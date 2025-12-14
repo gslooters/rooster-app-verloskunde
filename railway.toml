@@ -1,9 +1,10 @@
 [build]
 # Force clean build - geen cache, Railway versie-resolver fix
-command = "npm install && npm run build"
+command = "npm ci && npm run build"
 
 # 🔧 EXPLICIT Node versioning voor Railway compatibility
-# FIXED: Was "node-20.18.0" (not found), now "node-20" (LTS)
+# FIXED: Gebruik nixpacks waarvoor LTS Node 20.x beschikbaar is
+# Railway Railpack resolves Node 20.x via nixpacks (20.18.0, 20.17.0, etc. automatisch)
 nixpacks = "node-20"
 
 [deploy]
@@ -19,5 +20,5 @@ healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
-# Cache-busting deployment trigger: 1734184011 (14-12-2025 15:26)
+# Cache-busting deployment trigger: 1734186649 (14-12-2025 15:50:49)
 # Force clean rebuild, geen cache collision
