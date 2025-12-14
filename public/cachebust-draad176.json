@@ -1,0 +1,16 @@
+{
+  "draad": "DRAAD176",
+  "description": "Denormalisering roster_period_staffing - Direct dagdelen generation",
+  "timestamp": "2025-12-14T14:38:00.000Z",
+  "deployed_at": 1734176400000,
+  "random_trigger": 847201639,
+  "changes": [
+    "Database: Migrated roster_period_staffing → roster_period_staffing_dagdelen",
+    "Type Definitions: Added roster_id, service_id, date, invulling",
+    "Storage Service: Direct dagdeel queries (no parent FK)",
+    "Planning Logic: 1-step denormalization (2835 records per roster)",
+    "Total: 9 services × 35 days × 3 shifts × 3 teams = 2835 records"
+  ],
+  "status": "DEPLOYED",
+  "version": "1.0"
+}
