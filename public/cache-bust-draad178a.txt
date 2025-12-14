@@ -1,0 +1,21 @@
+DRAAD178A Cache Buster
+Generated: 2025-12-14T18:51:00.000Z
+Timestamp: 1734271860000
+Random: ${Math.random()}
+Purpose: Force browser cache invalidation for DRAAD178A FASE 3 fixes
+
+Removals:
+- roster_period_staffing parent table queries
+
+Added:
+- Direct dagdelen table queries
+- Denormalization of roster_id, service_id, date fields
+- invulling tracking field
+
+Affected Files:
+- app/api/planinformatie-periode/route.ts
+- lib/planning/roster-period-staffing-storage.ts (already updated)
+- lib/types/roster-period-staffing-dagdeel.ts (already updated)
+- lib/services/roster-period-staffing-dagdelen-storage.ts (already updated)
+
+Deployment Status: IN PROGRESS
