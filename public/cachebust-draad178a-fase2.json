@@ -1,0 +1,18 @@
+{
+  "draad": "DRAAD178A",
+  "fase": "FASE 2",
+  "timestamp": 1734176640000,
+  "action": "phase2-retrieval-functions",
+  "description": "FASE 2: Add denormalized data retrieval functions voor roster-period-staffing-dagdelen",
+  "changes": [
+    "getDagdeelRegelsVoorRooster() - Fetch all dagdeel records for roster",
+    "getDagdeelRegelsPerDag() - Fetch dagdeel records for specific day+service",
+    "getDagdeelRegel() - Fetch single dagdeel record",
+    "updateDagdeelRegel() - Update dagdeel record fields",
+    "bulkUpdateInvulling() - Bulk update invulling field",
+    "getDagdeelRegelsVoorServicePerPeriode() - Fetch all rules for service in period",
+    "getDagdeelCountPerService() - Get count per service"
+  ],
+  "cacheKey": "phase2-functions-20241214-184640",
+  "status": "DEPLOYED"
+}
