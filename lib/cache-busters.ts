@@ -9,6 +9,14 @@
  * Prevents stale JavaScript + stale API responses
  */
 
+// DRAAD179: Backend Storage Layer Denormalization Fix
+// Fixes: getRosterPeriodStaffing, updateRosterPeriodStaffing, bulkUpdateRosterPeriodStaffing
+// Changes: All functions now use denormalized roster_period_staffing_dagdelen table
+// Impact: CRITICAL - Core data retrieval functions
+// Generated: 2025-12-14T19:20:28Z
+// Change triggers: Roster period staffing data retrieval, updates, and bulk operations
+export const DRAAD179_CACHEBUST = '20251214-roster-staffing-denorm-fase1';
+
 // DRAAD166: Layer 1 Exception Handlers
 // Fixes: "Fout: Onbekende fout - Application failed to respond" (502 Bad Gateway)
 // Changes: Added exception handlers in solver_engine.py + main.py FastAPI
@@ -34,7 +42,7 @@ export const OPTIE_E_CACHEBUST = '20251208-full-duplicate-fix';
 
 // Master cache version (all busters)
 // Increment this for any breaking change
-export const MASTER_CACHE_VERSION = '2025-12-12-T164700Z-DRAAD166';
+export const MASTER_CACHE_VERSION = '2025-12-14-T192028Z-DRAAD179';
 
 // Version history for debugging
 export const CACHE_VERSIONS = {
@@ -44,6 +52,7 @@ export const CACHE_VERSIONS = {
   'draad-127': DRAAD127_CACHEBUST,  // Duplicate prevention - TypeScript deduplication
   'draad-128': '20251208-upsert-fix-optie-e',  // PostgreSQL RPC UPSERT fix
   'draad-166': DRAAD166_CACHEBUST,  // Layer 1 exception handlers - prevents 502
+  'draad-179': DRAAD179_CACHEBUST,  // Backend storage denormalization - FASE1
   'optie-e': OPTIE_E_CACHEBUST      // Full duplicate fix (127 + 128 combined)
 };
 
@@ -53,11 +62,11 @@ export const CACHE_VERSIONS = {
  * Example: 20251212-layer1-exception-handlers-draad166 = Dec 12, 2025 exception handlers for DRAAD166
  */
 export function getCacheBusterUrl(): string {
-  return `/api/roster/solve?v=${DRAAD166_CACHEBUST}&cache-key=${Date.now()}`;
+  return `/api/roster/solve?v=${DRAAD179_CACHEBUST}&cache-key=${Date.now()}`;
 }
 
 /**
  * Railway environment variable format
  * Used: process.env.NEXT_PUBLIC_CACHE_BUSTER
  */
-export const RAILWAY_ENV_CACHEBUSTER = DRAAD166_CACHEBUST;
+export const RAILWAY_ENV_CACHEBUSTER = DRAAD179_CACHEBUST;
