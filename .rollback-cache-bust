@@ -1,0 +1,18 @@
+# ROLLBACK CACHE-BUST TRIGGER
+# 
+# Timestamp: 2025-12-14T16:00:00Z
+# Action: PR #77 successfully reverted
+# Status: Ready for Railway rebuild
+#
+# Changes reverted:
+# - sequential_solver_v2.py: load_from_db() restored
+# - sequential_solver_v2.py: _parse_date() restored  
+# - railway/DRAAD176-deployment-trigger.env: REMOVED
+# - src/utils/cache-bust-draad176.ts: REMOVED
+#
+# Expected result after Railway rebuild:
+# ✅ Solver will use original roster_period_staffing_dagdelen query
+# ✅ No more JOIN issues
+# ✅ Stable baseline restored
+#
+# Random token for cache invalidation: 1765600400000_abc123def456
