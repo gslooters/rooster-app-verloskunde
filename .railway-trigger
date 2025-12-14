@@ -1,37 +1,5 @@
-# Railway Deployment Trigger
-# This file is used to force Railway to rebuild the deployment
-# Each commit to this file triggers a new build
-#
-# DRAAD128.8: RPC Response Debugging
-# Date: 2025-12-08 01:30 CET
-# Build: 728493651
-#
-# DRAAD128.6: Source Field Case Fix
-# Date: 2025-12-08 01:23 CET
-# Build: 617382451
-#
-# DRAAD127: Duplicate Prevention - TypeScript Deduplication
-# Date: 2025-12-08 01:06 CET
-# Build: 394857261
-#
-# DRAAD128: UPSERT Fix - PostgreSQL RPC Function
-# Date: 2025-12-08 00:43 CET
-# Build: 847362941
-#
-# Changes in DRAAD128.8:
-# 1. route.ts: Log full RPC response structure
-# 2. route.ts: Check for upsertResult null/undefined
-# 3. route.ts: Validate Array.isArray(upsertResult)
-# 4. route.ts: Debug result object contents
-# 5. route.ts: Provide detailed error messages for each condition
-# 6. route.ts: Log typeof upsertResult and array check
-#
-# Purpose:
-# - Find ROOT CAUSE of '[DRAAD128] UPSERT failed: undefined'
-# - Understand RPC response structure
-# - Fix silent failures
-#
-TRIGGER_BUILD=728493651
-TIMESTAMP=2025-12-08T01:30:15Z
-VERSION=20251208-rpc-debugging
-STATUS=DRAAD128.8+DRAAD128.6+DRAAD127+DRAAD128
+DRAAD-181-Railway-Trigger
+Deployment: 2025-12-14T20:41:00Z
+Random-ID: 9c2f7b1a-draad181-greedy
+Action: Force rebuild
+Status: Initiated
