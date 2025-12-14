@@ -1,6 +1,7 @@
 // lib/planning/roster-period-staffing-storage.ts
 // ============================================================================
 // DRAAD176: Roster Period Staffing Storage (DENORMALISERING)
+// DRAAD179-FASE1: ADD missing functions
 // Datum: 2025-12-14
 // NIEUW: Direct dagdelen generation, GEEN parent tabel meer
 // ============================================================================
@@ -17,7 +18,8 @@ import {
   isValidUUID,
   isValidISODate,
   Dagdeel,
-  TeamDagdeel
+  TeamDagdeel,
+  RosterPeriodStaffingDagdeel
 } from '@/lib/types/roster-period-staffing-dagdeel';
 import { DagCode, DagblokCode, DagblokStatus, TeamRegels } from '@/lib/types/service';
 import { parseUTCDate, toUTCDateString, addUTCDays, getUTCDaysDiff } from '@/lib/utils/date-utc';
@@ -240,6 +242,113 @@ export async function generateRosterPeriodStaffing(
     console.error('[generateRosterPeriodStaffing] ❌ FOUT OPGETREDEN');
     console.error('[generateRosterPeriodStaffing] Error:', err);
     console.error('='.repeat(80) + '\n');
+    throw err;
+  }
+}
+
+/**
+ * DRAAD179-FASE1: NEW - Get roster period staffing data
+ * DIRECT query from denormalized dagdelen table
+ */
+export async function getRosterPeriodStaffing(
+  rosterId: string
+): Promise<RosterPeriodStaffingDagdeel[]> {
+  try {
+    console.log('[getRosterPeriodStaffing] 📖 GET periode staffing data');
+    console.log('[getRosterPeriodStaffing] RosterId:', rosterId);
+    validateId(rosterId, 'rosterId');
+    
+    // DIRECT query dagdelen (NO parent table)
+    const { data, error } = await supabase
+      .from('roster_period_staffing_dagdelen')
+      .select('*')
+      .eq('roster_id', rosterId)
+      .order('date', { ascending: true })
+      .order('service_id', { ascending: true });
+    
+    if (error) {
+      console.error('[getRosterPeriodStaffing] Supabase error:', error);
+      throw error;
+    }
+    
+    console.log('[getRosterPeriodStaffing] ✅ Data opgehaald:', data?.length ?? 0, 'records');
+    return data || [];
+  } catch (err) {
+    console.error('[getRosterPeriodStaffing] ❌ Error:', err);
+    throw err;
+  }
+}
+
+/**
+ * DRAAD179-FASE1: NEW - Update single roster period staffing record
+ * DIRECT update in denormalized dagdelen table
+ */
+export async function updateRosterPeriodStaffing(
+  id: string,
+  updates: Partial<RosterPeriodStaffingDagdeel>
+): Promise<RosterPeriodStaffingDagdeel | null> {
+  try {
+    console.log('[updateRosterPeriodStaffing] 🔄 UPDATE staffing record');
+    console.log('[updateRosterPeriodStaffing] ID:', id);
+    validateId(id, 'id');
+    
+    // DIRECT update dagdelen (NO parent table)
+    const { data, error } = await supabase
+      .from('roster_period_staffing_dagdelen')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('[updateRosterPeriodStaffing] Supabase error:', error);
+      throw error;
+    }
+    
+    console.log('[updateRosterPeriodStaffing] ✅ Record updated');
+    return data;
+  } catch (err) {
+    console.error('[updateRosterPeriodStaffing] ❌ Error:', err);
+    throw err;
+  }
+}
+
+/**
+ * DRAAD179-FASE1: NEW - Bulk update roster period staffing records
+ * DIRECT batch update in denormalized dagdelen table
+ */
+export async function bulkUpdateRosterPeriodStaffing(
+  updates: Array<{ id: string } & Partial<RosterPeriodStaffingDagdeel>>
+): Promise<RosterPeriodStaffingDagdeel[]> {
+  try {
+    console.log('[bulkUpdateRosterPeriodStaffing] 🔄 BULK UPDATE staffing records');
+    console.log('[bulkUpdateRosterPeriodStaffing] Count:', updates.length);
+    
+    if (updates.length === 0) {
+      console.log('[bulkUpdateRosterPeriodStaffing] ⚠️  No records to update');
+      return [];
+    }
+    
+    // Validate all IDs
+    for (const update of updates) {
+      validateId(update.id, 'id');
+    }
+    
+    // DIRECT batch update using upsert
+    const { data, error } = await supabase
+      .from('roster_period_staffing_dagdelen')
+      .upsert(updates, { onConflict: 'id' })
+      .select();
+    
+    if (error) {
+      console.error('[bulkUpdateRosterPeriodStaffing] Supabase error:', error);
+      throw error;
+    }
+    
+    console.log('[bulkUpdateRosterPeriodStaffing] ✅ Records updated:', data?.length ?? 0);
+    return data || [];
+  } catch (err) {
+    console.error('[bulkUpdateRosterPeriodStaffing] ❌ Error:', err);
     throw err;
   }
 }
