@@ -1,50 +1,23 @@
 [build]
-# DRAAD185-6 FIX: Build command with explicit Dockerfile
-# Next.js requires environment variables at BUILD-TIME for static generation
-# Dockerfile specifies ARG for build-time dummy env vars
-# Railway secrets provide real values at runtime
-command = "npm ci --prefer-offline --no-audit && npm run build"
+# Clean build command
+command = "npm ci && npm run build"
 
 [deploy]
-# DRAAD185-6 EXTENDED TIMEOUTS: Multi-stage builds can be slow
-# Builder stage: npm ci + npm run build (~30-40s on resource-constrained infra)
-# Runtime startup: .next/standalone server.js (~5-10s)
-# Total: 50-60s typical, but we allow 150s for worst case
+# Correct standalone server path
 startCommand = "HOSTNAME=0.0.0.0 PORT=$PORT node .next/standalone/server.js"
 
-# Health check configuration for slow builds
-# interval: Check every 10 seconds
-# timeout: 10 second timeout per check (strict)
-# start-period: 150 seconds (2.5 minutes) for slow builds + startup
-# retries: 5 attempts before declaring unhealthy
+# Health check
 healthcheckPath = "/api/health"
-healthcheckTimeout = 150
+healthcheckTimeout = 100
 
 # Restart policy
 restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 15
+restartPolicyMaxRetries = 10
 
-# DRAAD185-6 BUILD-TIME ENVIRONMENT VARIABLES FIX
-# Root cause: Next.js static page generation at BUILD-TIME requires env vars
-# Dockerfile now accepts ARG values for build-time configuration
-# These dummy values allow build to complete; real values come from Railway secrets at runtime
-# 
-# Build args are now specified in Dockerfile STAGES:
-# - Builder stage: ARG NEXT_PUBLIC_SUPABASE_URL (dummy: https://dummy.supabase.co)
-# - Builder stage: ARG NEXT_PUBLIC_SUPABASE_ANON_KEY (dummy: dummy-key-for-build-time)
-# 
-# Railway will pass real secrets at deployment; Dockerfile applies them at build time
-# At runtime, all environment variables come from Railway project variables
-#
-# Deployment workflow:
-# 1. Docker build stage: Uses ARG defaults or Railway vars for npm run build
-# 2. Pages marked with 'export const dynamic = "force-dynamic"' skip static generation
-# 3. Runtime: Railway secrets inject NEXT_PUBLIC_* into process.env
-# 4. Client pages ('use client') fetch data at request time with real env vars
-
-# Cache-busting deployment trigger
-# DRAAD185-6 BUILD-TIME ENV FIX: 2025-12-15T18:06:00Z  
-# Issue: Static page generation failed due to missing build-time env vars
-# Solution: Multi-stage Dockerfile with ARG + dynamic page markers
-# Incremented cache bust: 1734370020
-# Expected outcome: Clean rebuild with proper environment variable handling
+# Cache-busting deployment trigger: 1734285413
+# DRAAD185 FINAL FIX: Resolved dependency conflicts
+# - Main app: typing-extensions 4.9.0 → 4.12.2
+# - Solver: Added typing-extensions>=4.12.2
+# - Root cause: pydantic 2.8.0 requires typing-extensions>=4.12.2 for Python 3.13
+# Force rebuild and deployment on Railway
+# Updated: 2025-12-15T17:37:00Z
