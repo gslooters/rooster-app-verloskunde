@@ -6,7 +6,7 @@ Random Token: 9847${Math.random().toString(36).substring(7)}
 ✅ STAP 4 EXECUTION CHECKPOINT
 
 BaselineServices Verified:
-───────────────────────────
+─────────────────────────────────────
 1. rooster-app-verloskunde (Frontend + API)
    Status: LIVE (DRAAD176 Sequential Solver FIX)
    Commits: All soft constraints + solver updates present
@@ -20,13 +20,22 @@ BaselineServices Verified:
 
 Both Services Baseline Status: ✅ VERIFIED
 
-Next: DRAAD-185-STAP-5 (Differential Analysis)
-Differences between baseline & current:
-- Data consistency checks
-- Service integration verification
-- Requirements loading correctness
+Next Steps:
+─────────────────────────────────────
+→ DRAAD-185-STAP-5: Differential Analysis
+   Differences between baseline & current:
+   - Data consistency checks
+   - Service integration verification
+   - Requirements loading correctness
+
+→ DRAAD-185-STAP-6: Cache Busting & Deployment
+   - New cache-bust file with Date.now()
+   - Random token generation
+   - Update bestaande busters
+   - Railway deployment trigger
+   - Commit & push
+   - DEPLOY (CURRENT PHASE)
 
 Cache Bust Status: ACTIVE
 Deployment Trigger: ARMED
-
-Authorized: DRAAD-185-4 Execution
+Authorized: DRAAD-185-COMPLETE
