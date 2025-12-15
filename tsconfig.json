@@ -1,5 +1,5 @@
 {
-  "//": "DRAAD185-7: FIX tsconfig.json path alias - Change @/* from ['*'] to ['./*']",
+  "//": "DRAAD63B Cache Bust: 2025-11-27T16:32:00Z - Incremental cache DISABLED",
   "compilerOptions": {
     "target": "ES2020",
     "lib": [
@@ -20,7 +20,7 @@
     "baseUrl": ".",
     "paths": {
       "@/*": [
-        "./*"
+        "*"
       ]
     },
     "incremental": false,
