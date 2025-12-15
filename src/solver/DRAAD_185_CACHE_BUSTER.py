@@ -1,17 +1,17 @@
 """Cache buster for Greedy Engine V0.2 deployment.
 
-DRAD 185: Forces Railway to rebuild when this file changes.
-Datum: 2025-12-15
-Timestamp: 2025-12-15T17:35:00Z
+DRAAD 185-2: Forces Railway to rebuild when this file changes.
+Datum: 2025-12-15 17:44 CET
+Timestamp: 2025-12-15T16:44:00Z
 
-Random seed: a9f3e2c7
-Deployment: DRAAD-185-greedy-v0.2-cache-bust
+Random seed: b3f8c4d9
+Deployment: DRAAD-185-2-greedy-hc-constraints
 
 How it works:
   1. This file is imported in main app
   2. When deployed to Railway, changes trigger rebuild
   3. New cache prevents serving old solver
-  4. Ensures fresh Greedy Engine code
+  4. Ensures fresh Greedy Engine code with HC1-HC6
 
 Usage:
   from src.solver.DRAAD_185_CACHE_BUSTER import CACHE_KEY, TIMESTAMP
@@ -24,11 +24,11 @@ import time
 from datetime import datetime
 
 # Force new cache on each generation
-CACHE_KEY = f"greedy-engine-v0.2-{datetime.now().timestamp()}"
+CACHE_KEY = f"greedy-engine-v0.2-hc-{datetime.now().timestamp()}"
 TIMESTAMP = datetime.utcnow().isoformat()
-VERSION = "DRAAD-185-v0.2"
-DEPLOYMENT_ID = "a9f3e2c7-greedy-v0.2-2025-12-15"
-RANDOM_BUSTER = 1734272100
+VERSION = "DRAAD-185-2-v0.2"
+DEPLOYMENT_ID = "b3f8c4d9-greedy-hc-2025-12-15"
+RANDOM_BUSTER = 1734284640  # Updated for STAP 2
 
 # This ensures each import gets fresh timestamp
 def get_cache_version():
@@ -42,13 +42,14 @@ def log_deployment():
         'version': VERSION,
         'timestamp': TIMESTAMP,
         'cache_key': CACHE_KEY,
-        'status': 'GREEDY-ENGINE-V0.2-ACTIVE',
+        'status': 'GREEDY-ENGINE-V0.2-HC-CONSTRAINTS-ACTIVE',
         'random_buster': RANDOM_BUSTER,
-        'date': '2025-12-15'
+        'date': '2025-12-15',
+        'step': 'DRAAD-185-2'
     }
 
 if __name__ == '__main__':
-    print("DRAAD-185 Cache Buster V0.2 Active")
+    print("DRAAD-185-2 Cache Buster V0.2 with HC1-HC6 Active")
     print(f"Cache Key: {CACHE_KEY}")
     print(f"Version: {VERSION}")
     print(f"Deployment: {DEPLOYMENT_ID}")
