@@ -1,0 +1,182 @@
+# Railway Deployment Trigger for DRAAD185-6
+# Build-Time Environment Variables Fix
+#
+# Deployment Initiated: 2025-12-15T18:07:00Z
+# Trigger ID: draad185-6-build-env-fix
+# Random: 4829753692
+#
+# =============================================================================
+# DRAAD185-6: BUILD-TIME ENVIRONMENT VARIABLES FIX - COMPLETE SOLUTION
+# =============================================================================
+#
+# PROBLEM STATEMENT:
+# ─────────────────
+# Deployment failures (DRAAD185-1 through DRAAD185-5) were caused by Next.js
+# attempting to generate static pages at BUILD-TIME, which requires environment
+# variables. The pages:
+#   - app/services/assignments/page.tsx
+#   - app/settings/diensten-toewijzing/page.tsx
+# 
+# These pages import and use the Supabase client, but Supabase credentials
+# (NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY) are only injected
+# by Railway at RUNTIME. During the Docker build phase, these variables don't
+# exist, causing npm run build to fail.
+#
+# ROOT CAUSE ANALYSIS:
+# ───────────────────
+# 1. Old Dockerfile: No ARG for environment variables
+# 2. npm run build: Next.js tries to generate all pages statically
+# 3. Page imports Supabase: Requires NEXT_PUBLIC_* to be defined
+# 4. Build fails: "Cannot read property of undefined"
+#
+# DRAAD185-6 SOLUTION (Three-Part Fix):
+# ─────────────────────────────────────
+#
+# PART 1: MULTI-STAGE DOCKERFILE WITH BUILD-TIME ARGS
+# ═══════════════════════════════════════════════════════════════
+# File: Dockerfile (UPDATED)
+#
+# Stage 1 (Builder):
+#   ✓ ARG NEXT_PUBLIC_SUPABASE_URL=https://dummy.supabase.co
+#   ✓ ARG NEXT_PUBLIC_SUPABASE_ANON_KEY=dummy-key-for-build-time
+#   ✓ These dummy values allow npm run build to complete
+#   ✓ Static generation skips pages marked with 'force-dynamic'
+#   ✓ No actual Supabase connection needed at build time
+#
+# Stage 2 (Runtime):
+#   ✓ Copies .next/standalone (pre-compiled app)
+#   ✓ At startup, Railway secrets are loaded into process.env
+#   ✓ Real NEXT_PUBLIC_* values now available
+#   ✓ Client pages can access real Supabase credentials
+#
+# PART 2: MARK PAGES AS DYNAMIC
+# ════════════════════════════════════════════════════════════════
+# Files Updated:
+#   ✓ app/services/assignments/page.tsx
+#   ✓ app/settings/diensten-toewijzing/page.tsx (already had it)
+#
+# Change:
+#   export const dynamic = 'force-dynamic';
+#
+# Effect:
+#   - Skips static generation at build time
+#   - Page renders at request time with real env vars
+#   - No pre-compilation needed
+#   - Perfect for database-dependent pages
+#
+# PART 3: EXTENDED HEALTH CHECK TIMEOUT
+# ════════════════════════════════════════════════════════════════
+# File: railway.toml (UPDATED)
+#
+# Change:
+#   healthcheckTimeout = 150  (was: 120)
+#   start-period = 150s       (was: 60s)
+#
+# Reason:
+#   - Multi-stage build takes 30-40 seconds
+#   - App startup takes 5-10 seconds
+#   - Total: ~50-60 seconds typical
+#   - 150 seconds allows for slow infrastructure
+#
+# =============================================================================
+# EXPECTED BEHAVIOR AFTER DEPLOYMENT
+# =============================================================================
+#
+# Build Phase (Docker):
+#   1. Builder stage starts
+#   2. ARG NEXT_PUBLIC_SUPABASE_URL defaults to https://dummy.supabase.co
+#   3. ARG NEXT_PUBLIC_SUPABASE_ANON_KEY defaults to dummy-key-for-build-time
+#   4. npm ci runs (install dependencies)
+#   5. npm run build runs (Next.js compilation)
+#      - Pages with 'force-dynamic' skip static generation
+#      - Other pages generate statically
+#   6. .next/standalone created successfully
+#
+# Runtime Phase (Container):
+#   1. Runtime stage starts from Node.js alpine
+#   2. .next/standalone copied from builder
+#   3. Container starts: node .next/standalone/server.js
+#   4. Railway secrets are loaded into process.env
+#      - NEXT_PUBLIC_SUPABASE_URL = actual value from Railway
+#      - NEXT_PUBLIC_SUPABASE_ANON_KEY = actual value from Railway
+#   5. Health check runs: /api/health endpoint
+#   6. Service becomes healthy and ready to receive traffic
+#
+# Page Access:
+#   - Client pages ('use client'): Use real Supabase env vars from process.env
+#   - Dynamic pages: Render at request time with real credentials
+#   - Static pages: Use pre-compiled .next/standalone with dummy values (fallback)
+#   - Queries: Connect to real Supabase database
+#
+# =============================================================================
+# DEPLOYMENT CHECKLIST
+# =============================================================================
+#
+# Pre-Deployment:
+#   ☐ All code changes committed and pushed
+#   ☐ Dockerfile syntax validated
+#   ☐ railway.toml syntax valid
+#   ☐ Cache-bust files created
+#
+# Deployment Trigger:
+#   ☐ Push to main branch
+#   ☐ Railway auto-detects changes
+#   ☐ Clean rebuild starts (due to cache-bust)
+#
+# Build Verification (5-10 minutes):
+#   ☐ Builder stage completes
+#   ☐ npm ci succeeds
+#   ☐ npm run build succeeds
+#   ☐ No "Cannot find module" errors
+#   ☐ Docker image created: ~500MB (multi-stage optimization)
+#
+# Runtime Verification (2-3 minutes):
+#   ☐ Container starts
+#   ☐ Health check starts (60s wait period)
+#   ☐ /api/health returns HTTP 200
+#   ☐ Health check passes all 5 retries
+#   ☐ Service marked as HEALTHY
+#   ☐ Traffic routed to service
+#
+# Application Verification:
+#   ☐ /api/health endpoint works
+#   ☐ Services pages load without errors
+#   ☐ Supabase queries return data
+#   ☐ No console errors about env variables
+#   ☐ Database-dependent pages respond correctly
+#
+# =============================================================================
+# IF DEPLOYMENT FAILS
+# =============================================================================
+#
+# Symptom: "Build failed"
+#   → Check Docker build logs for npm error
+#   → Verify Dockerfile syntax
+#   → Check if new dependencies were added
+#
+# Symptom: "Health check failed"
+#   → Wait 60+ seconds for startup to complete
+#   → Check /api/health endpoint manually
+#   → Verify Railway secrets are configured
+#   → Check if startCommand matches .next/standalone structure
+#
+# Symptom: "Supabase connection error at runtime"
+#   → Verify NEXT_PUBLIC_SUPABASE_URL in Railway variables
+#   → Verify NEXT_PUBLIC_SUPABASE_ANON_KEY in Railway variables
+#   → Restart container to force environment reload
+#
+# Rollback Procedure:
+#   1. Revert Dockerfile to previous version
+#   2. Revert railway.toml timeout changes
+#   3. Remove 'export const dynamic' markers
+#   4. Create new cache-bust file
+#   5. Push to main
+#   6. Monitor deployment
+#
+# =============================================================================
+
+DEPLOYMENT_TRIGGER=true
+TRIGGER_ID=draad185-6-build-env-fix
+TIMESTAMP=2025-12-15T18:07:00Z
+RANDOM_ID=4829753692
+STATUS=initiated
