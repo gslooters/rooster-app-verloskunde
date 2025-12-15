@@ -1,0 +1,56 @@
+# DRAAD185-5 CACHE BUST - ROOT CAUSE FIX
+# Date: 2025-12-15T18:46:00Z
+# Timestamp: 1734369960
+# Random: 4729
+# Build ID: draad185-5-explicit-dockerfile-4729
+#
+# ROOT CAUSE ANALYSIS
+# ====================
+# Previous deployments (1-4) failed due to Railway's Railpack auto-detection
+# being confused by mixed Node.js and Python artifacts:
+#
+# PROBLEM:
+#   - package.json (Node.js)
+#   - solver/requirements.txt (Python)
+#   - Railway detected BOTH and chose Python path
+#   - Tried to run: npm ci && npm run build with Python
+#   - But used: HOSTNAME=0.0.0.0 PORT=$PORT node .next/standalone/server.js
+#   - Result: Service unavailable (Node.js not built)
+#
+# SOLUTION:
+#   1. Added explicit Dockerfile → Removes ambiguity
+#   2. Updated .railwayignore → Excludes solver/ from detection
+#   3. Increased healthcheckTimeout → 100s → 120s
+#   4. Increased restartPolicyMaxRetries → 10 → 15
+#   5. Added --prefer-offline --no-audit flags → Faster npm install
+#
+# EXPECTED OUTCOME:
+#   - Clean rebuild with explicit Node.js path
+#   - npm ci installs dependencies
+#   - npm run build compiles Next.js
+#   - Health check succeeds within 120s
+#   - Service starts and becomes healthy
+#
+# VERIFICATION POINTS:
+#   ✓ Check: 'Using explicit Dockerfile' in build logs
+#   ✓ Check: 'npm ci' command executed
+#   ✓ Check: 'npm run build' completed
+#   ✓ Check: '/api/health' returns 200
+#   ✓ Check: No Python detection in logs
+#   ✓ Check: No 'service unavailable' errors
+#
+# FILES MODIFIED:
+#   - Dockerfile (NEW) - Explicit Next.js configuration
+#   - railway.toml - Updated timeouts and build command
+#   - .railwayignore - Ensured solver/ is excluded
+#
+# DRAAD HISTORY:
+#   - DRAAD185-1: typing-extensions conflict (4/4 failed)
+#   - DRAAD185-2: Stale snapshot detection
+#   - DRAAD185-3: Partial fix attempt
+#   - DRAAD185-4: Root cause analysis (DEBUGGING ONLY)
+#   - DRAAD185-5: Root cause resolution (PRODUCTION FIX)
+
+TRIGGER_DEPLOYMENT=true
+FORCE_CLEAN_BUILD=true
+EXPLICIT_DOCKERFILE_USED=true
