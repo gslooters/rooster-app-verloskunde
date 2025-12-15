@@ -1,6 +1,12 @@
 """Greedy Rostering Engine for fast, transparent roster generation.
 
-DRAAD 185-2: Enhanced with HC1-HC6 Hard Constraints
+DRAD 190: SMART GREEDY ALLOCATION
+Enhanced with smart tie-breaker for fair distribution:
+  - Sorteer eligible employees by "shifts remaining" (ascending)
+  - Tie-breaker: "shifts assigned in current run" (ascending) for exact fairness
+  - In-memory tracking during solve session
+
+DRAD 185-2: Enhanced with HC1-HC6 Hard Constraints
 Replaces: RosterSolverV2.py (OR-Tools CP-SAT)
 Features:
   - Phase 1: Lock pre-planned assignments (with HC validation)
@@ -23,7 +29,7 @@ Constraints:
   HC5: Max per specific service
   HC6: Team-aware logic
 
-Author: DRAAD 185-2 Implementation
+Author: DRAAD 190 Smart Greedy Allocation + DRAAD 185-2 Implementation
 Date: 2025-12-15
 """
 
@@ -138,11 +144,29 @@ class SolveResult:
 
 class GreedyRosteringEngine:
     """
-    Greedy allocation engine with HC1-HC6 constraints.
+    Greedy allocation engine with HC1-HC6 constraints + DRAAD 190 Smart Allocation.
+    
+    DRAAD 190 Fair Distribution Algorithm:
+    ======================================
+    1️⃣ AVAILABILITY CHECK: Only eligible employees (not blackout, not overscheduled)
+    2️⃣ SORT BY "SHIFTS_REMAINING": Ascending order
+       → Employee with MOST to-do gets LOWER priority
+       → Employee with LEAST to-do gets HIGHER priority
+    3️⃣ TIE-BREAKER "SHIFTS_IN_CURRENT_RUN": Ascending order
+       → If both have same remaining: who was selected earlier in THIS roster run?
+       → That person gets lower priority on next service
+    4️⃣ ASSIGN: Take first person in sorted list
+    5️⃣ RESULT: Fair distribution without complex scoring
+    
+    Example (Karin=4 remaining, Lizette=5, Paula=6):
+      Service 1: Sort → [Paula (6), Lizette (5), Karin (4)] → Assign Paula
+      Service 2: Sort → [Lizette (5), Karin (4), Paula (5)] → Assign Lizette  
+      Service 3: Sort → [Karin (4), Paula (5), Lizette (4)] → Assign Karin (fewer in run)
+      RESULT: All three end with 4 shifts ✅
     
     Provides 5-phase algorithm:
     1. Lock pre-planned (validate & preserve)
-    2. Greedy allocate (fill remaining with HC constraints)
+    2. Greedy allocate (fill remaining with HC constraints + smart sorting)
     3. Analyze bottlenecks (diagnose shortages)
     4. Save to database (bulk insert)
     5. Return result (with metadata & suggestions)
@@ -189,7 +213,12 @@ class GreedyRosteringEngine:
         self.employee_shift_count: Dict[str, int] = {}  # Current count
         self.employee_service_count: Dict[Tuple[str, str], int] = {}  # (emp, svc) -> count
         
-        logger.info(f"✅ [DRAAD185-2] GreedyRosteringEngine initialized for roster {self.roster_id}")
+        # DRAAD 190: Smart Greedy Allocation tracking
+        # In-memory map: emp_id → count of shifts assigned in THIS roster run
+        self.shifts_assigned_in_current_run: Dict[str, int] = {}
+        
+        logger.info(f"✅ [DRAAD190-SMART] GreedyRosteringEngine initialized for roster {self.roster_id}")
+        logger.info(f"   🎯 DRAAD 190 Smart Greedy Allocation enabled")
         
         # Load data
         self._load_data()
@@ -251,6 +280,8 @@ class GreedyRosteringEngine:
             ))
             # Initialize counters
             self.employee_shift_count[row['id']] = 0
+            # DRAAD 190: Initialize current-run counter
+            self.shifts_assigned_in_current_run[row['id']] = 0
 
     def _load_service_types(self) -> None:
         """Load service types from database."""
@@ -336,14 +367,14 @@ class GreedyRosteringEngine:
             SolveResult with all details
         """
         start_time = time.time()
-        logger.info("🚀 [DRAAD185-2] Starting GREEDY solve...")
+        logger.info("🚀 [DRAAD190] Starting GREEDY solve with SMART allocation...")
         
         try:
             # Phase 1: Lock pre-planned
             self._lock_pre_planned()
             logger.info(f"✅ Phase 1: {len(self.assignments)} locked assignments")
             
-            # Phase 2: Greedy allocate
+            # Phase 2: Greedy allocate (with DRAAD 190 smart sorting)
             bottlenecks = self._greedy_allocate()
             logger.info(f"✅ Phase 2: {len(self.assignments)} total, {len(bottlenecks)} bottlenecks")
             
@@ -372,12 +403,12 @@ class GreedyRosteringEngine:
                 solve_time=round(elapsed, 2),
                 pre_planned_count=pre_planned_count,
                 greedy_count=greedy_count,
-                message=f"GREEDY solver: {coverage:.1f}% coverage in {elapsed:.2f}s"
+                message=f"DRAAD 190 SMART GREEDY: {coverage:.1f}% coverage in {elapsed:.2f}s"
             )
             
             logger.info(f"✅ Phase 5 complete: {result.coverage}% coverage in {elapsed:.2f}s")
             logger.info(f"   📈 Pre-planned: {pre_planned_count}")
-            logger.info(f"   📈 Greedy: {greedy_count}")
+            logger.info(f"   📈 Greedy (DRAAD 190): {greedy_count}")
             logger.info(f"   📈 Total: {len(self.assignments)}/{total_slots}")
             logger.info(f"   📈 Bottlenecks: {len(bottlenecks)}")
             
@@ -409,10 +440,24 @@ class GreedyRosteringEngine:
             self.employee_service_count[key] = \
                 self.employee_service_count.get(key, 0) + 1
             
+            # DRAAD 190: Count pre-planned as part of current run
+            self.shifts_assigned_in_current_run[assignment.employee_id] = \
+                self.shifts_assigned_in_current_run.get(assignment.employee_id, 0) + 1
+            
             logger.debug(f"Locked: {assignment.employee_id} → {assignment.date} {assignment.dagdeel}")
 
     def _greedy_allocate(self) -> List[Bottleneck]:
-        """Phase 2: Greedy allocation with HC1-HC6.
+        """Phase 2: Greedy allocation with HC1-HC6 + DRAAD 190 Smart Sorting.
+        
+        DRAAD 190 Algorithm:
+        1. For each slot needing assignment:
+        2. Find eligible employees (HC1-HC6 passed)
+        3. Sort by fairness using sortEligibleByFairness():
+           a. Check availability (not overscheduled, not in blackout)
+           b. Sort by shifts_remaining (ascending) - who needs the MOST shifts?
+           c. Tie-breaker: shifts_assigned_in_current_run (ascending) - who was selected earlier?
+        4. Assign to first person in sorted list
+        5. Increment shifts_assigned_in_current_run for that person
         
         Returns:
             List of bottlenecks (unfilled slots)
@@ -432,8 +477,8 @@ class GreedyRosteringEngine:
             if shortage <= 0:
                 continue
             
-            # Find eligible employees (sorted by fairness)
-            eligible = self._find_eligible(date, dagdeel, service_id)
+            # DRAAD 190: Find eligible employees with smart sorting
+            eligible = self._sort_eligible_by_fairness(date, dagdeel, service_id)
             
             # Assign as many as possible
             assigned_this_slot = 0
@@ -461,7 +506,10 @@ class GreedyRosteringEngine:
                 key = (emp_id, service_id)
                 self.employee_service_count[key] = self.employee_service_count.get(key, 0) + 1
                 
-                logger.debug(f"Assigned: {emp_id} → {date} {dagdeel} {service_id}")
+                # DRAAD 190: Track shifts assigned in THIS run
+                self.shifts_assigned_in_current_run[emp_id] += 1
+                
+                logger.debug(f"Assigned (DRAAD190): {emp_id} → {date} {dagdeel} {service_id} (run_count: {self.shifts_assigned_in_current_run[emp_id]})")
             
             # Record bottleneck if not all filled
             if assigned_this_slot < shortage:
@@ -478,11 +526,28 @@ class GreedyRosteringEngine:
         
         return bottlenecks
 
-    def _find_eligible(self, date: str, dagdeel: str, service_id: str) -> List[str]:
-        """Find eligible employees with HC1-HC6 validation.
+    def _sort_eligible_by_fairness(self, date: str, dagdeel: str, service_id: str) -> List[str]:
+        """DRAAD 190: Sort eligible employees by fairness.
+        
+        Algorithm:
+        1. FILTER: Get all employees
+        2. CHECK AVAILABILITY:
+           - Must be active
+           - Must not exceed target shifts
+           - Must not be in blackout
+           - Must pass HC1-HC6 constraints
+        3. CALCULATE FAIRNESS:
+           - shifts_remaining = target - currently_assigned
+           - shifts_in_current_run = incremented as we assign in this solve
+        4. SORT BY:
+           a. shifts_remaining (ascending) - MOST to-do → LOWER priority
+           b. shifts_in_current_run (ascending) - EARLIER selected → LOWER priority
+        5. RETURN: Sorted list ready for assignment
+        
+        Result: Fair distribution without complex scoring
         
         Returns:
-            List of employee IDs sorted by fairness (fewest shifts first)
+            List of employee IDs sorted by fairness (best candidate first)
         """
         eligible = []
         service_type = self.service_types.get(service_id)
@@ -495,17 +560,25 @@ class GreedyRosteringEngine:
             emp_target = self.employee_targets.get(emp.id, self.max_shifts_per_employee)
             emp_shift_count = self.employee_shift_count.get(emp.id, 0)
             
+            # DRAAD 190: Calculate "shifts remaining" for this employee
+            shifts_remaining = emp_target - emp_shift_count
+            
+            # Skip if already met target
+            if shifts_remaining <= 0:
+                logger.debug(f"SKIP {emp.id}: Target met ({emp_shift_count}/{emp_target})")
+                continue
+            
             key = (emp.id, service_id)
             svc_count = self.employee_service_count.get(key, 0)
             
-            # Convert assignments to dict format for HC2 check
+            # Convert assignments to dict format for HC check
             existing_dicts = [{
                 'employee_id': a.employee_id,
                 'date': a.date,
                 'dagdeel': a.dagdeel
             } for a in self.assignments]
             
-            # Check ALL constraints
+            # Check ALL HC1-HC6 constraints
             passed, failed_constraint = self.constraint_checker.check_all_constraints(
                 emp_id=emp.id,
                 date_str=date,
@@ -521,16 +594,38 @@ class GreedyRosteringEngine:
             )
             
             if passed:
-                # Calculate fairness score (prefer employees with fewer shifts)
-                fairness_score = 1.0 / (emp_shift_count + 1)
-                eligible.append((emp.id, fairness_score, emp_shift_count))
+                # Get tie-breaker: shifts assigned in THIS run
+                shifts_in_run = self.shifts_assigned_in_current_run.get(emp.id, 0)
+                
+                # Store for sorting
+                eligible.append((
+                    emp.id,
+                    shifts_remaining,  # Primary sort key (ascending)
+                    shifts_in_run       # Secondary sort key (ascending)
+                ))
+                
+                logger.debug(
+                    f"ELIGIBLE {emp.id}: "
+                    f"remaining={shifts_remaining}, "
+                    f"run_count={shifts_in_run}"
+                )
             else:
-                logger.debug(f"{emp.id} ineligible: {failed_constraint}")
+                logger.debug(f"INELIGIBLE {emp.id}: {failed_constraint}")
         
-        # Sort by fairness (higher score = fewer shifts = higher priority)
-        eligible.sort(key=lambda x: (-x[1], x[2]))  # Sort by score DESC, then count ASC
+        # DRAAD 190: Sort by fairness
+        # Primary: shifts_remaining (ascending) - employee with MOST remaining gets priority
+        # Secondary: shifts_in_current_run (ascending) - tiebreaker
+        eligible.sort(key=lambda x: (x[1], x[2]))  # Sort by remaining ASC, then run_count ASC
         
-        return [emp_id for emp_id, _, _ in eligible]
+        sorted_list = [emp_id for emp_id, _, _ in eligible]
+        
+        logger.debug(
+            f"DRAAD190 FAIRNESS SORT: {date} {dagdeel} {service_id}\n"
+            f"  {eligible}\n"
+            f"  → Assigned to: {sorted_list}"
+        )
+        
+        return sorted_list
 
     def _count_assigned(self, date: str, dagdeel: str, service_id: str) -> int:
         """Count current assignments for slot."""
@@ -586,7 +681,7 @@ class GreedyRosteringEngine:
         try:
             # Bulk insert
             response = self.supabase.table('roster_assignments').insert(data).execute()
-            logger.info(f"✅ Bulk inserted {len(data)} greedy assignments")
+            logger.info(f"✅ Bulk inserted {len(data)} greedy assignments (DRAAD 190 SMART GREEDY)")
         except Exception as e:
             logger.error(f"❌ Error saving assignments: {e}")
             raise
