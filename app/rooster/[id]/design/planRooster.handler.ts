@@ -4,11 +4,15 @@
  * Called when user clicks 'Roosterbewerking starten' in Dashboard Rooster Ontwerp.
  * Orchestrates the solver call and routes to appropriate screen based on outcome.
  * 
+ * DRAAD-191: SOLVER SWITCH TO GREEDY
+ * Changed from ORT (/api/roster/solve) to GREEDY (/api/roster/solve-greedy)
+ * Smart Greedy Allocation with fair work distribution (DRAAD-190)
+ * 
  * LOGIC:
- * 1. Call POST /api/roster/solve
+ * 1. Call POST /api/roster/solve-greedy (GREEDY solver)
  * 2. Parse response.solver_result.status
- * 3. If FEASIBLE: store summary → route to /rooster/[id]/feasible-summary
- * 4. If INFEASIBLE: store bottleneck_report → route to /rooster/[id]/bottleneck-analysis
+ * 3. If FEASIBLE/SUCCESS: store summary → route to /rooster/[id]/feasible-summary
+ * 4. If INFEASIBLE/PARTIAL: store bottleneck_report → route to /rooster/[id]/bottleneck-analysis
  * 5. If ERROR: show error message
  */
 
@@ -28,9 +32,9 @@ export async function planRooster(config: PlanRoosterHandlerConfig): Promise<voi
     console.log(`[DRAAD118A] planRooster: Starting for roster ${rosterId}`);
     onLoading?.(true);
     
-    // DRAAD118A: Call solve endpoint
-    const solveUrl = `/api/roster/solve`;
-    console.log(`[DRAAD118A] planRooster: Calling ${solveUrl}`);
+    // DRAAD-191: Call GREEDY solve endpoint (DRAAD-190 Smart Greedy Allocation)
+    const solveUrl = `/api/roster/solve-greedy`;
+    console.log(`[DRAAD-191] planRooster: Calling ${solveUrl} (GREEDY solver with DRAAD-190 fairness)`);
     
     const solveResponse = await fetch(solveUrl, {
       method: 'POST',
@@ -46,7 +50,7 @@ export async function planRooster(config: PlanRoosterHandlerConfig): Promise<voi
     }
     
     const apiResponse: SolverApiResponse = await solveResponse.json();
-    console.log(`[DRAAD118A] planRooster: Solver response status=${apiResponse.solver_result?.status}`);
+    console.log(`[DRAAD-191] planRooster: Solver response status=${apiResponse.solver_result?.status}`);
     
     if (!apiResponse.success) {
       throw new Error(apiResponse.solver_result?.status || 'Onbekende fout');
@@ -54,10 +58,10 @@ export async function planRooster(config: PlanRoosterHandlerConfig): Promise<voi
     
     const solverStatus = apiResponse.solver_result.status;
     
-    // DRAAD118A: Route based on solver status
-    if (solverStatus === 'feasible' || solverStatus === 'optimal') {
-      // ✅ FEASIBLE PATH
-      console.log(`[DRAAD118A] planRooster: FEASIBLE outcome - showing summary`);
+    // DRAAD-191: Route based on GREEDY solver status
+    if (solverStatus === 'feasible' || solverStatus === 'optimal' || solverStatus === 'success' || solverStatus === 'partial') {
+      // ✅ FEASIBLE/SUCCESS PATH (GREEDY may return 'success' or 'partial')
+      console.log(`[DRAAD-191] planRooster: FEASIBLE outcome - showing summary`);
       
       // Store summary in sessionStorage (transient data)
       if (apiResponse.solver_result.summary) {
@@ -70,9 +74,9 @@ export async function planRooster(config: PlanRoosterHandlerConfig): Promise<voi
       // Route to summary screen
       router.push(`/rooster/${rosterId}/feasible-summary`);
       
-    } else if (solverStatus === 'infeasible') {
-      // ⛔ INFEASIBLE PATH
-      console.log(`[DRAAD118A] planRooster: INFEASIBLE outcome - showing bottleneck analysis`);
+    } else if (solverStatus === 'infeasible' || solverStatus === 'failed') {
+      // ⛔ INFEASIBLE/FAILED PATH (GREEDY may return 'failed' instead of 'infeasible')
+      console.log(`[DRAAD-191] planRooster: INFEASIBLE outcome - showing bottleneck analysis`);
       
       // Store bottleneck report in sessionStorage (transient data)
       if (apiResponse.solver_result.bottleneck_report) {
@@ -95,7 +99,7 @@ export async function planRooster(config: PlanRoosterHandlerConfig): Promise<voi
     }
     
   } catch (error: any) {
-    console.error(`[DRAAD118A] planRooster: Error:`, error);
+    console.error(`[DRAAD-191] planRooster: Error:`, error);
     
     const errorMessage = error.message || 'Een onbekende fout is opgetreden.';
     onError?.(errorMessage);
