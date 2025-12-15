@@ -1,17 +1,17 @@
-"""
-AUTO-FILL BUTTON COMPONENT
-
-DRAD 183: "🤖 Automatisch Invullen" button for GREEDY solver
-
-Integration Point: RoosterBewerking > Preplanning view
-Trigger: POST /api/roster/solve
-Behavior:
-  1. Show loading spinner
-  2. Call solver API
-  3. Display results with coverage
-  4. Show bottleneck summary
-  5. Auto-refresh rooster
-"""
+/**
+ * AUTO-FILL BUTTON COMPONENT
+ * 
+ * DRAD 183: "🤖 Automatisch Invullen" button for GREEDY solver
+ * 
+ * Integration Point: RoosterBewerking > Preplanning view
+ * Trigger: POST /api/roster/solve
+ * Behavior:
+ *   1. Show loading spinner
+ *   2. Call solver API
+ *   3. Display results with coverage
+ *   4. Show bottleneck summary
+ *   5. Auto-refresh rooster
+ */
 
 import React, { useState } from 'react';
 import { supabase } from '@/lib/supabase';
