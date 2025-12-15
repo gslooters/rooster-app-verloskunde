@@ -1,22 +1,22 @@
 # Python OR-Tools Solver Service - Dependencies
-# Date: 2025-12-13
-# FASE 2 FIX: Added supabase for SequentialSolverV2 database integration
-# SOLVER2-FIX: Updated to Python 3.12.7 compatible wheels
-# DRAAD102D proven: Python 3.12.7 + ortools 9.14.6206 = SUCCESS
+# Date: 2025-12-15
+# DRAAD185 FIX: Python 3.13.11 compatibility update
+# Pydantic 2.8.0 is compatible met Python 3.13
+# OR-Tools 9.14+ works with Python 3.13
 
 # FastAPI & Web
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 python-multipart==0.0.6
 
-# Data handling
-pydantic==2.10.5
+# Data handling - Python 3.13 compatible
+pydantic==2.8.0
 python-dateutil==2.9.0
 
-# Database - Supabase client for FASE 2 SequentialSolverV2
+# Database - Supabase client
 supabase==2.4.1
 
-# OR-Tools CP-SAT Solver (Python 3.12.7 cp312 wheels available)
+# OR-Tools CP-SAT Solver (works with Python 3.13)
 ortools==9.14.6206
 
 # Optional but recommended
