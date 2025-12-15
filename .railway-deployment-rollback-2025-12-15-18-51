@@ -1,0 +1,20 @@
+🚨 ROLLBACK TRIGGER
+==================
+
+Timestamp: 2025-12-15T18:51:35Z
+Commit: 24453b503cd859b5aca37a72d7dd1f5e44cc3403
+Reason: Revert DRAAD185-6/7 broken changes (27 failed builds)
+
+Changes:
+- Dockerfile: Multi-stage → Single-stage Node build
+- railway.toml: healthcheckTimeout 150s → 100s
+
+Expected: Clean rebuild, no cache pollution
+
+Railway deployment trigger for automatic redeploy:
+- Force clean build
+- Invalidate cache
+- Restart service: rooster-app-verloskunde-production
+
+Monitor logs at:
+https://railway.app/project/90165889-1a50-4236-aefe-b1e1ae44dc7f
