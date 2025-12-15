@@ -1,6 +1,14 @@
 /**
  * API Route: POST /api/roster/solve
  * 
+ * DRAAD192: SOLVER2 ENDPOINT MIGRATION
+ * Migrates from local SOLVER_SERVICE_URL to external Solver2 API
+ * Features:
+ * - 120s timeout minimum handling
+ * - Robust error reporting
+ * - Backward compatible response format
+ * - Detailed logging for troubleshooting
+ * 
  * DRAAD135: DELETE FUNCTIONALITY REMOVED & UPSERT RESTORED
  * DRAAD149: Employee ID type verification (TEXT vs UUID)
  * DRAAD149B: Deduplication key includes service_id to prevent conflicts
@@ -48,8 +56,11 @@ import type {
   ExactStaffing
 } from '@/lib/types/solver';
 
-const SOLVER_URL = process.env.SOLVER_SERVICE_URL || 'http://localhost:8000';
-const SOLVER_TIMEOUT = 35000;
+// DRAAD192: Solver2 endpoint configuration
+const SOLVER2_URL = process.env.SOLVER2_URL || 'http://localhost:8000';
+const SOLVER_TIMEOUT = 120000; // 120 seconds minimum per DRAAD192 requirement
+const SOLVER_RETRY_ATTEMPTS = 3;
+const SOLVER_RETRY_DELAY_MS = 1000;
 
 const dienstverbandMapping: Record<string, 'maat' | 'loondienst' | 'overig'> = {
   'Maat': 'maat',
@@ -292,6 +303,60 @@ const findExistingSlot = (
   }
 };
 
+/**
+ * DRAAD192: Retry logic with exponential backoff
+ */
+const callSolver2WithRetry = async (
+  payload: SolveRequest,
+  attempt: number = 0
+): Promise<Response> => {
+  try {
+    console.log(`[DRAAD192] Solver2 call attempt ${attempt + 1}/${SOLVER_RETRY_ATTEMPTS}`);
+    console.log(`[DRAAD192] URL: ${SOLVER2_URL}/api/v1/solve-schedule`);
+    console.log(`[DRAAD192] Timeout: ${SOLVER_TIMEOUT}ms`);
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), SOLVER_TIMEOUT);
+    
+    try {
+      const response = await fetch(`${SOLVER2_URL}/api/v1/solve-schedule`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'rooster-app-verloskunde/DRAAD192'
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      return response;
+    } catch (fetchError: any) {
+      clearTimeout(timeoutId);
+      
+      // Check for timeout
+      if (fetchError.name === 'AbortError') {
+        console.error(`[DRAAD192] ⏱️  Solver2 TIMEOUT after ${SOLVER_TIMEOUT}ms`);
+        
+        // Retry on timeout
+        if (attempt < SOLVER_RETRY_ATTEMPTS - 1) {
+          const delayMs = SOLVER_RETRY_DELAY_MS * Math.pow(2, attempt);
+          console.log(`[DRAAD192] Retrying in ${delayMs}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+          return callSolver2WithRetry(payload, attempt + 1);
+        } else {
+          throw new Error(`Solver2 timeout after ${SOLVER_RETRY_ATTEMPTS} attempts`);
+        }
+      }
+      
+      throw fetchError;
+    }
+  } catch (error: any) {
+    console.error(`[DRAAD192] Solver2 call failed: ${error.message}`);
+    throw error;
+  }
+};
+
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
   const solverRunId = crypto.randomUUID();
@@ -303,6 +368,7 @@ export async function POST(request: NextRequest) {
   const draad150CacheBustId = `DRAAD150-${executionMs}-${Math.floor(Math.random() * 100000)}`;
   const draad154CacheBustId = `DRAAD154-${executionMs}-${Math.floor(Math.random() * 100000)}`;
   const draad155CacheBustId = `DRAAD155-${executionMs}-${Math.floor(Math.random() * 100000)}`;
+  const draad192CacheBustId = `DRAAD192-${executionMs}-${Math.floor(Math.random() * 100000)}`;
   
   const draad135Version = CACHE_BUST_DRAAD135.version;
   const draad135Timestamp = CACHE_BUST_DRAAD135.timestamp;
@@ -326,6 +392,10 @@ export async function POST(request: NextRequest) {
     }
     
     console.log(`[Solver API] Start solve voor roster ${roster_id}`);
+    console.log(`[DRAAD192] Solver2 migration active`);
+    console.log(`[DRAAD192] Cache bust: ${draad192CacheBustId}`);
+    console.log(`[DRAAD192] Solver endpoint: ${SOLVER2_URL}`);
+    console.log(`[DRAAD192] Timeout: ${SOLVER_TIMEOUT}ms (${SOLVER_TIMEOUT / 1000}s)`);
     console.log(`[DRAAD135] Cache bust: ${cacheBustingId}`);
     console.log(`[DRAAD135] Version: ${draad135Version}`);
     console.log(`[DRAAD135] Method: UPSERT (no DELETE)`);
@@ -503,30 +573,43 @@ export async function POST(request: NextRequest) {
         service_id: sa.service_id
       })),
       exact_staffing,
-      timeout_seconds: 30
+      timeout_seconds: Math.floor(SOLVER_TIMEOUT / 1000)
     };
     
-    console.log(`[Solver API] Aanroepen solver...`);
+    console.log(`[DRAAD192] Aanroepen Solver2...`);
     
-    const solverResponse = await fetch(`${SOLVER_URL}/api/v1/solve-schedule`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(solverRequest),
-      signal: AbortSignal.timeout(SOLVER_TIMEOUT)
-    });
+    // DRAAD192: Call Solver2 with retry logic and timeout handling
+    let solverResponse: Response;
+    try {
+      solverResponse = await callSolver2WithRetry(solverRequest);
+    } catch (timeoutError: any) {
+      console.error(`[DRAAD192] ❌ Solver2 failed after retries: ${timeoutError.message}`);
+      return NextResponse.json(
+        {
+          error: 'Solver2 timeout',
+          message: `Solver could not complete within ${SOLVER_TIMEOUT / 1000}s after ${SOLVER_RETRY_ATTEMPTS} attempts`,
+          details: {
+            timeout_ms: SOLVER_TIMEOUT,
+            retry_attempts: SOLVER_RETRY_ATTEMPTS,
+            roster_id
+          }
+        },
+        { status: 504 }
+      );
+    }
     
     if (!solverResponse.ok) {
       const errorText = await solverResponse.text();
+      console.error(`[DRAAD192] Solver2 error (${solverResponse.status}): ${errorText}`);
       return NextResponse.json(
-        { error: `Solver service fout: ${errorText}` },
+        { error: `Solver2 service error: ${errorText}` },
         { status: solverResponse.status }
       );
     }
     
     const solverResult: SolveResponse = await solverResponse.json();
     
+    console.log(`[DRAAD192] Solver2 response received`);
     console.log(`[Solver API] Status=${solverResult.status}, assignments=${solverResult.total_assignments}`);
     
     /**
@@ -541,7 +624,7 @@ export async function POST(request: NextRequest) {
           success: true,
           roster_id,
           warning: 'INFEASIBLE',
-          message: 'De roostering is niet haalbaar met de huidige constraints',
+          message: 'De roostering is niet haalbaar met de huidge constraints',
           solver_result: {
             status: solverResult.status,
             assignments: [],
@@ -592,7 +675,7 @@ export async function POST(request: NextRequest) {
       
       if (emptySlots.length === 0) {
         console.warn('[DRAAD155] ⚠️  WARNING: No empty slots found (status=0, service_id=NULL)');
-        console.warn('[DRAAD155] ORT has ${solverResult.assignments.length} assignments but no slots to fill');
+        console.warn(`[DRAAD155] ORT has ${solverResult.assignments.length} assignments but no slots to fill`);
         // Continue anyway - might be edge case
       }
       console.log('[DRAAD155] === END BASELINE VERIFICATION ===');
@@ -633,7 +716,7 @@ export async function POST(request: NextRequest) {
           .update({
             service_id: serviceId,
             status: serviceId ? 1 : 0,  // KEY: status=1 ONLY with service_id
-            source: 'ort',
+            source: 'solver2',
             ort_run_id: solverRunId,
             ort_confidence: ortAssignment.confidence || null,
             updated_at: new Date().toISOString()
@@ -692,7 +775,7 @@ export async function POST(request: NextRequest) {
         .eq('id', roster_id);
       
       if (!updateError) {
-        console.log('[DRAAD118A] Roster status updated: draft → in_progress');
+        console.log('[DRAAD192] Roster status updated: draft → in_progress');
       }
       
       const totalTime = Date.now() - startTime;
@@ -706,6 +789,14 @@ export async function POST(request: NextRequest) {
           total_assignments: solverResult.total_assignments,
           fill_percentage: solverResult.fill_percentage,
           solve_time_seconds: solverResult.solve_time_seconds
+        },
+        draad192: {
+          status: 'IMPLEMENTED',
+          version: '1.0',
+          solver_endpoint: SOLVER2_URL,
+          timeout_ms: SOLVER_TIMEOUT,
+          retry_attempts: SOLVER_RETRY_ATTEMPTS,
+          message: 'Migrated to Solver2 endpoint with timeout handling'
         },
         draad135: {
           status: 'IMPLEMENTED',
