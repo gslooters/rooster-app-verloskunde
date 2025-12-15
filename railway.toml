@@ -3,8 +3,8 @@
 command = "npm ci && npm run build"
 
 [deploy]
-# Correct standalone server path
-startCommand = "HOSTNAME=0.0.0.0 PORT=$PORT node .next/standalone/server.js"
+# Standalone server path
+startCommand = "node .next/standalone/server.js"
 
 # Health check
 healthcheckPath = "/api/health"
@@ -14,10 +14,8 @@ healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
-# Cache-busting deployment trigger: 1734285413
-# DRAAD185 FINAL FIX: Resolved dependency conflicts
-# - Main app: typing-extensions 4.9.0 → 4.12.2
-# - Solver: Added typing-extensions>=4.12.2
-# - Root cause: pydantic 2.8.0 requires typing-extensions>=4.12.2 for Python 3.13
-# Force rebuild and deployment on Railway
-# Updated: 2025-12-15T17:37:00Z
+# DRAAD187: Baseline configuration restored
+# Reverted from DRAAD186 experimental changes
+# Date: 2025-12-15T20:37:00Z
+# Status: Known working configuration
+# Cache-bust: 1734286620000
