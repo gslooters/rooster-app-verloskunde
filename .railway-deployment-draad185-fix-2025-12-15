@@ -1,0 +1,29 @@
+🔧 DRAAD185 ROOT CAUSE FIX - Lazy-load Supabase
+================================================
+
+Timestamp: 2025-12-15T18:57:53Z
+
+Problem:
+- Next.js tried to statically pre-render pages that import Supabase client
+- Supabase client load requires NEXT_PUBLIC_SUPABASE_URL env var
+- Build-time env vars were missing → ERROR: "supabaseUrl is required"
+
+Solution:
+- Changed both pages to lazy-import Supabase (dynamic import)
+- Supabase modules only load when needed (client-side)
+- Pages marked as `export const dynamic = 'force-dynamic'`
+- Next.js no longer attempts static generation → no build errors
+
+Fixes:
+1. app/services/assignments/page.tsx - Lazy-load Supabase
+2. app/settings/diensten-toewijzing/page.tsx - Lazy-load Supabase
+3. Single-stage Dockerfile kept (simple, correct)
+4. railway.toml kept (simple, correct)
+
+Expected Railway Deployment:
+✅ Build succeeds (no "supabaseUrl" errors)
+✅ Frontend loads correctly
+✅ Pages render dynamically with real env vars
+✅ No static pre-rendering attempted
+
+Railway: Force clean rebuild with cache invalidation
