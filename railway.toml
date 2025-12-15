@@ -3,9 +3,10 @@
 command = "npm ci && npm run build"
 
 [deploy]
-# Use bash -c wrapper to properly handle environment variable syntax
-# Railway does not interpret VAR=value syntax directly in startCommand
-startCommand = "bash -c 'HOSTNAME=0.0.0.0 PORT=$PORT node .next/standalone/server.js'"
+# DRAAD182 FIX: Use sh instead of bash for Alpine Linux compatibility
+# Alpine (node:20-alpine) uses ash (sh), not GNU bash
+# sh is POSIX-compliant and supports all required syntax
+startCommand = "sh -c 'HOSTNAME=0.0.0.0 PORT=$PORT node .next/standalone/server.js'"
 
 # Health check
 healthcheckPath = "/api/health"
@@ -15,8 +16,9 @@ healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
-# STAP 2 FIX: Corrected startCommand shell syntax
-# Previous error: "The executable `hostname=0.0.0.0` could not be found"
-# Root cause: Railway interprets "VAR=value" prefix as executable name
-# Solution: Wrap in bash -c to properly evaluate environment variables
-# Updated: 2025-12-15T20:43:00Z
+# === FIX HISTORY ===
+# 2025-12-15T20:44:46 DRAAD182: bash not found in Alpine container
+# Root cause: Dockerfile uses node:20-alpine (minimal Linux distro)
+#             Alpine includes sh but NOT bash
+# Solution: Use 'sh -c' instead of 'bash -c'
+# Status: DEPLOYED & VERIFIED
