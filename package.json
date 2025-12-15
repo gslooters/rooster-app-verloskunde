@@ -1,6 +1,6 @@
 {
   "name": "rooster-app-final",
-  "version": "0.1.5-draad186.supabase-env-fix.1734278442000",
+  "version": "0.1.4-draad181.greedy.1734278481000",
   "private": true,
   "scripts": {
     "dev": "next dev",
