@@ -1,0 +1,25 @@
+# DRAAD 182: Soft Constraints Framework V0.2
+# Cache Buster - Force Full Rebuild
+# Date: 2025-12-15 14:22:37 UTC
+# Timestamp: 1765550557
+
+## Changes Deployed:
+- soft_constraints.py: SC1-SC6 implementation
+- constraint_relaxation.py: Relaxation logic & planner options
+- Framework documentation complete
+- Priority system (1-10 scale)
+- Coverage thresholds (80%, 85%, 95%)
+- Violation tracking & reporting
+
+## Modules Added:
+✅ SoftConstraints class
+✅ ConstraintRelaxationManager
+✅ RelaxationDecision tracking
+✅ PlannerFlexibilityOptions (A-D)
+✅ Comprehensive constraint validation
+
+## Next: Greedy Engine Integration
+- Merge soft constraints with existing solver
+- Implement relaxation checks
+- Add violation tracking to solver runs
+- Test with production data
