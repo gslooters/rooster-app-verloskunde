@@ -1,8 +1,8 @@
 # Rooster App - Next.js Frontend
-# DRAAD185 ROOT CAUSE FIX: Explicit Dockerfile to prevent Railpack ambiguity
-# Date: 2025-12-15T18:46:00Z
-# Issue: Railway auto-detection confused by both Node.js and Python artifacts
-# Solution: Explicit Dockerfile forces Node.js path, ignores solver/requirements.txt
+# DRAAD186 FIX #2: Dockerfile start command fix for Railway runtime
+# Date: 2025-12-15T19:20:00Z
+# Issue: ENV HOSTNAME variable interpreted as executable command
+# Solution: Use shell form CMD with proper environment variable injection
 
 FROM node:20-alpine
 
@@ -30,9 +30,11 @@ EXPOSE 3000
 HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})" || exit 1
 
-# Start server with verbose logging
-ENV HOSTNAME=0.0.0.0
-ENV PORT=3000
+# Environment variables
 ENV NODE_ENV=production
+ENV PORT=3000
 
-CMD ["node", ".next/standalone/server.js"]
+# FIX #2: Use shell form with proper hostname binding for Railway
+# This ensures HOSTNAME=0.0.0.0 is passed as environment variable,
+# not interpreted as a command. The shell form allows variable expansion.
+CMD ["/bin/sh", "-c", "node .next/standalone/server.js"]
