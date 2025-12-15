@@ -137,7 +137,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     console.log(`  - Time: ${solverResult.solve_time}s`);
 
     // DRAAD-191: Compute summary for GREEDY success/partial outcomes
-    let summary = null;
+    // Using Optie C: No explicit null initialization, declare only when assigned
+    let summary: SolveResponse['solver_result']['summary'];
     if (solverResult.status === 'success' || solverResult.status === 'partial') {
       const totalSlots = solverResult.total_required;
       const scheduledSlots = solverResult.assignments_created;
