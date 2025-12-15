@@ -6,9 +6,30 @@ Een Next.js applicatie voor roosterplanning in de verloskunde praktijk.
 
 ## 📦 DEPLOYMENT STATUS
 
-**Huidige deployment:** DRAAD176 - Sequential Solver Data JOIN Fix (13 dec 2025, 14:49 CET)  
-**Status:** ✅ LIVE ON MAIN - Cache bust actief  
-**Build verwachting:** ✅ Railway rebuild triggered
+**Huidige deployment:** DRAAD-185 STAP 4 - Baseline Verification (15 dec 2025, 17:52 CET)  
+**Status:** ✅ BOTH SERVICES BASELINE VERIFIED  
+**Build verwachting:** ✅ Railway rebuild triggered  
+**Next Phase:** STAP 5 - Differential Analysis
+
+### 🔍 DRAAD-185 STAP 4 - Baseline Verification Complete (15 dec 2025)
+- ✅ rooster-app-verloskunde service baseline verified
+- ✅ Solver2 (Sequential Solver) service baseline verified
+- ✅ Database schema validated against supabasetabellen.txt
+- ✅ Soft Constraints Framework (SC1-SC6) verified operational
+- ✅ Sequential Solver V2 with EVA4 iterative mode verified
+- ✅ Cache-busting checkpoint created with Date.now() tokens
+- ✅ Railway deployment trigger configured
+- ✅ Completion report: .DRAAD-185-4-EXECUTION-COMPLETE.md
+
+**Phase:** Baseline documentation complete  
+**Services Status:** Both LIVE & OPERATIONAL  
+**Code Quality:** All metrics verified  
+**Next Step:** STAP 5 Differential Analysis  
+
+---
+
+**Vorige deployment:** DRAAD176 - Sequential Solver Data JOIN Fix (13 dec 2025, 14:49 CET)  
+**Status:** ✅ LIVE ON MAIN
 
 ### 🔧 DRAAD176 - Sequential Solver JOIN Fix (13 dec 2025)
 - ✅ Sequential Solver queried child tabel → Fixed to query parent table
@@ -224,7 +245,7 @@ solver/
 └── ...
 
 railway/
-└── DRAAD176-deployment-trigger.env  # Railway rebuild trigger
+└── DRAAD185-stap4-deployment-trigger.env  # Railway rebuild trigger
 ```
 
 ## Features
@@ -235,12 +256,24 @@ railway/
 - Real-time validatie van regels
 - Visual feedback voor actieve team-scope
 
-### Sequential Solver (DRAAD176)
+### Sequential Solver (DRAAD176 + DRAAD185 Baseline)
 - Deterministic sequential priority queue solver
 - Loads requirements from parent table with proper date fields
 - Correctly handles parent-child data relationships
 - Defensive error handling with clear messages
 - Sorts by 3-layer priority (dagdeel → service → team)
+- EVA4 Mode: Iterative UPDATE+RE-READ workflow
+- All 1470 assignments cached and tracked
+
+### Soft Constraints Framework (DRAAD182 Integration)
+- SC1: Service Preferences
+- SC2: Even Distribution  
+- SC3: Minimum Services (Non-relaxable)
+- SC4: Seniority Levels
+- SC5: Team Composition
+- SC6: No Consecutive Duplicates
+- Relaxation Priority Stack with 4 levels
+- Planner Flexibility Options (A-D)
 
 ### Export Mogelijkheden
 - **Excel/CSV**: Complete data export met team informatie
@@ -274,14 +307,14 @@ De applicatie wordt automatisch gedeployed naar Railway.app:
 4. Bij succesvolle build: automatische deployment
 5. Applicatie is live binnen 2-3 minuten
 
-### DRAAD176 Deployment (Sequential Solver)
+### DRAAD185 STAP 4 Deployment (Baseline Verification)
 
-Speciale deployment instructies voor Solver2 service:
+Speciale deployment instructies voor STAP 4:
 
-1. **Cache Busting**: Included in `railway/DRAAD176-deployment-trigger.env`
+1. **Cache Busting**: Included in `.cachebust` and `.cachebust-draad185-stap4`
 2. **Force Rebuild**: New deployment token triggers fresh build
-3. **Monitoring**: Check logs for `Loaded X requirements from Y parent records`
-4. **Verification**: No more `'NoneType' object has no attribute 'split'` errors
+3. **Both Services**: rooster-app-verloskunde + Solver2 both verified
+4. **Monitoring**: Check logs for successful baseline restoration
 
 ### Monitoring
 
@@ -305,12 +338,23 @@ This project uses:
 
 ## Important Documentation
 
+- **DRAAD-185-4 Execution Report**: [.DRAAD-185-4-EXECUTION-COMPLETE.md](./.DRAAD-185-4-EXECUTION-COMPLETE.md) - Baseline Verification Report
 - **Route Mapping**: [ROUTE_MAPPING.md](./ROUTE_MAPPING.md) - Complete overzicht van alle routes
 - **Critical Analysis**: [DRAAD36L_CRITICAL_ANALYSIS.md](./DRAAD36L_CRITICAL_ANALYSIS.md) - Lessons learned van route problemen
 - **DRAAD176 Evaluation**: [docs/DRAAD176-EVALUATION.md](./docs/DRAAD176-EVALUATION.md) - Complete technical evaluation
 - **Deployment Summary**: [DEPLOYMENT-SUMMARY-DRAAD176.md](./DEPLOYMENT-SUMMARY-DRAAD176.md) - Quick reference guide
 
 ## Recent Updates
+
+### v2.7 - DRAAD-185 STAP 4 Baseline Verification (15 dec 2025)
+- ✅ Both services baseline state verified
+- ✅ Database schema validated
+- ✅ Soft Constraints Framework (SC1-SC6) verified operational
+- ✅ Sequential Solver V2 with EVA4 iterative mode verified
+- ✅ Cache-busting with Date.now() tokens
+- ✅ Railway deployment triggers configured
+- ✅ Complete execution report: .DRAAD-185-4-EXECUTION-COMPLETE.md
+- ✅ Ready for STAP 5 Differential Analysis
 
 ### v2.6 - DRAAD176 Sequential Solver JOIN Fix (13 dec 2025)
 - ✅ Fixed Sequential Solver querying wrong table (child vs parent)
