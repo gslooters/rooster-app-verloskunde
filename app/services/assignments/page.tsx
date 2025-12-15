@@ -13,19 +13,33 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ArrowLeft, RefreshCw, Check, FileDown } from 'lucide-react';
-import { 
-  getEmployeeServicesOverview, 
-  upsertEmployeeService,
-  getServiceIdByCode
-} from '@/lib/services/medewerker-diensten-supabase';
-import { supabase } from '@/lib/services/medewerker-diensten-supabase';
-import type { EmployeeServiceRow } from '@/lib/types/employee-services';
+
+// LAZY IMPORT: Delay Supabase import until client-side rendering
+// This prevents "supabaseUrl is required" error during static generation
+let getEmployeeServicesOverview: any;
+let upsertEmployeeService: any;
+let getServiceIdByCode: any;
+let supabase: any;
+let EmployeeServiceRow: any;
+
+const loadSupabaseModules = async () => {
+  if (!getEmployeeServicesOverview) {
+    const mod = await import('@/lib/services/medewerker-diensten-supabase');
+    getEmployeeServicesOverview = mod.getEmployeeServicesOverview;
+    upsertEmployeeService = mod.upsertEmployeeService;
+    getServiceIdByCode = mod.getServiceIdByCode;
+    supabase = mod.supabase;
+    
+    const typesModule = await import('@/lib/types/employee-services');
+    EmployeeServiceRow = typesModule.EmployeeServiceRow;
+  }
+};
 
 export default function DienstenToewijzingPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [exportingPDF, setExportingPDF] = useState(false);
-  const [data, setData] = useState<EmployeeServiceRow[]>([]);
+  const [data, setData] = useState<any[]>([]);
   const [serviceTypes, setServiceTypes] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -39,6 +53,9 @@ export default function DienstenToewijzingPage() {
     try {
       setLoading(true);
       setError(null);
+      
+      // Load Supabase modules FIRST, client-side only
+      await loadSupabaseModules();
       
       console.log('🔄 Starting loadData...');
       
@@ -54,7 +71,7 @@ export default function DienstenToewijzingPage() {
         throw servError;
       }
       
-      const serviceCodes = services?.map(s => s.code) || [];
+      const serviceCodes = services?.map((s: any) => s.code) || [];
       console.log('✅ Service types loaded:', serviceCodes);
       setServiceTypes(serviceCodes);
 
@@ -73,12 +90,13 @@ export default function DienstenToewijzingPage() {
 
   async function handleToggle(employeeId: string, serviceCode: string, currentEnabled: boolean) {
     try {
+      await loadSupabaseModules();
       const serviceId = await getServiceIdByCode(serviceCode);
       if (!serviceId) {
         throw new Error(`Dienst ${serviceCode} niet gevonden`);
       }
 
-      // Vind huidige count
+      // Vind huidge count
       const employee = data.find(e => e.employeeId === employeeId);
       const currentCount = employee?.services[serviceCode]?.count || 0;
 
@@ -129,6 +147,7 @@ export default function DienstenToewijzingPage() {
 
   async function handleCountChange(employeeId: string, serviceCode: string, newCount: number) {
     try {
+      await loadSupabaseModules();
       const serviceId = await getServiceIdByCode(serviceCode);
       if (!serviceId) throw new Error(`Dienst ${serviceCode} niet gevonden`);
 
