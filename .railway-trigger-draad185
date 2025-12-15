@@ -1,0 +1,20 @@
+# Railway Deployment Trigger - DRAAD-185-4
+# This file triggers a rebuild on Railway.app
+
+Timestamp: 2025-12-15T17:53:45Z
+Token: draad185_stap4_${Math.random().toString(36).substring(7)}
+Phase: baseline_verification_deployment
+Services: rooster-app-verloskunde,Solver2
+
+# Cache Bust Configuration
+Cache-Bust-ID: 1765893120000
+Deployment-Phase: stap4_baseline_verification
+
+# Trigger Metadata
+Triggered-By: DRAAD-185-4 STAP 4 Execution
+Execution-Date: 2025-12-15 17:53:45 CET
+Authorization: Auto-approved per DRAAD-185 plan
+
+# Both services baseline verified
+# Ready for Railway rebuild
+# Force rebuild enabled
