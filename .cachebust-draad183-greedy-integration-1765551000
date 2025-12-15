@@ -1,0 +1,31 @@
+DRAAD 183: GREEDY Integration - Cache Bust
+
+Date: 2025-12-15 14:41:56 UTC
+Timestamp: 1765551000
+Random: 82947159
+
+Deployed Components:
+✅ src/api/routes/roster_solve.py
+   - POST /api/roster/solve endpoint
+   - 6-step solver pipeline
+   - Batch assignment saving
+   - Bottleneck tracking
+
+✅ src/components/RoosterBewerking/AutoFillButton.tsx
+   - React button component
+   - Loading/success/error states
+   - Collapsible details panel
+   - Auto-refresh after solve
+
+✅ Cache busting files updated:
+   - .cachebust-draad181-greedy-engine
+   - .cachebust-draad182-soft-constraints
+   - .cachebust-draad183-greedy-integration-1765551000 (this)
+
+Action:
+- Full rebuild of Railway deployment
+- Clear all cached assets
+- Fresh load of solver components
+- Integration test ready
+
+Status: DEPLOY NOW
