@@ -1,17 +1,11 @@
 # Rooster App - Next.js Frontend
-# DRAAD186 FIX #2: Dockerfile start command fix for Railway runtime
-# Date: 2025-12-15T19:20:00Z
-# Issue: ENV HOSTNAME variable interpreted as executable command
-# Solution: Use shell form CMD with proper environment variable injection
+# DRAAD187: Stable baseline Dockerfile (reverted from DRAAD186 broken version)
+# Date: 2025-12-15T20:36:00Z
+# Status: Known working configuration
 
 FROM node:20-alpine
 
 WORKDIR /app
-
-# Build arguments for cache busting
-ARG BUILD_TIMESTAMP=unknown
-ARG BUILD_ID=unknown
-RUN echo "[Dockerfile] Build ID: ${BUILD_ID} Timestamp: ${BUILD_TIMESTAMP}"
 
 # Install dependencies
 COPY package*.json ./
@@ -34,7 +28,6 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# FIX #2: Use shell form with proper hostname binding for Railway
-# This ensures HOSTNAME=0.0.0.0 is passed as environment variable,
-# not interpreted as a command. The shell form allows variable expansion.
-CMD ["/bin/sh", "-c", "node .next/standalone/server.js"]
+# Start application
+# Simple command form - Railway will set HOSTNAME=0.0.0.0 via environment
+CMD node .next/standalone/server.js
