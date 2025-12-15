@@ -11,9 +11,9 @@
  * LOGIC:
  * 1. Call POST /api/roster/solve-greedy (GREEDY solver)
  * 2. Parse response.solver_result.status
- * 3. If FEASIBLE/SUCCESS: store summary → route to /rooster/[id]/feasible-summary
- * 4. If INFEASIBLE/PARTIAL: store bottleneck_report → route to /rooster/[id]/bottleneck-analysis
- * 5. If ERROR: show error message
+ * 3. If SUCCESS/PARTIAL: store summary → route to /rooster/[id]/feasible-summary
+ * 4. If FAILED: store bottleneck_report → route to /rooster/[id]/bottleneck-analysis
+ * 5. If ERROR/TIMEOUT: show error message
  */
 
 import type { SolverApiResponse } from '@/lib/types/solver';
@@ -59,9 +59,10 @@ export async function planRooster(config: PlanRoosterHandlerConfig): Promise<voi
     const solverStatus = apiResponse.solver_result.status;
     
     // DRAAD-191: Route based on GREEDY solver status
-    if (solverStatus === 'feasible' || solverStatus === 'optimal' || solverStatus === 'success' || solverStatus === 'partial') {
-      // ✅ FEASIBLE/SUCCESS PATH (GREEDY may return 'success' or 'partial')
-      console.log(`[DRAAD-191] planRooster: FEASIBLE outcome - showing summary`);
+    // GREEDY returns: 'success' | 'partial' | 'failed'
+    if (solverStatus === 'success' || solverStatus === 'partial') {
+      // ✅ SUCCESS/PARTIAL PATH (GREEDY found a feasible solution)
+      console.log(`[DRAAD-191] planRooster: FEASIBLE outcome (${solverStatus}) - showing summary`);
       
       // Store summary in sessionStorage (transient data)
       if (apiResponse.solver_result.summary) {
@@ -74,8 +75,8 @@ export async function planRooster(config: PlanRoosterHandlerConfig): Promise<voi
       // Route to summary screen
       router.push(`/rooster/${rosterId}/feasible-summary`);
       
-    } else if (solverStatus === 'infeasible' || solverStatus === 'failed') {
-      // ⛔ INFEASIBLE/FAILED PATH (GREEDY may return 'failed' instead of 'infeasible')
+    } else if (solverStatus === 'failed') {
+      // ⛔ FAILED PATH (GREEDY could not satisfy constraints)
       console.log(`[DRAAD-191] planRooster: INFEASIBLE outcome - showing bottleneck analysis`);
       
       // Store bottleneck report in sessionStorage (transient data)
@@ -89,9 +90,11 @@ export async function planRooster(config: PlanRoosterHandlerConfig): Promise<voi
       // Route to bottleneck analysis screen
       router.push(`/rooster/${rosterId}/bottleneck-analysis`);
       
-    } else if (solverStatus === 'timeout') {
+    } else if (solverStatus === 'error' || solverStatus === 'timeout') {
       throw new Error(
-        'Solver timeout: de berekening duurde te lang. Probeer het later opnieuw of vereenvoudig het probleem.'
+        solverStatus === 'timeout' 
+          ? 'Solver timeout: de berekening duurde te lang. Probeer het later opnieuw of vereenvoudig het probleem.'
+          : 'Solver fout: er is een technische fout opgetreden.'
       );
       
     } else {
