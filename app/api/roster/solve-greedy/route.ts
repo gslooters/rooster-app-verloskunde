@@ -3,6 +3,7 @@
  * 
  * DRAAD 185: GREEDY ENGINE INTEGRATION
  * Replaces external Solver2 (OR-Tools) with local GREEDY implementation
+ * DRAAD-191: Type Fix - Aligned GREEDY status responses with handler expectations
  * 
  * Features:
  * - 5-phase GREEDY algorithm (lock pre-planned, allocate, analyze, save, return)
@@ -28,7 +29,7 @@ interface SolveResponse {
   roster_id: string;
   solver: 'GREEDY';
   solver_result: {
-    status: 'success' | 'partial' | 'failed';
+    status: 'success' | 'partial' | 'failed' | 'error' | 'timeout';
     assignments_created: number;
     total_required: number;
     coverage: number;
@@ -46,6 +47,11 @@ interface SolveResponse {
     pre_planned_count: number;
     greedy_count: number;
     message: string;
+    summary?: {
+      total_services_scheduled: number;
+      coverage_percentage: number;
+      unfilled_slots: number;
+    };
   };
   total_time_ms: number;
 }
@@ -130,6 +136,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     console.log(`  - Assignments: ${solverResult.assignments_created}/${solverResult.total_required}`);
     console.log(`  - Time: ${solverResult.solve_time}s`);
 
+    // DRAAD-191: Compute summary for GREEDY success/partial outcomes
+    let summary = null;
+    if (solverResult.status === 'success' || solverResult.status === 'partial') {
+      const totalSlots = solverResult.total_required;
+      const scheduledSlots = solverResult.assignments_created;
+      const unfilledSlots = Math.max(0, totalSlots - scheduledSlots);
+      const coveragePercentage = totalSlots > 0 ? Math.round((scheduledSlots / totalSlots) * 100) : 0;
+
+      summary = {
+        total_services_scheduled: scheduledSlots,
+        coverage_percentage: coveragePercentage,
+        unfilled_slots: unfilledSlots,
+      };
+
+      console.log(`[DRAAD185-GREEDY] Summary generated: ${scheduledSlots}/${totalSlots} (${coveragePercentage}%)`);
+    }
+
     // If GREEDY succeeded, save solver run metadata
     if (solverResult.status === 'success' || solverResult.status === 'partial') {
       const { error: metadataError } = await supabase
@@ -179,12 +202,46 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       if (!updateError) {
         console.log(`[DRAAD185-GREEDY] Roster status updated: draft → in_progress`);
       }
+    } else if (solverResult.status === 'failed') {
+      // DRAAD-191: Save failed solver run for bottleneck analysis
+      const { error: metadataError } = await supabase
+        .from('solver_runs')
+        .insert([
+          {
+            id: solverRunId,
+            roster_id,
+            status: 'completed',
+            solver_status: 'failed',
+            solve_time: solverResult.solve_time,
+            solve_time_seconds: solverResult.solve_time,
+            coverage_rate: solverResult.coverage / 100,
+            total_assignments: solverResult.assignments_created,
+            constraint_violations: solverResult.bottlenecks,
+            solver_config: {
+              algorithm: 'GREEDY',
+              version: 'DRAAD185',
+            },
+            metadata: {
+              pre_planned_count: solverResult.pre_planned_count,
+              greedy_count: solverResult.greedy_count,
+              bottleneck_count: solverResult.bottlenecks.length,
+              reason: solverResult.message,
+            },
+            created_at: executionTimestamp,
+            started_at: executionTimestamp,
+            completed_at: new Date().toISOString(),
+          },
+        ]);
+
+      if (metadataError) {
+        console.warn(`[DRAAD185-GREEDY] Failed to save failed solver run: ${metadataError.message}`);
+      }
     }
 
     const totalTime = Date.now() - startTime;
 
     const response: SolveResponse = {
-      success: solverResult.status !== 'failed',
+      success: solverResult.status !== 'failed' && solverResult.status !== 'error',
       roster_id,
       solver: 'GREEDY',
       solver_result: {
@@ -197,6 +254,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         pre_planned_count: solverResult.pre_planned_count,
         greedy_count: solverResult.greedy_count,
         message: solverResult.message,
+        summary, // DRAAD-191: Include summary for feasible outcomes
       },
       total_time_ms: totalTime,
     };
