@@ -1,0 +1,15 @@
+DRAAD192 DEPLOYMENT TRIGGER
+============================
+
+Build triggered: 2025-12-16 00:21:00 UTC
+Branch: fix/solver2-migration
+Cache-Bust ID: DRAAD192-20251216-00210000
+Random Seed: 87462918346
+
+SOLVER2 MIGRATION ACTIVE:
+- Endpoint: SOLVER2_URL (external)
+- Timeout: 120 seconds
+- Retry: 3 attempts
+- Status: READY FOR DEPLOYMENT
+
+This file triggers Railway redeploy to ensure latest code is deployed.
