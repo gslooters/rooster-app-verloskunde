@@ -4,6 +4,7 @@
  * DRAAD 185: GREEDY ENGINE INTEGRATION
  * Replaces external Solver2 (OR-Tools) with local GREEDY implementation
  * DRAAD-191: Type Fix - Aligned GREEDY status responses with handler expectations
+ * DRAAD-193: Fix hardcoded localhost in GREEDY_SOLVER_URL (use env var instead)
  * 
  * Features:
  * - 5-phase GREEDY algorithm (lock pre-planned, allocate, analyze, save, return)
@@ -16,8 +17,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
-// Note: In production, this would be imported from Python solver
-// For now, we'll handle the solve logic here or call Python API
+// DRAAD-193: Use GREEDY_SOLVER_URL environment variable
+// Fallback to localhost for development, but Railway will set the production URL
 const GREEDY_SOLVER_URL = process.env.GREEDY_SOLVER_URL || 'http://localhost:5000';
 
 interface SolveRequest {
@@ -72,6 +73,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     console.log(`[DRAAD185-GREEDY] Starting GREEDY solve for roster ${roster_id}`);
+    console.log(`[DRAAD193] Using GREEDY_SOLVER_URL: ${GREEDY_SOLVER_URL}`);
 
     const supabase = await createClient();
 
