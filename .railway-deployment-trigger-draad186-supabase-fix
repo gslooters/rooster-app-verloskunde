@@ -1,0 +1,14 @@
+DRAAD186 - Supabase Environment Variable Fix
+Timestamp: 2025-12-15T20:00:36Z
+Commit: d7cea82f0466fc5dd7d69adde7af37f10e18c47b
+
+FIXES:
+1. lib/supabase.ts - Removed placeholder fallback URLs
+2. .env.local - Added proper environment variable instructions
+3. Force Railway rebuild with correct NEXT_PUBLIC_SUPABASE_URL
+
+EXPECTED BEHAVIOR AFTER DEPLOYMENT:
+✅ Supabase URL resolves to: https://rzecogncpkjfytebfkni.supabase.co
+✅ No more "placeholder.supabase.co" errors
+✅ Rooster creation (Wizard) will work properly
+✅ All database operations functional
