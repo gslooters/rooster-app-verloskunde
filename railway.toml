@@ -1,10 +1,10 @@
 [build]
-# Build command - Railway injects env vars BEFORE running this
+# Clean build command
 command = "npm ci && npm run build"
 
 [deploy]
-# Standalone server path
-startCommand = "node .next/standalone/server.js"
+# Correct standalone server path
+startCommand = "HOSTNAME=0.0.0.0 PORT=$PORT node .next/standalone/server.js"
 
 # Health check
 healthcheckPath = "/api/health"
@@ -14,9 +14,7 @@ healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
-# DRAAD186: Railway environment variables injected at build time
-# Date: 2025-12-15T20:04:00Z
-# CRITICAL: Ensure these environment variables are set in Railway:
-#   - NEXT_PUBLIC_SUPABASE_URL
-#   - NEXT_PUBLIC_SUPABASE_ANON_KEY
-# Cache-bust: 1734278674000
+# Cache-busting deployment trigger: 1734283963
+# DRAAD182: Fixed AutoFillButton.tsx TypeScript syntax error (removed invalid docstring)
+# Force rebuild and deployment on Railway
+# Updated: 2025-12-15T14:46:03Z
