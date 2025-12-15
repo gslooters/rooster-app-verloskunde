@@ -3,6 +3,7 @@
  * DRAAD125: HOTFIX - Complete type definitions for route.ts compatibility
  * DRAAD125B: Missing Types - BottleneckItem + BottleneckSuggestion + SolverApiResponse
  * DRAAD125C: FeasibleSummary Type Addition - fixes TypeScript compilation error
+ * DRAAD-191: GREEDY Solver Type Update - Changed status types for GREEDY engine
  * Phase 3: TypeScript Types voor Solver & Roster Assignment
  */
 
@@ -115,7 +116,7 @@ export interface SolverRun {
   started_at: string; // ISO 8601
   completed_at?: string;
   solve_time_seconds?: number;
-  solver_status: 'optimal' | 'feasible' | 'infeasible' | 'timeout' | 'error';
+  solver_status: 'optimal' | 'feasible' | 'infeasible' | 'timeout' | 'error' | 'success' | 'partial';
   total_assignments: number;
   metadata?: Record<string, any>;
   created_at: string;
@@ -346,11 +347,20 @@ export interface BottleneckReport {
 }
 
 /**
- * Solve Response (Output from ORT)
+ * DRAAD-191: Solve Response (Output from GREEDY or ORT)
+ * 
+ * Updated to support both:
+ * - ORT legacy: status = 'optimal' | 'feasible' | 'infeasible' | 'timeout' | 'error'
+ * - GREEDY: status = 'success' | 'partial' | 'failed'
+ * 
+ * NOTE: For GREEDY solver, the status values are:
+ *   - 'success' = Feasible solution found with high coverage
+ *   - 'partial' = Feasible solution found with lower coverage  
+ *   - 'failed' = Infeasible (cannot satisfy constraints)
  */
 export interface SolveResponse {
   success?: boolean;
-  status: 'optimal' | 'feasible' | 'infeasible' | 'timeout' | 'error';
+  status: 'optimal' | 'feasible' | 'infeasible' | 'timeout' | 'error' | 'success' | 'partial' | 'failed';
   assignments: Assignment[];
   total_assignments: number;
   total_slots?: number;
@@ -363,7 +373,7 @@ export interface SolveResponse {
   suggestions?: SolverSuggestion[];
 
   // Legacy fields for backward compat
-  solver_status?: 'optimal' | 'feasible' | 'infeasible' | 'timeout' | 'error';
+  solver_status?: 'optimal' | 'feasible' | 'infeasible' | 'timeout' | 'error' | 'success' | 'partial' | 'failed';
   metadata?: {
     assignments_fixed: number;
     assignments_protected: number;
@@ -373,7 +383,9 @@ export interface SolveResponse {
 }
 
 /**
- * DRAAD125B: SolverApiResponse - Wrapper response from /api/roster/solve
+ * DRAAD-191: SolverApiResponse - Wrapper response from /api/roster/solve or /api/roster/solve-greedy
+ * 
+ * Unified interface for both ORT and GREEDY solver responses
  * The API endpoint wraps SolveResponse with metadata and conditionally includes summary
  */
 export interface SolverApiResponse {
@@ -394,6 +406,7 @@ export interface SolverApiResponse {
   draad121?: Record<string, any>;
   draad122?: Record<string, any>;
   draad125a?: Record<string, any>;
+  draad191?: Record<string, any>; // GREEDY solver metadata
   error?: string;
   total_time_ms?: number;
 }
