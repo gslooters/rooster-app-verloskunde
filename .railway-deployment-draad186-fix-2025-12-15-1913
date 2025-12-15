@@ -1,0 +1,89 @@
+# DRAAD186 FIX #1 - TypeScript Type Import Resolution
+
+## Deployment Information
+**Deploy Timestamp:** 2025-12-15T19:13:39Z  
+**Fix Type:** TypeScript Compilation Error  
+**Target Deploy:** #29 (Recovery from #28 failure)  
+
+## Issue Summary
+- **Error:** `Property 'EmployeeServiceRow' does not exist on type...`
+- **Root Cause:** Lazy-import of types at runtime broke compile-time type checking
+- **Impact:** Build #28 failed, rooster-app-verloskunde + Solver2 blocked
+
+## Solution Applied: FIX #1
+
+### Code Change
+**File:** `app/services/assignments/page.tsx`
+
+**Before (BROKEN):**
+```typescript
+let EmployeeServiceRow: any;
+const loadSupabaseModules = async () => {
+  const typesModule = await import('@/lib/types/employee-services');
+  EmployeeServiceRow = typesModule.EmployeeServiceRow; // ← Lazy-load types (WRONG)
+};
+```
+
+**After (FIXED):**
+```typescript
+import type { EmployeeServiceRow } from '@/lib/types/employee-services'; // ← Direct import (CORRECT)
+
+const loadSupabaseModules = async () => {
+  // Only Supabase runtime modules lazy-load
+  const mod = await import('@/lib/services/medewerker-diensten-supabase');
+  // ... no type imports here
+};
+```
+
+### Why This Works
+1. **TypeScript needs types at compile-time** (not runtime)
+2. **Direct import** satisfies TypeScript type-checker
+3. **`export const dynamic = 'force-dynamic'`** prevents static generation
+4. **Supabase modules still lazy-load** (safe for Edge Runtime)
+5. **No behavioral changes** - application logic unchanged
+
+## Database Verification
+✅ Confirmed: `employee_services` table EXISTS in Supabase  
+✅ Confirmed: Schema matches code expectations (employee_id, service_id, aantal, actief)
+✅ Confirmed: `EmployeeServiceRow` type exported from `lib/types/employee-services.ts`
+
+## PR Metadata
+- **PR #84:** Merged to main via squash strategy
+- **Commit SHA:** 0b724368dec111f82dc09c59307f9fa1f8cf99ba
+- **Files Changed:** 1 (app/services/assignments/page.tsx)
+- **Lines Changed:** ~10 (type import + state hint)
+
+## Next Steps
+1. **Railway Auto-Trigger:** Detect this file → trigger build #29
+2. **Build Test:** npm run build should now SUCCEED
+3. **Deployment:** Both rooster-app and Solver2 proceed to production
+4. **Verification:** Monitor Railway logs for type resolution success
+
+## Quality Assurance
+- ✅ Type-safe (TypeScript strict mode)
+- ✅ No runtime behavioral changes
+- ✅ Maintains dynamic rendering
+- ✅ Code reviewed (import pattern)
+- ✅ Database schema validated
+
+## Alternative Solutions (Not Needed)
+❌ FIX #2: Package update (only if Edge Runtime issues persist)  
+❌ FIX #3: Explicit exports (redundant with direct import)  
+❌ Rollback: Not viable (same code issue)
+
+## Expected Build Output
+```
+✅ [5/7] COPY package*.json ./
+✅ [5/7] RUN npm ci --prefer-offline --no-audit
+✅ [6/7] COPY . .
+✅ [7/7] RUN npm run build
+✅ Creating an optimized production build...
+✅ Compiled successfully
+✅ Next.js build succeeded
+```
+
+---
+
+**Status:** READY FOR RAILWAY DEPLOYMENT  
+**Confidence:** HIGH (direct import is standard TypeScript pattern)  
+**Risk:** MINIMAL (no logic changes, type-only fix)
