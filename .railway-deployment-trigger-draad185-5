@@ -1,0 +1,90 @@
+# RAILWAY DEPLOYMENT TRIGGER - DRAAD185-5
+# Purpose: Force Railway to initiate deployment
+# Mechanism: Change this file to trigger Railway webhook
+# Timestamp: 2025-12-15T18:46:00Z Unix: 1734369960
+# Random ID: 9847-draad185-5-root-cause-fix
+#
+# DEPLOYMENT INFORMATION
+# ======================
+# Service: rooster-app-verloskunde (main Next.js frontend)
+# Trigger Type: FULL_REBUILD
+# Build System: Explicit Dockerfile
+# Expected Duration: 3-5 minutes
+# Health Check: /api/health
+# Timeout: 120 seconds (increased from 100)
+#
+# WHAT CHANGED
+# ============
+# 1. Dockerfile (NEW) - Explicit Node.js 20 Alpine container
+#    - Prevents Railpack from detecting Python artifacts
+#    - Explicitly runs npm ci && npm run build
+#    - Includes proper health check endpoint
+#
+# 2. railway.toml - Updated configuration
+#    - healthcheckTimeout: 100s → 120s
+#    - restartPolicyMaxRetries: 10 → 15
+#    - Build command with --prefer-offline --no-audit flags
+#
+# 3. .railwayignore - Ensured solver/ is excluded
+#    - Prevents Python detection
+#    - Reduces buildcontext size
+#
+# WHY THIS WORKS
+# ==============
+# Previous Failure Sequence:
+# 1. Railway detects package.json (Node.js) ✓
+# 2. Railway detects solver/requirements.txt (Python) ✓
+# 3. Auto-detection chooses Python (priority issue)
+# 4. Runs: python -m venv && pip install -r requirements.txt
+# 5. Tries to execute: npm ci && npm run build (FAILS - no npm in Python env)
+# 6. Falls back to: node .next/standalone/server.js (NOT BUILT)
+# 7. Health check timeout → Service unavailable
+# 8. Deployment rolled back
+#
+# New Fix Sequence:
+# 1. Explicit Dockerfile found
+# 2. Railway skips auto-detection
+# 3. Uses Dockerfile with Node.js 20 Alpine
+# 4. Runs: npm ci --prefer-offline --no-audit
+# 5. Runs: npm run build (Next.js compilation)
+# 6. Builds: .next/standalone/ directory
+# 7. Starts: node .next/standalone/server.js
+# 8. Health check succeeds → Service healthy
+# 9. Deployment completes
+#
+# VERIFICATION
+# ============
+# After deployment, check these signs of success:
+# ✓ Build logs show: "Using explicit Dockerfile"
+# ✓ Build logs show: "npm ci" execution
+# ✓ Build logs show: "npm run build" completion
+# ✓ Startup logs show: "node .next/standalone/server.js" running
+# ✓ Health check logs show: "/api/health" returning 200
+# ✓ No logs containing: "Python", "pydantic", "ortools"
+# ✓ No logs containing: "service unavailable"
+# ✓ No logs containing: "Healthcheck failed"
+# ✓ Replicas show: "healthy" status
+#
+# ROLLBACK PROCEDURE (if needed)
+# ==============================
+# 1. Revert Dockerfile deletion
+# 2. Check railway.toml reverted to previous version
+# 3. Trigger new deployment
+# 4. Monitor health status
+#
+# SUPPORT INFORMATION
+# ===================
+# Issue Type: Build System Auto-detection
+# Root Cause: Mixed Node.js + Python artifacts
+# Severity: CRITICAL (4 failed deployments)
+# Solution Category: Infrastructure Fix
+# Estimated Time to Resolution: 5 minutes
+#
+# Contact: For issues during deployment, check:
+# - Railway dashboard logs
+# - GitHub Actions (if connected)
+# - Docker build output
+
+DEPLOYMENT_INITIATED=true
+TRIGGER_TIME=2025-12-15T18:46:00Z
+BUILD_ID=draad185-5-explicit-dockerfile
