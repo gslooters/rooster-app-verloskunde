@@ -1,0 +1,15 @@
+DRAAD186: Railway environment variables fix
+Date: 2025-12-15T20:05:30Z
+Status: Ready for build with proper Supabase env vars
+
+Fixed issues:
+1. Added ARG to Dockerfile for build-time env vars
+2. Created .env.production template
+3. Simplified railway.toml config
+4. lib/supabase.ts will show clear errors if vars missing
+
+Railway MUST HAVE these variables set:
+- NEXT_PUBLIC_SUPABASE_URL=https://rzecogncpkjfytebfkni.supabase.co
+- NEXT_PUBLIC_SUPABASE_ANON_KEY=(from Supabase dashboard)
+
+Timestamp: 1734278730000
