@@ -3,6 +3,7 @@
  * 
  * DRAAD192: SOLVER2 ENDPOINT MIGRATION
  * Migrates from local SOLVER_SERVICE_URL to external Solver2 API
+ * DRAAD193: Clarify env var usage: SOLVER2_URL (Railway) with localhost fallback for dev
  * Features:
  * - 120s timeout minimum handling
  * - Robust error reporting
@@ -57,6 +58,7 @@ import type {
 } from '@/lib/types/solver';
 
 // DRAAD192: Solver2 endpoint configuration
+// DRAAD193: Use SOLVER2_URL env var (set on Railway), fallback to localhost for local development
 const SOLVER2_URL = process.env.SOLVER2_URL || 'http://localhost:8000';
 const SOLVER_TIMEOUT = 120000; // 120 seconds minimum per DRAAD192 requirement
 const SOLVER_RETRY_ATTEMPTS = 3;
@@ -90,7 +92,7 @@ interface DuplicateAnalysis {
   totalCount: number;
   uniqueCount: number;
   duplicateCount: number;
-  duplicateKeys: Array<{key: string; count: number; indices: number[]}>;
+  duplicateKeys: Array<{key: string; count: number; indices: number[]}>;  
 }
 
 const logDuplicates = (assignments: any[], label: string): DuplicateAnalysis => {
@@ -393,6 +395,7 @@ export async function POST(request: NextRequest) {
     
     console.log(`[Solver API] Start solve voor roster ${roster_id}`);
     console.log(`[DRAAD192] Solver2 migration active`);
+    console.log(`[DRAAD193] SOLVER2_URL environment variable: ${SOLVER2_URL}`);
     console.log(`[DRAAD192] Cache bust: ${draad192CacheBustId}`);
     console.log(`[DRAAD192] Solver endpoint: ${SOLVER2_URL}`);
     console.log(`[DRAAD192] Timeout: ${SOLVER_TIMEOUT}ms (${SOLVER_TIMEOUT / 1000}s)`);
