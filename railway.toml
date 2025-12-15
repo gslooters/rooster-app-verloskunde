@@ -1,6 +1,10 @@
 [build]
-# Clean build command
+# Build with environment variable injection
 command = "npm ci && npm run build"
+
+# CRITICAL: Pass environment variables to Docker build process
+# Railway will inject NEXT_PUBLIC_* from service environment into these build args
+buildCommand = "docker build --build-arg NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY -t app ."
 
 [deploy]
 # Standalone server path
@@ -14,8 +18,8 @@ healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
-# DRAAD187: Baseline configuration restored
-# Reverted from DRAAD186 experimental changes
-# Date: 2025-12-15T20:37:00Z
-# Status: Known working configuration
-# Cache-bust: 1734286620000
+# DRAAD186: Fixed environment variable injection for Docker build
+# Date: 2025-12-15T20:04:00Z
+# Issue: NEXT_PUBLIC_* variables must be passed as build args to Docker
+# Solution: Added buildCommand with explicit build args from environment
+# Cache-bust: 1734278674000
