@@ -1,0 +1,53 @@
+# Cache-Busting File for DRAAD185-6: Build-Time Environment Variables Fix
+#
+# Timestamp: 2025-12-15T18:06:00Z
+# Build Timestamp: 1734370020
+# Deploy Trigger: 2025-12-15 18:06 UTC
+#
+# PURPOSE:
+# This file forces Railway to perform a clean rebuild by changing the directory
+# hash. Essential after Dockerfile changes that affect the build process.
+#
+# WHAT WAS FIXED IN DRAAD185-6:
+# ✅ Multi-stage Dockerfile with build-time ARG for NEXT_PUBLIC_SUPABASE_URL
+# ✅ Multi-stage Dockerfile with build-time ARG for NEXT_PUBLIC_SUPABASE_ANON_KEY  
+# ✅ Dummy values for build-time (https://dummy.supabase.co, dummy-key-for-build-time)
+# ✅ Runtime stage copies built app; Railway secrets inject real values at runtime
+# ✅ Extended health check timeout to 150s for slow builds
+# ✅ Marked database-dependent pages with 'export const dynamic = "force-dynamic"'
+# ✅ Documentation of build-time vs runtime environment variable handling
+#
+# HOW IT WORKS:
+# 1. Builder stage: Uses ARG defaults OR Railway-provided env vars during npm run build
+# 2. Static generation: Pages skip static generation if marked with 'force-dynamic'
+# 3. Runtime stage: Copies .next/standalone and executes server.js
+# 4. At startup: Railway secrets are loaded into process.env
+# 5. Client pages: Can access NEXT_PUBLIC_* vars from process.env at request time
+#
+# EXPECTED BEHAVIOR AFTER DEPLOYMENT:
+# ✓ npm ci completes successfully
+# ✓ npm run build completes (build-time env vars available)
+# ✓ Static pages that need database access are skipped (marked force-dynamic)
+# ✓ .next/standalone/server.js starts and becomes healthy
+# ✓ /api/health endpoint returns 200 OK
+# ✓ Client pages load with real Supabase env vars from Railway secrets
+# ✓ No more "Cannot find module" or "Unexpected end of JSON input" errors
+#
+# VERIFICATION CHECKLIST AFTER DEPLOYMENT:
+# - [ ] Deployment completes without "build failed" errors
+# - [ ] Health check passes (status should show healthy)
+# - [ ] /api/health returns HTTP 200
+# - [ ] Pages load without Supabase connection errors
+# - [ ] Supabase queries work (data loads correctly)
+# - [ ] No console errors about missing env variables
+#
+# ROLLBACK PROCEDURE (if needed):
+# 1. Revert to previous Dockerfile (remove multi-stage, ARG)
+# 2. Remove 'export const dynamic' markers from pages
+# 3. Trigger new deployment with cache bust
+# 4. Monitor health check
+
+CACHE_BUST_ID=draad185-6-build-env-fix
+TIMESTAMP=2025-12-15T18:06:00Z
+BUILD_ID=1734370020
+STATUS=ready-for-deployment
