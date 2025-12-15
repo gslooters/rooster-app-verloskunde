@@ -1,0 +1,285 @@
+DRAAD 190: SMART GREEDY ALLOCATION - IMPLEMENTATION CONTEXT
+============================================================
+
+STATUS: IMPLEMENTATION COMPLETE ✅
+DATE: 2025-12-15 22:08 UTC
+COMMIT: 1fe3e074be4cc8e4437bbc6345f9a3722e9867a2
+DOCUMENTATION: .DRAAD-190-SMART-GREEDY-IMPLEMENTATION.md
+
+
+CODEBASE ANALYSE FINDINGS:
+==========================
+
+✅ Located solveRoster implementation at: src/solver/greedy_engine.py
+   - Class: GreedyRosteringEngine (now 619 lines after DRAAD 190)
+   - Method: _greedy_allocate() for main allocation loop
+   - Method: _sort_eligible_by_fairness() [NEW - DRAAD 190]
+
+✅ Current sorting method (BEFORE DRAAD 190):
+   Old: fairness_score = 1.0 / (emp_shift_count + 1)
+   Sort: by score DESC (higher = lower shifts = priority)
+   Issue: No tie-breaker when two employees have same remaining
+
+✅ Where shifts_assigned counted:
+   - employee_shift_count[emp_id] in __init__()
+   - Incremented in _lock_pre_planned() (line ~367)
+   - Incremented in _greedy_allocate() (line ~433)
+   - Used for fairness calculation in _sort_eligible_by_fairness() (line ~537)
+
+✅ Database queries for availability:
+   - supabase.table('period_employee_staffing') → target_shifts
+   - supabase.table('roster_period_staffing_dagdelen') → requirements
+   - supabase.table('roster_assignments') → current assignments
+   - supabase.table('medewerker_unavailability') → blackout dates [via constraint_checker]
+
+✅ Constraint checker location:
+   - File: src/solver/constraint_checker.py
+   - Method: check_all_constraints() for HC1-HC6 validation
+   - Returns: (passed: bool, failed_constraint: str)
+
+
+DESIGN DECISION 1: Tie-breaker Implementation
+==============================================
+
+DECISION: In-memory Map during solve session
+
+WHY THIS CHOICE:
+1. Simplicity: No database round-trips needed
+2. Performance: O(1) lookup vs database query
+3. Scope: Only relevant for THIS rostering session
+4. Cleanup: Auto-cleared when solve() completes
+
+IMPLEMENTATION:
+- Data structure: Dict[str, int]
+- Key: employee_id
+- Value: count of shifts assigned in current run
+- Initialization: All zeros in __init()
+- Increment: After each greedy assignment in _greedy_allocate()
+- Usage: In _sort_eligible_by_fairness() as secondary sort key
+
+ALTERNATIVES CONSIDERED:
+- Database column: Would require schema change + more complexity
+- Session variable: Global state - harder to test
+- Query-based: Would be slow for every slot
+
+
+DESIGN DECISION 2: Fair Distribution Algorithm
+===============================================
+
+ALGORITHM: Smart Greedy Allocation with Two-Level Sort
+
+LEVEL 1 - PRIMARY SORT: shifts_remaining (ascending)
+  - Calculates: target - current_assigned
+  - Sorts: ascending (MOST remaining → HIGHEST priority)
+  - Logic: Employee with more work to do gets selected first
+  - Effect: Gradually equalizes loads across team
+
+LEVEL 2 - TIE-BREAKER: shifts_in_current_run (ascending)
+  - When: Two employees have same shifts_remaining
+  - Sorts: ascending (EARLIER selected → LOWER priority next time)
+  - Logic: Share the load - don't pick same person twice
+  - Effect: True fairness without bias
+
+EXAMPLE EXECUTION (3 employees: Karin=4, Lizette=5, Paula=6 remaining):
+
+  Slot 1:
+    Eligible: [(Karin,4,0), (Lizette,5,0), (Paula,6,0)]
+    Sort: Paula(6) > Lizette(5) > Karin(4) ← highest remaining first
+    Select: Paula
+    Update: Paula.remaining=5, Paula.run_count=1
+
+  Slot 2:
+    Eligible: [(Karin,4,0), (Lizette,5,0), (Paula,5,1)]
+    Sort: Lizette(5,0) < Paula(5,1) ← same remaining, earlier selected gets lower priority
+    Sort: Karin(4) < Lizette(5,0) ← lower remaining gets lower priority
+    Select: Karin? NO - Paula/Lizette higher priority
+    Select: Lizette (same as Paula remaining, but not selected in run yet)
+    Update: Lizette.remaining=4, Lizette.run_count=1
+
+  Slot 3:
+    Eligible: [(Paula,5,1), (Lizette,4,1), (Karin,4,0)]
+    Sort: Karin(4,0) < Lizette(4,1) < Paula(5,1)
+    Select: Karin (same remaining as Lizette, but not selected in run yet)
+    Update: Karin.remaining=3, Karin.run_count=1
+
+  FINAL: Paula=5, Lizette=4, Karin=3
+  VARIANCE: ~1.3 shifts (FAIR!) ✅
+
+
+CODE CHANGES SUMMARY
+====================
+
+FILE: src/solver/greedy_engine.py
+SHA BEFORE: a4bf329a8d245bba73b05efdd286ecfb70932ba0
+SHA AFTER: cd83b9001dd83669849608f530edd19d3abf798c
+
+ADDED:
+1. In __init__():
+   - self.shifts_assigned_in_current_run: Dict[str, int] = {}
+   - Log message: "DRAAD 190 Smart Greedy Allocation enabled"
+
+2. In _load_employees():
+   - self.shifts_assigned_in_current_run[row['id']] = 0
+
+3. In _lock_pre_planned():
+   - Increment shifts_assigned_in_current_run for each pre-planned
+
+4. NEW METHOD _sort_eligible_by_fairness():
+   - Replaces _find_eligible()
+   - Implements two-level sort
+   - 150+ lines with extensive documentation
+
+5. In _greedy_allocate():
+   - Replaced: _find_eligible() → _sort_eligible_by_fairness()
+   - Added: Increment shifts_assigned_in_current_run after assignment
+
+MODIFIED:
+- solve() log message includes "DRAAD 190"
+- Algorithm docstring updated with DRAAD 190 explanation
+
+
+TEST EXECUTION CHECKLIST
+========================
+
+TEST 1: Karin(4), Lizette(5), Paula(6) - Three Unequal
+  Input: target_shifts=[4,5,6], slots=3
+  Expected: All approximately 4-5 shifts
+  Status: READY TO TEST ✅
+
+TEST 2: Two Equal + Tie-Breaker  
+  Input: Karin(4,run_0), Paula(4,run_1), slot=1
+  Expected: Karin selected (not selected yet in run)
+  Status: READY TO TEST ✅
+
+TEST 3: Constraint Blocking
+  Input: All employees blackout except one
+  Expected: Only available employee gets slot
+  Status: READY TO TEST ✅
+
+TEST 4: Performance (100 employees, 500 slots)
+  Expected: Solve < 5 seconds
+  Status: READY TO TEST ✅
+
+
+DEPLOYMENT INSTRUCTIONS
+=======================
+
+IMEDIATE (no changes to config):
+1. Main branch already has code (commit 1fe3e074)
+2. Railway detects change → auto-rebuild
+3. Solver2 service restarts with DRAAD 190 enabled
+
+VERIFICATION:
+1. Check Railway logs: "DRAAD 190 Smart Greedy Allocation enabled"
+2. Call POST /api/roster/solve-greedy
+3. Verify: solver_result.message contains "DRAAD 190 SMART GREEDY"
+4. Check roster_assignments: Fair distribution in results
+
+ROLLBACK (if needed):
+1. Revert commit: git revert 1fe3e074
+2. Push main
+3. Railway auto-rebuild with old code
+
+
+RELATED CONTEXT
+===============
+
+DRAD 189A CONCLUSION:
+✅ HC6 Two-Pass algorithm DEFERRED (backlog)
+✅ Current "Most-to-do-first" logic KEPT (this is DRAAD 190 implementation)
+✅ Greedy Engine v0.2 baseline VERIFIED
+
+DRAD 181 GREEDY ENGINE:
+- 5-phase algorithm (lock, allocate, analyze, save, return)
+- 6 hard constraints (HC1-HC6)
+- 2-5 second solve time
+- 98%+ coverage target
+
+DRAD 190 ENHANCEMENT:
+- Smart allocation (fair distribution)
+- Two-level fairness sort
+- Tie-breaker for ties
+- Deterministic, transparent results
+
+
+KNOWN LIMITATIONS
+=================
+
+1. SESSION-SCOPED ONLY:
+   - shifts_assigned_in_current_run clears when solve() ends
+   - Next roster run starts fresh with zeros
+   - This is INTENTIONAL (fairness per-run, not global)
+
+2. CONSTRAINT-AWARE ONLY:
+   - Fairness sorting respects HC1-HC6
+   - Cannot override constraints for "fairness"
+   - Safety over convenience (correct choice)
+
+3. NOT PERSISTENT:
+   - No database tracking of "run history"
+   - Each solve is independent
+   - This is acceptable for current use case
+
+
+FUTURE ENHANCEMENTS (BACKLOG)
+=============================
+
+1. MULTI-RUN FAIRNESS:
+   - Track shifts_in_previous_runs in database
+   - Use for tie-breaker across multiple rostering sessions
+   - Requires: New column in period_employee_staffing
+
+2. PREFERENCE INTEGRATION:
+   - Boost priority for employees with specific shift preferences
+   - Integrate with mijn_voorkeur field
+   - Requires: Query of planning_detail table
+
+3. TEAM BALANCING:
+   - Ensure team workloads balanced
+   - Prevent one team overloaded, another idle
+   - Requires: Team-level aggregation in fairness logic
+
+4. VISUALIZATION:
+   - Show fairness score per employee
+   - Display tie-breaker reasoning in UI
+   - Requires: Frontend enhancement
+
+
+KEY TAKEAWAYS FOR MAINTENANCE
+==============================
+
+1. SHIFT_ASSIGNED_IN_CURRENT_RUN is thread-local:
+   - Safe for concurrent requests (each gets own instance)
+   - Auto-cleanup when solve() completes
+   - No special teardown needed
+
+2. SORT LOGIC IS CRITICAL:
+   - Primary sort (remaining ascending) = main fairness mechanism
+   - Tie-breaker (run_count ascending) = edge case handling
+   - Must not swap sort order (reverses fairness!)
+
+3. CONSTRAINT INTEGRATION:
+   - constraint_checker.check_all_constraints() is BLOCKING
+   - If HC violation → employee not in eligible list
+   - Fairness applies only to feasible subset
+
+4. LOGGING DETAIL:
+   - DEBUG level shows sort decisions
+   - WARN level shows bottlenecks
+   - INFO level shows phase progression
+   - Use for debugging fairness issues
+
+
+CONTACT & QUESTIONS
+===================
+
+For issues with DRAAD 190:
+1. Check solver logs: "DRAAD190" tagged messages
+2. Review .DRAAD-190-SMART-GREEDY-IMPLEMENTATION.md
+3. Review this context file
+4. Check git commit 1fe3e074 for exact changes
+
+
+---
+Last Updated: 2025-12-15 22:09 UTC
+Context File Complete ✅
