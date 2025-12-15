@@ -1,0 +1,30 @@
+DRAAD192 CACHE-BUSTING TRIGGER
+==============================
+
+Timestamp: 2025-12-15T23:19:00Z
+Trigger ID: DRAAD192-cache-bust-001
+Random Token: d092b7f4e3a9c1
+
+Purpose: Force Railway deployment pipeline to rebuild application
+with new Solver2 endpoint migration
+
+Status: ACTIVE
+Branch: fix/solver2-migration
+Target Service: rooster-app-verloskunde
+
+Deployment Configuration:
+- Environment: Production
+- Timeout: 120 seconds
+- Retry: 3 attempts
+- Status: Ready for merge to main
+
+Environment Variables Required:
+- SOLVER2_URL: https://solver2-api.example.com
+- SUPABASE_URL: (existing)
+- SUPABASE_ANON_KEY: (existing)
+- SUPABASE_SERVICE_ROLE_KEY: (existing)
+
+Next Step: Merge PR #85 to main branch
+Then: Railway webhook triggers automatic deployment
+
+Generated: 2025-12-15 23:19 UTC
