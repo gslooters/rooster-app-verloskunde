@@ -8,21 +8,30 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ArrowLeft, RefreshCw, Check } from 'lucide-react';
-import {
-  getEmployeeServicesOverview,
-  upsertEmployeeService,
-  getServiceIdByCode
-} from '@/lib/services/medewerker-diensten-supabase';
-import { supabase } from '@/lib/services/medewerker-diensten-supabase';
-import type { EmployeeServiceRow } from '@/lib/types/employee-services';
 
 // CRITICAL: Force dynamic rendering - no caching whatsoever
 export const dynamic = 'force-dynamic';
 
+// LAZY IMPORT: Delay Supabase import until client-side rendering
+let getEmployeeServicesOverview: any;
+let upsertEmployeeService: any;
+let getServiceIdByCode: any;
+let supabase: any;
+
+const loadSupabaseModules = async () => {
+  if (!getEmployeeServicesOverview) {
+    const mod = await import('@/lib/services/medewerker-diensten-supabase');
+    getEmployeeServicesOverview = mod.getEmployeeServicesOverview;
+    upsertEmployeeService = mod.upsertEmployeeService;
+    getServiceIdByCode = mod.getServiceIdByCode;
+    supabase = mod.supabase;
+  }
+};
+
 export default function DienstenToewijzingPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<EmployeeServiceRow[]>([]);
+  const [data, setData] = useState<any[]>([]);
   const [serviceTypes, setServiceTypes] = useState<{ code: string; dienstwaarde: number; naam?: string; kleur?: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [serviceTotals, setServiceTotals] = useState<Record<string, number>>({});
@@ -55,6 +64,9 @@ export default function DienstenToewijzingPage() {
       setLoading(true);
       setError(null);
       
+      // Load Supabase modules FIRST, client-side only
+      await loadSupabaseModules();
+      
       // Haal alle actieve diensten op, gesorteerd op code
       const { data: services } = await supabase
         .from('service_types')
@@ -62,7 +74,7 @@ export default function DienstenToewijzingPage() {
         .eq('actief', true)
         .order('code', { ascending: true });
       
-      const serviceInfo = services?.map(s => ({
+      const serviceInfo = services?.map((s: any) => ({
         code: s.code,
         dienstwaarde: s.dienstwaarde || 1.0,
         naam: s.naam,
@@ -90,6 +102,7 @@ export default function DienstenToewijzingPage() {
 
   async function handleToggle(employeeId: string, serviceCode: string, currentEnabled: boolean) {
     try {
+      await loadSupabaseModules();
       const serviceId = await getServiceIdByCode(serviceCode);
       if (!serviceId) throw new Error(`Dienst ${serviceCode} niet gevonden`);
       
@@ -142,6 +155,7 @@ export default function DienstenToewijzingPage() {
         return;
       }
       
+      await loadSupabaseModules();
       const serviceId = await getServiceIdByCode(serviceCode);
       if (!serviceId) throw new Error(`Dienst ${serviceCode} niet gevonden`);
       
