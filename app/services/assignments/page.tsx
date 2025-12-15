@@ -14,13 +14,17 @@ import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ArrowLeft, RefreshCw, Check, FileDown } from 'lucide-react';
 
+// FIX #1 DRAAD186: Direct type import (TypeScript compile-time resolution)
+// Reason: Lazy-import of types causes TypeScript build failure
+// Safe because: export const dynamic = 'force-dynamic' prevents static generation
+import type { EmployeeServiceRow } from '@/lib/types/employee-services';
+
 // LAZY IMPORT: Delay Supabase import until client-side rendering
 // This prevents "supabaseUrl is required" error during static generation
 let getEmployeeServicesOverview: any;
 let upsertEmployeeService: any;
 let getServiceIdByCode: any;
 let supabase: any;
-let EmployeeServiceRow: any;
 
 const loadSupabaseModules = async () => {
   if (!getEmployeeServicesOverview) {
@@ -29,9 +33,6 @@ const loadSupabaseModules = async () => {
     upsertEmployeeService = mod.upsertEmployeeService;
     getServiceIdByCode = mod.getServiceIdByCode;
     supabase = mod.supabase;
-    
-    const typesModule = await import('@/lib/types/employee-services');
-    EmployeeServiceRow = typesModule.EmployeeServiceRow;
   }
 };
 
@@ -39,7 +40,7 @@ export default function DienstenToewijzingPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [exportingPDF, setExportingPDF] = useState(false);
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<EmployeeServiceRow[]>([]);
   const [serviceTypes, setServiceTypes] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
