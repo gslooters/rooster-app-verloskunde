@@ -14,7 +14,10 @@ healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
-# Cache-busting deployment trigger: 1734283963
-# DRAAD182: Fixed AutoFillButton.tsx TypeScript syntax error (removed invalid docstring)
+# Cache-busting deployment trigger: 1734285215
+# DRAAD185: Fixed Python 3.13 incompatibility issues
+# - Main app: pydantic 2.5.0 → 2.8.0
+# - Solver: pydantic 2.10.5 → 2.8.0
+# - Updated typing-extensions 4.8.0 → 4.9.0
 # Force rebuild and deployment on Railway
-# Updated: 2025-12-15T14:46:03Z
+# Updated: 2025-12-15T17:34:00Z
