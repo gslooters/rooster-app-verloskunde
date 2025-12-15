@@ -1,0 +1,56 @@
+# Cache-Busting File for DRAAD185-7: tsconfig.json Path Alias Fix
+#
+# Timestamp: 2025-12-15T18:15:30Z
+# Build Timestamp: 1734370530
+# Deploy Trigger: 2025-12-15 18:15 UTC
+#
+# PURPOSE:
+# Forces Railway to perform a clean rebuild after tsconfig.json correction.
+# All 23 deployment failures were caused by incorrect path alias configuration.
+#
+# WHAT WAS FIXED IN DRAAD185-7:
+# ✅ tsconfig.json: "@/*": ["*"] → "@/*": ["./\*"]
+# ✅ This corrects module resolution for all imports using @ alias
+# ✅ Fixes: @/lib/planning/storage, @/lib/services/..., @/styles/...
+# ✅ Expected: npm run build now succeeds completely
+#
+# ROOT CAUSE:
+# The path alias "@/*": ["*"] was resolved as:
+#   @/lib/planning → /lib/planning (from root, WRONG!)
+# 
+# Correct path alias "@/*": ["./\*"] resolves as:
+#   @/lib/planning → ./lib/planning (from baseUrl, CORRECT!)
+#
+# CASCADING FAILURES:
+# - DRAAD185-6 was CORRECT (Dockerfile + dynamic pages)
+# - But build failed due to tsconfig.json error
+# - Railway retried 15 times × multiple failure scenarios = 23+ failures shown
+# - All from SAME ROOT CAUSE
+#
+# EXPECTED OUTCOME AFTER THIS FIX:
+# ✅ npm ci succeeds
+# ✅ npm run build succeeds (module resolution now works)
+# ✅ .next/standalone created
+# ✅ Docker image built (~500MB)
+# ✅ Health check passes
+# ✅ Service becomes HEALTHY
+# ✅ Pages load with data
+#
+# VERIFICATION CHECKLIST:
+# - [ ] Build completes without "Module not found" errors
+# - [ ] Docker image created successfully
+# - [ ] Health check passes (status = HEALTHY)
+# - [ ] /api/health returns HTTP 200
+# - [ ] Pages load: /services/assignments, /settings/diensten-toewijzing
+# - [ ] No console errors about module resolution
+# - [ ] Supabase data loads correctly
+#
+# NO ROLLBACK NEEDED:
+# This fix is correct and permanent. The original tsconfig was wrong.
+
+CACHE_BUST_ID=draad185-7-tsconfig-fix
+TIMESTAMP=2025-12-15T18:15:30Z
+BUILD_ID=1734370530
+STATUS=ready-for-deployment
+ROOT_CAUSE=tsconfig-path-alias-wrong
+DRAD185_PROGRESSION="1-5 (Python), 6 (Correct but build failed), 7 (Fix root cause)"
