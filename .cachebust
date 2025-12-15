@@ -1,18 +1,22 @@
-# Global Cache Bust File - DRAAD173B FASE 4
-# Updated: 2025-12-13 14:26 CET
+# Global Cache Bust File - DRAAD185 STAP 4
+# Updated: 2025-12-15 17:52 CET
 
-DRAD173B_TIMESTAMP=1765632960000
-DRAD173B_PHASE=fase4_testing_polish
-DRAD173B_RANDOM=7829
+DRAD185_TIMESTAMP=1765893120000
+DRAD185_PHASE=stap4_baseline_verification
+DRAD185_RANDOM=9847
 
-# DRAAD173B: FASE 4 TESTING & DEPLOYMENT
-# ✅ Fresh OR-Tools Solver V2 (FASE 1) - COMPLETE
-# ✅ Sequential Solver V2 (FASE 2) - COMPLETE  
-# ✅ SolverSelector V2 Integration (FASE 3) - COMPLETE
-# ✅ Cache-busting (FASE 4) - ACTIVE
-# ✅ Unit + Integration Tests (FASE 4) - PENDING
-# ✅ Smoke Tests (FASE 4) - PENDING
+# DRAAD185: BASELINE VERIFICATION & BOTH SERVICES RESTORATION
+# ✅ STAP 1: Git history parsed & analyzed
+# ✅ STAP 2: Architecture summary completed  
+# ✅ STAP 3: First verification checkpoint created
+# ✅ STAP 4: BASELINE VERIFICATION COMPLETE
+#    - rooster-app-verloskunde service verified
+#    - Solver2 (Sequential Solver) verified
+#    - Soft constraints SC1-SC6 framework verified
+#    - Sequential Solver V2 with EVA4 verified
+# ⏭️  STAP 5: Differential Analysis (next)
 
 # Cumulative history:
+DRAD173B_TIMESTAMP=1765632960000
 DRAD99B_TIMESTAMP=1733225340000
 DRAD97A_TIMESTAMP=1733176200000
