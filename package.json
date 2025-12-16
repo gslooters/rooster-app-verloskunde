@@ -1,6 +1,6 @@
 {
   "name": "rooster-app-final",
-  "version": "0.1.4-draad197.security-fix.1734355200000",
+  "version": "0.1.4-draad198-dependency-sync",
   "private": true,
   "scripts": {
     "dev": "next dev",
