@@ -419,13 +419,13 @@
         });
         
         function checkServiceStatus() {
-            fetch(`${API_ENDPOINT}/health`)
+            fetch(`${API_ENDPOINT}/api/greedy/health`)
                 .then(r => r.json())
                 .then(d => {
                     document.getElementById('service-status').innerHTML = `
                         Service Status: <span class="status-badge success">✓ ONLINE</span>
                         <span class="metric"><strong>Solver:</strong> ${d.solver}</span>
-                        <span class="metric"><strong>Version:</strong> ${d.version || 'N/A'}</span>
+                        <span class="metric"><strong>Timestamp:</strong> ${new Date(d.timestamp).toLocaleTimeString('nl-NL')}</span>
                     `;
                 })
                 .catch(e => {
@@ -471,7 +471,7 @@
             
             try {
                 const start = performance.now();
-                const response = await fetch(`${API_ENDPOINT}/health`);
+                const response = await fetch(`${API_ENDPOINT}/api/greedy/health`);
                 const time = (performance.now() - start).toFixed(0);
                 const data = await response.json();
                 
@@ -482,7 +482,6 @@
 
 Response Time: ${time}ms
 Solver: ${data.solver}
-Version: ${data.version || 'N/A'}
 Timestamp: ${data.timestamp}
 
 Full Response:
@@ -503,7 +502,7 @@ ${JSON.stringify(data, null, 2)}
 ${e.message}
 
 Make sure the service endpoint is correct:
-${API_ENDPOINT}/health
+${API_ENDPOINT}/api/greedy/health
                     `;
                 testResults.healthCheck = 'error';
                 logResult('Health Check', 'error', e.message);
