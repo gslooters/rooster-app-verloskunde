@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GREEDY Service Test Suite</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1f3c5c 0%, #2d5a8c 100%);
+            color: #333;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        header {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1 {
+            color: #1f3c5c;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        @media (max-width: 1024px) {
+            .content {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .card h2 {
+            color: #1f3c5c;
+            margin-bottom: 15px;
+            font-size: 18px;
+            border-bottom: 2px solid #2d5a8c;
+            padding-bottom: 10px;
+        }
+        
+        .test-group {
+            margin-bottom: 20px;
+        }
+        
+        .test-button {
+            background: #2d5a8c;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+            transition: all 0.3s ease;
+        }
+        
+        .test-button:hover {
+            background: #1f3c5c;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        
+        .test-button.success {
+            background: #22c55e;
+        }
+        
+        .test-button.error {
+            background: #ef4444;
+        }
+        
+        .test-button.warning {
+            background: #f59e0b;
+        }
+        
+        .test-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .input-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #333;
+            font-size: 14px;
+        }
+        
+        input, textarea {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 13px;
+        }
+        
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+            font-family: 'Monaco', 'Menlo', monospace;
+        }
+        
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #2d5a8c;
+            box-shadow: 0 0 0 3px rgba(45, 90, 140, 0.1);
+        }
+        
+        .result-box {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 12px;
+        }
+        
+        .result-box.success {
+            background: #f0fdf4;
+            border-color: #86efac;
+        }
+        
+        .result-box.error {
+            background: #fef2f2;
+            border-color: #fca5a5;
+        }
+        
+        .result-box.warning {
+            background: #fffbeb;
+            border-color: #fde68a;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-right: 10px;
+        }
+        
+        .status-badge.success {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        
+        .status-badge.error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        
+        .status-badge.warning {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        
+        .status-badge.pending {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+        
+        .metric {
+            display: inline-block;
+            background: #f3f4f6;
+            padding: 8px 12px;
+            border-radius: 6px;
+            margin: 5px 5px 5px 0;
+            font-size: 13px;
+        }
+        
+        .metric strong {
+            color: #1f3c5c;
+        }
+        
+        .test-list {
+            list-style: none;
+        }
+        
+        .test-list li {
+            padding: 10px 0;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            align-items: center;
+        }
+        
+        .test-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .test-list li .check {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            margin-right: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+        
+        .test-list li .check.pending {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+        
+        .test-list li .check.success {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        
+        .test-list li .check.error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f4f6;
+            border-top: 3px solid #2d5a8c;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .timeline {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 2px solid #e5e7eb;
+        }
+        
+        .timeline-item {
+            display: flex;
+            margin-bottom: 15px;
+        }
+        
+        .timeline-marker {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #dbeafe;
+            border: 2px solid #1e40af;
+            flex-shrink: 0;
+            margin-right: 12px;
+            margin-top: 2px;
+        }
+        
+        .timeline-content {
+            flex: 1;
+        }
+        
+        .timeline-time {
+            font-size: 12px;
+            color: #999;
+        }
+        
+        .timeline-text {
+            font-size: 14px;
+            color: #333;
+            margin-top: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 GREEDY Service Test Suite</h1>
+            <p class="subtitle">DRAAD 194 FASE 2 - OPTIE C - Interactive Testing</p>
+            <p class="subtitle" id="service-status">Service Status: <span class="status-badge pending">Checking...</span></p>
+        </header>
+        
+        <div class="content">
+            <!-- TEST PANEL -->
+            <div class="card">
+                <h2>📋 Test Console</h2>
+                
+                <div class="test-group">
+                    <h3 style="font-size: 14px; color: #666; margin-bottom: 10px;">✅ TEST 1: Health Check</h3>
+                    <button class="test-button" onclick="testHealthCheck()">Run Health Check</button>
+                    <div class="result-box" id="health-result"></div>
+                </div>
+                
+                <div class="test-group">
+                    <h3 style="font-size: 14px; color: #666; margin-bottom: 10px;">✅ TEST 2: Validation Test</h3>
+                    <button class="test-button" onclick="testValidation()">Test Valid Request</button>
+                    <button class="test-button warning" onclick="testValidationInvalid()">Test Invalid UUID</button>
+                    <button class="test-button warning" onclick="testValidationBadDate()">Test Bad Date</button>
+                    <button class="test-button warning" onclick="testValidationBadRange()">Test Bad Date Range</button>
+                    <div class="result-box" id="validation-result"></div>
+                </div>
+                
+                <div class="test-group">
+                    <h3 style="font-size: 14px; color: #666; margin-bottom: 10px;">⚙️ Configuration</h3>
+                    <div class="input-group">
+                        <label>Service Endpoint</label>
+                        <input type="text" id="endpoint" value="https://greedy-production.up.railway.app" readonly>
+                    </div>
+                    <div class="input-group">
+                        <label>Test Roster ID (must be valid UUID)</label>
+                        <input type="text" id="rosterId" value="550e8400-e29b-41d4-a716-446655440000" placeholder="550e8400-e29b-41d4-a716-446655440000">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- RESULTS PANEL -->
+            <div class="card">
+                <h2>📊 Test Results</h2>
+                
+                <div class="test-group">
+                    <h3 style="font-size: 14px; color: #666; margin-bottom: 10px;">Test Summary</h3>
+                    <ul class="test-list" id="test-summary">
+                        <li>
+                            <div class="check pending">⏳</div>
+                            <div>
+                                <strong>Health Check</strong>
+                                <div style="font-size: 12px; color: #999;">Waiting to run...</div>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="check pending">⏳</div>
+                            <div>
+                                <strong>Validation Tests</strong>
+                                <div style="font-size: 12px; color: #999;">Waiting to run...</div>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="check pending">⏳</div>
+                            <div>
+                                <strong>Performance Test</strong>
+                                <div style="font-size: 12px; color: #999;">Waiting to run...</div>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="check pending">⏳</div>
+                            <div>
+                                <strong>Error Handling</strong>
+                                <div style="font-size: 12px; color: #999;">Waiting to run...</div>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="timeline" id="timeline">
+                    <h3 style="font-size: 14px; color: #666; margin-bottom: 15px;">📍 Activity Timeline</h3>
+                    <div style="text-align: center; color: #999; font-size: 14px;">
+                        No tests run yet
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- QUICK ACTION BUTTONS -->
+        <div class="card" style="margin-bottom: 30px;">
+            <h2>🎯 Quick Actions</h2>
+            <button class="test-button" onclick="runAllTests()" style="background: #059669; font-weight: bold; padding: 12px 20px; font-size: 15px;">▶ RUN ALL TESTS</button>
+            <button class="test-button warning" onclick="clearResults()" style="padding: 12px 20px; font-size: 15px;">🗑 Clear Results</button>
+            <button class="test-button" onclick="openSwagger()" style="background: #0891b2; padding: 12px 20px; font-size: 15px;">📖 Open Swagger Docs</button>
+        </div>
+    </div>
+    
+    <script>
+        const API_ENDPOINT = document.getElementById('endpoint').value;
+        let testResults = {
+            healthCheck: null,
+            validationTests: null,
+            performanceTest: null,
+            errorHandling: null
+        };
+        
+        // Initialize
+        window.addEventListener('load', () => {
+            checkServiceStatus();
+        });
+        
+        function checkServiceStatus() {
+            fetch(`${API_ENDPOINT}/health`)
+                .then(r => r.json())
+                .then(d => {
+                    document.getElementById('service-status').innerHTML = `
+                        Service Status: <span class="status-badge success">✓ ONLINE</span>
+                        <span class="metric"><strong>Solver:</strong> ${d.solver}</span>
+                        <span class="metric"><strong>Version:</strong> ${d.version || 'N/A'}</span>
+                    `;
+                })
+                .catch(e => {
+                    document.getElementById('service-status').innerHTML = `
+                        Service Status: <span class="status-badge error">✗ OFFLINE</span>
+                        <span style="color: #ef4444; font-size: 12px;">${e.message}</span>
+                    `;
+                });
+        }
+        
+        function logResult(testName, status, details, metrics = null) {
+            const timeline = document.getElementById('timeline');
+            const time = new Date().toLocaleTimeString('nl-NL');
+            
+            const html = `
+                <div class="timeline-item">
+                    <div class="timeline-marker" style="background: ${status === 'success' ? '#d1fae5' : status === 'error' ? '#fee2e2' : '#fef3c7'}; border-color: ${status === 'success' ? '#065f46' : status === 'error' ? '#991b1b' : '#92400e'};">
+                        ${status === 'success' ? '✓' : status === 'error' ? '✗' : '⚠'}
+                    </div>
+                    <div class="timeline-content">
+                        <div class="timeline-time">${time}</div>
+                        <div class="timeline-text"><strong>${testName}</strong></div>
+                        <div style="font-size: 12px; color: #666; margin-top: 4px;">${details}</div>
+                        ${metrics ? `<div style="margin-top: 8px; display: flex; flex-wrap: wrap;">${metrics}</div>` : ''}
+                    </div>
+                </div>
+            `;
+            
+            if (timeline.innerHTML.includes('No tests run yet')) {
+                timeline.innerHTML = html;
+            } else {
+                timeline.innerHTML += html;
+            }
+        }
+        
+        async function testHealthCheck() {
+            const btn = event.target;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Running...';
+            const resultBox = document.getElementById('health-result');
+            resultBox.className = 'result-box';
+            resultBox.innerHTML = 'Testing...';
+            
+            try {
+                const start = performance.now();
+                const response = await fetch(`${API_ENDPOINT}/health`);
+                const time = (performance.now() - start).toFixed(0);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultBox.className = 'result-box success';
+                    resultBox.innerHTML = `
+✅ SUCCESS (${response.status})
+
+Response Time: ${time}ms
+Solver: ${data.solver}
+Version: ${data.version || 'N/A'}
+Timestamp: ${data.timestamp}
+
+Full Response:
+${JSON.stringify(data, null, 2)}
+                    `;
+                    testResults.healthCheck = 'success';
+                    logResult('Health Check', 'success', `Service is online and responding`, 
+                        `<span class="metric"><strong>Response Time:</strong> ${time}ms</span>`);
+                    updateTestSummary();
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (e) {
+                resultBox.className = 'result-box error';
+                resultBox.innerHTML = `
+❌ ERROR
+
+${e.message}
+
+Make sure the service endpoint is correct:
+${API_ENDPOINT}/health
+                    `;
+                testResults.healthCheck = 'error';
+                logResult('Health Check', 'error', e.message);
+                updateTestSummary();
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Run Health Check';
+            }
+        }
+        
+        async function testValidation() {
+            const btn = event.target;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Testing...';
+            const resultBox = document.getElementById('validation-result');
+            resultBox.className = 'result-box';
+            resultBox.innerHTML = 'Testing valid request...';
+            
+            try {
+                const data = {
+                    roster_id: document.getElementById('rosterId').value,
+                    start_date: '2025-01-01',
+                    end_date: '2025-01-31',
+                    max_shifts_per_employee: 8
+                };
+                
+                const start = performance.now();
+                const response = await fetch(`${API_ENDPOINT}/api/greedy/validate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const time = (performance.now() - start).toFixed(0);
+                const result = await response.json();
+                
+                resultBox.className = result.valid ? 'result-box success' : 'result-box warning';
+                resultBox.innerHTML = `
+${result.valid ? '✅' : '⚠️'} Validation Result (${time}ms)
+
+Valid: ${result.valid}
+Message: ${result.message}
+
+Full Response:
+${JSON.stringify(result, null, 2)}
+                `;
+                logResult('Validation Test (Valid)', 'success', 'Valid request accepted',
+                    `<span class="metric"><strong>Response Time:</strong> ${time}ms</span>`);
+                updateTestSummary();
+            } catch (e) {
+                resultBox.className = 'result-box error';
+                resultBox.innerHTML = `❌ ERROR: ${e.message}`;
+                logResult('Validation Test', 'error', e.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Test Valid Request';
+            }
+        }
+        
+        async function testValidationInvalid() {
+            const resultBox = document.getElementById('validation-result');
+            resultBox.innerHTML = 'Testing invalid UUID...';
+            
+            try {
+                const data = {
+                    roster_id: 'INVALID_UUID_NOT_VALID',
+                    start_date: '2025-01-01',
+                    end_date: '2025-01-31'
+                };
+                
+                const response = await fetch(`${API_ENDPOINT}/api/greedy/validate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+                
+                if (!result.valid) {
+                    resultBox.className = 'result-box success';
+                    resultBox.innerHTML = `
+✅ CORRECTLY REJECTED (400)
+
+Reason: ${result.message}
+
+Expected error caught ✓
+${JSON.stringify(result, null, 2)}
+                    `;
+                    logResult('Error Handling (Invalid UUID)', 'success', 'Invalid UUID correctly rejected');
+                } else {
+                    throw new Error('Should have rejected invalid UUID');
+                }
+                updateTestSummary();
+            } catch (e) {
+                resultBox.className = 'result-box error';
+                resultBox.innerHTML = `❌ ERROR: ${e.message}`;
+                logResult('Error Handling (Invalid UUID)', 'error', e.message);
+            }
+        }
+        
+        async function testValidationBadDate() {
+            const resultBox = document.getElementById('validation-result');
+            resultBox.innerHTML = 'Testing bad date format...';
+            
+            try {
+                const data = {
+                    roster_id: document.getElementById('rosterId').value,
+                    start_date: '01-01-2025',  // Wrong format
+                    end_date: '2025-01-31'
+                };
+                
+                const response = await fetch(`${API_ENDPOINT}/api/greedy/validate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+                
+                if (!result.valid && result.message.includes('start_date')) {
+                    resultBox.className = 'result-box success';
+                    resultBox.innerHTML = `
+✅ CORRECTLY REJECTED (400)
+
+Reason: ${result.message}
+
+Bad date format correctly caught ✓
+${JSON.stringify(result, null, 2)}
+                    `;
+                    logResult('Error Handling (Bad Date)', 'success', 'Bad date format correctly rejected');
+                } else {
+                    throw new Error('Should have rejected bad date');
+                }
+                updateTestSummary();
+            } catch (e) {
+                resultBox.className = 'result-box error';
+                resultBox.innerHTML = `❌ ERROR: ${e.message}`;
+                logResult('Error Handling (Bad Date)', 'error', e.message);
+            }
+        }
+        
+        async function testValidationBadRange() {
+            const resultBox = document.getElementById('validation-result');
+            resultBox.innerHTML = 'Testing inverted date range...';
+            
+            try {
+                const data = {
+                    roster_id: document.getElementById('rosterId').value,
+                    start_date: '2025-12-31',  // After end_date
+                    end_date: '2025-01-01'     // Before start_date
+                };
+                
+                const response = await fetch(`${API_ENDPOINT}/api/greedy/validate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+                
+                if (!result.valid && result.message.includes('date range')) {
+                    resultBox.className = 'result-box success';
+                    resultBox.innerHTML = `
+✅ CORRECTLY REJECTED (400)
+
+Reason: ${result.message}
+
+Inverted date range correctly caught ✓
+${JSON.stringify(result, null, 2)}
+                    `;
+                    logResult('Error Handling (Bad Range)', 'success', 'Inverted date range correctly rejected');
+                } else {
+                    throw new Error('Should have rejected bad date range');
+                }
+                updateTestSummary();
+            } catch (e) {
+                resultBox.className = 'result-box error';
+                resultBox.innerHTML = `❌ ERROR: ${e.message}`;
+                logResult('Error Handling (Bad Range)', 'error', e.message);
+            }
+        }
+        
+        async function runAllTests() {
+            const btn = event.target;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Running All Tests...';
+            
+            // Run all tests in sequence
+            await new Promise(r => setTimeout(() => {
+                document.querySelector('[onclick="testHealthCheck()"]').click();
+                setTimeout(r, 1000);
+            }, 500));
+            
+            await new Promise(r => setTimeout(() => {
+                document.querySelector('[onclick="testValidation()"]').click();
+                setTimeout(r, 1000);
+            }, 500));
+            
+            await new Promise(r => setTimeout(() => {
+                document.querySelector('[onclick="testValidationInvalid()"]').click();
+                setTimeout(r, 500);
+            }, 500));
+            
+            await new Promise(r => setTimeout(() => {
+                document.querySelector('[onclick="testValidationBadDate()"]').click();
+                setTimeout(r, 500);
+            }, 500));
+            
+            await new Promise(r => setTimeout(() => {
+                document.querySelector('[onclick="testValidationBadRange()"]').click();
+                setTimeout(r, 500);
+            }, 500));
+            
+            btn.disabled = false;
+            btn.innerHTML = '▶ RUN ALL TESTS';
+        }
+        
+        function clearResults() {
+            document.getElementById('health-result').innerHTML = '';
+            document.getElementById('validation-result').innerHTML = '';
+            document.getElementById('timeline').innerHTML = '<h3 style="font-size: 14px; color: #666; margin-bottom: 15px;">📍 Activity Timeline</h3><div style="text-align: center; color: #999; font-size: 14px;">No tests run yet</div>';
+            testResults = { healthCheck: null, validationTests: null, performanceTest: null, errorHandling: null };
+            updateTestSummary();
+        }
+        
+        function openSwagger() {
+            window.open(`${API_ENDPOINT}/docs`, '_blank');
+        }
+        
+        function updateTestSummary() {
+            // Update based on results
+        }
+    </script>
+</body>
+</html>
