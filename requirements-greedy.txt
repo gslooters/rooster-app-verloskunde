@@ -1,23 +1,22 @@
-# DRAAD 194 FASE 2: Requirements for GREEDY Separate Railway Service
-# Minimal dependencies for GREEDY engine
+# DRAAD 195: Requirements for GREEDY Separate Railway Service
+# Minimal, aligned dependencies for GREEDY CP-SAT solver engine
+# FIXED: postgrest-py removed (doesn't exist), aligned with baseline services
 
-# Web Framework
+# Web Framework (aligned with baseline services)
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
-pydantic==2.5.0
+pydantic==2.8.0
 pydantic-settings==2.1.0
 python-multipart==0.0.18
 
-# Database
-supabase==2.3.5
-postgrest-py==0.13.0
-realtime-py==1.4.4
-postgres-py==0.1.0
-python-gotrue==1.4.0
-py-httpx==0.3.0
+# Database (aligned with rooster-app-verloskunde baseline)
+supabase==2.4.0
+# NOTE: postgrest-py, realtime-py, postgres-py, python-gotrue are handled by supabase
+# postgrest-py==0.13.0 doesn't exist on PyPI (max available: 0.10.6)
+# Using supabase==2.4.0 which includes compatible versions internally
 
-# HTTP Client
-httpx==0.25.1
+# HTTP Client (aligned with baseline)
+httpx==0.25.2
 requests==2.32.4
 
 # Utilities
@@ -27,7 +26,7 @@ pytz==2023.3
 # Logging
 python-json-logger==2.0.7
 
-# Development (optional, but included for consistency)
+# Development (optional, but included for consistency with main service)
 black==23.12.0
 flake8==6.1.0
 pytest==7.4.3
