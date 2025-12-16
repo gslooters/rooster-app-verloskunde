@@ -1,0 +1,37 @@
+# DRAAD 194 FASE 2: Requirements for GREEDY Separate Railway Service
+# Minimal dependencies for GREEDY engine
+
+# Web Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+python-multipart==0.0.6
+
+# Database
+supabase==2.3.5
+postgrest-py==0.13.0
+realtime-py==1.4.4
+postgres-py==0.1.0
+python-gotrue==1.4.0
+py-httpx==0.3.0
+
+# HTTP Client
+httpx==0.25.1
+requests==2.31.0
+
+# Utilities
+python-dotenv==1.0.0
+pytz==2023.3
+
+# Logging
+python-json-logger==2.0.7
+
+# Development (optional, but included for consistency)
+black==23.12.0
+flake8==6.1.0
+pytest==7.4.3
+pytest-asyncio==0.21.1
+
+# Monitoring
+prometheus-client==0.19.0
