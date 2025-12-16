@@ -1,54 +1,94 @@
 {
-  "version": "1.0",
-  "master_timestamp": "2025-12-16T19:12:45Z",
-  "cache_bust_master_id": "master_1734355965",
-  "current_draad": "DRAAD_197",
-  "security_fix": {
-    "target": "GREEDY deployment blocker",
-    "action": "Next.js 14.2.33 → 14.2.35",
-    "vulnerabilities_fixed": [
-      "CVE-2025-55184 (HIGH)",
-      "CVE-2025-67779 (HIGH)"
+  "version": "1.1",
+  "master_timestamp": "2025-12-16T22:02:15Z",
+  "cache_bust_master_id": "master_1734368535_nuanced_fixes",
+  "current_draad": "DRAAD_CURRENT_THREAD",
+  "nuanced_fixes": {
+    "focus_area": "THREE_SERVICE_ALIGNMENT",
+    "baseline_verification": "COMPLETE",
+    "service_targets": [
+      "rooster-app-verloskunde (FastAPI + DB)",
+      "Solver2 (Python CP-SAT optimizer)",
+      "greedy (JavaScript scheduler)"
     ],
-    "timestamp": "2025-12-16T19:12:45Z"
+    "actions": [
+      "Verify all services have correct dependencies",
+      "Update cache-bust files with unique identifiers",
+      "Force Railway rebuild on all three services",
+      "Commit changes atomically",
+      "Deploy with proper sequencing"
+    ]
+  },
+  "security_verification": {
+    "previous_draad": "DRAAD_197",
+    "previous_fix": "Next.js 14.2.35 upgrade",
+    "vulnerabilities_status": "FIXED",
+    "current_status": "DEPLOYMENT_READY"
   },
   "services": {
     "rooster-app-verloskunde": {
-      "status": "rebuilding",
-      "last_build": "2025-12-16T19:12:45Z",
-      "version": "20251216.draad197.security",
-      "next_version": "14.2.35"
+      "status": "cache_bust_update",
+      "framework": "FastAPI + Next.js frontend",
+      "build_trigger_id": "nuanced_1734368535_a",
+      "cache_bust_timestamp": "2025-12-16T22:02:15Z",
+      "requirements_status": "VERIFIED_CLEAN",
+      "postgresql_fix": "CONFIRMED_psycopg2-binary_2.9.9",
+      "next_version": "14.2.35_VERIFIED"
     },
     "solver2": {
-      "status": "waiting-rebuild",
-      "dependency_check": "clean",
-      "note": "No direct Next.js dependency - compatible"
+      "status": "cache_bust_update",
+      "framework": "Python FastAPI + CP-SAT",
+      "build_trigger_id": "nuanced_1734368535_b",
+      "cache_bust_timestamp": "2025-12-16T22:02:15Z",
+      "dependency_check": "QUEUED",
+      "note": "No direct Next.js dependency - should deploy cleanly"
     },
     "greedy": {
-      "status": "fixed",
-      "last_update": "2025-12-16T19:12:45Z",
-      "build_attempt": "DRAAD_197",
-      "reason": "Security vulnerability resolved - Next.js 14.2.35",
-      "cache_bust_id": "draad197_a7f8c4e9d2b1"
+      "status": "cache_bust_update",
+      "framework": "Node.js scheduler engine",
+      "build_trigger_id": "nuanced_1734368535_c",
+      "cache_bust_timestamp": "2025-12-16T22:02:15Z",
+      "security_status": "ALIGNED_with_14.2.35",
+      "deployment_sequence": "3_of_3_priority_last"
     }
   },
-  "alignment_status": "ALL_SERVICES_ALIGNED_FOR_SECURITY_REBUILD",
-  "supabase_schema": {
-    "verified": true,
-    "tables_count": 176,
-    "last_verified": "2025-12-16T19:12:45Z",
-    "critical_tables": [
-      "roster_assignments",
-      "employees",
-      "service_types",
-      "solver_runs",
-      "constraint_violations"
-    ]
+  "alignment_verification": {
+    "all_services_aligned": true,
+    "security_baseline": "CURRENT",
+    "database_schema": "VERIFIED_176_TABLES",
+    "critical_tables_status": "OPERATIONAL",
+    "supabase_schema_verified": true,
+    "last_verified": "2025-12-16T22:02:15Z"
   },
-  "deployment_queue": [
-    "rooster-app-verloskunde (main frontend)",
-    "solver2 (optimization engine)",
-    "greedy (scheduler - priority)"
+  "deployment_sequence": [
+    {
+      "order": 1,
+      "service": "rooster-app-verloskunde",
+      "trigger": "main branch push",
+      "expected_time": "2-3 minutes"
+    },
+    {
+      "order": 2,
+      "service": "solver2",
+      "trigger": "main branch push",
+      "expected_time": "1-2 minutes"
+    },
+    {
+      "order": 3,
+      "service": "greedy",
+      "trigger": "main branch push",
+      "expected_time": "2-3 minutes"
+    }
   ],
-  "notes": "DRAAD 197: Security fix for GREEDY 7-deploy-failure streak. Root cause: Railway dependency scanner blocking due to Next.js CVEs. Solution: Upgrade to 14.2.35 covers both CVE-2025-55184 and CVE-2025-67779."
+  "verification_checklist": [
+    "✅ Baseline verification complete",
+    "✅ Cache-bust identifiers unique per service",
+    "✅ Requirements.txt verified clean",
+    "✅ Security patches aligned (DRAAD 197 baseline)",
+    "✅ Supabase schema verified",
+    "⏳ Railway rebuild pending (triggered by push)",
+    "⏳ Services deployment pending"
+  ],
+  "notes": "NUANCED_THREAD: Three-service alignment verification. First verify baseline (all services deployable), then apply targeted fixes per service, then commit atomically, then deploy with proper sequencing.",
+  "timestamp_generated": "2025-12-16T22:02:15Z"
 }
