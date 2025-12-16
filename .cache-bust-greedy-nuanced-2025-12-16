@@ -1,0 +1,31 @@
+{
+  "timestamp": "2025-12-16T22:02:15Z",
+  "service": "greedy",
+  "trigger_id": "nuanced_1734368535_c",
+  "purpose": "Force rebuild of Greedy (JavaScript scheduler service)",
+  "context": "Three-service alignment verification per DRAAD-CURRENT_THREAD",
+  "verification_status": {
+    "security_alignment": "DRAAD_197_14.2.35_VERIFIED",
+    "draad_190_smart_greedy": "ACTIVE",
+    "baseline": "COMPLETE",
+    "ready_for_deploy": true
+  },
+  "baseline_checks": {
+    "next_js_version": "14.2.35",
+    "security_patches_applied": true,
+    "cve_2025_55184": "FIXED",
+    "cve_2025_67779": "FIXED",
+    "smart_greedy_algorithm": "OPERATIONAL",
+    "supabase_schema_aligned": true
+  },
+  "random_busting": 1734368535,
+  "deploy_sequence": "3_of_3",
+  "draad_190_context": {
+    "algorithm": "Smart Greedy Allocation with fairness",
+    "tie_breaker": "shifts_in_current_run tracking",
+    "constraint_level": "HC1-HC6",
+    "coverage_target": "98%+",
+    "solve_time": "2-5 seconds"
+  },
+  "deployment_notes": "Greedy is the final service in sequence. It has already been updated to Next.js 14.2.35 (DRAAD 197). DRAAD 190 Smart Greedy Allocation is active. This rebuild forces latest code with fairness algorithm enabled."
+}
