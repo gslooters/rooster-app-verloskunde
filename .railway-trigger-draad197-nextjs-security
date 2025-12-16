@@ -1,0 +1,34 @@
+RAILWAY DEPLOYMENT TRIGGER
+============================================================================
+DRAD: 197
+Purpose: Force Railway to rebuild all services after Next.js security upgrade
+Date: 2025-12-16T19:13:03Z
+Trigger ID: railway_1734355983
+
+Actions Required by Railway:
+1. Clear build cache for all three services
+2. Re-download npm dependencies
+3. Validate Next.js 14.2.35 (no CVE-2025-55184, no CVE-2025-67779)
+4. Rebuild Docker images
+5. Deploy services in order:
+   a. rooster-app-verloskunde (main frontend)
+   b. solver2 (optimization engine)
+   c. greedy (greedy scheduler) - PRIORITY
+
+Expected Outcomes:
+✓ Security scanner passes (no CVEs found)
+✓ Build succeeds for all services
+✓ All health checks pass
+✓ Services are operational
+
+Commit Hashes:
+- package.json: 4dc4a4e1b4e16ed55912cba246811b74fb7c542b
+- Cache bust: f9549e9fa3c12867b5071e7d7b48ad591c3931c2
+- Master update: 7181fc585bff6a78e414c3c0b277b3778990aef7
+- This file: Will be set by Railway
+
+Notes:
+- No code changes required
+- Only dependency version bump
+- Backward compatible upgrade
+- Fixes 2 HIGH severity CVEs
