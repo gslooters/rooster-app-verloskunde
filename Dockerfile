@@ -2,9 +2,6 @@
 # DRAAD186-HOTFIX: Fixed healthcheck timeout (Railway killer issue)
 # Date: 2025-12-16T02:15:00Z
 # Issue: Railway timeout too short for database connection test + startup
-# DRAAD200-FIX: Added npm install for lock file regeneration
-# Date: 2025-12-17T00:50:00Z
-# Issue: Lock file corruption required automatic regeneration
 
 FROM node:20-alpine
 
@@ -20,12 +17,6 @@ ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
 
 # Install dependencies
 COPY package*.json ./
-
-# 🔧 DRAAD200: Regenerate complete lock file during build
-# This ensures all 350+ dependencies are available
-# npm install: resolves ^versions to exact versions + regenerates lock file
-# npm ci: verifies all dependencies available from lock file
-RUN npm install
 RUN npm ci --prefer-offline --no-audit
 
 # Copy source code
