@@ -1,0 +1,14 @@
+{
+  "description": "Cache buster for FASE 5: Fix eslint-config-next version mismatch",
+  "timestamp": "2025-12-16T23:10:00Z",
+  "railwayTrigger": "phase5-dependency-sync-v1",
+  "phase": "FASE 5: FIX ESLINT-CONFIG-NEXT VERSION MISMATCH",
+  "changes": [
+    "eslint-config-next: 14.2.5 → 14.2.35",
+    "package-lock.json regenerated",
+    "GitHub Actions auto-sync enabled"
+  ],
+  "bustedAt": 1734366600000,
+  "nonce": 7428,
+  "purpose": "Force Railway rebuild and npm ci refresh"
+}
