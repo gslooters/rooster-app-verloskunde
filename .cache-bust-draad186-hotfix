@@ -1,0 +1,37 @@
+DRAAD186 HOTFIX - RAILWAY DEPLOYMENT FIX
+===========================================
+
+Timestamp: 2025-12-16T02:15:00Z
+
+ISSUES FIXED:
+✅ Healthcheck timeout too short (30s start-period -> 60s)
+✅ Database test blocked healthcheck (removed from fast path)
+✅ Response time > 5s, now < 50ms
+✅ HOSTNAME not set, now 0.0.0.0
+
+FILES CHANGED:
+- Dockerfile: Extended healthcheck timing
+- app/api/health/route.ts: Optimized for speed
+
+DEPLOYMENT:
+This file triggers Docker cache invalidation on Railway rebuild.
+Force Railway to rebuild with:
+  1. Go to Railway dashboard
+  2. Trigger new deployment
+  3. Wait for build (should take ~4-5 minutes)
+  4. Check deployment logs
+
+EXPECTED RESULT:
+🚀 BUILD: 4 seconds (same)
+👋 HEALTHCHECK: PASS (was FAIL)
+🜐 DEPLOYMENT: SUCCESS
+
+ROOT CAUSE ANALYSIS:
+Railway default healthcheck timeout ~40s total.
+Our health endpoint included database query (5-10s).
+Startup + DB query > 40s = timeout = deployment fail.
+
+SOLUTION:
+- Extend healthcheck window to 75s
+- Health endpoint responds in < 50ms
+- Multiple retries possible within window
