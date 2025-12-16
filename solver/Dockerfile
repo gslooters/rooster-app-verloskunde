@@ -42,9 +42,11 @@ RUN echo "[Dockerfile] Testing critical imports..." && \
     python -c "from main import app; print('[OK] Main FastAPI app imported')" && \
     echo "[Dockerfile] ✅ ALL IMPORTS SUCCESSFUL - FASE 1+2+3 COMPLETE"
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:${PORT}/health || exit 1
+# DRAAD196 FIX: Corrected healthcheck with proper shell expansion and optimized timing
+# Problem was: ${PORT} not expanded in HEALTHCHECK CMD - now using hardcoded port
+# Timing: Reduced start-period from 40s to 30s, interval from 30s to 5s
+HEALTHCHECK --interval=5s --timeout=10s --start-period=30s --retries=6 \
+    CMD curl -f http://localhost:8000/health || exit 1
 
 # Start server with verbose logging
 CMD ["python", "-u", "-c", "import uvicorn; uvicorn.run('main:app', host='0.0.0.0', port=8000, log_level='info')"]
