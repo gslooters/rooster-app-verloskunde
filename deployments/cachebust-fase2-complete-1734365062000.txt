@@ -1,0 +1,9 @@
+GREEDY-SERVICE-DEPLOYMENT-READY
+TIMESTAMP: 1734365062000
+NOTE: FASE 2 complete - all 5 deliverables in main
+- src/solver/greedy_api.py
+- src/main_greedy.py
+- Dockerfile.greedy
+- requirements-greedy.txt
+- src/solver/test_greedy_fase2.py
+STATUS: Production-ready, awaiting Railway configuration

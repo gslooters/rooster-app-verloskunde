@@ -1,0 +1,6 @@
+RAILWAY-TRIGGER-FASE2-COMPLETE
+TIMESTAMP: 1734365062000
+RANDOM: 927456
+STATUS: FASE 2 code now in main - GREEDY separate service ready
+NOTE: Baseline (FASE 1) + FASE 2 implementation both now in main branch
+DATES: Baseline + GREEDY engine live
