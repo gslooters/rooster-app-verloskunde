@@ -1,0 +1,35 @@
+# GREEDY Engine Requirements
+# DRAAD-194: FASE 3 - Separate Railway Service
+# Datum: 16 December 2025
+
+# Core dependencies
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+python-multipart==0.0.6
+
+# Database
+supabase==2.3.5
+postgresql-driver==0.1.0
+
+# Async/HTTP
+aiohttp==3.9.1
+httpx==0.25.1
+requests==2.31.0
+
+# Data processing
+numpy==1.24.3
+pandas==2.0.3
+pydantic-settings==2.1.0
+
+# Logging & monitoring
+python-json-logger==2.0.7
+
+# Development
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+
+# Utilities
+python-dotenv==1.0.0
+pytz==2023.3
