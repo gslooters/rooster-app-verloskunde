@@ -1,0 +1,38 @@
+# DRAAD196 CACHE BUST - Solver2 Healthcheck Fix
+# Date: 2025-12-16T16:22:00Z
+# Trigger: Force rebuild of Solver2 service after healthcheck fix
+
+REASON: Solver2 deployment healthcheck failures (30x attempts)
+ROOT_CAUSE: HEALTHCHECK ${PORT} variable not expanded in Docker CMD
+FIX: Hardcoded port 8000 + timing optimization
+
+FILES_MODIFIED:
+- solver/Dockerfile
+  - Line 51: Fixed HEALTHCHECK shell variable interpolation
+  - Changed: interval 30s → 5s for faster detection
+  - Changed: start-period 40s → 30s for quicker startup
+  - Changed: retries 3 → 6 for stability
+
+EXPECTED_RESULT:
+- Build: Succeeds (all imports verified)
+- Container: Starts on port 8000 (logs confirm)
+- Healthcheck: Succeeds within 60 seconds
+- Replica: Marked healthy and stays online
+- Service: Shows ONLINE in Railway dashboard
+
+TIMELINE:
+- 16:22 UTC: Commit pushed to main
+- 16:23 UTC: Railway webhook triggered
+- 16:27 UTC: Build complete
+- 16:28 UTC: Container starts
+- 16:28-16:29 UTC: Healthcheck runs (should pass by attempt #1-2)
+- 16:29 UTC: ✅ Solver2 ONLINE
+
+MONITOR:
+- Railway logs for "Healthcheck" messages
+- Check for "service unavailable" errors
+- Verify /health endpoint returns 200
+
+ROLLBACK:
+- If still failing: revert Dockerfile to previous SHA
+- Consider: use GREEDY instead of Solver2
