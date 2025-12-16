@@ -1,7 +1,7 @@
 # Rooster App - Next.js Frontend
-# DRAAD186: Fixed Docker build with proper environment variable injection
-# Date: 2025-12-15T20:04:00Z
-# Issue: Build args needed for NEXT_PUBLIC_* variables during docker build
+# DRAAD186-HOTFIX: Fixed healthcheck timeout (Railway killer issue)
+# Date: 2025-12-16T02:15:00Z
+# Issue: Railway timeout too short for database connection test + startup
 
 FROM node:20-alpine
 
@@ -28,13 +28,18 @@ RUN npm run build
 # Expose port
 EXPOSE 3000
 
-# Health check
-HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})" || exit 1
+# 🔥 CRITICAL FIX: Longer healthcheck with proper timing
+# Railway: start-period=60s (time to fully start)
+# Railway: interval=5s (check every 5s)
+# Railway: timeout=10s (wait 10s for response)
+# Railway: retries=3 (try 3 times = 30s total)
+HEALTHCHECK --interval=5s --timeout=10s --start-period=60s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
 
 # Environment variables for runtime
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
 
-# Start application
-CMD node .next/standalone/server.js
+# Start application with explicit hostname binding
+CMD ["node", ".next/standalone/server.js"]
