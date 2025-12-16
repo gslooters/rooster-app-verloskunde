@@ -1,0 +1,31 @@
+{
+  "version": "1.0",
+  "master_timestamp": "2025-12-16T15:40:15Z",
+  "cache_bust_master_id": "master_7842551693",
+  "services": {
+    "rooster-app-verloskunde": {
+      "status": "stable",
+      "last_build": "2025-12-16T15:23:45Z",
+      "version": "20251216.v3"
+    },
+    "solver2": {
+      "status": "verified",
+      "last_update": "2025-12-16T15:40:00Z",
+      "note": "Compatible with baseline"
+    },
+    "greedy": {
+      "status": "fixing",
+      "last_update": "2025-12-16T15:40:15Z",
+      "build_attempt": "DRAAD_195",
+      "reason": "postgrest-py removed, dependencies aligned",
+      "cache_bust_id": "cb_7842551693"
+    }
+  },
+  "alignment_status": "ALL_SERVICES_ALIGNED",
+  "supabase_schema": {
+    "verified": true,
+    "tables_count": 176,
+    "last_verified": "2025-12-16T15:40:00Z"
+  },
+  "notes": "DRAAD 195 GREEDY fix: baseline first verify complete"
+}
