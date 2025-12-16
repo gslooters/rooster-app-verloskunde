@@ -1,0 +1,26 @@
+DRAAD 197: GREEDY Deployment Security Fix
+============================================================
+Date: 2025-12-16T19:11:43Z
+Timestamp: 1734355903000
+Random: a7f8c4e9d2b1
+
+Action: Upgrade Next.js 14.2.33 → 14.2.35
+
+Vulnerabilities Fixed:
+- CVE-2025-55184 (HIGH): Security vulnerability in Next.js 14.2.33
+- CVE-2025-67779 (HIGH): Security vulnerability in Next.js 14.2.33
+
+Railway Actions:
+✓ Clear build cache
+✓ Force fresh dependency resolution
+✓ Trigger all three services redeploy:
+  - rooster-app-verloskunde (Main Frontend)
+  - Solver2 (Optimization Engine)
+  - GREEDY (Greedy Scheduler)
+
+Expected Result:
+✅ No more security vulnerability blocks
+✅ Deployment successful on all services
+✅ All health checks pass
+
+Commit: 4dc4a4e1b4e16ed55912cba246811b74fb7c542b
