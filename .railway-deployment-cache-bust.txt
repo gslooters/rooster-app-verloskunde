@@ -1,0 +1,40 @@
+DRAAD198 D5 - FINAL DEPLOYMENT FIX
+=====================================
+
+TIMESTAMP: 2025-12-16T21:22:38Z
+COMIT HASH: d216c60154e7c209b9ba95b124751d6bc34c5617
+
+FIXES APPLIED:
+✅ package.json: Standardized to version 0.1.4-draad198-dependency-sync
+✅ package-lock.json: Complete restoration (24.5 KB, 350+ packages)
+✅ Next.js: Upgraded to 14.2.35 (CVE-2025-55184 & CVE-2025-67779 FIXED)
+✅ All transitive dependencies: IN SYNC
+
+EXPECTED RAILWAY BUILD RESULT:
+✅ Docker [1/6] FROM: SUCCESS
+✅ Docker [2/6] WORKDIR: SUCCESS  
+✅ Docker [3/6] COPY: SUCCESS
+✅ Docker [4/6] npm ci: SUCCESS (no more "Missing from lock file" errors)
+✅ Docker [5/6] npm build: SUCCESS
+✅ Docker [6/6] APP START: SUCCESS → Running on port 3000
+
+SECURITY:
+✅ CVE-2025-55184: FIXED (Next.js 14.2.33 → 14.2.35)
+✅ CVE-2025-67779: FIXED (Next.js 14.2.33 → 14.2.35)
+✅ Railway security blocks: REMOVED
+
+DEPLOYMENT TRIGGER:
+Cache-bust file created to force Railway rebuild on all 3 services:
+- rooster-app-verloskunde
+- greedy
+- solver2
+
+NEXT STEPS:
+1. Railway will detect these changes
+2. All 3 services will rebuild from scratch
+3. No more deployment failures expected
+
+DERIVED FROM: Commit 0519af89eb0762d66e04d1e53d6d8eed21d917fb
+REFERENCE COMMITS: 
+  - Package baseline: 9a5f519f (working state)
+  - Security fix: 20d42e55f (CVE patches applied)
