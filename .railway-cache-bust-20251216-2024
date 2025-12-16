@@ -1,0 +1,12 @@
+# Cache Bust Trigger for Railway Rebuild
+# Date: 2025-12-16 20:24:15 UTC
+# Reason: HOTFIX - Restored complete package-lock.json with Next.js 14.2.35
+# Build version: 0.1.4-draad197.security-fix.1734360000
+
+TRIGGER_TIMESTAMP=1734360255
+TRIGGER_ID=railway-rebuild-20251216-2024-$(printf '%x' $RANDOM)
+FORCE_REBUILD=true
+
+# Previous deploy: 07b76cf7-f9b9-427a-95cd-d1ac903d0732 (WORKING)
+# Current status: Building with restored lock file
+# Expected: npm ci succeeds, Docker build completes, app starts on port 3000
