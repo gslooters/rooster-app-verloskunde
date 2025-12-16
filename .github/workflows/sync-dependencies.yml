@@ -1,0 +1,47 @@
+name: Sync Dependencies
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'package.json'
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies (npm install)
+        run: npm install
+
+      - name: Check if package-lock.json changed
+        id: check-changes
+        run: |
+          if git diff --exit-code package-lock.json; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit and push updated package-lock.json
+        if: steps.check-changes.outputs.changed == 'true'
+        run: |
+          git config --local user.email "gslooters@gslmcc.net"
+          git config --local user.name "Dependency Sync Bot"
+          git add package-lock.json
+          git commit -m "🔒 Auto-sync: Update package-lock.json after npm install ($(date -u +'%Y-%m-%d %H:%M:%S'))"
+          git push origin main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
