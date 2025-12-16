@@ -13,7 +13,12 @@ Performance:
 - Coverage: 98%+
 - HTTP: 200 success (or 400/500 errors)
 
-Author: DRAAD 194 FASE 2
+FIXES (OPDRACHT 195):
+- Pydantic V2 deprecation: schema_extra → json_schema_extra
+- ConfigDict for model configuration
+- Clean logs without warnings
+
+Author: DRAAD 194 FASE 2 + OPDRACHT 195
 Date: 2025-12-16
 """
 
@@ -23,7 +28,7 @@ import traceback
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 import uuid
 
 from .greedy_engine import GreedyRosteringEngine, SolveResult
@@ -31,7 +36,7 @@ from .greedy_engine import GreedyRosteringEngine, SolveResult
 logger = logging.getLogger(__name__)
 
 # ============================================================================
-# REQUEST & RESPONSE MODELS (Pydantic)
+# REQUEST & RESPONSE MODELS (Pydantic V2)
 # ============================================================================
 
 class SolveRequest(BaseModel):
@@ -44,8 +49,8 @@ class SolveRequest(BaseModel):
         description="Maximum shifts per employee (default: 8)"
     )
     
-    class Config:
-        schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "roster_id": "550e8400-e29b-41d4-a716-446655440000",
                 "start_date": "2025-01-01",
@@ -53,6 +58,7 @@ class SolveRequest(BaseModel):
                 "max_shifts_per_employee": 8
             }
         }
+    )
 
 
 class BottleneckResponse(BaseModel):
@@ -81,8 +87,8 @@ class SolveResponse(BaseModel):
     solver_type: str = Field(default="GREEDY", description="Solver type (always 'GREEDY')")
     timestamp: str = Field(..., description="ISO8601 timestamp of solve")
     
-    class Config:
-        schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "status": "success",
                 "assignments_created": 224,
@@ -97,6 +103,7 @@ class SolveResponse(BaseModel):
                 "timestamp": "2025-12-16T14:30:45.123456Z"
             }
         }
+    )
 
 
 # ============================================================================
