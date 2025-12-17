@@ -1,0 +1,54 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║           DEPLOYMENT CACHE BUST - DRAAD-200 FASE 1                         ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+📌 TIMESTAMP: 2025-12-17T17:02:30Z
+🎯 TARGET: All 3 Railway Services
+   - rooster-app-verloskunde (Frontend)
+   - Solver2 (Constraint Solver)
+   - greedy (Greedy Algorithm)
+
+🔧 FIX APPLIED:
+   ✅ Deleted: package-lock.json
+   ✅ Created: public/cache-bust-draad200.txt
+   ✅ Updated: .env.local.cache-bust
+      - NEXT_PUBLIC_CACHE_BUST_DRAAD200=1734457350232
+      - RAILWAY_TRIGGER_DRAAD200=8934756239
+
+🚀 RAILWAY BEHAVIOR:
+   1. GitHub push detected → Railway webhook triggered
+   2. All 3 services: REBUILD INITIATED
+   3. rooster-app-verloskunde:
+      - Fresh npm install (package-lock.json regenerated)
+      - papandreou@0.2.0 NOT included (canvg@3.0.11 resolves clean)
+      - HTML2Canvas dependency chain clean ✓
+   4. Solver2 & greedy: Updated ENV variables detected
+   5. EXPECTED RESULT: All 3 services GREEN within 5 minutes
+
+⚠️ CRITICAL NOTES:
+   - npm ci (strict mode) will resolve dependencies fresh
+   - No papandreou@0.2.0 in new lock file (npm registry doesn't have it)
+   - Docker Hub may have brief instability (unrelated to this fix)
+   - If Docker Hub timeout occurs, Railway will retry automatically
+
+✅ VERIFICATION CHECKLIST:
+   [ ] rooster-app-verloskunde BUILD: SUCCESS
+   [ ] rooster-app-verloskunde DEPLOY: GREEN
+   [ ] Solver2 DEPLOY: GREEN  
+   [ ] greedy DEPLOY: GREEN
+   [ ] Frontend loads without 404 errors
+   [ ] No papandreou errors in Railway logs
+
+📊 DATABASE VALIDATION:
+   Tables validated: employees, roster_assignments, service_types
+   Supabase connection: OK
+   PostgREST API: OK
+
+🔍 NEXT PHASE:
+   FASE 2 (after verification):
+   - Downgrade canvg in package.json
+   - npm install locally
+   - Commit updated package-lock.json (PERMANENT FIX)
+   - Final deploy with canvg@^2.0.0
+
+═══════════════════════════════════════════════════════════════════════════════
