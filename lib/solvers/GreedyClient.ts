@@ -9,7 +9,10 @@
  * - Error classification
  * - Logging
  * 
- * Optional utility - can be used in place of inline callGreedyAPI()
+ * DRAAD202-HOTFIX: Removed nested "data" object
+ * Now uses flat payload structure matching GREEDY Pydantic model
+ * 
+ * NOTE: This client is optional utility - main implementation in route.ts
  */
 
 import type { SolveRequest } from '@/lib/types/solver';
@@ -18,9 +21,61 @@ import type { SolveRequest } from '@/lib/types/solver';
 // TYPES
 // ============================================================================
 
-export interface GreedyRequest {
-  roster_id: string;
-  data: SolveRequest;
+/**
+ * DRAAD202-HOTFIX: Flat payload structure
+ * No nested "data" object - all fields at root level
+ */
+export interface GreedyPayload {
+  rosterid: string;
+  startdate: string; // ISO 8601 YYYY-MM-DD
+  enddate: string;   // ISO 8601 YYYY-MM-DD
+  employees: Array<{
+    id: string;
+    voornaam: string;
+    achternaam: string;
+    team: 'maat' | 'loondienst' | 'overig';
+    structureel_nbh?: number;
+    min_werkdagen?: number;
+  }>;
+  services: Array<{
+    id: string;
+    code: string;
+    naam: string;
+  }>;
+  rosteremployeeservices: Array<{
+    roster_id: string;
+    employee_id: string;
+    service_id: string;
+    aantal: number;
+    actief: boolean;
+  }>;
+  fixedassignments: Array<{
+    employee_id: string;
+    date: string;
+    dagdeel: 'O' | 'M' | 'A';
+    service_id: string;
+  }>;
+  blockedslots: Array<{
+    employee_id: string;
+    date: string;
+    dagdeel: 'O' | 'M' | 'A';
+    status: 2 | 3;
+  }>;
+  suggestedassignments: Array<{
+    employee_id: string;
+    date: string;
+    dagdeel: 'O' | 'M' | 'A';
+    service_id: string;
+  }>;
+  exactstaffing: Array<{
+    date: string;
+    dagdeel: 'O' | 'M' | 'A';
+    service_id: string;
+    team: 'TOT' | 'GRO' | 'ORA';
+    exact_aantal: number;
+    is_system_service: boolean;
+  }>;
+  timeoutseconds: number;
 }
 
 export interface GreedyResponse {
@@ -199,10 +254,12 @@ export class GreedyClient {
 
   /**
    * Call GREEDY API with timeout handling
+   * DRAAD202-HOTFIX: Use flat GreedyPayload (no nested data object)
    */
-  async solve(payload: GreedyRequest): Promise<GreedySolution> {
+  async solve(payload: GreedyPayload): Promise<GreedySolution> {
     console.log('[GreedyClient] === SOLVE START ===');
-    console.log(`[GreedyClient] Roster: ${payload.roster_id}`);
+    console.log(`[GreedyClient] Roster: ${payload.rosterid}`);
+    console.log('[GreedyClient] Payload structure: FLAT (no nested data object)');
     
     const startTime = Date.now();
 
