@@ -1,23 +1,13 @@
-{
-  "timestamp": "2025-12-16T22:02:15Z",
-  "service": "Solver2",
-  "trigger_id": "nuanced_1734368535_b",
-  "purpose": "Force rebuild of Solver2 (Python CP-SAT optimizer service)",
-  "context": "Three-service alignment verification per DRAAD-CURRENT_THREAD",
-  "verification_status": {
-    "requirements_txt_status": "VERIFIED",
-    "postgresql_driver": "psycopg2-binary==2.9.9",
-    "baseline": "COMPLETE",
-    "ready_for_deploy": true
-  },
-  "baseline_checks": {
-    "dependencies_clean": true,
-    "no_direct_next_js": true,
-    "python_dependencies": "CLEAN",
-    "postgres_adapter": "VALID",
-    "supabase_client": "COMPATIBLE"
-  },
-  "random_busting": 1734368535,
-  "deploy_sequence": "2_of_3",
-  "notes": "Solver2 has no Next.js dependency so should deploy cleanly. This is the optimization engine (CP-SAT backend). Verify logs show successful deployment."
-}
+DRAAD 2026 D3 - CACHE BUST SOLVER2
+
+Status: REBUILD TRIGGERED
+
+Reason: Frontend TypeScript JSX compilation fixed
+- Renamed: lib/frontend/greedy-realtime-monitor.ts → .tsx
+- Resolved: "Cannot find name 'div'" error
+- Impact: All services rebuild with new baseline
+
+Date: 2025-12-17T22:53:00Z
+Version: DRAAD2026-D3
+
+Solver2 must rebuild to ensure consistency with frontend and Greedy services.
