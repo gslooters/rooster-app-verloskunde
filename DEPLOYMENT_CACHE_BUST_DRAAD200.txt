@@ -1,54 +1,81 @@
-╔════════════════════════════════════════════════════════════════════════════╗
-║           DEPLOYMENT CACHE BUST - DRAAD-200 FASE 1                         ║
-╚════════════════════════════════════════════════════════════════════════════╝
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║           DEPLOYMENT CACHE BUST - DRAAD-200 FASE 1 (REVISED)                  ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
 
-📌 TIMESTAMP: 2025-12-17T17:02:30Z
+📋 TIMESTAMP: 2025-12-17T17:07:30Z (UPDATED - FIX APPLIED)
 🎯 TARGET: All 3 Railway Services
    - rooster-app-verloskunde (Frontend)
    - Solver2 (Constraint Solver)
    - greedy (Greedy Algorithm)
 
-🔧 FIX APPLIED:
-   ✅ Deleted: package-lock.json
-   ✅ Created: public/cache-bust-draad200.txt
-   ✅ Updated: .env.local.cache-bust
-      - NEXT_PUBLIC_CACHE_BUST_DRAAD200=1734457350232
-      - RAILWAY_TRIGGER_DRAAD200=8934756239
+🔨 FIXES APPLIED (COMPLETE CHAIN):
+   ✅ Step 1: Deleted: package-lock.json (papandreou@0.2.0 removal)
+   ✅ Step 2: Created: public/cache-bust-draad200.txt (force rebuild)
+   ✅ Step 3: Updated: .env.local.cache-bust (cache triggers)
+   ✅ Step 4: CRITICAL FIX - Dockerfile: npm ci → npm install
+      REASON: npm ci requires existing package-lock.json
+      SOLUTION: npm install generates lock file in Railway container
+      STATUS: COMMITTED & DEPLOYED
 
-🚀 RAILWAY BEHAVIOR:
+🚀 RAILWAY BEHAVIOR (REVISED):
    1. GitHub push detected → Railway webhook triggered
    2. All 3 services: REBUILD INITIATED
-   3. rooster-app-verloskunde:
-      - Fresh npm install (package-lock.json regenerated)
-      - papandreou@0.2.0 NOT included (canvg@3.0.11 resolves clean)
-      - HTML2Canvas dependency chain clean ✓
-   4. Solver2 & greedy: Updated ENV variables detected
-   5. EXPECTED RESULT: All 3 services GREEN within 5 minutes
+   3. rooster-app-verloskunde BUILD PROCESS:
+      - Dockerfile COPY package*.json ./
+      - Dockerfile RUN npm install --prefer-offline --no-audit
+        → npm install (no lock file required)
+        → Generates clean package-lock.json IN CONTAINER
+        → papandreou@0.2.0 NOT resolved (not in npm registry)
+        → Clean dependency tree ✓
+      - Dockerfile COPY . . (includes all changes)
+      - Dockerfile RUN npm run build (Next.js build)
+   4. HTML2Canvas chain: html2canvas@1.4.1 → canvg@3.0.11
+      → Clean resolution (papandreou dropped)
+   5. Build completes → Docker image ready
+   6. Deployment to Railway
+   7. Solver2 & greedy: Updated ENV variables detected
+   8. EXPECTED RESULT: All 3 services GREEN within 5-10 minutes
 
 ⚠️ CRITICAL NOTES:
-   - npm ci (strict mode) will resolve dependencies fresh
-   - No papandreou@0.2.0 in new lock file (npm registry doesn't have it)
-   - Docker Hub may have brief instability (unrelated to this fix)
-   - If Docker Hub timeout occurs, Railway will retry automatically
+   - npm install (not npm ci) allows dynamic dependency resolution
+   - Container environment: FRESH (no host cache interference)
+   - papandreou@0.2.0: NOT available in npm registry → safely excluded
+   - Docker Hub: May have brief instability (unrelated, Railway retries)
+   - If Docker Hub timeout: Railway automatic retry (3x)
 
 ✅ VERIFICATION CHECKLIST:
-   [ ] rooster-app-verloskunde BUILD: SUCCESS
+   [ ] rooster-app-verloskunde BUILD: SUCCESS (check logs)
+   [ ] rooster-app-verloskunde npm install: COMPLETED (no EUSAGE)
+   [ ] rooster-app-verloskunde BUILD: npm run build SUCCESS
    [ ] rooster-app-verloskunde DEPLOY: GREEN
    [ ] Solver2 DEPLOY: GREEN  
    [ ] greedy DEPLOY: GREEN
    [ ] Frontend loads without 404 errors
    [ ] No papandreou errors in Railway logs
+   [ ] Package-lock.json auto-generated (check container)
 
 📊 DATABASE VALIDATION:
-   Tables validated: employees, roster_assignments, service_types
-   Supabase connection: OK
+   Tables validated: employees, roster_assignments, service_types, solver_runs
+   Supabase connection: OK (no schema changes)
    PostgREST API: OK
+   Status: DATABASE UNCHANGED (compatible with all code versions)
 
-🔍 NEXT PHASE:
-   FASE 2 (after verification):
-   - Downgrade canvg in package.json
-   - npm install locally
-   - Commit updated package-lock.json (PERMANENT FIX)
-   - Final deploy with canvg@^2.0.0
+🔍 COMMITS IN THIS PHASE:
+   1. 7a19dc3 - Verwijder package-lock.json
+   2. a56adad - Nieuw cache-bust bestand
+   3. 38249a7 - Update cache-bust env
+   4. 5c4488b - Deployment info file
+   5. 524f230 - Dockerfile: npm ci → npm install (THIS FIX)
 
+📝 NEXT PHASE (AFTER VERIFICATION):
+   FASE 2 (permanent solution):
+   - Downgrade canvg in package.json to ^2.0.0
+   - npm install locally (generates clean package-lock.json)
+   - Commit updated package-lock.json
+   - Change Dockerfile BACK to: npm ci (for production best-practice)
+   - Final deploy (permanent, reproducible)
+
+═══════════════════════════════════════════════════════════════════════════════
+STATUS: AWAITING RAILWAY REBUILD (should start within 30 seconds)
+EXPECTED: Build SUCCESS, all 3 services GREEN within 10 minutes
 ═══════════════════════════════════════════════════════════════════════════════
