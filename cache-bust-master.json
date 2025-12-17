@@ -1,0 +1,26 @@
+{
+  "timestamp": "2025-12-17T14:51:30Z",
+  "draad": 200,
+  "reason": "Full rollback to STAP 3 Complete - Next.js 14.2.33, complete package-lock.json",
+  "services": {
+    "rooster-app-verloskunde": {
+      "status": "ready-for-rebuild",
+      "timestamp": "2025-12-17T14:51:30Z",
+      "cache-bust-id": "draad200-rooster-" + Date.now()
+    },
+    "Solver2": {
+      "status": "no-changes",
+      "timestamp": "2025-12-17T14:51:30Z"
+    },
+    "greedy": {
+      "status": "no-changes",
+      "timestamp": "2025-12-17T14:51:30Z"
+    }
+  },
+  "changes": [
+    "✅ package.json: Next.js 14.2.33",
+    "✅ package-lock.json: Complete 350+ dependencies",
+    "✅ Dockerfile: npm ci only (no npm install)",
+    "✅ Railway will rebuild main app"
+  ]
+}
