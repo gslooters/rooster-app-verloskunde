@@ -1,0 +1,59 @@
+{
+  "master_registry": true,
+  "last_updated": 1734457003829,
+  "active_deployments": [
+    {
+      "draad": "DRAAD202",
+      "phase": "STAP 5 - Backend GREEDY Integration",
+      "version": "1.0",
+      "timestamp": 1734457003829,
+      "file": "public/.cache-bust-DRAAD202-BACKEND.json",
+      "status": "ACTIVE",
+      "component": "Backend /api/roster/solve",
+      "changes": "Solver2 → GREEDY, 30s timeout, Dutch errors, no retry"
+    },
+    {
+      "draad": "DRAAD201",
+      "phase": "STAP 4 - Frontend GREEDY Integration",
+      "version": "1.0",
+      "timestamp": 1734370000000,
+      "file": "public/.cache-bust-DRAAD201-FRONTEND.json",
+      "status": "ACTIVE",
+      "component": "Frontend AutoFillButton",
+      "changes": "Health check + GREEDY solver call"
+    }
+  ],
+  "deployment_notes": {
+    "rooster_app": "https://railway.app/project/90165889-1a50-4236-aefe-b1e1ae44dc7f",
+    "services": [
+      {
+        "name": "rooster-app-verloskunde",
+        "type": "Next.js Frontend + Backend APIs",
+        "draads": ["DRAAD201", "DRAAD202"]
+      },
+      {
+        "name": "greedy",
+        "type": "GREEDY Solver Service",
+        "url": "https://greedy-production.up.railway.app",
+        "endpoint": "/api/greedy/solve"
+      },
+      {
+        "name": "Solver2 (DEPRECATED)",
+        "type": "OR-Tools Python FastAPI",
+        "status": "No longer used - replaced by GREEDY"
+      }
+    ]
+  },
+  "recent_changes": [
+    {
+      "date": "2025-12-17T19:37:09Z",
+      "draad": "DRAAD202",
+      "description": "Backend GREEDY integration complete",
+      "files_modified": [
+        "app/api/roster/solve/route.ts",
+        ".env.example",
+        "public/.cache-bust-DRAAD202-BACKEND.json"
+      ]
+    }
+  ]
+}
