@@ -55,6 +55,8 @@
  * ADDED (Minimal GreedyRequest):
  *   - interface GreedyRequest {
  *       roster_id: string;
+ *       start_date: string;        // ← DRAAD-207B
+ *       end_date: string;          // ← DRAAD-207B
  *       supabase_url: string;
  *       supabase_key: string;
  *     }
@@ -245,6 +247,11 @@
  *   - Minimal GreedyRequest interface
  *   - Async fire-and-forget pattern
  * 
+ * DRAAD-207B: Fix Greedy API Payload (START/END DATES)
+ *   - Added start_date and end_date to GreedyRequest
+ *   - Fixes HTTP 422 validation error in Greedy service
+ *   - Dates now passed from backend to Greedy
+ * 
  * ============================================================================
  * DEPLOYMENT CHECKLIST
  * ============================================================================
@@ -311,11 +318,15 @@ console.log('[DRAAD-204] =====================================================')
 
 /**
  * DRAAD-204 FASE 3: Minimal GreedyRequest
- * Backend ONLY sends roster_id + Supabase credentials
+ * Backend ONLY sends roster_id + Supabase credentials + date range
  * Greedy is now self-sufficient and autonomous
+ * 
+ * DRAAD-207B: Added start_date and end_date for Greedy validation
  */
 interface GreedyRequest {
   roster_id: string;
+  start_date: string;  // ← ADDED DRAAD-207B
+  end_date: string;    // ← ADDED DRAAD-207B
   supabase_url: string;
   supabase_key: string;
 }
@@ -432,6 +443,7 @@ async function sendToGreedyAsync(
   console.log('[DRAAD-204] === SENDING TO GREEDY (ASYNC) ===');
   console.log(`[DRAAD-204] Endpoint: ${GREEDY_ENDPOINT}`);
   console.log(`[DRAAD-204] Roster ID: ${payload.roster_id}`);
+  console.log(`[DRAAD-204] Date range: ${payload.start_date} to ${payload.end_date}`);
 
   const startTime = Date.now();
 
@@ -445,7 +457,7 @@ async function sendToGreedyAsync(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'rooster-app-verloskunde/DRAAD-204'
+          'User-Agent': 'rooster-app-verloskunde/DRAAD-207B'
         },
         body: JSON.stringify(payload),
         signal: controller.signal
@@ -503,7 +515,7 @@ async function sendToGreedyAsync(
 }
 
 // ============================================================================
-// MAIN ROUTE HANDLER (DRAAD-204 FASE 3)
+// MAIN ROUTE HANDLER (DRAAD-204 FASE 3 + DRAAD-207B)
 // ============================================================================
 
 /**
@@ -519,37 +531,42 @@ async function sendToGreedyAsync(
  * - Immediate response (fire-and-forget to Greedy)
  * - Async processing (no waiting for Greedy to complete)
  * - Realtime Frontend monitoring (via Supabase subscription)
+ * 
+ * DRAAD-207B Fix:
+ * - Added start_date and end_date to greedy payload
+ * - Fixes HTTP 422 validation error
+ * - Greedy can now validate date range independently
  */
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
-  const cacheBustId = `DRAAD-204-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+  const cacheBustId = `DRAAD-207B-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
 
   console.log(
-    '[DRAAD-204] ========== POST /api/roster/solve (SELF-SERVICE GREEDY) =========='
+    '[DRAAD-207B] ========== POST /api/roster/solve (SELF-SERVICE GREEDY + FIX) =========='
   );
-  console.log(`[DRAAD-204] Cache bust ID: ${cacheBustId}`);
-  console.log('[DRAAD-204] Model: Backend routes → Greedy executes → Frontend monitors');
+  console.log(`[DRAAD-207B] Cache bust ID: ${cacheBustId}`);
+  console.log('[DRAAD-207B] Fix: Added start_date & end_date to greedy payload');
 
   try {
     // Parse request
     const { roster_id } = await request.json();
 
     if (!roster_id) {
-      console.error('[DRAAD-204] Missing roster_id in request');
+      console.error('[DRAAD-207B] Missing roster_id in request');
       return NextResponse.json(
         { error: 'roster_id is verplicht' },
         { status: 400 }
       );
     }
 
-    console.log(`[DRAAD-204] Roster ID: ${roster_id}`);
+    console.log(`[DRAAD-207B] Roster ID: ${roster_id}`);
     const supabase = await createClient();
 
     // ========================================================================
     // PHASE 1: VALIDATION (minimal - ONLY verify roster exists)
     // ========================================================================
 
-    console.log('[DRAAD-204] === PHASE 1: VALIDATION (minimal) ===');
+    console.log('[DRAAD-207B] === PHASE 1: VALIDATION (minimal) ===');
 
     // Fetch ONLY roster metadata (to verify existence and dates)
     // NO other data fetching here
@@ -560,7 +577,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (rosterError || !roster) {
-      console.error('[DRAAD-204] Roster not found');
+      console.error('[DRAAD-207B] Roster not found');
       return NextResponse.json(
         {
           error: 'Roster niet gevonden',
@@ -572,7 +589,7 @@ export async function POST(request: NextRequest) {
 
     // Verify date range
     if (!roster.start_date || !roster.end_date) {
-      console.error('[DRAAD-204] Roster missing date range', {
+      console.error('[DRAAD-207B] Roster missing date range', {
         start_date: roster.start_date,
         end_date: roster.end_date
       });
@@ -587,7 +604,7 @@ export async function POST(request: NextRequest) {
     // Verify roster status is 'draft'
     if (roster.status !== 'draft') {
       console.error(
-        `[DRAAD-204] Roster status validation failed: status='${roster.status}', expected 'draft'`
+        `[DRAAD-207B] Roster status validation failed: status='${roster.status}', expected 'draft'`
       );
       return NextResponse.json(
         {
@@ -597,24 +614,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('[DRAAD-204] ✅ Roster validation passed');
-    console.log(`[DRAAD-204]   - Status: ${roster.status}`);
-    console.log(`[DRAAD-204]   - Date range: ${roster.start_date} tot ${roster.end_date}`);
-    console.log(`[DRAAD-204]   - Duration: ${calculateDays(roster.start_date, roster.end_date)} dagen`);
-    console.log('[DRAAD-204] === END VALIDATION ===');
+    console.log('[DRAAD-207B] ✅ Roster validation passed');
+    console.log(`[DRAAD-207B]   - Status: ${roster.status}`);
+    console.log(`[DRAAD-207B]   - Date range: ${roster.start_date} tot ${roster.end_date}`);
+    console.log(`[DRAAD-207B]   - Duration: ${calculateDays(roster.start_date, roster.end_date)} dagen`);
+    console.log('[DRAAD-207B] === END VALIDATION ===');
 
     // ========================================================================
-    // PHASE 2: BUILD MINIMAL GREEDY REQUEST
+    // PHASE 2: BUILD MINIMAL GREEDY REQUEST (WITH DATES - DRAAD-207B FIX)
     // ========================================================================
 
-    console.log('[DRAAD-204] === PHASE 2: BUILD GREEDY REQUEST ===');
+    console.log('[DRAAD-207B] === PHASE 2: BUILD GREEDY REQUEST ===');
 
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !supabaseServiceKey) {
-      console.error('[DRAAD-204] Missing Supabase credentials in environment');
-      console.error('[DRAAD-204] Required:', {
+      console.error('[DRAAD-207B] Missing Supabase credentials in environment');
+      console.error('[DRAAD-207B] Required:', {
         SUPABASE_URL: !!supabaseUrl,
         SUPABASE_SERVICE_ROLE_KEY: !!supabaseServiceKey
       });
@@ -626,34 +643,39 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // DRAAD-207B: Added start_date and end_date to greedy_payload
     const greedyRequest: GreedyRequest = {
       roster_id: roster_id.toString(),
+      start_date: roster.start_date,  // ← ADDED DRAAD-207B
+      end_date: roster.end_date,      // ← ADDED DRAAD-207B
       supabase_url: supabaseUrl,
       supabase_key: supabaseServiceKey
     };
 
-    console.log('[DRAAD-204] ✅ Greedy request built (minimal payload)');
-    console.log(`[DRAAD-204]   - roster_id: ${greedyRequest.roster_id}`);
+    console.log('[DRAAD-207B] ✅ Greedy request built (minimal payload with dates)');
+    console.log(`[DRAAD-207B]   - roster_id: ${greedyRequest.roster_id}`);
+    console.log(`[DRAAD-207B]   - start_date: ${greedyRequest.start_date}`);
+    console.log(`[DRAAD-207B]   - end_date: ${greedyRequest.end_date}`);
     console.log(
-      `[DRAAD-204]   - supabase_url: ${greedyRequest.supabase_url.substring(0, 40)}...`
+      `[DRAAD-207B]   - supabase_url: ${greedyRequest.supabase_url.substring(0, 40)}...`
     );
     console.log(
-      `[DRAAD-204]   - supabase_key: ${greedyRequest.supabase_key.substring(0, 15)}...`
+      `[DRAAD-207B]   - supabase_key: ${greedyRequest.supabase_key.substring(0, 15)}...`
     );
-    console.log('[DRAAD-204] === END BUILD REQUEST ===');
+    console.log('[DRAAD-207B] === END BUILD REQUEST ===');
 
     // ========================================================================
     // PHASE 3: SEND TO GREEDY (ASYNC - FIRE AND FORGET)
     // ========================================================================
 
-    console.log('[DRAAD-204] === PHASE 3: SEND TO GREEDY (ASYNC) ===');
+    console.log('[DRAAD-207B] === PHASE 3: SEND TO GREEDY (ASYNC) ===');
 
     const greedyResult = await sendToGreedyAsync(greedyRequest);
 
     if (!greedyResult.success) {
-      console.warn('[DRAAD-204] ⚠️  Greedy request failed');
-      console.warn('[DRAAD-204] Error detail:', greedyResult.error);
-      console.log('[DRAAD-204] === END SEND TO GREEDY (FAILED) ===');
+      console.warn('[DRAAD-207B] ⚠️  Greedy request failed');
+      console.warn('[DRAAD-207B] Error detail:', greedyResult.error);
+      console.log('[DRAAD-207B] === END SEND TO GREEDY (FAILED) ===');
 
       return NextResponse.json(
         {
@@ -665,14 +687,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('[DRAAD-204] ✅ Greedy request sent successfully (async processing started)');
-    console.log('[DRAAD-204] === END SEND TO GREEDY ===');
+    console.log('[DRAAD-207B] ✅ Greedy request sent successfully (async processing started)');
+    console.log('[DRAAD-207B] === END SEND TO GREEDY ===');
 
     // ========================================================================
     // PHASE 4: UPDATE ROSTER STATUS & RETURN IMMEDIATELY
     // ========================================================================
 
-    console.log('[DRAAD-204] === PHASE 4: UPDATE ROSTER & RETURN ===');
+    console.log('[DRAAD-207B] === PHASE 4: UPDATE ROSTER & RETURN ===');
 
     // DRAAD-206 FIX: Wrap Supabase PromiseLike with Promise.resolve()
     // This ensures the result is a full Promise<T> type that supports .catch()
@@ -688,17 +710,17 @@ export async function POST(request: NextRequest) {
 
     Promise.resolve(updatePromise)
       .then(() => {
-        console.log('[DRAAD-204] ✅ Roster status updated: draft → in_progress');
+        console.log('[DRAAD-207B] ✅ Roster status updated: draft → in_progress');
       })
       .catch((err: any) => {
-        console.error('[DRAAD-204] ⚠️  Failed to update roster status:', err?.message);
+        console.error('[DRAAD-207B] ⚠️  Failed to update roster status:', err?.message);
       });
 
     const totalTime = Date.now() - startTime;
 
-    console.log('[DRAAD-204] === END ROSTER UPDATE ===');
-    console.log('[DRAAD-204] ========== RESPONSE SENT ==========');
-    console.log(`[DRAAD-204] Total backend time: ${totalTime}ms`);
+    console.log('[DRAAD-207B] === END ROSTER UPDATE ===');
+    console.log('[DRAAD-207B] ========== RESPONSE SENT ==========');
+    console.log(`[DRAAD-207B] Total backend time: ${totalTime}ms`);
 
     // ========================================================================
     // RETURN IMMEDIATELY (Don't wait for Greedy)
@@ -730,14 +752,16 @@ export async function POST(request: NextRequest) {
           frontend_responsibility: 'realtime monitoring via Supabase subscription'
         },
         implementation: {
-          draad: 'DRAAD-204',
+          draad: 'DRAAD-207B',
+          base_draad: 'DRAAD-204',
           fase: '3',
           status: 'IMPLEMENTED',
-          version: '1.0',
+          version: '1.1',
           endpoint: GREEDY_ENDPOINT,
           timeout_ms: GREEDY_TIMEOUT,
           async: true,
-          backend_payload: 'minimal (roster_id + credentials only)',
+          backend_payload: 'minimal (roster_id + start_date + end_date + credentials)',
+          fix_details: 'Added start_date and end_date to GreedyRequest to fix HTTP 422 validation error',
           removed_features: [
             'Data fetching (employees, services, constraints)',
             'UPDATE loop (Greedy writes directly)',
@@ -745,6 +769,7 @@ export async function POST(request: NextRequest) {
           ],
           new_features: [
             'Minimal GreedyRequest interface',
+            'Date range in payload (DRAAD-207B)',
             'Async fire-and-forget pattern',
             'Realtime Supabase subscription',
             'Autonomous Greedy service'
@@ -760,14 +785,14 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (error: any) {
-    console.error('[DRAAD-204] ❌ Unexpected error in POST handler:', error);
-    console.error('[DRAAD-204] Stack:', error?.stack);
+    console.error('[DRAAD-207B] ❌ Unexpected error in POST handler:', error);
+    console.error('[DRAAD-207B] Stack:', error?.stack);
 
     return NextResponse.json(
       {
         error: 'Internal server error',
         message: error.message,
-        draad: 'DRAAD-204'
+        draad: 'DRAAD-207B'
       },
       { status: 500 }
     );
