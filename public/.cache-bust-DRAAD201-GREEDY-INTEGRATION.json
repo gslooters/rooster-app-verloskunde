@@ -1,0 +1,21 @@
+{
+  "timestamp": 1734450950847,
+  "version": "DRAAD201-STAP4-GREEDY",
+  "stage": "FRONTEND_INTEGRATION",
+  "features": [
+    "AutoFillButton GREEDY endpoint integration",
+    "Health check on service startup",
+    "Error classification: network/server/timeout",
+    "Dutch error messages",
+    "Loading spinner with status",
+    "Result display with coverage",
+    "Bottleneck detection",
+    "Auto-refresh after success"
+  ],
+  "endpoints": {
+    "solve": "https://greedy-production.up.railway.app/api/greedy/solve",
+    "health": "https://greedy-production.up.railway.app/health"
+  },
+  "build_timestamp": "2025-12-17T19:15:00Z",
+  "railway_trigger": "AUTO"
+}
