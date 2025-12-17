@@ -39,6 +39,13 @@
  * - Fixed structureel_nbh type mismatch (boolean -> number | string | null)
  * - Added defensive type conversion in employee mapping
  * - JSONB field from Supabase now properly typed
+ *
+ * DRAAD202-CRITICAL (2025-12-17 20:17:00Z):
+ * - Fixed dagdeel type validation in fixed_assignments, blocked_slots, suggested_assignments
+ * - Added normalizeDagdeel() function with runtime validation
+ * - Replaces unsafe 'as' casts with proper type guards
+ * - Eliminates TypeScript error: Type 'string' is not assignable to '"A" | "M" | "O"'
+ * - Deployment should now succeed
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -101,19 +108,19 @@ interface GreedyPayload {
   fixedassignments: Array<{
     employee_id: string;
     date: string;
-    dagdeel: 'O' | 'M' | 'A';
+    dagdeel: 'O' | 'M' | 'A'; // ✅ DRAAD202-CRITICAL: Strict literal type
     service_id: string;
   }>;
   blockedslots: Array<{
     employee_id: string;
     date: string;
-    dagdeel: 'O' | 'M' | 'A';
+    dagdeel: 'O' | 'M' | 'A'; // ✅ DRAAD202-CRITICAL: Strict literal type
     status: 2 | 3;
   }>;
   suggestedassignments: Array<{
     employee_id: string;
     date: string;
-    dagdeel: 'O' | 'M' | 'A';
+    dagdeel: 'O' | 'M' | 'A'; // ✅ DRAAD202-CRITICAL: Strict literal type
     service_id: string;
   }>;
   exactstaffing: Array<{
@@ -175,6 +182,44 @@ interface GreedyError {
   type: GreedyErrorType;
   message: string;
   details?: any;
+}
+
+// ============================================================================
+// DAGDEEL VALIDATION & NORMALIZATION
+// ============================================================================
+
+/**
+ * DRAAD202-CRITICAL: Validate and normalize dagdeel value
+ * Database returns dagdeel as string, but GREEDY API requires strict literal type
+ * 
+ * This function:
+ * - Runtime validates that value is one of: 'O', 'M', 'A'
+ * - Returns properly typed value
+ * - Logs warning if invalid value provided
+ * - Fallback: returns 'O' if value is invalid (never undefined)
+ * 
+ * Usage: Replace unsafe "as 'O' | 'M' | 'A'" casts with this function
+ */
+function normalizeDagdeel(value: any): 'O' | 'M' | 'A' {
+  // Check if already valid
+  if (value === 'O' || value === 'M' || value === 'A') {
+    return value;
+  }
+
+  // Log invalid values for debugging
+  if (value !== undefined && value !== null) {
+    console.warn(`[DRAAD202-CRITICAL] Invalid dagdeel value: '${value}' (type: ${typeof value}), defaulting to 'O'`);
+  }
+
+  // Fallback to 'O' (morning shift)
+  return 'O';
+}
+
+/**
+ * Type guard to verify dagdeel is valid
+ */
+function isDagdeelValid(value: any): value is 'O' | 'M' | 'A' {
+  return value === 'O' || value === 'M' || value === 'A';
 }
 
 // ============================================================================
@@ -247,6 +292,7 @@ function classifyGreedyError(error: any): { type: GreedyErrorType; userMessage: 
  * Call GREEDY API with timeout handling
  * DRAAD202 FIX: Pass flat payload (no nested "data" object)
  * DRAAD202-HOTFIX: Payload must have non-null startdate/enddate
+ * DRAAD202-CRITICAL: All dagdeel values validated before sending
  * SINGLE ATTEMPT - NO RETRY LOGIC per DRAAD 202 requirement
  */
 async function callGreedyAPI(payload: GreedyPayload): Promise<GreedySolution> {
@@ -261,6 +307,9 @@ async function callGreedyAPI(payload: GreedyPayload): Promise<GreedySolution> {
   console.log('[DRAAD202-FIX] Nested data property?', 'data' in payload ? 'ERROR' : 'OK');
   console.log('[DRAAD202-HOTFIX] startdate type:', typeof payload.startdate, 'value:', payload.startdate);
   console.log('[DRAAD202-HOTFIX] enddate type:', typeof payload.enddate, 'value:', payload.enddate);
+  console.log('[DRAAD202-CRITICAL] fixedassignments dagdeel values:', payload.fixedassignments.slice(0, 3).map(fa => fa.dagdeel));
+  console.log('[DRAAD202-CRITICAL] blockedslots dagdeel values:', payload.blockedslots.slice(0, 3).map(bs => bs.dagdeel));
+  console.log('[DRAAD202-CRITICAL] suggestedassignments dagdeel values:', payload.suggestedassignments.slice(0, 3).map(sa => sa.dagdeel));
   
   const startTime = Date.now();
 
@@ -660,7 +709,7 @@ export async function POST(request: NextRequest) {
 
       return {
         date: rps?.date || '',
-        dagdeel: row.dagdeel as 'O' | 'M' | 'A',
+        dagdeel: normalizeDagdeel(row.dagdeel), // ✅ DRAAD202-CRITICAL: Use validated dagdeel
         service_id: rps?.service_id || '',
         team: row.team as 'TOT' | 'GRO' | 'ORA',
         exact_aantal: row.aantal,
@@ -696,19 +745,19 @@ export async function POST(request: NextRequest) {
       fixed_assignments: safeFixedData.map(fa => ({
         employee_id: fa.employee_id,
         date: fa.date,
-        dagdeel: fa.dagdeel as 'O' | 'M' | 'A',
+        dagdeel: normalizeDagdeel(fa.dagdeel), // ✅ DRAAD202-CRITICAL: Runtime validation + type safety
         service_id: fa.service_id
       })),
       blocked_slots: safeBlockedData.map(bs => ({
         employee_id: bs.employee_id,
         date: bs.date,
-        dagdeel: bs.dagdeel as 'O' | 'M' | 'A',
+        dagdeel: normalizeDagdeel(bs.dagdeel), // ✅ DRAAD202-CRITICAL: Runtime validation + type safety
         status: bs.status as 2 | 3
       })),
       suggested_assignments: safeSuggestedData.map(sa => ({
         employee_id: sa.employee_id,
         date: sa.date,
-        dagdeel: sa.dagdeel as 'O' | 'M' | 'A',
+        dagdeel: normalizeDagdeel(sa.dagdeel), // ✅ DRAAD202-CRITICAL: Runtime validation + type safety
         service_id: sa.service_id
       })),
       exact_staffing,
@@ -719,6 +768,7 @@ export async function POST(request: NextRequest) {
     
     // DRAAD202 FIX: Build flat payload (no nested "data" object)
     // DRAAD202-HOTFIX: Ensure start_date and end_date are NOT null/undefined
+    // DRAAD202-CRITICAL: All dagdeel values validated before sending to GREEDY
     const greedyPayload: GreedyPayload = {
       rosterid: roster_id.toString(),
       startdate: solverRequest.start_date as string, // ✅ TypeScript verified non-null
@@ -870,7 +920,7 @@ export async function POST(request: NextRequest) {
       },
       draad202: {
         status: 'IMPLEMENTED',
-        version: '1.2-TYPEERROR-FIXED',
+        version: '1.3-CRITICAL-FIXED',
         endpoint: GREEDY_ENDPOINT,
         timeout_ms: GREEDY_TIMEOUT,
         retry_attempts: 0,
@@ -878,7 +928,8 @@ export async function POST(request: NextRequest) {
         payload_structure: 'FLAT (no nested data object)',
         date_handling: 'ISO 8601 strings (verified non-null)',
         structureel_nbh_handling: 'Converted from JSONB to number | undefined',
-        message: 'Backend GREEDY integration fixed - flat payload, null-safe dates, type-safe structureel_nbh'
+        dagdeel_handling: 'Runtime validated via normalizeDagdeel() - strict literal type checking',
+        message: 'Backend GREEDY integration fixed - type-safe dagdeel validation, no more TypeScript errors'
       },
       total_time_ms: totalTime
     });
