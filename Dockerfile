@@ -1,9 +1,9 @@
 # Rooster App - Next.js Frontend
-# DRAAD-200 FASE 0: BASELINE VERIFY - Complete Docker Cache Wipe
-# Date: 2025-12-17T18:50:00Z
-# FIX: rm -rf node_modules + npm cache clean (explicit cache invalidation)
-# Status: canvg@2.0.0 ONLY (NO canvas, NO papandreou)
-# Services: rooster-app-verloskunde, Solver2, greedy all trigger
+# DRAAD-200: COMPLETE ROLLBACK TO BASELINE
+# Date: 2025-12-17T18:00:00Z
+# Status: All 3 services reset + Docker cache flushed
+# FIX: npm ci restored (from baseline commit)
+# Services: rooster-app-verloskunde, Solver2, greedy aligned
 
 FROM node:20-alpine
 
@@ -20,11 +20,9 @@ ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
 # Copy package files
 COPY package*.json ./
 
-# 🔥 CRITICAL: Clean npm cache + remove any stale dependencies
-# This prevents old canvas/papandreou from lock file being used
-RUN npm cache clean --force && \
-    rm -rf node_modules .npm && \
-    npm install --prefer-offline --no-audit
+# Use npm ci for reproducible builds (requires package-lock.json)
+# npm ci is best practice for production environments
+RUN npm ci --prefer-offline
 
 # Copy source code
 COPY . .
@@ -35,11 +33,7 @@ RUN npm run build
 # Expose port
 EXPOSE 3000
 
-# 🔥 CRITICAL FIX: Longer healthcheck with proper timing
-# Railway: start-period=60s (time to fully start)
-# Railway: interval=5s (check every 5s)
-# Railway: timeout=10s (wait 10s for response)
-# Railway: retries=3 (try 3 times = 30s total)
+# Healthcheck with proper timing
 HEALTHCHECK --interval=5s --timeout=10s --start-period=60s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
 
