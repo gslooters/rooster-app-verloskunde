@@ -4,22 +4,27 @@
  * DRAAD125B: Missing Types - BottleneckItem + BottleneckSuggestion + SolverApiResponse
  * DRAAD125C: FeasibleSummary Type Addition - fixes TypeScript compilation error
  * DRAAD-191: GREEDY Solver Type Update - Changed status types for GREEDY engine
- * DRAAD-202: STRUCTUREEL_NBH TYPE FIX - Changed from boolean to number | null | string
+ * DRAAD-202: STRUCTUREEL_NBH TYPE FIX - Changed from boolean to number | undefined
+ * DRAAD-202-CRITICAL: Removed null from type (was: number | string | null, now: number | undefined)
  * Phase 3: TypeScript Types voor Solver & Roster Assignment
  */
 
 /**
  * Employee from employees table
  * DRAAD115: voornaam/achternaam split, team mapped from dienstverband
- * DRAAD-202: structureel_nbh is JSONB in database, can be number, string, null, or boolean
- *           Changed type to number | string | null to support flexible data formats
+ * 
+ * DRAAD-202-CRITICAL FIX:
+ * - Database stores JSONB (flexible format)
+ * - GREEDY API expects: number | undefined (NOT null)
+ * - Conversion function handles null → undefined
+ * - Type now matches GreedyPayload expectation exactly
  */
 export interface Employee {
   id: string; // UUID
   voornaam: string;
   achternaam: string;
   team: 'maat' | 'loondienst' | 'overig'; // mapped from dienstverband
-  structureel_nbh?: number | string | null;  // ✅ FIXED: Was boolean, now flexible
+  structureel_nbh?: number | undefined;  // ✅ CRITICAL FIX: Changed from number | string | null to number | undefined
   min_werkdagen?: number;
 }
 
@@ -386,7 +391,7 @@ export interface SolveResponse {
 }
 
 /**
- * DRAAD-191: SolverApiResponse - Wrapper response from /api/roster/solve or /api/roster/solve-greedy
+ * DRAAD-191: SolverApiResponse - Wrapper response from /api/roster/solve or /api/router/solve-greedy
  * 
  * Unified interface for both ORT and GREEDY solver responses
  * The API endpoint wraps SolveResponse with metadata and conditionally includes summary
