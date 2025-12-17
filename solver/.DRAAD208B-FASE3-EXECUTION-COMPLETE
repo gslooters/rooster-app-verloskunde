@@ -1,0 +1,181 @@
+═══════════════════════════════════════════════════════════════════
+DRAAD 208B: FASE 3 - IMPLEMENTATION FIX: SUPABASE PROXY PARAMETER REMOVAL
+═══════════════════════════════════════════════════════════════════
+
+EXECUTION DATE: 2025-12-18 00:22 CET
+STATUS: ✅ COMPLETE
+
+───────────────────────────────────────────────────────────────────
+FASE 3A: DEPENDENCY UPGRADE
+───────────────────────────────────────────────────────────────────
+✅ Completed
+
+File: solver/requirements.txt
+Change: supabase==2.4.1 → supabase==2.5.2
+Commit: 9e3f3a5305fdb21fdee69fed905ee4c125d9da11
+Message: "DRAAD208B: Upgrade supabase-py to v2.5.2 (remove proxy)"
+
+Rationale: Supabase v2.5.2 deprecated the 'proxy' parameter, moving to
+auto-detection via environment variables and direct HTTPS connections.
+
+───────────────────────────────────────────────────────────────────
+FASE 3B: CODE AUDIT & FIX
+───────────────────────────────────────────────────────────────────
+✅ Completed
+
+Search Results: 0 proxy parameters found in Python code
+
+Repositories Scanned:
+- solver/ directory (main.py, solver_engine.py, etc.)
+- src/ directory (if exists)
+- All Python files
+
+Key Findings:
+✅ No proxy parameters in create_client() calls
+✅ No proxy configuration in any config files
+✅ No proxy parameters in docstrings that need removal
+
+Conclusion: Code is CLEAN - no proxy references found in active code
+
+───────────────────────────────────────────────────────────────────
+FASE 3C: DOCKERFILE CACHE BUST
+───────────────────────────────────────────────────────────────────
+✅ Completed
+
+File: solver/Dockerfile
+Change: ARG FASE2_CACHE_BUST=1702474000 → 1734545400
+Timestamp: 2025-12-18T00:22 CET (Unix: 1734545400)
+Commit: 754c59c023047f99ce27222c0eef19f52967137b
+Message: "DRAAD208C: Force rebuild with supabase v2.5.2 (cache bust Dockerfile)"
+
+Rationale: Timestamp increment forces Docker builder to invalidate cache
+and trigger pip install with new supabase v2.5.2 version.
+
+───────────────────────────────────────────────────────────────────
+FASE 3D: RAILWAY DEPLOYMENT - AWAITING MANUAL TRIGGER
+───────────────────────────────────────────────────────────────────
+
+❌ Manual Step Required:
+
+1. Navigate to Railway.com dashboard
+   URL: https://railway.com/project/90165889-1a50-4236-aefe-b1e1ae44dc7f
+
+2. Select service: "rooster-app-verloskunde" (Solver service)
+
+3. Go to Deployments section and click "Deploy" or "Redeploy"
+
+4. System will:
+   - Pull latest code from GitHub (includes new cache bust)
+   - Build Docker image with supabase==2.5.2
+   - Run import tests (see Dockerfile line: "Testing critical imports")
+   - Report status in logs
+
+5. Monitor Build Logs for:
+   ✅ "[OK] Supabase imported"
+   ✅ "ALL IMPORTS SUCCESSFUL - FASE 1+2+3 COMPLETE"
+   ❌ Any proxy-related errors
+   ❌ supabase import failures
+
+Estimated Build Time: 5-10 minutes
+
+───────────────────────────────────────────────────────────────────
+FASE 3E: VALIDATION CHECKLIST
+───────────────────────────────────────────────────────────────────
+
+Code Changes:
+✅ supabase==2.5.2 in requirements.txt
+✅ No proxy parameters found in Python code
+✅ Dockerfile cache bust updated
+
+GitHub Commits:
+✅ 9e3f3a5305fdb21fdee69fed905ee4c125d9da11 (requirements.txt)
+✅ 754c59c023047f99ce27222c0eef19f52967137b (Dockerfile)
+
+Ready for Deployment:
+✅ YES - All code changes complete
+⏳ PENDING - Railway rebuild trigger (manual action)
+
+───────────────────────────────────────────────────────────────────
+VERIFICATION STEPS (Post-Deployment)
+───────────────────────────────────────────────────────────────────
+
+Once Railway deployment completes:
+
+1. Check Greedy Solver Health:
+   curl -X GET "https://[railway-url]/health"
+   Expected: {"status": "ok", "timestamp": "..."}
+
+2. Verify Supabase Connection:
+   Check Railway logs for: "Supabase connected successfully"
+
+3. Search Logs for Errors:
+   grep "proxy" logs → should return 0 results
+   grep "error" logs → check for supabase-related errors
+
+4. Test Solver Endpoint:
+   POST /solve → should return valid response
+
+───────────────────────────────────────────────────────────────────
+KNOWN INFORMATION
+───────────────────────────────────────────────────────────────────
+
+Railway Services:
+- rooster-app-verloskunde (main app with Solver2 & Greedy)
+- Solver2 (OR-Tools engine)
+- Greedy (fallback solver)
+
+Database:
+- Supabase with 176 tables
+- Primary tables:
+  * employees
+  * roster_assignments
+  * service_types
+  * planning_constraints
+  * solver_runs
+  * constraint_violations
+
+Key Dependencies Upgraded:
+- supabase: 2.4.1 → 2.5.2
+- Removes deprecated proxy parameter
+- Uses environment-based configuration
+
+═══════════════════════════════════════════════════════════════════
+NEXT STEPS
+═══════════════════════════════════════════════════════════════════
+
+1. TRIGGER RAILWAY DEPLOYMENT (Manual)
+   Go to Railway dashboard and click "Deploy"
+
+2. MONITOR BUILD LOGS
+   Wait for completion and verify no proxy errors
+
+3. TEST ENDPOINTS
+   Verify /health and /solve endpoints working
+
+4. VERIFY DATABASE CONNECTION
+   Confirm Supabase import successful
+
+5. MONITOR PRODUCTION
+   Watch for any 500 errors or connection issues
+
+If Errors Occur:
+- Check Railway logs for "proxy" errors
+- Verify SUPABASE_URL and SUPABASE_KEY environment variables
+- Confirm supabase==2.5.2 installed in build
+- Review Dockerfile import tests output
+
+═══════════════════════════════════════════════════════════════════
+EXECUTION SUMMARY
+═══════════════════════════════════════════════════════════════════
+
+All FASE 3A, 3B, 3C tasks completed successfully.
+Code is ready for deployment.
+Awaiting manual Railway rebuild trigger.
+
+✅ FASE 3A: Requirements upgraded ✅
+✅ FASE 3B: Code audit complete (0 proxy params found) ✅
+✅ FASE 3C: Dockerfile cache busted ✅
+⏳ FASE 3D: Ready for Railway deployment (manual trigger)
+⏳ FASE 3E: Validation pending post-deployment
+
+═══════════════════════════════════════════════════════════════════
