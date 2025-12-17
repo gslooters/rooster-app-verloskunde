@@ -1,0 +1,21 @@
+DRAAD-200 ROLLBACK CACHE BUST
+
+Timestamp: 2025-12-17T17:40:30Z
+UnixTime: 1734445230000
+Random: 7482639501
+Build Trigger: Railway Build #49
+
+Reason: Rollback from npm ci to npm install
+Status: Lock file will be generated in container
+Expected: SUCCESS all 3 services (rooster-app, Solver2, greedy)
+
+Changes:
+- Dockerfile: npm ci -> npm install
+- package-lock.json: DELETED (invalid)
+- package.json: KEEPS canvg@2.0.0 (papandreou-free)
+
+Timeline:
+- FASE 1 (17:09): npm install workaround
+- FASE 2 (17:25): npm ci attempt (FAILED - lock out of sync)
+- ROLLBACK (17:40): Return to npm install
+- Build #49: In progress...
