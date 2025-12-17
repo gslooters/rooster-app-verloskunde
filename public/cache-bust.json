@@ -1,86 +1,119 @@
 {
-  "version": "1.0.0-draad192",
-  "timestamp": 1734315661000,
-  "buildId": "draad192-solver2-migration-" + "999d686",
-  "description": "DRAAD192: Solver2 Endpoint Migration - 120s Timeout + Retry Logic",
-  "migration": {
-    "from": "Local Solver Service (/api/roster/solve)",
-    "to": "External Solver2 API Endpoint",
-    "status": "✅ COMPLETE AND MERGED"
+  "version": "1.0.0-draad202",
+  "timestamp": 1734464250000,
+  "buildId": "draad202-greedy-flat-payload-" + "7ad2674c",
+  "description": "DRAAD202: GREEDY API Payload Restructuring - Flatten nested data object",
+  "previous_draad": "DRAAD192 (Solver2 migration)",
+  "draad202_fix": {
+    "issue": "HTTP 422 Pydantic validation errors from GREEDY API",
+    "root_cause": "GreedyRequest interface had geneste 'data' object, but GREEDY expects flat root-level fields",
+    "solution": "Replaced GreedyRequest with GreedyPayload (flat structure)",
+    "status": "✅ IMPLEMENTED AND MERGED"
   },
-  "technical_details": {
-    "timeout_seconds": 120,
-    "retry_attempts": 3,
-    "retry_backoff": "exponential (1s, 2s)",
-    "fallback_status": "504 Gateway Timeout",
-    "error_logging_prefix": "DRAAD192",
-    "abortSignal_implementation": true,
-    "backward_compatibility": true,
-    "type_safety": "✅ VERIFIED",
-    "error_handling": "✅ COMPREHENSIVE"
-  },
-  "success_criteria": {
-    "no_timeout_errors": true,
-    "status_progression": "0 → 1 → 3",
-    "all_roster_items_processable": 1470,
-    "fill_percentage_expected": "≥95%",
-    "solver2_api_responding": true,
-    "data_integrity_maintained": true
-  },
-  "deployment_checklist": {
-    "code_review": "✅ PASSED",
-    "merge_to_main": "✅ COMPLETE (commit: 999d686)",
-    "pr_number": 85,
-    "railway_deployment": "⏳ PENDING - NEEDS MANUAL TRIGGER",
-    "supabase_verification": "⏳ PENDING",
-    "integration_testing": "⏳ PENDING",
-    "production_validation": "⏳ PENDING"
-  },
-  "environment_variables_required": {
-    "SOLVER2_URL": "https://solver2-api.example.com",
-    "TIMEOUT_MS": 120000,
-    "RETRY_ATTEMPTS": 3,
-    "LOG_PREFIX": "DRAAD192"
-  },
-  "cache_bust_strategy": {
-    "static_version": "1.0.0-draad192",
-    "dynamic_timestamp": 1734315661000,
-    "commit_sha": "999d686",
-    "invalidation_trigger": "Hard refresh (Ctrl+Shift+R) OR railway redeploy",
-    "purpose": "Force clients to fetch new Solver2 endpoint configuration"
-  },
-  "rollback_info": {
-    "previous_commit": "e2f42e2 (last main before merge)",
-    "fallback_endpoint": "/api/roster/solve (local)",
-    "rollback_time_estimate": "5 minutes"
-  },
-  "next_steps": [
-    "✅ 1. PR Merged to main (COMPLETE)",
-    "⏳ 2. Push cache-bust.json trigger (IN PROGRESS)",
-    "⏳ 3. Manual Railway deployment trigger needed",
-    "⏳ 4. Monitor DRAAD192 logs in Railway",
-    "⏳ 5. Verify Solver2 API connectivity",
-    "⏳ 6. Run integration tests (all 3 scenarios)",
-    "⏳ 7. Production validation with real roster data"
-  ],
-  "monitoring": {
-    "log_prefix": "[DRAAD192]",
-    "metrics_to_watch": [
-      "Timeout duration (target: <120s)",
-      "Retry count distribution",
-      "Success rate (%)",
-      "Error rate by type",
-      "API response time"
-    ],
-    "alerts": {
-      "timeout_exceeded": "CRITICAL",
-      "all_retries_exhausted": "CRITICAL",
-      "service_unavailable": "CRITICAL",
-      "degraded_performance": "WARNING"
+  "payload_structure_change": {
+    "before": {
+      "structure": "Nested object with 'data' property",
+      "example": "{ roster_id: '123', data: { start_date, end_date, employees, ... } }",
+      "issue": "GREEDY Pydantic model cannot validate nested structure"
+    },
+    "after": {
+      "structure": "Flat root-level fields",
+      "fields": [
+        "rosterid",
+        "startdate",
+        "enddate",
+        "employees",
+        "services",
+        "rosteremployeeservices",
+        "fixedassignments",
+        "blockedslots",
+        "suggestedassignments",
+        "exactstaffing",
+        "timeoutseconds"
+      ],
+      "diagnostics": "console.log outputs: Flat payload keys + 'nested data property?' check"
     }
   },
-  "deployment_date": "2025-12-16T12:21:01Z",
+  "technical_details": {
+    "file_changed": "app/api/roster/solve/route.ts",
+    "changes": [
+      "Replaced GreedyRequest interface with GreedyPayload",
+      "Flattened all fields to root level",
+      "Updated callGreedyAPI() function signature",
+      "Added DRAAD202-FIX diagnostics logging"
+    ],
+    "greedy_service": {
+      "endpoint": "https://greedy-production.up.railway.app/api/greedy/solve",
+      "timeout": "30000ms",
+      "retry_attempts": 0,
+      "method": "POST",
+      "content_type": "application/json"
+    }
+  },
+  "success_criteria": {
+    "http_422_resolved": true,
+    "greedy_api_accepts_payload": "✅ Expected (flat structure)",
+    "pydantic_validation_passes": "✅ Expected (all fields at root level)",
+    "roster_calculation_starts": "⏳ To be verified in Railway logs",
+    "no_validation_errors": "✅ Expected (Field required: startdate errors should stop)"
+  },
+  "deployment_checklist": {
+    "code_changes_merged": "✅ COMPLETE",
+    "cache_bust_updated": "✅ THIS REQUEST",
+    "railway_deployment_triggered": "⏳ NEXT STEP",
+    "greedy_service_restart": "ℹ️  Only if GREEDY service env vars changed",
+    "frontend_hard_refresh": "⏳ User action required (Ctrl+Shift+R)",
+    "railway_logs_monitoring": "⏳ Watch for [DRAAD202-FIX] diagnostics"
+  },
+  "expected_log_outputs": {
+    "success_indicators": [
+      "[DRAAD202-FIX] Flat payload keys: [rosterid, startdate, enddate, employees, ...]",
+      "[DRAAD202-FIX] Nested data property? OK",
+      "[DRAAD202] ✅ GREEDY response parsed successfully",
+      "[DRAAD202] Status: SUCCESS, Coverage: XX%, Assignments: YYY"
+    ],
+    "error_indicators": [
+      "[DRAAD202-FIX] Nested data property? ERROR",
+      "[DRAAD202] GREEDY HTTP error 422",
+      "Field required: startdate"
+    ]
+  },
+  "monitoring": {
+    "log_prefix": "[DRAAD202]",
+    "diagnostic_prefix": "[DRAAD202-FIX]",
+    "metrics_to_watch": [
+      "HTTP status codes from GREEDY (200 = success, 422 = payload error, 500 = server error)",
+      "Pydantic validation error messages",
+      "Coverage rate percentage",
+      "Assignment count",
+      "Solve time in seconds"
+    ],
+    "alerts": {
+      "http_422_still_occurs": "CRITICAL - payload structure still incorrect",
+      "field_required_errors": "CRITICAL - missing required fields",
+      "greedy_timeout": "WARNING - solver taking >30s",
+      "zero_coverage": "WARNING - no assignments generated"
+    }
+  },
+  "rollback_info": {
+    "previous_commit": "f6824e64 (before DRAAD202 fix)",
+    "rollback_file": "app/api/roster/solve/route.ts",
+    "rollback_time_estimate": "5 minutes",
+    "manual_rollback": "If HTTP 422 errors persist after fix"
+  },
+  "next_steps": [
+    "✅ 1. Code changes implemented (COMPLETE)",
+    "✅ 2. Cache bust updated (THIS REQUEST)",
+    "⏳ 3. Trigger Railway deployment",
+    "⏳ 4. Monitor [DRAAD202-FIX] logs",
+    "⏳ 5. Test /api/roster/solve endpoint",
+    "⏳ 6. Verify GREEDY returns HTTP 200 + valid response",
+    "⏳ 7. Monitor coverage rate and assignment count"
+  ],
+  "deployment_date": "2025-12-17T19:57:30Z",
   "deployed_by": "GitHub MCP Tools (automated)",
-  "railway_trigger_needed": true,
-  "status": "MERGED - AWAITING RAILWAY DEPLOYMENT"
+  "railway_trigger_required": true,
+  "trigger_reason": "Backend code changes (route.ts) - flat payload structure",
+  "status": "MERGED - AWAITING RAILWAY DEPLOYMENT",
+  "priority": "HIGH - Blocks roster calculation"
 }
