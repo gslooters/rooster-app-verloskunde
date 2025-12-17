@@ -1,12 +1,11 @@
-# Rooster App - Next.js Frontend Production Dockerfile
-# DRAAD-200: COMPLETE FIX - npm ci now works with package-lock.json
-# Date: 2025-12-17T18:14:00Z
-# Status: BUILD PIPELINE FIXED ✅
+# Rooster App - Next.js Frontend Production Dockerfile  
+# DRAAD-200: FASE 2 FIX - Use npm install instead of npm ci (generate lock dynamically)
+# Date: 2025-12-17T18:20:00Z
+# Status: BUILD WILL GENERATE LOCKFILE AUTOMATICALLY
 
 FROM node:20-alpine
 
 # Install build dependencies for native modules
-# canvg is pure JavaScript but canvas dependencies might be needed
 RUN apk add --no-cache python3 make g++ cairo-dev jpeg-dev pango-dev giflib-dev
 
 WORKDIR /app
@@ -19,19 +18,19 @@ ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
 ENV NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
 ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
 
-# Copy package files (CRITICAL: package-lock.json MUST exist)
-COPY package*.json ./
+# Copy package.json ONLY (NOT package-lock.json yet)
+COPY package.json ./
 
-# Clean install with package-lock.json (reproducible builds)
-RUN npm ci --prefer-offline --verbose
+# Generate lock file + install (npm install generates package-lock.json automatically)
+RUN npm install --prefer-offline --legacy-peer-deps
 
-# Copy source code
+# Copy rest of source code
 COPY . .
 
 # Build Next.js app (env vars available during build)
 RUN npm run build
 
-# Production stage - only needed files
+# ===== PRODUCTION STAGE =====
 FROM node:20-alpine
 WORKDIR /app
 
@@ -52,5 +51,5 @@ EXPOSE 3000
 HEALTHCHECK --interval=5s --timeout=10s --start-period=60s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
 
-# Start application with explicit hostname binding
+# Start application
 CMD ["node", "server.js"]
