@@ -1,9 +1,8 @@
 # Rooster App - Next.js Frontend
-# DRAAD-200: COMPLETE ROLLBACK TO BASELINE
-# Date: 2025-12-17T18:00:00Z
-# Status: All 3 services reset + Docker cache flushed
-# FIX: npm ci restored (from baseline commit)
-# Services: rooster-app-verloskunde, Solver2, greedy aligned
+# DRAAD-200: EMERGENCY FIX - npm install (package-lock.json missing)
+# Date: 2025-12-17T18:04:00Z
+# Status: Generate clean package-lock.json in container
+# Services: rooster-app-verloskunde, Solver2, greedy all rebuilding
 
 FROM node:20-alpine
 
@@ -20,9 +19,10 @@ ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
 # Copy package files
 COPY package*.json ./
 
-# Use npm ci for reproducible builds (requires package-lock.json)
-# npm ci is best practice for production environments
-RUN npm ci --prefer-offline
+# CRITICAL FIX: npm install generates fresh package-lock.json
+# package-lock.json is NOT in repo - this generates it cleanly in container
+# No papandreou corruption possible (not in npm registry)
+RUN npm install --prefer-offline --no-audit
 
 # Copy source code
 COPY . .
