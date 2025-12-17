@@ -1,0 +1,32 @@
+{
+  "draad": "DRAAD202",
+  "phase": "STAP 5 - Backend GREEDY Integration",
+  "version": "1.0",
+  "timestamp": 1734457003829,
+  "random_id": "DRAAD202-1734457003829-94582",
+  "description": "Backend /api/roster/solve route replaced with GREEDY endpoint",
+  "changes": [
+    "Replaced Solver2/ORT with GREEDY API call",
+    "30s timeout, no retry logic (single attempt)",
+    "Dutch error messages for all failure types",
+    "Response validation and status handling",
+    "DRAAD155 UPDATE pattern maintained",
+    "solverruns table: source='greedy'"
+  ],
+  "deployment_target": "Railway rooster-app-verloskunde",
+  "requirements": [
+    "GREEDY_ENDPOINT env var set on Railway",
+    "GREEDY_TIMEOUT=30000 (milliseconds)",
+    "Frontend AutoFillButton calls /api/roster/solve",
+    "Supabase roster_assignments table writable"
+  ],
+  "success_criteria": [
+    "Button click → GREEDY call (not Solver2)",
+    "Response validation passed",
+    "Dutch error messages shown",
+    "Coverage % displayed (0-100)",
+    "Assignments stored in database",
+    "Roster status: draft → in_progress",
+    "No 504 timeout errors"
+  ]
+}
