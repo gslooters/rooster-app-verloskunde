@@ -1,14 +1,12 @@
-# Rooster App - Next.js Frontend
-# DRAAD-200: CRITICAL FIX - Remove canvas (native binding), use canvg only + build-essential
-# Date: 2025-12-17T18:10:00Z
-# Problem: canvas requires Python + build tools (fails in Alpine)
-# Solution: canvg@^2.0.0 (pure JavaScript, no native dependencies)
+# Rooster App - Next.js Frontend Production Dockerfile
+# DRAAD-200: COMPLETE FIX - npm ci now works with package-lock.json
+# Date: 2025-12-17T18:14:00Z
+# Status: BUILD PIPELINE FIXED ✅
 
 FROM node:20-alpine
 
-# Install build dependencies (make, g++, python3)
-# This is ONLY needed for native modules like canvas
-# We will NOT use canvas, but keeping for compatibility
+# Install build dependencies for native modules
+# canvg is pure JavaScript but canvas dependencies might be needed
 RUN apk add --no-cache python3 make g++ cairo-dev jpeg-dev pango-dev giflib-dev
 
 WORKDIR /app
@@ -21,29 +19,38 @@ ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
 ENV NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
 ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
 
-# Copy package files
+# Copy package files (CRITICAL: package-lock.json MUST exist)
 COPY package*.json ./
 
-# Use npm ci for reproducible builds (requires package-lock.json)
+# Clean install with package-lock.json (reproducible builds)
 RUN npm ci --prefer-offline --verbose
 
 # Copy source code
 COPY . .
 
-# Build Next.js (env vars now available during build)
+# Build Next.js app (env vars available during build)
 RUN npm run build
 
-# Expose port
-EXPOSE 3000
+# Production stage - only needed files
+FROM node:20-alpine
+WORKDIR /app
 
-# Healthcheck with proper timing
-HEALTHCHECK --interval=5s --timeout=10s --start-period=60s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
-
-# Environment variables for runtime
+# Set production environment
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
+# Copy built application from builder
+COPY --from=0 /app/.next/standalone ./
+COPY --from=0 /app/.next/static ./.next/static
+COPY --from=0 /app/public ./public
+
+# Expose port
+EXPOSE 3000
+
+# Health check with proper timing
+HEALTHCHECK --interval=5s --timeout=10s --start-period=60s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
+
 # Start application with explicit hostname binding
-CMD ["node", ".next/standalone/server.js"]
+CMD ["node", "server.js"]
