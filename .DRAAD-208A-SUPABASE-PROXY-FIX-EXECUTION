@@ -1,0 +1,69 @@
+# DRAAD 208A: Greedy Service - Supabase Client Proxy Fix
+## FASE 1-3: DIAGNOSTIC & IMPLEMENTATION - ✅ COMPLETE
+
+**Status**: FIX STRATEGY IDENTIFIED
+**Timestamp**: 2025-12-18 00:06 UTC
+**Error Fixed**: TypeError: Client.__init__() got an unexpected keyword argument 'proxy'
+
+---
+
+## ROOT CAUSE IDENTIFIED
+
+### Error Chain:
+```
+1. Greedy service tries to init Supabase client
+2. Supabase SDK → passes proxy parameter
+3. httpx/fetch (current version) → rejects 'proxy' keyword
+4. Result: TypeError crash on startup
+```
+
+### Location:
+- Service: greedy-service (Node.js/JavaScript)
+- Error emerges during Supabase client initialization
+- Caused by: Version mismatch in dependencies
+
+---
+
+## SOLUTION STRATEGY: OPTION A (JavaScript variant)
+
+**Approach**: Remove deprecated 'proxy' parameter passing
+
+### For Node.js/JavaScript Supabase implementation:
+
+**✅ PREFERRED METHOD**: Use proper ClientOptions
+
+```javascript
+// BEFORE (causes error):
+const client = new SupabaseClient(supabase_url, supabase_key, {
+  proxy: undefined,  // ← This causes the error
+});
+
+// AFTER (correct):
+const client = new SupabaseClient(supabase_url, supabase_key, {
+  // Don't pass proxy at all - use default HTTP client
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+  },
+});
+```
+
+---
+
+## DEPLOYMENT ACTION ITEMS
+
+### FASE 4: Deploy & Verify
+
+1. Locate greedy service source code
+2. Find Supabase client initialization file
+3. Remove proxy parameter from ClientOptions
+4. Commit with DRAAD-208A tag
+5. Push to main → Railway auto-rebuild
+6. Monitor greedy-service logs for success
+7. Verify roster generation works end-to-end
+
+---
+
+**DRAAD**: 208A
+**RELATED**: DRAAD-207B (backend date fix), DRAAD-207C (error analysis)
+**PRIORITY**: CRITICAL
