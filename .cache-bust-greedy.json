@@ -1,20 +1,13 @@
 {
-  "timestamp": "2025-12-16T15:40:15Z",
-  "reason": "DRAAD 195 - GREEDY deployment fix: postgrest-py removed, dependencies aligned with baseline",
   "service": "greedy",
-  "cache_bust_id": "cb_7842551693",
-  "fixes": [
-    "postgrest-py==0.13.0 removed (version doesn't exist)",
-    "supabase: 2.3.5 → 2.4.0",
-    "pydantic: 2.5.0 → 2.8.0",
-    "httpx: 0.25.1 → 0.25.2",
-    "Removed conflicting: realtime-py, postgres-py, python-gotrue, py-httpx"
+  "timestamp": 1734550320000,
+  "version": "DRAAD2026-D3",
+  "trigger_reason": "TypeScript JSX Compilation Fix",
+  "changes": [
+    "Renamed greedy-realtime-monitor.ts to .tsx",
+    "JSX support now properly enabled in frontend",
+    "Build error 'Cannot find name div' resolved"
   ],
-  "services_aligned": [
-    "rooster-app-verloskunde",
-    "Solver2",
-    "greedy"
-  ],
-  "supabase_schema_verified": true,
-  "tables_count": 176
+  "status": "REBUILD_REQUIRED",
+  "date": "2025-12-17T22:52:00Z"
 }
