@@ -1,0 +1,16 @@
+DRAAD 2026 D3: CACHE BUST - TypeScript JSX Fix
+
+Changes:
+1. Renamed lib/frontend/greedy-realtime-monitor.ts → .tsx
+2. Removed old .ts file (JSX mismatch)
+3. All JSX now properly recognized in TypeScript
+
+Services to rebuild:
+- rooster-app (main frontend)
+- Solver2 (solver service)
+- Greedy (greedy service)
+
+This cache bust forces fresh install and build on all services.
+
+Time: 2025-12-17T22:52:00Z
+ID: 7392847
