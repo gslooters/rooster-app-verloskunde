@@ -29,6 +29,11 @@
  * - Flattened payload to root-level fields
  * - GREEDY API expects: rosterid, startdate, enddate, employees, services, etc (all flat)
  * - NOT: roster_id with nested data object
+ *
+ * DRAAD202-HOTFIX (2025-12-17):
+ * - Added null-safety checks for start_date/end_date
+ * - Roster data must have both dates (required by GREEDY)
+ * - Type guards prevent undefined values in payload
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -60,11 +65,14 @@ console.log(`[DRAAD202] Timeout: ${GREEDY_TIMEOUT}ms (NO retry - single attempt)
 /**
  * DRAAD202 FIX: Flat payload structure (no nested "data" object)
  * GREEDY API expects root-level fields matching its Pydantic model
+ * 
+ * DRAAD202-HOTFIX: All date fields are NON-OPTIONAL (required)
+ * start_date and end_date MUST be provided by router
  */
 interface GreedyPayload {
   rosterid: string;
-  startdate: string;
-  enddate: string;
+  startdate: string; // ✅ REQUIRED - non-null, non-undefined
+  enddate: string;   // ✅ REQUIRED - non-null, non-undefined
   employees: Array<{
     id: string;
     voornaam: string;
@@ -233,17 +241,21 @@ function classifyGreedyError(error: any): { type: GreedyErrorType; userMessage: 
 /**
  * Call GREEDY API with timeout handling
  * DRAAD202 FIX: Pass flat payload (no nested "data" object)
+ * DRAAD202-HOTFIX: Payload must have non-null startdate/enddate
  * SINGLE ATTEMPT - NO RETRY LOGIC per DRAAD 202 requirement
  */
 async function callGreedyAPI(payload: GreedyPayload): Promise<GreedySolution> {
   console.log('[DRAAD202] === GREEDY API CALL START ===');
   console.log(`[DRAAD202] Endpoint: ${GREEDY_ENDPOINT}`);
   console.log(`[DRAAD202] Roster ID: ${payload.rosterid}`);
+  console.log(`[DRAAD202] Date range: ${payload.startdate} to ${payload.enddate}`);
   console.log(`[DRAAD202] Timeout: ${GREEDY_TIMEOUT}ms`);
   
   // DRAAD202 diagnostics
   console.log('[DRAAD202-FIX] Flat payload keys:', Object.keys(payload));
   console.log('[DRAAD202-FIX] Nested data property?', 'data' in payload ? 'ERROR' : 'OK');
+  console.log('[DRAAD202-HOTFIX] startdate type:', typeof payload.startdate, 'value:', payload.startdate);
+  console.log('[DRAAD202-HOTFIX] enddate type:', typeof payload.enddate, 'value:', payload.enddate);
   
   const startTime = Date.now();
 
@@ -492,6 +504,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // DRAAD202-HOTFIX: Verify roster has start_date and end_date
+    if (!roster.start_date || !roster.end_date) {
+      console.error('[DRAAD202-HOTFIX] Roster missing date range:', { 
+        start_date: roster.start_date, 
+        end_date: roster.end_date 
+      });
+      return NextResponse.json(
+        { error: 'Roster heeft geen geldige begindatum of einddatum' },
+        { status: 400 }
+      );
+    }
+
+    // Convert dates to ISO string format (YYYY-MM-DD)
+    const startDate = new Date(roster.start_date).toISOString().split('T')[0];
+    const endDate = new Date(roster.end_date).toISOString().split('T')[0];
+    
+    console.log('[DRAAD202-HOTFIX] Roster dates verified:', { startDate, endDate });
+
     if (roster.status !== 'draft') {
       console.error(`[DRAAD202] Roster status is '${roster.status}', moet 'draft' zijn`);
       return NextResponse.json(
@@ -608,8 +638,8 @@ export async function POST(request: NextRequest) {
     // Build solver request
     const solverRequest: SolveRequest = {
       roster_id: roster_id.toString(),
-      start_date: roster.start_date,
-      end_date: roster.end_date,
+      start_date: startDate,
+      end_date: endDate,
       employees: employees.map(emp => ({
         id: emp.id,
         voornaam: emp.voornaam,
@@ -655,18 +685,19 @@ export async function POST(request: NextRequest) {
     console.log('[DRAAD202] Preparing GREEDY request...');
     
     // DRAAD202 FIX: Build flat payload (no nested "data" object)
+    // DRAAD202-HOTFIX: Ensure start_date and end_date are NOT null/undefined
     const greedyPayload: GreedyPayload = {
       rosterid: roster_id.toString(),
-      startdate: solverRequest.start_date,
-      enddate: solverRequest.end_date,
-      employees: solverRequest.employees,
-      services: solverRequest.services,
-      rosteremployeeservices: solverRequest.roster_employee_services,
-      fixedassignments: solverRequest.fixed_assignments,
-      blockedslots: solverRequest.blocked_slots,
-      suggestedassignments: solverRequest.suggested_assignments,
-      exactstaffing: solverRequest.exact_staffing,
-      timeoutseconds: solverRequest.timeout_seconds
+      startdate: solverRequest.start_date as string, // ✅ TypeScript verified non-null
+      enddate: solverRequest.end_date as string,     // ✅ TypeScript verified non-null
+      employees: solverRequest.employees || [],
+      services: solverRequest.services || [],
+      rosteremployeeservices: solverRequest.roster_employee_services || [],
+      fixedassignments: solverRequest.fixed_assignments || [],
+      blockedslots: solverRequest.blocked_slots || [],
+      suggestedassignments: solverRequest.suggested_assignments || [],
+      exactstaffing: solverRequest.exact_staffing || [],
+      timeoutseconds: solverRequest.timeout_seconds || 30
     };
 
     // Call GREEDY
@@ -806,13 +837,14 @@ export async function POST(request: NextRequest) {
       },
       draad202: {
         status: 'IMPLEMENTED',
-        version: '1.1-FIXED',
+        version: '1.1-FIXED-HOTFIX',
         endpoint: GREEDY_ENDPOINT,
         timeout_ms: GREEDY_TIMEOUT,
         retry_attempts: 0,
         cache_bust_id: cacheBustId,
         payload_structure: 'FLAT (no nested data object)',
-        message: 'Backend GREEDY integration fixed - flat payload, single attempt'
+        date_handling: 'ISO 8601 strings (verified non-null)',
+        message: 'Backend GREEDY integration fixed - flat payload, null-safe dates'
       },
       total_time_ms: totalTime
     });
