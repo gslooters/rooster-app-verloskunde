@@ -1,10 +1,15 @@
 # Rooster App - Next.js Frontend
-# DRAAD-200: EMERGENCY FIX - npm install (package-lock.json missing)
-# Date: 2025-12-17T18:04:00Z
-# Status: Generate clean package-lock.json in container
-# Services: rooster-app-verloskunde, Solver2, greedy all rebuilding
+# DRAAD-200: CRITICAL FIX - Remove canvas (native binding), use canvg only + build-essential
+# Date: 2025-12-17T18:10:00Z
+# Problem: canvas requires Python + build tools (fails in Alpine)
+# Solution: canvg@^2.0.0 (pure JavaScript, no native dependencies)
 
 FROM node:20-alpine
+
+# Install build dependencies (make, g++, python3)
+# This is ONLY needed for native modules like canvas
+# We will NOT use canvas, but keeping for compatibility
+RUN apk add --no-cache python3 make g++ cairo-dev jpeg-dev pango-dev giflib-dev
 
 WORKDIR /app
 
@@ -19,10 +24,8 @@ ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
 # Copy package files
 COPY package*.json ./
 
-# CRITICAL FIX: npm install generates fresh package-lock.json
-# package-lock.json is NOT in repo - this generates it cleanly in container
-# No papandreou corruption possible (not in npm registry)
-RUN npm install --prefer-offline --no-audit
+# Use npm ci for reproducible builds (requires package-lock.json)
+RUN npm ci --prefer-offline --verbose
 
 # Copy source code
 COPY . .
