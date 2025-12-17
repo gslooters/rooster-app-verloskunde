@@ -23,6 +23,12 @@
  * - solverruns table: source='greedy' (not 'ortsolve')
  * - status: SUCCESS/PARTIAL/FAILED
  * - Coverage rate, total assignments, solve time tracked
+ * 
+ * DRAAD202 FIX (2025-12-17):
+ * - Removed geneste "data" object from GreedyRequest
+ * - Flattened payload to root-level fields
+ * - GREEDY API expects: rosterid, startdate, enddate, employees, services, etc (all flat)
+ * - NOT: roster_id with nested data object
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -52,11 +58,60 @@ console.log(`[DRAAD202] Timeout: ${GREEDY_TIMEOUT}ms (NO retry - single attempt)
 // ============================================================================
 
 /**
- * GREEDY API Request format
+ * DRAAD202 FIX: Flat payload structure (no nested "data" object)
+ * GREEDY API expects root-level fields matching its Pydantic model
  */
-interface GreedyRequest {
-  roster_id: string;
-  data: SolveRequest;
+interface GreedyPayload {
+  rosterid: string;
+  startdate: string;
+  enddate: string;
+  employees: Array<{
+    id: string;
+    voornaam: string;
+    achternaam: string;
+    team: 'maat' | 'loondienst' | 'overig';
+    structureel_nbh?: number;
+    min_werkdagen?: number;
+  }>;
+  services: Array<{
+    id: string;
+    code: string;
+    naam: string;
+  }>;
+  rosteremployeeservices: Array<{
+    roster_id: string;
+    employee_id: string;
+    service_id: string;
+    aantal: number;
+    actief: boolean;
+  }>;
+  fixedassignments: Array<{
+    employee_id: string;
+    date: string;
+    dagdeel: 'O' | 'M' | 'A';
+    service_id: string;
+  }>;
+  blockedslots: Array<{
+    employee_id: string;
+    date: string;
+    dagdeel: 'O' | 'M' | 'A';
+    status: 2 | 3;
+  }>;
+  suggestedassignments: Array<{
+    employee_id: string;
+    date: string;
+    dagdeel: 'O' | 'M' | 'A';
+    service_id: string;
+  }>;
+  exactstaffing: Array<{
+    date: string;
+    dagdeel: 'O' | 'M' | 'A';
+    service_id: string;
+    team: 'TOT' | 'GRO' | 'ORA';
+    exact_aantal: number;
+    is_system_service: boolean;
+  }>;
+  timeoutseconds: number;
 }
 
 /**
@@ -177,13 +232,18 @@ function classifyGreedyError(error: any): { type: GreedyErrorType; userMessage: 
 
 /**
  * Call GREEDY API with timeout handling
+ * DRAAD202 FIX: Pass flat payload (no nested "data" object)
  * SINGLE ATTEMPT - NO RETRY LOGIC per DRAAD 202 requirement
  */
-async function callGreedyAPI(payload: GreedyRequest): Promise<GreedySolution> {
+async function callGreedyAPI(payload: GreedyPayload): Promise<GreedySolution> {
   console.log('[DRAAD202] === GREEDY API CALL START ===');
   console.log(`[DRAAD202] Endpoint: ${GREEDY_ENDPOINT}`);
-  console.log(`[DRAAD202] Roster ID: ${payload.roster_id}`);
+  console.log(`[DRAAD202] Roster ID: ${payload.rosterid}`);
   console.log(`[DRAAD202] Timeout: ${GREEDY_TIMEOUT}ms`);
+  
+  // DRAAD202 diagnostics
+  console.log('[DRAAD202-FIX] Flat payload keys:', Object.keys(payload));
+  console.log('[DRAAD202-FIX] Nested data property?', 'data' in payload ? 'ERROR' : 'OK');
   
   const startTime = Date.now();
 
@@ -593,16 +653,27 @@ export async function POST(request: NextRequest) {
     };
 
     console.log('[DRAAD202] Preparing GREEDY request...');
-    const greedyRequest: GreedyRequest = {
-      roster_id: roster_id.toString(),
-      data: solverRequest
+    
+    // DRAAD202 FIX: Build flat payload (no nested "data" object)
+    const greedyPayload: GreedyPayload = {
+      rosterid: roster_id.toString(),
+      startdate: solverRequest.start_date,
+      enddate: solverRequest.end_date,
+      employees: solverRequest.employees,
+      services: solverRequest.services,
+      rosteremployeeservices: solverRequest.roster_employee_services,
+      fixedassignments: solverRequest.fixed_assignments,
+      blockedslots: solverRequest.blocked_slots,
+      suggestedassignments: solverRequest.suggested_assignments,
+      exactstaffing: solverRequest.exact_staffing,
+      timeoutseconds: solverRequest.timeout_seconds
     };
 
     // Call GREEDY
     console.log('[DRAAD202] Calling GREEDY API...');
     let greedySolution: GreedySolution;
     try {
-      greedySolution = await callGreedyAPI(greedyRequest);
+      greedySolution = await callGreedyAPI(greedyPayload);
     } catch (greedyError: any) {
       console.error('[DRAAD202] GREEDY call failed:', greedyError);
 
@@ -735,12 +806,13 @@ export async function POST(request: NextRequest) {
       },
       draad202: {
         status: 'IMPLEMENTED',
-        version: '1.0',
+        version: '1.1-FIXED',
         endpoint: GREEDY_ENDPOINT,
         timeout_ms: GREEDY_TIMEOUT,
         retry_attempts: 0,
         cache_bust_id: cacheBustId,
-        message: 'Backend GREEDY integration complete - single attempt, no retry'
+        payload_structure: 'FLAT (no nested data object)',
+        message: 'Backend GREEDY integration fixed - flat payload, single attempt'
       },
       total_time_ms: totalTime
     });
