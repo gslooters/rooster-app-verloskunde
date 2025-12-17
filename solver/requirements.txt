@@ -1,6 +1,6 @@
 # Python OR-Tools Solver Service - Dependencies
-# Date: 2025-12-15
-# DRAAD185 HOTFIX: Python 3.13.11 compatibility update
+# Date: 2025-12-18
+# DRAAD208B: Upgrade supabase-py to v2.5.2 (remove proxy parameter)
 # Pydantic 2.8.0 requires typing-extensions>=4.12.2 for Python 3.13
 # OR-Tools 9.14+ works with Python 3.13
 
@@ -14,8 +14,8 @@ pydantic==2.8.0
 typing-extensions>=4.12.2
 python-dateutil==2.9.0
 
-# Database - Supabase client
-supabase==2.4.1
+# Database - Supabase client (upgraded to v2.5.2)
+supabase==2.5.2
 
 # OR-Tools CP-SAT Solver (works with Python 3.13)
 ortools==9.14.6206
