@@ -4,19 +4,22 @@
  * DRAAD125B: Missing Types - BottleneckItem + BottleneckSuggestion + SolverApiResponse
  * DRAAD125C: FeasibleSummary Type Addition - fixes TypeScript compilation error
  * DRAAD-191: GREEDY Solver Type Update - Changed status types for GREEDY engine
+ * DRAAD-202: STRUCTUREEL_NBH TYPE FIX - Changed from boolean to number | null | string
  * Phase 3: TypeScript Types voor Solver & Roster Assignment
  */
 
 /**
  * Employee from employees table
  * DRAAD115: voornaam/achternaam split, team mapped from dienstverband
+ * DRAAD-202: structureel_nbh is JSONB in database, can be number, string, null, or boolean
+ *           Changed type to number | string | null to support flexible data formats
  */
 export interface Employee {
   id: string; // UUID
   voornaam: string;
   achternaam: string;
   team: 'maat' | 'loondienst' | 'overig'; // mapped from dienstverband
-  structureel_nbh?: boolean;
+  structureel_nbh?: number | string | null;  // ✅ FIXED: Was boolean, now flexible
   min_werkdagen?: number;
 }
 

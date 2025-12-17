@@ -34,6 +34,11 @@
  * - Added null-safety checks for start_date/end_date
  * - Roster data must have both dates (required by GREEDY)
  * - Type guards prevent undefined values in payload
+ *
+ * DRAAD202-TYPEERROR-FIX (2025-12-17):
+ * - Fixed structureel_nbh type mismatch (boolean -> number | string | null)
+ * - Added defensive type conversion in employee mapping
+ * - JSONB field from Supabase now properly typed
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -78,7 +83,7 @@ interface GreedyPayload {
     voornaam: string;
     achternaam: string;
     team: 'maat' | 'loondienst' | 'overig';
-    structureel_nbh?: number;
+    structureel_nbh?: number; // ✅ DRAAD202-TYPEERROR-FIX: Changed from boolean to number
     min_werkdagen?: number;
   }>;
   services: Array<{
@@ -461,6 +466,34 @@ function findServiceId(serviceCode: string, services: Service[]): string | null 
   return svc.id;
 }
 
+/**
+ * DRAAD202-TYPEERROR-FIX: Convert structureel_nbh to number
+ * Database stores JSONB which can be boolean, string, number, or null
+ * GREEDY API expects number | undefined
+ */
+function convertStructureelNbh(value: any): number | undefined {
+  // Already a number
+  if (typeof value === 'number') {
+    return value;
+  }
+
+  // Convert string to number
+  if (typeof value === 'string') {
+    const num = parseInt(value, 10);
+    if (!isNaN(num)) {
+      return num;
+    }
+  }
+
+  // Convert boolean to number (true=1, false=0)
+  if (typeof value === 'boolean') {
+    return value ? 1 : 0;
+  }
+
+  // Null or undefined returns undefined
+  return undefined;
+}
+
 // ============================================================================
 // MAIN HANDLER
 // ============================================================================
@@ -533,7 +566,7 @@ export async function POST(request: NextRequest) {
     // Fetch employees
     const { data: employees, error: empError } = await supabase
       .from('employees')
-      .select('id, voornaam, achternaam, dienstverband, structureel_nbh')
+      .select('id, voornaam, achternaam, dienstverband, structureel_nbh, team')
       .eq('actief', true);
 
     if (empError || !employees || employees.length === 0) {
@@ -645,7 +678,7 @@ export async function POST(request: NextRequest) {
         voornaam: emp.voornaam,
         achternaam: emp.achternaam,
         team: emp.dienstverband as 'maat' | 'loondienst' | 'overig',
-        structureel_nbh: emp.structureel_nbh || undefined,
+        structureel_nbh: convertStructureelNbh(emp.structureel_nbh), // ✅ DRAAD202-TYPEERROR-FIX
         min_werkdagen: undefined
       })),
       services: services.map(svc => ({
@@ -837,14 +870,15 @@ export async function POST(request: NextRequest) {
       },
       draad202: {
         status: 'IMPLEMENTED',
-        version: '1.1-FIXED-HOTFIX',
+        version: '1.2-TYPEERROR-FIXED',
         endpoint: GREEDY_ENDPOINT,
         timeout_ms: GREEDY_TIMEOUT,
         retry_attempts: 0,
         cache_bust_id: cacheBustId,
         payload_structure: 'FLAT (no nested data object)',
         date_handling: 'ISO 8601 strings (verified non-null)',
-        message: 'Backend GREEDY integration fixed - flat payload, null-safe dates'
+        structureel_nbh_handling: 'Converted from JSONB to number | undefined',
+        message: 'Backend GREEDY integration fixed - flat payload, null-safe dates, type-safe structureel_nbh'
       },
       total_time_ms: totalTime
     });
