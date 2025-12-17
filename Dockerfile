@@ -1,7 +1,9 @@
 # Rooster App - Next.js Frontend
-# DRAAD186-HOTFIX: Fixed healthcheck timeout (Railway killer issue)
-# Date: 2025-12-16T02:15:00Z
-# Issue: Railway timeout too short for database connection test + startup
+# DRAAD-200: Fixed npm ci → npm install (package-lock.json verwijderd)
+# Date: 2025-12-17T17:05:00Z
+# Issue: Dockerfile used 'npm ci' but package-lock.json was removed for papandreou-fix
+# Solution: Use 'npm install' which generates package-lock.json in container
+# Previous: DRAAD186-HOTFIX (healthcheck timeout)
 
 FROM node:20-alpine
 
@@ -16,8 +18,10 @@ ENV NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
 ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
 
 # Install dependencies
+# NOTE: Using 'npm install' instead of 'npm ci' because package-lock.json was removed
+# for papandreou@0.2.0 fix. npm install will generate a clean lockfile in the container.
 COPY package*.json ./
-RUN npm ci --prefer-offline --no-audit
+RUN npm install --prefer-offline --no-audit
 
 # Copy source code
 COPY . .
