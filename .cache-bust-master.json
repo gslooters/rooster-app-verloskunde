@@ -1,94 +1,29 @@
 {
-  "version": "1.1",
-  "master_timestamp": "2025-12-16T22:02:15Z",
-  "cache_bust_master_id": "master_1734368535_nuanced_fixes",
-  "current_draad": "DRAAD_CURRENT_THREAD",
-  "nuanced_fixes": {
-    "focus_area": "THREE_SERVICE_ALIGNMENT",
-    "baseline_verification": "COMPLETE",
-    "service_targets": [
-      "rooster-app-verloskunde (FastAPI + DB)",
-      "Solver2 (Python CP-SAT optimizer)",
-      "greedy (JavaScript scheduler)"
-    ],
-    "actions": [
-      "Verify all services have correct dependencies",
-      "Update cache-bust files with unique identifiers",
-      "Force Railway rebuild on all three services",
-      "Commit changes atomically",
-      "Deploy with proper sequencing"
-    ]
-  },
-  "security_verification": {
-    "previous_draad": "DRAAD_197",
-    "previous_fix": "Next.js 14.2.35 upgrade",
-    "vulnerabilities_status": "FIXED",
-    "current_status": "DEPLOYMENT_READY"
-  },
-  "services": {
-    "rooster-app-verloskunde": {
-      "status": "cache_bust_update",
-      "framework": "FastAPI + Next.js frontend",
-      "build_trigger_id": "nuanced_1734368535_a",
-      "cache_bust_timestamp": "2025-12-16T22:02:15Z",
-      "requirements_status": "VERIFIED_CLEAN",
-      "postgresql_fix": "CONFIRMED_psycopg2-binary_2.9.9",
-      "next_version": "14.2.35_VERIFIED"
+  "timestamp": 1734450980000,
+  "version": "DRAAD201-STAP4",
+  "stage": "PRODUCTION",
+  "builds": {
+    "frontend": {
+      "status": "GREEDY_INTEGRATED",
+      "timestamp": 1734450950847,
+      "features": [
+        "AutoFillButton with GREEDY endpoint",
+        "Health check on startup",
+        "Error classification",
+        "Dutch UI/UX"
+      ]
     },
-    "solver2": {
-      "status": "cache_bust_update",
-      "framework": "Python FastAPI + CP-SAT",
-      "build_trigger_id": "nuanced_1734368535_b",
-      "cache_bust_timestamp": "2025-12-16T22:02:15Z",
-      "dependency_check": "QUEUED",
-      "note": "No direct Next.js dependency - should deploy cleanly"
+    "backend_solver2": {
+      "status": "READY",
+      "endpoint": "https://solver2-production.up.railway.app/api/v1/solve-schedule"
     },
-    "greedy": {
-      "status": "cache_bust_update",
-      "framework": "Node.js scheduler engine",
-      "build_trigger_id": "nuanced_1734368535_c",
-      "cache_bust_timestamp": "2025-12-16T22:02:15Z",
-      "security_status": "ALIGNED_with_14.2.35",
-      "deployment_sequence": "3_of_3_priority_last"
+    "backend_greedy": {
+      "status": "PRODUCTION",
+      "endpoint": "https://greedy-production.up.railway.app/api/greedy/solve",
+      "health": "https://greedy-production.up.railway.app/health"
     }
   },
-  "alignment_verification": {
-    "all_services_aligned": true,
-    "security_baseline": "CURRENT",
-    "database_schema": "VERIFIED_176_TABLES",
-    "critical_tables_status": "OPERATIONAL",
-    "supabase_schema_verified": true,
-    "last_verified": "2025-12-16T22:02:15Z"
-  },
-  "deployment_sequence": [
-    {
-      "order": 1,
-      "service": "rooster-app-verloskunde",
-      "trigger": "main branch push",
-      "expected_time": "2-3 minutes"
-    },
-    {
-      "order": 2,
-      "service": "solver2",
-      "trigger": "main branch push",
-      "expected_time": "1-2 minutes"
-    },
-    {
-      "order": 3,
-      "service": "greedy",
-      "trigger": "main branch push",
-      "expected_time": "2-3 minutes"
-    }
-  ],
-  "verification_checklist": [
-    "✅ Baseline verification complete",
-    "✅ Cache-bust identifiers unique per service",
-    "✅ Requirements.txt verified clean",
-    "✅ Security patches aligned (DRAAD 197 baseline)",
-    "✅ Supabase schema verified",
-    "⏳ Railway rebuild pending (triggered by push)",
-    "⏳ Services deployment pending"
-  ],
-  "notes": "NUANCED_THREAD: Three-service alignment verification. First verify baseline (all services deployable), then apply targeted fixes per service, then commit atomically, then deploy with proper sequencing.",
-  "timestamp_generated": "2025-12-16T22:02:15Z"
+  "deployments_active": 3,
+  "last_update": "2025-12-17T19:16:30Z",
+  "railway_trigger": "STAP4_COMPLETE"
 }
