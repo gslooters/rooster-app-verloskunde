@@ -1,9 +1,9 @@
 # Rooster App - Next.js Frontend
-# DRAAD-200: Fixed npm ci → npm install (package-lock.json verwijderd)
-# Date: 2025-12-17T17:05:00Z
-# Issue: Dockerfile used 'npm ci' but package-lock.json was removed for papandreou-fix
-# Solution: Use 'npm install' which generates package-lock.json in container
-# Previous: DRAAD186-HOTFIX (healthcheck timeout)
+# DRAAD-200 FASE 3: Restored npm ci (best practice)
+# Date: 2025-12-17T17:25:00Z
+# Issue: FASE 1 used 'npm install' due to missing package-lock.json
+# Solution: FASE 2 created clean package-lock.json with canvg@2.0.0 (no papandreou)
+# FASE 3: Restore npm ci (best practice for production reproducible builds)
 
 FROM node:20-alpine
 
@@ -18,10 +18,11 @@ ENV NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
 ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
 
 # Install dependencies
-# NOTE: Using 'npm install' instead of 'npm ci' because package-lock.json was removed
-# for papandreou@0.2.0 fix. npm install will generate a clean lockfile in the container.
+# NOTE: Using 'npm ci' (best practice) - requires package-lock.json
+# FASE 2 created clean package-lock.json with canvg@2.0.0
+# NO papandreou@0.2.0 (papandreou-free permanent solution)
 COPY package*.json ./
-RUN npm install --prefer-offline --no-audit
+RUN npm ci --prefer-offline --no-audit
 
 # Copy source code
 COPY . .
