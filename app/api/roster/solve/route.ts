@@ -674,20 +674,24 @@ export async function POST(request: NextRequest) {
 
     console.log('[DRAAD-204] === PHASE 4: UPDATE ROSTER & RETURN ===');
 
-    // Update roster status to 'in_progress' (async - fire and forget)
-    // Don't wait for this
-    supabase
+    // DRAAD-206 FIX: Wrap Supabase PromiseLike with Promise.resolve()
+    // This ensures the result is a full Promise<T> type that supports .catch()
+    // Previously: `.then().catch()` failed with TypeScript error
+    // "Property 'catch' does not exist on type 'PromiseLike<void>'"
+    const updatePromise = supabase
       .from('roosters')
       .update({
         status: 'in_progress',
         updated_at: new Date().toISOString()
       })
-      .eq('id', roster_id)
+      .eq('id', roster_id);
+
+    Promise.resolve(updatePromise)
       .then(() => {
         console.log('[DRAAD-204] ✅ Roster status updated: draft → in_progress');
       })
-      .catch((err) => {
-        console.error('[DRAAD-204] ⚠️  Failed to update roster status:', err.message);
+      .catch((err: any) => {
+        console.error('[DRAAD-204] ⚠️  Failed to update roster status:', err?.message);
       });
 
     const totalTime = Date.now() - startTime;
