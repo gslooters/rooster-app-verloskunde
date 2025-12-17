@@ -1,0 +1,25 @@
+{
+  "status": "DRAAD-200 ULTIMATE FIX - Build #59+",
+  "timestamp": "2025-12-17T18:09:10Z UTC",
+  "root_cause": "canvas is native binding - requires Python + build tools in Alpine",
+  "solution": "Add apk packages: python3, make, g++, cairo-dev, jpeg-dev, pango-dev, giflib-dev",
+  "dockerfile_change": "RUN apk add --no-cache python3 make g++ cairo-dev jpeg-dev pango-dev giflib-dev",
+  "npm_method": "npm ci --prefer-offline --verbose",
+  "package_lock": "REQUIRED (from working baseline)",
+  "expected_flow": [
+    "1. Alpine packages installed (Python, make, build tools)",
+    "2. npm ci resolves all 350+ dependencies",
+    "3. canvas installs successfully (pre-built or compiles with tools available)",
+    "4. canvg resolved as pure JS (no native compilation)",
+    "5. npm run build succeeds (Next.js compilation)",
+    "6. Docker image builds",
+    "7. All 3 services deploy GREEN"
+  ],
+  "services_rebuilding": [
+    {"name": "rooster-app-verloskunde", "status": "pending"},
+    {"name": "Solver2", "status": "pending"},
+    {"name": "greedy", "status": "pending"}
+  ],
+  "confidence": "EXTREMELY HIGH",
+  "reasoning": "Alpine + build tools = canvas can compile. npm ci + complete lock file = deterministic build"
+}
