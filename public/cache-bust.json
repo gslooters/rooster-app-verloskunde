@@ -1,119 +1,111 @@
 {
-  "version": "1.0.0-draad202",
-  "timestamp": 1734464250000,
-  "buildId": "draad202-greedy-flat-payload-" + "7ad2674c",
-  "description": "DRAAD202: GREEDY API Payload Restructuring - Flatten nested data object",
-  "previous_draad": "DRAAD192 (Solver2 migration)",
-  "draad202_fix": {
-    "issue": "HTTP 422 Pydantic validation errors from GREEDY API",
-    "root_cause": "GreedyRequest interface had geneste 'data' object, but GREEDY expects flat root-level fields",
-    "solution": "Replaced GreedyRequest with GreedyPayload (flat structure)",
-    "status": "✅ IMPLEMENTED AND MERGED"
+  "version": "1.0.0-draad202-hotfix",
+  "timestamp": 1734468299000,
+  "buildId": "draad202-hotfix-nullsafety-" + "b9cf6a6d",
+  "description": "DRAAD202-HOTFIX: TypeScript null-safety for start_date/end_date",
+  "previous_version": "1.0.0-draad202",
+  "hotfix_reason": "Deployment failed with TypeScript compilation error: 'string | undefined' not assignable to 'string'",
+  "compilation_error": {
+    "file": "app/api/roster/solve/route.ts",
+    "line": 660,
+    "error": "Type error: Type 'string | undefined' is not assignable to type 'string'.",
+    "cause": "SolveRequest.start_date and end_date are optional (with ?), but GreedyPayload expects required string",
+    "root_cause": "GREEDY API requires non-null dates; roster table dates could be NULL"
   },
-  "payload_structure_change": {
-    "before": {
-      "structure": "Nested object with 'data' property",
-      "example": "{ roster_id: '123', data: { start_date, end_date, employees, ... } }",
-      "issue": "GREEDY Pydantic model cannot validate nested structure"
+  "fixes_applied": {
+    "1_roster_data_validation": {
+      "description": "Added null-check for roster.start_date and roster.end_date after fetch",
+      "code_location": "app/api/roster/solve/route.ts ~677-684",
+      "logic": "If either date is missing, return HTTP 400 error immediately"
     },
-    "after": {
-      "structure": "Flat root-level fields",
-      "fields": [
-        "rosterid",
-        "startdate",
-        "enddate",
-        "employees",
-        "services",
-        "rosteremployeeservices",
-        "fixedassignments",
-        "blockedslots",
-        "suggestedassignments",
-        "exactstaffing",
-        "timeoutseconds"
-      ],
-      "diagnostics": "console.log outputs: Flat payload keys + 'nested data property?' check"
+    "2_date_conversion": {
+      "description": "Convert dates from Supabase date format to ISO 8601 string",
+      "code_location": "app/api/roster/solve/route.ts ~687-690",
+      "logic": "new Date(roster.start_date).toISOString().split('T')[0] → YYYY-MM-DD format"
+    },
+    "3_type_assertion": {
+      "description": "Add 'as string' type assertion when building GreedyPayload",
+      "code_location": "app/api/roster/solve/route.ts ~659-660",
+      "logic": "TypeScript verified non-null because of null-check above; assertion is safe"
+    },
+    "4_greedy_payload_safety": {
+      "description": "All array fields have fallback to [] if undefined",
+      "code_location": "app/api/roster/solve/route.ts ~659-668",
+      "logic": "Prevent undefined arrays from being passed to GREEDY"
     }
+  },
+  "draad202_progression": {
+    "1_original_issue": "HTTP 422 - nested data object",
+    "1_fix": "Flattened payload structure (commit: 850cd7154...)",
+    "2_new_issue": "HTTP 500 - TypeScript compilation failed",
+    "2_fix_this_commit": "Add null-safety checks and type guards (commit: b9cf6a6d...)"
   },
   "technical_details": {
-    "file_changed": "app/api/roster/solve/route.ts",
-    "changes": [
-      "Replaced GreedyRequest interface with GreedyPayload",
-      "Flattened all fields to root level",
-      "Updated callGreedyAPI() function signature",
-      "Added DRAAD202-FIX diagnostics logging"
-    ],
-    "greedy_service": {
-      "endpoint": "https://greedy-production.up.railway.app/api/greedy/solve",
-      "timeout": "30000ms",
-      "retry_attempts": 0,
-      "method": "POST",
-      "content_type": "application/json"
+    "greedy_payload_interface": {
+      "startdate": "string (REQUIRED, non-null)",
+      "enddate": "string (REQUIRED, non-null)",
+      "format": "ISO 8601 YYYY-MM-DD",
+      "all_arrays": "Non-empty or fallback to []"
+    },
+    "date_handling": {
+      "source": "Supabase roosters table (date columns)",
+      "validation": "Check non-null after fetch",
+      "conversion": "Convert to ISO 8601 string",
+      "final_format": "YYYY-MM-DD (e.g., '2025-12-17')"
     }
   },
-  "success_criteria": {
-    "http_422_resolved": true,
-    "greedy_api_accepts_payload": "✅ Expected (flat structure)",
-    "pydantic_validation_passes": "✅ Expected (all fields at root level)",
-    "roster_calculation_starts": "⏳ To be verified in Railway logs",
-    "no_validation_errors": "✅ Expected (Field required: startdate errors should stop)"
-  },
-  "deployment_checklist": {
-    "code_changes_merged": "✅ COMPLETE",
-    "cache_bust_updated": "✅ THIS REQUEST",
-    "railway_deployment_triggered": "⏳ NEXT STEP",
-    "greedy_service_restart": "ℹ️  Only if GREEDY service env vars changed",
-    "frontend_hard_refresh": "⏳ User action required (Ctrl+Shift+R)",
-    "railway_logs_monitoring": "⏳ Watch for [DRAAD202-FIX] diagnostics"
-  },
-  "expected_log_outputs": {
-    "success_indicators": [
-      "[DRAAD202-FIX] Flat payload keys: [rosterid, startdate, enddate, employees, ...]",
-      "[DRAAD202-FIX] Nested data property? OK",
-      "[DRAAD202] ✅ GREEDY response parsed successfully",
-      "[DRAAD202] Status: SUCCESS, Coverage: XX%, Assignments: YYY"
-    ],
-    "error_indicators": [
-      "[DRAAD202-FIX] Nested data property? ERROR",
-      "[DRAAD202] GREEDY HTTP error 422",
-      "Field required: startdate"
+  "expected_behavior_after_fix": {
+    "typescript_compilation": "✅ Should pass (all types verified)",
+    "http_status": "✅ Should be 200 OK (dates are now non-null)",
+    "greedy_api_payload": "✅ Should accept flat structure with ISO dates",
+    "logs": [
+      "[DRAAD202-HOTFIX] Roster dates verified: {startDate, endDate}",
+      "[DRAAD202-HOTFIX] startdate type: string value: YYYY-MM-DD",
+      "[DRAAD202-HOTFIX] enddate type: string value: YYYY-MM-DD"
     ]
   },
-  "monitoring": {
-    "log_prefix": "[DRAAD202]",
-    "diagnostic_prefix": "[DRAAD202-FIX]",
-    "metrics_to_watch": [
-      "HTTP status codes from GREEDY (200 = success, 422 = payload error, 500 = server error)",
-      "Pydantic validation error messages",
-      "Coverage rate percentage",
-      "Assignment count",
-      "Solve time in seconds"
-    ],
-    "alerts": {
-      "http_422_still_occurs": "CRITICAL - payload structure still incorrect",
-      "field_required_errors": "CRITICAL - missing required fields",
-      "greedy_timeout": "WARNING - solver taking >30s",
-      "zero_coverage": "WARNING - no assignments generated"
-    }
-  },
-  "rollback_info": {
-    "previous_commit": "f6824e64 (before DRAAD202 fix)",
-    "rollback_file": "app/api/roster/solve/route.ts",
-    "rollback_time_estimate": "5 minutes",
-    "manual_rollback": "If HTTP 422 errors persist after fix"
+  "deployment_checklist": {
+    "code_fix_merged": "✅ COMPLETE (commit: b9cf6a6d...)",
+    "cache_bust_updated": "✅ THIS REQUEST",
+    "railway_redeploy_needed": "✅ YES - code changed",
+    "env_vars_changed": "❌ NO",
+    "greedy_service_restart": "❌ NO"
   },
   "next_steps": [
-    "✅ 1. Code changes implemented (COMPLETE)",
-    "✅ 2. Cache bust updated (THIS REQUEST)",
-    "⏳ 3. Trigger Railway deployment",
-    "⏳ 4. Monitor [DRAAD202-FIX] logs",
-    "⏳ 5. Test /api/roster/solve endpoint",
-    "⏳ 6. Verify GREEDY returns HTTP 200 + valid response",
-    "⏳ 7. Monitor coverage rate and assignment count"
+    "✅ 1. Code fix merged to main",
+    "✅ 2. Cache bust file updated",
+    "⏳ 3. Trigger Railway deployment manually",
+    "⏳ 4. Monitor [DRAAD202-HOTFIX] logs",
+    "⏳ 5. Verify TypeScript compilation succeeds",
+    "⏳ 6. Test /api/roster/solve endpoint",
+    "⏳ 7. Check GREEDY API receives valid payload"
   ],
-  "deployment_date": "2025-12-17T19:57:30Z",
+  "rollback_info": {
+    "previous_commit": "1a54db644... (DRAAD202 original fix)",
+    "rollback_method": "Revert to previous commit if dates still cause issues",
+    "rollback_time": "5 minutes"
+  },
+  "monitoring_after_deploy": {
+    "critical_logs": [
+      "[DRAAD202-HOTFIX] Roster dates verified",
+      "[DRAAD202] === GREEDY API CALL SUCCESS ==="
+    ],
+    "error_indicators": [
+      "Roster missing date range",
+      "Failed to compile",
+      "Type error",
+      "HTTP 422 from GREEDY"
+    ],
+    "success_indicators": [
+      "HTTP 200 from /api/roster/solve",
+      "Coverage percentage > 0",
+      "Assignments count > 0",
+      "Database updates successful"
+    ]
+  },
+  "deployment_date": "2025-12-17T20:04:59Z",
   "deployed_by": "GitHub MCP Tools (automated)",
   "railway_trigger_required": true,
-  "trigger_reason": "Backend code changes (route.ts) - flat payload structure",
   "status": "MERGED - AWAITING RAILWAY DEPLOYMENT",
-  "priority": "HIGH - Blocks roster calculation"
+  "priority": "CRITICAL - Blocks all roster deployments"
 }
