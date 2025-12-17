@@ -1,0 +1,48 @@
+{
+  "status": "DRAAD-200 COMPLETE ROLLBACK EXECUTION",
+  "timestamp": "2025-12-17T18:02:30Z",
+  "baseline_commit": "23f77d5e6f28cc9ed065ded995f238c9573bd90f",
+  "rollback_complete": true,
+  "services_to_rebuild": [
+    {
+      "name": "rooster-app-verloskunde",
+      "type": "frontend",
+      "status": "ready_for_rebuild",
+      "config": {
+        "dockerfile": "Dockerfile (npm ci restored)",
+        "package_json": "papandreou-free",
+        "dependencies": "canvg@^2.0.0"
+      }
+    },
+    {
+      "name": "Solver2",
+      "type": "constraint_solver",
+      "status": "ready_for_rebuild",
+      "config": {
+        "service": "Google OR-Tools CP-SAT",
+        "cache": "cleared"
+      }
+    },
+    {
+      "name": "greedy",
+      "type": "greedy_algorithm",
+      "status": "ready_for_rebuild",
+      "config": {
+        "service": "Smart scheduling algorithm",
+        "cache": "cleared"
+      }
+    }
+  ],
+  "database": {
+    "status": "no_changes",
+    "supabase_schema": "fully_compatible",
+    "tables_verified": 176
+  },
+  "expected_result": {
+    "all_services_green": true,
+    "no_papandreou_errors": true,
+    "deployment_success": true
+  },
+  "trigger_railways_webhook": "all_three_services",
+  "eta_minutes": "5-10"
+}
