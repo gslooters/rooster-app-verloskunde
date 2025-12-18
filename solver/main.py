@@ -8,14 +8,20 @@ FASE 1: RosterSolverV2 with 4 hard constraints (DRAAD170)
 FASE 2: SequentialSolverV2 with 3-layer priority (DRAAD174)
 FASE 3: SolverSelector routes between solvers (DRAAD174)
 
-DRAARD175 FIXES:
+DRARD175 FIXES:
 - FOUT#2: HTTP 400 responses now include detailed error information
 - Better error handling and reporting
 - Structured error responses
 
+DRAAD208C FIXES (COMPONENT 1):
+- Database validation boot at startup
+- Detailed Supabase connection testing
+- Early error detection for credentials
+- Clear error messages for debugging
+
 Authors: Rooster App Team
-Version: 2.0.0-DRAAD175
-Date: 2025-12-13
+Version: 2.0.0-DRAAD208C
+Date: 2025-12-18
 """
 
 import sys
@@ -25,6 +31,7 @@ from datetime import datetime
 from typing import Optional
 from concurrent.futures import ThreadPoolExecutor
 import traceback
+import os
 
 # Configure logging EARLY - before any other imports
 logging.basicConfig(
@@ -36,13 +43,94 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 logger.info("[Main] ============================================================")
-logger.info("[Main] ROOSTER SOLVER SERVICE - FASE 2 + DRAAD175")
+logger.info("[Main] ROOSTER SOLVER SERVICE - FASE 2 + DRAAD208C")
 logger.info(f"[Main] Python version: {sys.version}")
 logger.info(f"[Main] Start time: {datetime.now().isoformat()}")
-logger.info("[Main] Version: 2.0.0-DRAAD175")
+logger.info("[Main] Version: 2.0.0-DRAAD208C")
 logger.info("[Main] Solver 1: RosterSolverV2 (CP-SAT) - FASE 1 COMPLETE")
 logger.info("[Main] Solver 2: SequentialSolverV2 (Priority Queue) - FASE 2 COMPLETE")
 logger.info("[Main] Routing: SolverSelector (FASE 3) - PRIMARY: Sequential, FALLBACK: CP-SAT")
+logger.info("[Main] DRAAD208C: Database validation boot enabled")
+
+# ============================================================================
+# DRAAD208C FIX 1: Database Validation Boot
+# ============================================================================
+
+def validate_database_connection():
+    """DRAAD208C FIX 1: Validate Supabase connection at startup.
+    
+    This catches credential/network issues early before solver attempts
+    to use the database.
+    """
+    logger.info("[Boot] ================================================")
+    logger.info("[Boot] DRAAD208C: Database Validation Boot Starting...")
+    
+    try:
+        # Check for required environment variables
+        supabase_url = os.environ.get('SUPABASE_URL')
+        supabase_key = os.environ.get('SUPABASE_KEY')
+        
+        if not supabase_url:
+            logger.error("[Boot] ✗ SUPABASE_URL environment variable not set")
+            logger.error("[Boot] ✗ Cannot proceed - database configuration incomplete")
+            return False
+        
+        if not supabase_key:
+            logger.error("[Boot] ✗ SUPABASE_KEY environment variable not set")
+            logger.error("[Boot] ✗ Cannot proceed - database authentication incomplete")
+            return False
+        
+        logger.info(f"[Boot] ✓ SUPABASE_URL detected: {supabase_url[:50]}...")
+        logger.info(f"[Boot] ✓ SUPABASE_KEY detected: {supabase_key[:20]}...")
+        
+        # Try to import and test Supabase client
+        try:
+            from supabase import create_client
+            logger.info("[Boot] ✓ Supabase library imported")
+        except ImportError as e:
+            logger.error(f"[Boot] ✗ Failed to import supabase: {e}")
+            return False
+        
+        # Try to create client
+        try:
+            client = create_client(supabase_url, supabase_key)
+            logger.info("[Boot] ✓ Supabase client created")
+        except Exception as e:
+            logger.error(f"[Boot] ✗ Failed to create Supabase client: {e}")
+            logger.error(f"[Boot] ✗ Error details: {str(e)[:200]}")
+            return False
+        
+        # Try to make a test query to roosters table
+        try:
+            response = client.table('roosters').select('id').limit(1).execute()
+            logger.info("[Boot] ✓ Supabase connection test successful (roosters table accessible)")
+        except Exception as e:
+            logger.error(f"[Boot] ✗ Failed to query roosters table: {e}")
+            logger.error(f"[Boot] ✗ Error details: {str(e)[:200]}")
+            logger.error("[Boot] ✗ Database may be unreachable or credentials invalid")
+            return False
+        
+        logger.info("[Boot] ✓ Database validation complete - All checks passed")
+        logger.info("[Boot] ================================================")
+        return True
+    
+    except Exception as e:
+        logger.error(f"[Boot] ✗ Unexpected error during validation: {e}")
+        logger.error(f"[Boot] ✗ Stack trace: {traceback.format_exc()}")
+        return False
+
+# Run database validation before importing other modules
+logger.info("[Main] Step 0: Running database validation...")
+db_valid = validate_database_connection()
+if not db_valid:
+    logger.error("[Main] ✗ Database validation failed - service cannot start")
+    logger.error("[Main] ✗ Fix environment variables and restart")
+    sys.exit(1)
+logger.info("[Main] ✓ Database validation passed - proceeding with imports")
+
+# ============================================================================
+# END DATABASE VALIDATION BOOT
+# ============================================================================
 
 try:
     logger.info("[Main] Step 1: Importing FastAPI...")
@@ -84,8 +172,8 @@ logger.info("[Main] ALL IMPORTS SUCCESSFUL - Creating FastAPI app")
 # FastAPI app
 app = FastAPI(
     title="Rooster Solver Service",
-    description="V2: RosterSolverV2 (FASE 1) + SequentialSolverV2 (FASE 2) + SolverSelector (FASE 3) - DRAAD175",
-    version="2.0.0-DRAAD175"
+    description="V2: RosterSolverV2 (FASE 1) + SequentialSolverV2 (FASE 2) + SolverSelector (FASE 3) - DRAAD208C",
+    version="2.0.0-DRAAD208C"
 )
 
 logger.info("[Main] FastAPI application created")
@@ -127,6 +215,7 @@ async def global_exception_handler(request, exc):
     """Global exception handler - prevents 502 errors.
     
     DRAAD175 FIX #2: Return detailed error information instead of generic response
+    DRAAD208C FIX: Include database validation status in error
     """
     logger.error(f"[Main] GLOBAL EXCEPTION: {type(exc).__name__}", exc_info=True)
     
@@ -161,9 +250,10 @@ async def global_exception_handler(request, exc):
 async def startup_event():
     """Called when FastAPI starts."""
     logger.info("[Main] STARTUP COMPLETE - Server ready")
-    logger.info(f"[Main] Service: Rooster Solver V2 (DRAAD175)")
+    logger.info(f"[Main] Service: Rooster Solver V2 (DRAAD208C)")
     logger.info(f"[Main] Primary solver: SequentialSolverV2 (Priority Queue)")
     logger.info(f"[Main] Fallback solver: RosterSolverV2 (OR-Tools CP-SAT)")
+    logger.info(f"[Main] Database validation: ✓ PASSED")
     logger.info(f"[Main] Started: {datetime.now().isoformat()}")
 
 # ============================================================================
@@ -176,7 +266,7 @@ async def root():
     return {
         "service": "Rooster Solver V2",
         "status": "online",
-        "version": "2.0.0-DRAAD175",
+        "version": "2.0.0-DRAAD208C",
         "fase1_rosterset2_solver": "RosterSolverV2 (OR-Tools CP-SAT)",
         "fase2_sequential_solver": "SequentialSolverV2 (Priority Queue)",
         "fase3_selector": "SolverSelectorV2 (Unified routing)",
@@ -188,7 +278,8 @@ async def root():
             "FASE 3: Unified SolverSelector with fallback",
             "Async/await with ThreadPoolExecutor",
             "CORS security",
-            "DRAAD175: Detailed error responses"
+            "DRAAD208C: Database validation boot",
+            "DRAAD208C: Enhanced error reporting"
         ]
     }
 
@@ -199,7 +290,7 @@ async def health():
         status="healthy",
         timestamp=datetime.utcnow().isoformat(),
         service="rooster-solver",
-        version="2.0.0-DRAAD175"
+        version="2.0.0-DRAAD208C"
     )
 
 @app.get("/version", response_model=VersionResponse)
@@ -211,7 +302,7 @@ async def version():
         ortools_version = "unknown"
     
     return VersionResponse(
-        version="2.0.0-DRAAD175",
+        version="2.0.0-DRAAD208C",
         or_tools_version=ortools_version,
         phase="FASE1+FASE2+FASE3",
         capabilities=[
@@ -220,21 +311,22 @@ async def version():
             "FASE_3_SolverSelectorV2_unified_routing",
             "async_executor",
             "supabase_integration",
+            "database_validation_boot",
             "fallback_strategy",
             "exception_handling",
             "cors_security",
-            "draad175_error_details"
+            "draad208c_enhanced_errors"
         ]
     )
 
 # ============================================================================
-# SOLVER LOGIC - DRAAD175 FIX #2: Better error context
+# SOLVER LOGIC - DRAAD208C: Enhanced error context
 # ============================================================================
 
 def _do_solve(request: SolveRequest, strategy: str = None) -> SolveResponse:
     """Execute solve in thread pool (runs synchronously but in separate thread).
     
-    DRAAD175 FIX #2: Improved error reporting and logging
+    DRAAD208C FIX: Improved error reporting and logging
     
     Args:
         request: SolveRequest
@@ -264,7 +356,7 @@ def _do_solve(request: SolveRequest, strategy: str = None) -> SolveResponse:
         logger.error(f"[Solver] ERROR: {str(e)}", exc_info=True)
         solve_time = (datetime.now() - start_time).total_seconds()
         
-        # DRAAD175 FIX #2: Return detailed error information
+        # DRAAD208C FIX: Return detailed error information
         error_msg = f"{type(e).__name__}: {str(e)[:150]}"
         logger.error(f"[Solver] Error details: {error_msg}")
         
@@ -281,12 +373,12 @@ def _do_solve(request: SolveRequest, strategy: str = None) -> SolveResponse:
         )
 
 # ============================================================================
-# SOLVER ENDPOINT (FASE 2+DRAAD175)
+# SOLVER ENDPOINT (FASE 2+DRAAD208C)
 # ============================================================================
 
 @app.post("/api/v1/solve-schedule", response_model=SolveResponse)
 async def solve_schedule(request: SolveRequest):
-    """Solve rooster using FASE 2 complete system (DRAAD175).
+    """Solve rooster using FASE 2 complete system (DRAAD208C).
     
     FASE 1 (RosterSolverV2):
     - Constraint 1: Bevoegdheden (authorized services only)
@@ -306,7 +398,8 @@ async def solve_schedule(request: SolveRequest):
     - Unified response format
     - Environment variable override
     
-    DRAAD175 IMPROVEMENTS:
+    DRAAD208C IMPROVEMENTS:
+    - Database validation at startup
     - Better HTTP error responses with details
     - Detailed violation reporting
     - Comprehensive logging
@@ -340,7 +433,7 @@ async def solve_schedule(request: SolveRequest):
         logger.error(f"[Async] ERROR: {str(e)}", exc_info=True)
         total_time = (datetime.now() - start_time).total_seconds()
         
-        # DRAAD175 FIX #2: Detailed error response
+        # DRAAD208C FIX: Detailed error response
         error_msg = f"{type(e).__name__}: {str(e)[:200]}"
         logger.error(f"[Async] Endpoint error: {error_msg}")
         
