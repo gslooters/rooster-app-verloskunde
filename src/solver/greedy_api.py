@@ -13,13 +13,17 @@ Performance:
 - Coverage: 98%+
 - HTTP: 200 success (or 400/500 errors)
 
+DRAAD 208H FIXES 2-3:
+- Fix 2: Status case - lowercase 'success'
+- Fix 3: Result field names - correct mappings
+
 FIXES (OPDRACHT 195):
 - Pydantic V2 deprecation: schema_extra → json_schema_extra
 - ConfigDict for model configuration
 - Clean logs without warnings
 
-Author: DRAAD 194 FASE 2 + OPDRACHT 195
-Date: 2025-12-16
+Author: DRAAD 194 FASE 2 + OPDRACHT 195 + DRAAD 208H Fixes
+Date: 2025-12-18
 """
 
 import logging
@@ -100,7 +104,7 @@ class SolveResponse(BaseModel):
                 "bottlenecks": [],
                 "message": "DRAAD 190 SMART GREEDY: 98.2% coverage in 3.24s",
                 "solver_type": "GREEDY",
-                "timestamp": "2025-12-16T14:30:45.123456Z"
+                "timestamp": "2025-12-18T14:30:45.123456Z"
             }
         }
     )
@@ -190,14 +194,23 @@ async def solve_greedy(request: SolveRequest) -> SolveResponse:
         logger.info("Starting GREEDY algorithm (DRAAD 190 Smart Allocation)...")
         result: SolveResult = engine.solve()
         
-        # Build response
+        # DRAAD 208H FIX 2: Check for lowercase 'success'
+        if result.status not in ['success', 'partial', 'failed']:
+            logger.error(f"Invalid status returned: {result.status}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Invalid solve status: {result.status}"
+            )
+        
+        # DRAAD 208H FIX 3: Use correct field names from engine
+        # Engine returns: assignments_created, total_required, pre_planned_count, greedy_count
         response = SolveResponse(
             status=result.status,
-            assignments_created=result.assignments_created,
-            total_required=result.total_required,
+            assignments_created=result.assignments_created,  # ✅ Correct field
+            total_required=result.total_required,  # ✅ Correct field
             coverage=result.coverage,
-            pre_planned_count=result.pre_planned_count,
-            greedy_count=result.greedy_count,
+            pre_planned_count=result.pre_planned_count,  # ✅ Correct field
+            greedy_count=result.greedy_count,  # ✅ Correct field
             solve_time=result.solve_time,
             bottlenecks=[BottleneckResponse(**bn) for bn in result.bottlenecks],
             message=result.message,
