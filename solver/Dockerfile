@@ -2,9 +2,9 @@ FROM python:3.12.7-slim
 
 WORKDIR /app
 
-# FASE 3: Cache bust for supabase v2.5.2 upgrade and proxy parameter removal (2025-12-18T00:29)
-ARG FASE2_CACHE_BUST=1734545340
-RUN echo "[Dockerfile] FASE 3 Cache Bust: ${FASE2_CACHE_BUST}"
+# DRAAD208C: Database validation boot + enhanced error handling
+ARG DRAAD208C_CACHE_BUST=1734545400
+RUN echo "[Dockerfile] DRAAD208C Cache Bust: ${DRAAD208C_CACHE_BUST}"
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -25,11 +25,12 @@ ENV PORT=8000
 ENV DRAAD170_PHASE_1=constraint7_validation+constraint8_reification
 ENV DRAAD170_PHASE_2=async_await+threadpoolexecutor
 ENV FASE2_STATUS=COMPLETE
+ENV DRAAD208C_VALIDATION_BOOT=enabled
 
 # Expose port
 EXPOSE 8000
 
-# DEBUG: Test all imports including FASE 2 SequentialSolverV2
+# DEBUG: Test all imports including FASE 2 SequentialSolverV2 + DRAAD208C validation
 RUN echo "[Dockerfile] Testing critical imports..." && \
     python -c "from fastapi import FastAPI; print('[OK] FastAPI imported')" && \
     python -c "import uvicorn; print('[OK] Uvicorn imported')" && \
@@ -39,14 +40,15 @@ RUN echo "[Dockerfile] Testing critical imports..." && \
     python -c "from supabase import create_client; print('[OK] Supabase imported')" && \
     python -c "from sequential_solver_v2 import SequentialSolverV2; print('[OK] SequentialSolverV2 imported')" && \
     python -c "from solver_selector import SolverSelectorV2; print('[OK] SolverSelectorV2 imported')" && \
-    python -c "from main import app; print('[OK] Main FastAPI app imported')" && \
-    echo "[Dockerfile] ALL IMPORTS SUCCESSFUL - FASE 1+2+3 COMPLETE"
+    python -c "from main import app; print('[OK] Main FastAPI app imported - DRAAD208C boot included')" && \
+    echo "[Dockerfile] ALL IMPORTS SUCCESSFUL - FASE 1+2+3 + DRAAD208C COMPLETE"
 
-# DRAAD196 FIX: Corrected healthcheck with proper shell expansion and optimized timing
-# Problem was: ${PORT} not expanded in HEALTHCHECK CMD - now using hardcoded port
-# Timing: Reduced start-period from 40s to 30s, interval from 30s to 5s
+# DRAAD208C FIX3: Enhanced health check with validation status
+# Checks both /health endpoint (standard health)
+# Also used by connection validation in solve-greedy/route.ts
 HEALTHCHECK --interval=5s --timeout=10s --start-period=30s --retries=6 \
     CMD curl -f http://localhost:8000/health || exit 1
 
 # Start server with verbose logging
+# DRAAD208C: Database validation boot runs automatically on startup in main.py
 CMD ["python", "-u", "-c", "import uvicorn; uvicorn.run('main:app', host='0.0.0.0', port=8000, log_level='info')"]
