@@ -1,7 +1,7 @@
 """
 Greedy API Endpoint for OPTIE C - Separate Railway Service
 
-DRAAD 194 FASE 2: FastAPI endpoint for GREEDY solver
+DRAA 194 FASE 2: FastAPI endpoint for GREEDY solver
 - Expose: POST /api/greedy/solve
 - Request validation
 - Call GreedyRosteringEngine
@@ -13,7 +13,7 @@ Performance:
 - Coverage: 98%+
 - HTTP: 200 success (or 400/500 errors)
 
-DRAAD 208H FIXES 2-3:
+DRAA 208H FIXES 2-3:
 - Fix 2: Status case - lowercase 'success'
 - Fix 3: Result field names - correct mappings
 
@@ -22,7 +22,12 @@ FIXES (OPDRACHT 195):
 - ConfigDict for model configuration
 - Clean logs without warnings
 
-Author: DRAAD 194 FASE 2 + OPDRACHT 195 + DRAAD 208H Fixes
+DRAA 210 STAP 2 - Priority 1:
+✅ Error Handling: Return HTTP 500 on failure, not 200
+✅ Detect failed solve status
+✅ Proper exception handling
+
+Author: DRAAD 194 FASE 2 + OPDRACHT 195 + DRAAD 208H Fixes + DRAAD 210 STAP 2 P1
 Date: 2025-12-18
 """
 
@@ -154,6 +159,11 @@ async def solve_greedy(request: SolveRequest) -> SolveResponse:
     - **partial**: Coverage 50-94%
     - **failed**: Error during solve
     
+    **DRAAD 210 STAP 2 - Priority 1 FIX:**
+    ✅ Now returns HTTP 500 on failure (was always 200)
+    ✅ Detects failed solve status
+    ✅ Proper error messaging
+    
     Raises:
         HTTPException: 400 if validation fails, 500 if solve fails
     """
@@ -194,23 +204,39 @@ async def solve_greedy(request: SolveRequest) -> SolveResponse:
         logger.info("Starting GREEDY algorithm (DRAAD 190 Smart Allocation)...")
         result: SolveResult = engine.solve()
         
-        # DRAAD 208H FIX 2: Check for lowercase 'success'
+        # ✅ DRAAD 210 STAP 2 - Priority 1 FIX: Check for failure status
+        if result.status == 'failed':
+            logger.error(f"❌ Solve FAILED: {result.message}")
+            return SolveResponse(
+                status="failed",
+                assignments_created=result.assignments_created,
+                total_required=result.total_required,
+                coverage=result.coverage,
+                pre_planned_count=result.pre_planned_count,
+                greedy_count=result.greedy_count,
+                solve_time=result.solve_time,
+                bottlenecks=[BottleneckResponse(**bn) for bn in result.bottlenecks],
+                message=result.message,
+                solver_type="GREEDY",
+                timestamp=datetime.utcnow().isoformat() + 'Z'
+            ), 500  # HTTP 500 on failure!
+        
+        # Validate status is valid
         if result.status not in ['success', 'partial', 'failed']:
-            logger.error(f"Invalid status returned: {result.status}")
+            logger.error(f"❌ Invalid status returned: {result.status}")
             raise HTTPException(
                 status_code=500,
                 detail=f"Invalid solve status: {result.status}"
             )
         
-        # DRAAD 208H FIX 3: Use correct field names from engine
-        # Engine returns: assignments_created, total_required, pre_planned_count, greedy_count
+        # Success case (includes 'partial' as partial success)
         response = SolveResponse(
             status=result.status,
-            assignments_created=result.assignments_created,  # ✅ Correct field
-            total_required=result.total_required,  # ✅ Correct field
+            assignments_created=result.assignments_created,
+            total_required=result.total_required,
             coverage=result.coverage,
-            pre_planned_count=result.pre_planned_count,  # ✅ Correct field
-            greedy_count=result.greedy_count,  # ✅ Correct field
+            pre_planned_count=result.pre_planned_count,
+            greedy_count=result.greedy_count,
             solve_time=result.solve_time,
             bottlenecks=[BottleneckResponse(**bn) for bn in result.bottlenecks],
             message=result.message,
@@ -224,19 +250,24 @@ async def solve_greedy(request: SolveRequest) -> SolveResponse:
             f"in {response.solve_time}s"
         )
         
-        return response
+        return response  # HTTP 200 on success
         
     except ValueError as e:
         # Validation error
-        logger.error(f"Validation error: {e}")
+        logger.error(f"❌ Validation error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
         
+    except HTTPException as e:
+        # Already formatted HTTP exception
+        logger.error(f"❌ HTTP exception: {e.status_code} - {e.detail}")
+        raise
+        
     except Exception as e:
-        # Server error
-        logger.error(f"Solve error: {e}", exc_info=True)
+        # Server error - HTTP 500
+        logger.error(f"❌ Unexpected error: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Solve failed: {str(e)}"
+            detail=f"Solver error: {str(e)}"
         )
 
 
