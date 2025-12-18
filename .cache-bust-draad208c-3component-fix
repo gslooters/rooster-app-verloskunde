@@ -1,0 +1,40 @@
+.cache-bust-draad208c-3component-fix
+
+DEPLOYMENT TRIGGERED: 2025-12-18 00:02:00 UTC
+
+=== DRAAD 208C - 3 COMPONENT FIX ===
+
+PROBLEM:
+Rootering kon niet worden gestart vanwege Supabase database credentials ongeldig/bereikbaar bij GREEDY solver runtime.
+
+ROOTCAUSE:
+Greedy solver kon database niet bereiken - geen validatie bij startup.
+
+OPLOSSING (3 COMPONENTEN):
+
+1. GREEDY SOLVER BOOT (solver/main.py)
+   ✓ Database validatieboot bij startup
+   ✓ Supabase connection test voordat solver werkt
+   ✓ Early error detection op environment variables
+   ✓ Gedetailleerde logging voor debugging
+
+2. GREEDY API ROUTE (app/api/roster/solve-greedy/route.ts)
+   ✓ Connection validation voordat solve wordt gestart
+   ✓ Health check endpoint naar solver
+   ✓ Enhanced error messages met solver URL info
+   ✓ Timeout handling (validation 5s, solve 35s)
+   ✓ 503 Service Unavailable bij connection fail
+
+3. DOCKERFILE (solver/Dockerfile)
+   ✓ Cache bust trigger (DRAAD208C)
+   ✓ Import test inclusief main.py boot validatie
+   ✓ HEALTHCHECK naar /health endpoint
+   ✓ 30s startup grace period
+
+COMMITS:
+2d1c710 - FIX1: Database validation boot in solver/main.py
+183ff02 - FIX2: Connection validation in solve-greedy/route.ts
+42618a0 - FIX3: Dockerfile enhancements + cache bust
+
+DEPLOYMENT:
+Railway rebuild triggered. Monitor deployment status.
