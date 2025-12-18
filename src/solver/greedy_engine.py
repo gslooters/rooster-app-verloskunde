@@ -39,14 +39,19 @@ DRAD 210 STAP 2 FIXES:
   ✅ Priority 2: Enhanced logging in Phase 4 (_save_assignments)
   ✅ Priority 3: Credentials validation at __init__
 
-DRAAD 210 STAP 2.1 CRITICAL FIXES:
+DRAD 210 STAP 2.1 CRITICAL FIXES:
   ✅ FIX 1: Status > 0 Slot Exclusion (P0) - Prevents roster corruption
   ✅ FIX 2: Service Pairing DIO↔DIA, DDO↔DDA (P0) - Validates service pairs
   ✅ FIX 3: Team Fallback Logic (P1) - Team → Overige → OPEN
   ✅ FIX 4: TOT Team Special Logic (P1) - Permanent → ZZP priority
   ✅ FIX 5: Service Priority Ordering (P1) - System → TOT → Other
 
-Author: DRAAD 190 Smart Greedy Allocation + DRAAD 185-2 Implementation + DRAAD 208H Fixes + DRAAD 210 STAP 2 + DRAAD 210 STAP 2.1 Critical Fixes
+DRAD 210 STAP 3 FIXES:
+  ✅ FIX 1: Status > 0 Slot Detection (P0) - Changed if status != 1 to if status > 0
+  ✅ FIX 2: UPSERT Operation (P0) - Use upsert instead of insert
+  ✅ FIX 3: Load All Pre-planned (P0) - Load all roster_assignments records
+
+Author: DRAAD 190 Smart Greedy Allocation + DRAAD 185-2 Implementation + DRAAD 208H Fixes + DRAAD 210 STAP 2 + DRAAD 210 STAP 2.1 + DRAAD 210 STAP 3
 Date: 2025-12-18
 """
 
@@ -196,11 +201,16 @@ class GreedyRosteringEngine:
     - FIX 4: TOT Team Special Logic (Permanent → ZZP priority)
     - FIX 5: Service Priority Ordering (System → TOT → Other)
     
+    DRAAD 210 STAP 3 CRITICAL FIXES:
+    - FIX 1: Status > 0 Slot Detection (if status > 0, not status != 1)
+    - FIX 2: UPSERT Operation (UPDATE existing, INSERT new)
+    - FIX 3: Load All Pre-planned (no status filter on pre-planned load)
+    
     Provides 5-phase algorithm:
     1. Lock pre-planned (validate & preserve)
     2. Greedy allocate (fill remaining with HC constraints + smart sorting)
     3. Analyze bottlenecks (diagnose shortages)
-    4. Save to database (bulk insert)
+    4. Save to database (bulk upsert)
     5. Return result (with metadata & suggestions)
     """
 
@@ -310,6 +320,10 @@ class GreedyRosteringEngine:
         logger.info(f"      ✅ FIX 3: Team Fallback Logic")
         logger.info(f"      ✅ FIX 4: TOT Team Special Logic")
         logger.info(f"      ✅ FIX 5: Service Priority Ordering")
+        logger.info(f"   🔥 DRAAD 210 STAP 3: ALL 3 CRITICAL STATUS FIXES")
+        logger.info(f"      ✅ FIX 1: Status > 0 Locked Slot Detection (if status > 0)")
+        logger.info(f"      ✅ FIX 2: UPSERT Operation (UPDATE existing)")
+        logger.info(f"      ✅ FIX 3: Load All Pre-planned Records")
         
         # Load data
         self._load_data()
@@ -347,9 +361,9 @@ class GreedyRosteringEngine:
             self._load_blocked_slots()
             logger.info(f"  ✅ Loaded {len(self.blocked_slots)} blocked slots")
             
-            # DRAAD 210 STAP 2.1 - FIX 1: Load locked slots (status != 1)
+            # DRAAD 210 STAP 3 - FIX 1: Load locked slots (status > 0)
             self._load_locked_slots()
-            logger.info(f"  ✅ Loaded {len(self.locked_slots)} locked slots (status != 1)")
+            logger.info(f"  ✅ Loaded {len(self.locked_slots)} locked slots (status > 0)")
             
         except Exception as e:
             logger.error(f"❌ Error loading data: {e}")
@@ -433,12 +447,21 @@ class GreedyRosteringEngine:
             self.employee_targets[row['employee_id']] = row.get('target_shifts', 8)
 
     def _load_pre_planned(self) -> None:
-        """Load pre-planned assignments (fixed)."""
+        """
+        DRAAD 210 STAP 3 - FIX 3: Load ALL pre-planned records (no status filter).
+        
+        SPEC 4.0: "Greedy moet alle records van de tabel roster_assignments inlezen"
+        SPEC 4.1: "alle pre-planned diensten inlezen"
+        
+        This loads ALL pre-planned assignments (source='fixed') regardless of status.
+        Status filtering happens in _load_locked_slots() for skip logic.
+        """
         response = self.supabase.table('roster_assignments').select('*').eq(
             'roster_id', self.roster_id
-        ).eq('source', 'fixed').eq('status', 1).execute()
+        ).eq('source', 'fixed').execute()  # ✅ FIX 3: Load ALL fixed (no .eq('status', 1))
         
         for row in response.data:
+            # Pre-planned can have any status - GREEDY respects all pre-planned
             self.pre_planned.append(RosterAssignment(
                 id=row['id'],
                 roster_id=row['roster_id'],
@@ -447,8 +470,13 @@ class GreedyRosteringEngine:
                 dagdeel=row['dagdeel'],
                 service_id=row['service_id'],
                 source=row.get('source', 'fixed'),
-                status=row.get('status', 1)
+                status=row.get('status', 0)
             ))
+        
+        logger.debug(
+            f"Loaded {len(self.pre_planned)} pre-planned records (source='fixed') "
+            f"from roster_assignments (SPEC 4.0 + 4.1 - no status filter)"
+        )
 
     def _load_blocked_slots(self) -> None:
         """Load blocked slots (status=3 means unavailable)."""
@@ -462,15 +490,17 @@ class GreedyRosteringEngine:
 
     def _load_locked_slots(self) -> None:
         """
-        DRAAD 210 STAP 2.1 - FIX 1: Load locked slots (status != 1).
+        DRAAD 210 STAP 3 - FIX 1: Load locked slots (status > 0).
+        
+        SPEC 3.1: "Greedy moet respecteert alle datums/dagdelen met de status > 0 
+                   deze zijn uitgesloten van gebruik door GREEDY"
         
         Status meanings:
-        - 1: ACTIVE (can be used for new assignments)
-        - 2: LOCKED (auto-filled by system, do NOT overwrite)
-        - 3: UNAVAILABLE (blackout/blocked)
+        - Status = 0: BESCHIKBAAR (GREEDY mag inplannen)
+        - Status > 0: GEBLOKKEERD (GREEDY SKIPT - reeds ingevuld of blackout)
         
         This method loads all date/dagdeel combinations that have
-        ANY assignment with status != 1, which means they should
+        ANY assignment with status > 0 (not just != 1), which means they should
         not receive additional assignments.
         """
         # Load ALL assignments for this roster
@@ -479,15 +509,15 @@ class GreedyRosteringEngine:
         ).execute()
         
         for row in response.data:
-            status = row.get('status', 1)
+            status = row.get('status', 0)  # Default 0 = available
             
-            # If status != 1, mark this date/dagdeel as locked
-            if status != 1:
+            # ✅ FIX 1: Only mark as locked if status > 0 (spec 3.1)
+            if status > 0:
                 key = (row['date'], row['dagdeel'])
                 self.locked_slots.add(key)
                 logger.debug(
-                    f"LOCKED SLOT: {row['date']} {row['dagdeel']} "
-                    f"(employee: {row['employee_id']}, status: {status})"
+                    f"LOCKED: {row['date']} {row['dagdeel']} "
+                    f"(status={status} > 0, will SKIP for GREEDY)"
                 )
 
     def solve(self) -> SolveResult:
@@ -497,19 +527,18 @@ class GreedyRosteringEngine:
             SolveResult with all details
         """
         start_time = time.time()
-        logger.info("\n🚀 [DRAAD190-210STAP21] Starting GREEDY solve with ALL CRITICAL FIXES...")
-        logger.info("   🎯 FIX 1: Status > 0 Slot Exclusion ENABLED")
-        logger.info("   🎯 FIX 2: Service Pairing (DIO↔DIA, DDO↔DDA) ENABLED")
-        logger.info("   🎯 FIX 3: Team Fallback Logic ENABLED")
-        logger.info("   🎯 FIX 4: TOT Team Special Logic ENABLED")
-        logger.info("   🎯 FIX 5: Service Priority Ordering ENABLED")
+        logger.info("\n🚀 [DRAAD210-STAP3] Starting GREEDY solve with ALL CRITICAL FIXES...")
+        logger.info("   🔥 STAP 3 FIXES:")
+        logger.info("   🎯 FIX 1: Status > 0 Slot Detection (if status > 0, not status != 1)")
+        logger.info("   🎯 FIX 2: UPSERT Operation (UPDATE existing, INSERT new)")
+        logger.info("   🎯 FIX 3: Load All Pre-planned (no status filter)")
         
         try:
             # Phase 1: Lock pre-planned
             self._lock_pre_planned()
             logger.info(f"✅ Phase 1: {len(self.assignments)} locked assignments")
             
-            # Phase 2: Greedy allocate (with DRAAD 190 smart sorting + all 5 fixes)
+            # Phase 2: Greedy allocate (with DRAAD 190 smart sorting + all fixes)
             bottlenecks = self._greedy_allocate()
             logger.info(f"✅ Phase 2: {len(self.assignments)} total, {len(bottlenecks)} bottlenecks")
             
@@ -538,12 +567,12 @@ class GreedyRosteringEngine:
                 solve_time=round(elapsed, 2),
                 pre_planned_count=pre_planned_count,
                 greedy_count=greedy_count,
-                message=f"DRAAD 190 + STAP 2.1 CRITICAL FIXES: {coverage:.1f}% coverage in {elapsed:.2f}s"
+                message=f"DRAAD 190 + STAP 2.1 + STAP 3 FIXES: {coverage:.1f}% coverage in {elapsed:.2f}s"
             )
             
             logger.info(f"✅ Phase 5 complete: {result.coverage}% coverage in {elapsed:.2f}s")
             logger.info(f"   📈 Pre-planned: {pre_planned_count}")
-            logger.info(f"   📈 Greedy (DRAAD 190 + STAP 2.1): {greedy_count}")
+            logger.info(f"   📈 Greedy (STAP 3 FIXES): {greedy_count}")
             logger.info(f"   📈 Total: {len(self.assignments)}/{total_slots}")
             logger.info(f"   📈 Bottlenecks: {len(bottlenecks)}")
             
@@ -590,7 +619,7 @@ class GreedyRosteringEngine:
 
     def _greedy_allocate(self) -> List[Bottleneck]:
         """
-        Phase 2: Greedy allocation with HC1-HC6 + DRAAD 190 Smart Sorting + ALL 5 STAP 2.1 FIXES.
+        Phase 2: Greedy allocation with HC1-HC6 + DRAAD 190 Smart Sorting + ALL STAP 2.1 FIXES + STAP 3 FIXES.
         
         DRAAD 210 STAP 2.1 FIX 5: Service Priority Ordering
         ======================================================
@@ -659,12 +688,12 @@ class GreedyRosteringEngine:
             logger.info(f"\n📊 [FIX 5] Processing {priority_name} services ({len(priority_services)} total)...")
             
             for (date, dagdeel, service_id), need in priority_services:
-                # DRAAD 210 STAP 2.1 - FIX 1: Check if slot is locked (status != 1)
+                # DRAAD 210 STAP 3 - FIX 1: Check if slot is locked (status > 0)
                 slot_key = (date, dagdeel)
                 if slot_key in self.locked_slots:
                     logger.info(
                         f"⏭️  SKIP: {date} {dagdeel} service={service_id} - "
-                        f"slot has locked assignments (status ≠ 1)"
+                        f"slot has locked assignments (status > 0)"
                     )
                     continue
                 
@@ -1069,7 +1098,15 @@ class GreedyRosteringEngine:
 
     def _save_assignments(self) -> None:
         """
-        Phase 4: Bulk insert greedy assignments to database.
+        Phase 4: Bulk UPSERT greedy assignments to database.
+        
+        DRAAD 210 STAP 3 - FIX 2: Use UPSERT instead of INSERT
+        SPEC 4.4.2: "Deze inplanning direct updaten in tabel roster_assignments"
+        
+        UPSERT = UPDATE if exists (id matches), INSERT if new
+        - Handles both new slots (INSERT) and existing slots (UPDATE)
+        - Prevents duplicate records
+        - Safe operation for database integrity
         
         DRAAD 210 STAP 2 - Priority 2 FIX: Enhanced logging
         - Log before attempt
@@ -1083,7 +1120,7 @@ class GreedyRosteringEngine:
             logger.info("🔍 No greedy assignments to save")
             return
         
-        # Prepare bulk insert data
+        # Prepare bulk upsert data
         data = []
         for a in greedy_assignments:
             data.append({
@@ -1105,29 +1142,32 @@ class GreedyRosteringEngine:
         logger.info(f"   - Supabase URL: {self.supabase.url}")
         logger.info(f"   - Table: roster_assignments")
         logger.info(f"   - Roster ID: {self.roster_id}")
-        logger.info(f"\n   📊 Insert details:")
-        logger.info(f"   - Records to insert: {len(data)}")
-        logger.info(f"   - Source: greedy (DRAAD 190 Smart Greedy Allocation + STAP 2.1 Fixes)")
+        logger.info(f"\n   📊 UPSERT details (STAP 3 FIX 2):")
+        logger.info(f"   - Records to UPSERT: {len(data)}")
+        logger.info(f"   - Operation: UPSERT (UPDATE if exists, INSERT if new)")
+        logger.info(f"   - Source: greedy (DRAAD 190 Smart Greedy Allocation + STAP 3 Fixes)")
         logger.info(f"   - Status: 1 (active)")
         logger.info(f"   - Timestamp: {datetime.utcnow().isoformat()}")
         
         try:
-            # Perform bulk insert
-            logger.info("\n   🚀 Executing bulk insert...")
-            response = self.supabase.table('roster_assignments').insert(data).execute()
+            # ✅ FIX 2: Perform bulk UPSERT (not INSERT)
+            logger.info("\n   🚀 Executing bulk UPSERT...")
+            response = self.supabase.table('roster_assignments').upsert(data).execute()
             
             # 🐱 Log success with details
             saved_count = len(response.data) if hasattr(response, 'data') and response.data else len(data)
             
-            logger.info(f"\n✅ [PHASE 4] SUCCESS: Bulk insert completed")
-            logger.info(f"   📈 Records saved: {saved_count}")
-            logger.info(f"   🎯 Source: DRAAD 190 Smart Greedy Allocation + STAP 2.1 Critical Fixes")
+            logger.info(f"\n✅ [PHASE 4] SUCCESS: Bulk UPSERT completed")
+            logger.info(f"   📈 Records UPSERTED: {saved_count}")
+            logger.info(f"   🎯 Source: DRAAD 190 Smart Greedy Allocation + STAP 3 Fixes")
+            logger.info(f"   🎯 Operation: UPSERT (UPDATE existing, INSERT new)")
             logger.info(f"   🕛 Timestamp: {datetime.utcnow().isoformat()}")
             logger.info(f"   💻 Response type: {type(response).__name__}")
+            logger.info(f"   📝 Note: Database will set status=2 after DIO/DDO pairing")
             
             return {
                 "status": "success",
-                "assignments_saved": saved_count,
+                "assignments_upserted": saved_count,
                 "phase": 4
             }
             
@@ -1139,8 +1179,9 @@ class GreedyRosteringEngine:
             logger.error(f"   - Error message: {str(e)}")
             logger.error(f"   - Records attempted: {len(data)}")
             logger.error(f"   - Database URL: {self.supabase.url}")
+            logger.error(f"   - Operation: UPSERT")
             logger.error(f"\n   📃 Full traceback:")
             logger.error(f"   ", exc_info=True)
             
             # Re-raise with context
-            raise Exception(f"Database write failed: {str(e)}") from e
+            raise Exception(f"Database UPSERT failed: {str(e)}") from e
