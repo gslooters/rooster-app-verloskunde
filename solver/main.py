@@ -1,4 +1,4 @@
-"""OR-Tools + Sequential Solver Service (DRAAD175)
+"""OR-Tools + Sequential Solver Service (DRAAD208C-FIX)
 
 FastAPI service voor rooster optimalisatie met twee solvers:
 - RosterSolverV2: Google OR-Tools CP-SAT (optimization)
@@ -8,19 +8,14 @@ FASE 1: RosterSolverV2 with 4 hard constraints (DRAAD170)
 FASE 2: SequentialSolverV2 with 3-layer priority (DRAAD174)
 FASE 3: SolverSelector routes between solvers (DRAAD174)
 
-DRARD175 FIXES:
-- FOUT#2: HTTP 400 responses now include detailed error information
-- Better error handling and reporting
-- Structured error responses
-
-DRAAD208C FIXES (COMPONENT 1):
-- Database validation boot at startup
-- Detailed Supabase connection testing
-- Early error detection for credentials
-- Clear error messages for debugging
+DRAARD208C-FIX:
+- Enhanced database validation with graceful degradation
+- If database unavailable, solver still starts but reports errors
+- Better environment variable handling
+- Detailed logging for debugging Railway deployment
 
 Authors: Rooster App Team
-Version: 2.0.0-DRAAD208C
+Version: 2.0.0-DRAAD208C-FIX
 Date: 2025-12-18
 """
 
@@ -43,27 +38,42 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 logger.info("[Main] ============================================================")
-logger.info("[Main] ROOSTER SOLVER SERVICE - FASE 2 + DRAAD208C")
+logger.info("[Main] ROOSTER SOLVER SERVICE - FASE 2 + DRAAD208C-FIX")
 logger.info(f"[Main] Python version: {sys.version}")
 logger.info(f"[Main] Start time: {datetime.now().isoformat()}")
-logger.info("[Main] Version: 2.0.0-DRAAD208C")
+logger.info("[Main] Version: 2.0.0-DRAAD208C-FIX")
 logger.info("[Main] Solver 1: RosterSolverV2 (CP-SAT) - FASE 1 COMPLETE")
 logger.info("[Main] Solver 2: SequentialSolverV2 (Priority Queue) - FASE 2 COMPLETE")
 logger.info("[Main] Routing: SolverSelector (FASE 3) - PRIMARY: Sequential, FALLBACK: CP-SAT")
-logger.info("[Main] DRAAD208C: Database validation boot enabled")
+logger.info("[Main] DRAAD208C-FIX: Enhanced database validation with graceful degradation")
 
 # ============================================================================
-# DRAAD208C FIX 1: Database Validation Boot
+# DRAAD208C-FIX: Environment Variable Validation (Non-blocking)
 # ============================================================================
 
-def validate_database_connection():
-    """DRAAD208C FIX 1: Validate Supabase connection at startup.
+class DatabaseConnectionStatus:
+    """Track database connection status across application lifecycle."""
+    def __init__(self):
+        self.is_available = False
+        self.supabase_url = None
+        self.supabase_key = None
+        self.validation_error = None
+        self.last_validation_time = None
+
+# Global status object
+DB_STATUS = DatabaseConnectionStatus()
+
+def validate_database_connection_nonblocking():
+    """DRAAD208C-FIX: Non-blocking database validation.
     
-    This catches credential/network issues early before solver attempts
-    to use the database.
+    This validation is NON-CRITICAL:
+    - If database is unavailable, service still starts
+    - Solvers can still run (limited functionality)
+    - Better feedback for deployment debugging
     """
     logger.info("[Boot] ================================================")
-    logger.info("[Boot] DRAAD208C: Database Validation Boot Starting...")
+    logger.info("[Boot] DRAAD208C-FIX: Database Connection Validation")
+    logger.info("[Boot] Mode: NON-BLOCKING (graceful degradation enabled)")
     
     try:
         # Check for required environment variables
@@ -71,14 +81,21 @@ def validate_database_connection():
         supabase_key = os.environ.get('SUPABASE_KEY')
         
         if not supabase_url:
-            logger.error("[Boot] ✗ SUPABASE_URL environment variable not set")
-            logger.error("[Boot] ✗ Cannot proceed - database configuration incomplete")
-            return False
+            DB_STATUS.validation_error = "SUPABASE_URL not set"
+            logger.warning("[Boot] ⚠ SUPABASE_URL environment variable not found")
+            logger.warning("[Boot] ⚠ This is normal during build/test")
+            logger.warning("[Boot] ⚠ Railway will inject this at runtime")
+            logger.warning("[Boot] ⚠ Database features will be unavailable until environment is configured")
+            return None  # Not an error - graceful degradation
         
         if not supabase_key:
-            logger.error("[Boot] ✗ SUPABASE_KEY environment variable not set")
-            logger.error("[Boot] ✗ Cannot proceed - database authentication incomplete")
-            return False
+            DB_STATUS.validation_error = "SUPABASE_KEY not set"
+            logger.warning("[Boot] ⚠ SUPABASE_KEY environment variable not found")
+            logger.warning("[Boot] ⚠ Database features will be unavailable until environment is configured")
+            return None  # Not an error - graceful degradation
+        
+        DB_STATUS.supabase_url = supabase_url
+        DB_STATUS.supabase_key = supabase_key
         
         logger.info(f"[Boot] ✓ SUPABASE_URL detected: {supabase_url[:50]}...")
         logger.info(f"[Boot] ✓ SUPABASE_KEY detected: {supabase_key[:20]}...")
@@ -88,48 +105,54 @@ def validate_database_connection():
             from supabase import create_client
             logger.info("[Boot] ✓ Supabase library imported")
         except ImportError as e:
-            logger.error(f"[Boot] ✗ Failed to import supabase: {e}")
-            return False
+            DB_STATUS.validation_error = f"Supabase import failed: {e}"
+            logger.warning(f"[Boot] ⚠ Failed to import supabase: {e}")
+            return None
         
         # Try to create client
         try:
             client = create_client(supabase_url, supabase_key)
             logger.info("[Boot] ✓ Supabase client created")
         except Exception as e:
-            logger.error(f"[Boot] ✗ Failed to create Supabase client: {e}")
-            logger.error(f"[Boot] ✗ Error details: {str(e)[:200]}")
-            return False
+            DB_STATUS.validation_error = f"Supabase client creation failed: {str(e)[:100]}"
+            logger.warning(f"[Boot] ⚠ Failed to create Supabase client: {e}")
+            logger.warning(f"[Boot] ⚠ Database may be temporarily unreachable")
+            return None
         
         # Try to make a test query to roosters table
         try:
             response = client.table('roosters').select('id').limit(1).execute()
             logger.info("[Boot] ✓ Supabase connection test successful (roosters table accessible)")
+            DB_STATUS.is_available = True
         except Exception as e:
-            logger.error(f"[Boot] ✗ Failed to query roosters table: {e}")
-            logger.error(f"[Boot] ✗ Error details: {str(e)[:200]}")
-            logger.error("[Boot] ✗ Database may be unreachable or credentials invalid")
-            return False
+            DB_STATUS.validation_error = f"Query test failed: {str(e)[:100]}"
+            logger.warning(f"[Boot] ⚠ Failed to query roosters table: {e}")
+            logger.warning(f"[Boot] ⚠ Database may be unreachable or credentials invalid")
+            return None
         
         logger.info("[Boot] ✓ Database validation complete - All checks passed")
         logger.info("[Boot] ================================================")
         return True
     
     except Exception as e:
-        logger.error(f"[Boot] ✗ Unexpected error during validation: {e}")
-        logger.error(f"[Boot] ✗ Stack trace: {traceback.format_exc()}")
-        return False
+        logger.warning(f"[Boot] ⚠ Unexpected error during validation: {e}")
+        DB_STATUS.validation_error = f"Validation exception: {str(e)[:100]}"
+        return None  # Graceful degradation
 
-# Run database validation before importing other modules
-logger.info("[Main] Step 0: Running database validation...")
-db_valid = validate_database_connection()
-if not db_valid:
-    logger.error("[Main] ✗ Database validation failed - service cannot start")
-    logger.error("[Main] ✗ Fix environment variables and restart")
-    sys.exit(1)
-logger.info("[Main] ✓ Database validation passed - proceeding with imports")
+# Run database validation - NON-CRITICAL
+logger.info("[Main] Step 0: Running non-blocking database validation...")
+db_validation_result = validate_database_connection_nonblocking()
+if db_validation_result is True:
+    logger.info("[Main] ✓ Database validation passed")
+elif db_validation_result is None:
+    logger.warning("[Main] ⚠ Database validation skipped/failed - using graceful degradation")
+    logger.warning("[Main] ⚠ Solvers will still work but database features may be limited")
+logger.info(f"[Main] ⚠ Database status: {'AVAILABLE' if DB_STATUS.is_available else 'UNAVAILABLE (graceful mode)'}")
+if DB_STATUS.validation_error:
+    logger.warning(f"[Main] ⚠ Database error: {DB_STATUS.validation_error}")
 
 # ============================================================================
-# END DATABASE VALIDATION BOOT
+# END DATABASE VALIDATION BOOT (NON-BLOCKING)
 # ============================================================================
 
 try:
@@ -172,8 +195,8 @@ logger.info("[Main] ALL IMPORTS SUCCESSFUL - Creating FastAPI app")
 # FastAPI app
 app = FastAPI(
     title="Rooster Solver Service",
-    description="V2: RosterSolverV2 (FASE 1) + SequentialSolverV2 (FASE 2) + SolverSelector (FASE 3) - DRAAD208C",
-    version="2.0.0-DRAAD208C"
+    description="V2: RosterSolverV2 (FASE 1) + SequentialSolverV2 (FASE 2) + SolverSelector (FASE 3) - DRAAD208C-FIX",
+    version="2.0.0-DRAAD208C-FIX"
 )
 
 logger.info("[Main] FastAPI application created")
@@ -207,25 +230,26 @@ app.add_middleware(
 logger.info(f"[Main] CORS configured with {len(ALLOWED_ORIGINS)} allowed origins")
 
 # ============================================================================
-# GLOBAL EXCEPTION HANDLER - DRAAD175 FIX #2: Better error responses
+# GLOBAL EXCEPTION HANDLER - DRAAD208C-FIX: Better error responses
 # ============================================================================
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
     """Global exception handler - prevents 502 errors.
     
-    DRAAD175 FIX #2: Return detailed error information instead of generic response
-    DRAAD208C FIX: Include database validation status in error
+    DRAAD208C-FIX: Return detailed error information instead of generic response
+    Includes database status for debugging
     """
     logger.error(f"[Main] GLOBAL EXCEPTION: {type(exc).__name__}", exc_info=True)
     
-    # DRAAD175 FIX: Include detailed error context
+    # Include detailed error context
     error_details = {
         "error_type": type(exc).__name__,
         "error_message": str(exc),
         "timestamp": datetime.utcnow().isoformat(),
         "request_path": str(request.url),
-        "traceback": traceback.format_exc()[:500]  # First 500 chars of traceback
+        "database_available": DB_STATUS.is_available,
+        "database_error": DB_STATUS.validation_error,
     }
     
     logger.error(f"[Main] Error details: {error_details}")
@@ -250,10 +274,12 @@ async def global_exception_handler(request, exc):
 async def startup_event():
     """Called when FastAPI starts."""
     logger.info("[Main] STARTUP COMPLETE - Server ready")
-    logger.info(f"[Main] Service: Rooster Solver V2 (DRAAD208C)")
+    logger.info(f"[Main] Service: Rooster Solver V2 (DRAAD208C-FIX)")
     logger.info(f"[Main] Primary solver: SequentialSolverV2 (Priority Queue)")
     logger.info(f"[Main] Fallback solver: RosterSolverV2 (OR-Tools CP-SAT)")
-    logger.info(f"[Main] Database validation: ✓ PASSED")
+    logger.info(f"[Main] Database: {'✓ CONNECTED' if DB_STATUS.is_available else '⚠ OFFLINE (graceful mode)'}")
+    if DB_STATUS.validation_error:
+        logger.warning(f"[Main] Database error: {DB_STATUS.validation_error}")
     logger.info(f"[Main] Started: {datetime.now().isoformat()}")
 
 # ============================================================================
@@ -266,11 +292,12 @@ async def root():
     return {
         "service": "Rooster Solver V2",
         "status": "online",
-        "version": "2.0.0-DRAAD208C",
+        "version": "2.0.0-DRAAD208C-FIX",
         "fase1_rosterset2_solver": "RosterSolverV2 (OR-Tools CP-SAT)",
         "fase2_sequential_solver": "SequentialSolverV2 (Priority Queue)",
         "fase3_selector": "SolverSelectorV2 (Unified routing)",
         "routing": "PRIMARY: Sequential, FALLBACK: CP-SAT",
+        "database_status": "CONNECTED" if DB_STATUS.is_available else "OFFLINE",
         "features": [
             "FASE 1: 4 hard constraints (bevoegdheden, one-per-slot, fixed, blocked)",
             "FASE 2: 3-layer priority (dagdeel -> service -> team)",
@@ -278,8 +305,8 @@ async def root():
             "FASE 3: Unified SolverSelector with fallback",
             "Async/await with ThreadPoolExecutor",
             "CORS security",
-            "DRAAD208C: Database validation boot",
-            "DRAAD208C: Enhanced error reporting"
+            "DRAAD208C-FIX: Graceful database degradation",
+            "DRAAD208C-FIX: Enhanced error reporting"
         ]
     }
 
@@ -287,10 +314,10 @@ async def root():
 async def health():
     """Health check endpoint."""
     return HealthResponse(
-        status="healthy",
+        status="healthy" if DB_STATUS.is_available else "degraded",
         timestamp=datetime.utcnow().isoformat(),
         service="rooster-solver",
-        version="2.0.0-DRAAD208C"
+        version="2.0.0-DRAAD208C-FIX"
     )
 
 @app.get("/version", response_model=VersionResponse)
@@ -302,7 +329,7 @@ async def version():
         ortools_version = "unknown"
     
     return VersionResponse(
-        version="2.0.0-DRAAD208C",
+        version="2.0.0-DRAAD208C-FIX",
         or_tools_version=ortools_version,
         phase="FASE1+FASE2+FASE3",
         capabilities=[
@@ -311,7 +338,7 @@ async def version():
             "FASE_3_SolverSelectorV2_unified_routing",
             "async_executor",
             "supabase_integration",
-            "database_validation_boot",
+            "graceful_database_degradation",
             "fallback_strategy",
             "exception_handling",
             "cors_security",
@@ -320,13 +347,13 @@ async def version():
     )
 
 # ============================================================================
-# SOLVER LOGIC - DRAAD208C: Enhanced error context
+# SOLVER LOGIC - DRAAD208C-FIX: Enhanced error context
 # ============================================================================
 
 def _do_solve(request: SolveRequest, strategy: str = None) -> SolveResponse:
     """Execute solve in thread pool (runs synchronously but in separate thread).
     
-    DRAAD208C FIX: Improved error reporting and logging
+    DRAAD208C-FIX: Improved error reporting and logging
     
     Args:
         request: SolveRequest
@@ -341,6 +368,7 @@ def _do_solve(request: SolveRequest, strategy: str = None) -> SolveResponse:
         logger.info("[Solver] Starting solve in thread pool...")
         logger.info(f"[Solver] Roster: {request.roster_id}")
         logger.info(f"[Solver] Period: {request.start_date} to {request.end_date}")
+        logger.info(f"[Solver] Database available: {DB_STATUS.is_available}")
         
         # Use SolverSelector to route to appropriate solver
         logger.info("[Solver] Calling SolverSelectorV2.solve()...")
@@ -356,8 +384,10 @@ def _do_solve(request: SolveRequest, strategy: str = None) -> SolveResponse:
         logger.error(f"[Solver] ERROR: {str(e)}", exc_info=True)
         solve_time = (datetime.now() - start_time).total_seconds()
         
-        # DRAAD208C FIX: Return detailed error information
+        # Include database status in error message
         error_msg = f"{type(e).__name__}: {str(e)[:150]}"
+        if not DB_STATUS.is_available:
+            error_msg += f" (Note: Database offline - {DB_STATUS.validation_error})"
         logger.error(f"[Solver] Error details: {error_msg}")
         
         return SolveResponse(
@@ -373,12 +403,12 @@ def _do_solve(request: SolveRequest, strategy: str = None) -> SolveResponse:
         )
 
 # ============================================================================
-# SOLVER ENDPOINT (FASE 2+DRAAD208C)
+# SOLVER ENDPOINT (FASE 2+DRAAD208C-FIX)
 # ============================================================================
 
 @app.post("/api/v1/solve-schedule", response_model=SolveResponse)
 async def solve_schedule(request: SolveRequest):
-    """Solve rooster using FASE 2 complete system (DRAAD208C).
+    """Solve rooster using FASE 2 complete system (DRAAD208C-FIX).
     
     FASE 1 (RosterSolverV2):
     - Constraint 1: Bevoegdheden (authorized services only)
@@ -398,11 +428,11 @@ async def solve_schedule(request: SolveRequest):
     - Unified response format
     - Environment variable override
     
-    DRAAD208C IMPROVEMENTS:
-    - Database validation at startup
+    DRAAD208C-FIX IMPROVEMENTS:
+    - Graceful database degradation
     - Better HTTP error responses with details
     - Detailed violation reporting
-    - Comprehensive logging
+    - Comprehensive logging with database status
     """
     start_time = datetime.now()
     
@@ -410,6 +440,7 @@ async def solve_schedule(request: SolveRequest):
         logger.info("[Async] ================================================")
         logger.info(f"[Async] SOLVE_SCHEDULE called for roster {request.roster_id}")
         logger.info(f"[Async] Scheduling in ThreadPoolExecutor (non-blocking)...")
+        logger.info(f"[Async] Database available: {DB_STATUS.is_available}")
         
         # Run solve in thread pool (non-blocking for async event loop)
         loop = asyncio.get_event_loop()
@@ -433,8 +464,10 @@ async def solve_schedule(request: SolveRequest):
         logger.error(f"[Async] ERROR: {str(e)}", exc_info=True)
         total_time = (datetime.now() - start_time).total_seconds()
         
-        # DRAAD208C FIX: Detailed error response
+        # Include database status in error
         error_msg = f"{type(e).__name__}: {str(e)[:200]}"
+        if not DB_STATUS.is_available:
+            error_msg += f" (Database offline: {DB_STATUS.validation_error})"
         logger.error(f"[Async] Endpoint error: {error_msg}")
         
         return SolveResponse(
