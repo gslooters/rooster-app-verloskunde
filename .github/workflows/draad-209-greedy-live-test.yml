@@ -1,0 +1,199 @@
+# 🚀 DRAAD 209: GREEDY LIVE API INTEGRATION TEST
+# GitHub Actions Workflow - One-Click Testing
+#
+# Doel: Test GREEDY service endpoints zonder lokale terminal
+# Methode: Volledig via GitHub Actions
+# Status: PRODUCTION READY
+#
+# Hoe uit te voeren:
+# 1. Ga naar: https://github.com/gslooters/rooster-app-verloskunde/actions
+# 2. Selecteer: "DRAAD 209 - GREEDY Live API Test"
+# 3. Klik: "Run workflow" (dropdown)
+# 4. Klik: "Run workflow" (button)
+# 5. Wacht op resultaten (~30 seconden)
+#
+# Output:
+# - Workflow log met alle test resultaten
+# - Artifact: DRAAD_209_TEST_RESULTS.json (download via Actions UI)
+# - Exit code: 0 (success) of 1 (failure)
+
+name: "DRAAD 209 - GREEDY Live API Test"
+
+on:
+  # Handmatig triggeren via GitHub UI
+  workflow_dispatch:
+    inputs:
+      verbose:
+        description: 'Verbose output'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      save_results:
+        description: 'Save results as artifact'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+  # Optioneel: elke dag om 09:00 UTC
+  schedule:
+    - cron: '0 9 * * *'
+
+jobs:
+  greedy-api-test:
+    name: "Test GREEDY Service"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    
+    steps:
+      # Step 1: Checkout repository
+      - name: "📥 Checkout Repository"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      
+      # Step 2: Setup Python environment
+      - name: "🐍 Set up Python 3.11"
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      # Step 3: Install dependencies
+      - name: "📦 Install Dependencies"
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+          echo "✅ Dependencies installed"
+      
+      # Step 4: Display environment info
+      - name: "ℹ️ Environment Info"
+        run: |
+          echo "Python version:"
+          python --version
+          echo ""
+          echo "Requests version:"
+          python -c "import requests; print(requests.__version__)"
+          echo ""
+          echo "GREEDY Service URL: https://greedy-production.up.railway.app"
+          echo "Test Type: Live Production Endpoint Testing"
+          echo "Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      
+      # Step 5: Run GREEDY API tests
+      - name: "🧪 Run GREEDY API Integration Tests"
+        run: |
+          echo "======================================="
+          echo "DRAAD 209: GREEDY API LIVE TEST"
+          echo "======================================="
+          echo ""
+          python tests/test_greedy_api_live.py
+        env:
+          PYTHONUNBUFFERED: '1'
+      
+      # Step 6: Display test results
+      - name: "📊 Display Test Results"
+        if: always()
+        run: |
+          echo ""
+          echo "======================================="
+          echo "TEST RESULTS SUMMARY"
+          echo "======================================="
+          if [ -f "tests/DRAAD_209_TEST_RESULTS.json" ]; then
+            echo "✅ Results file found"
+            echo ""
+            echo "Content:"
+            cat tests/DRAAD_209_TEST_RESULTS.json | python -m json.tool
+          else
+            echo "⚠️ Results file not found"
+          fi
+      
+      # Step 7: Upload test results as artifact
+      - name: "📤 Upload Test Results as Artifact"
+        if: always() && fromJSON(github.event.inputs.save_results || 'true')
+        uses: actions/upload-artifact@v4
+        with:
+          name: greedy-test-results-${{ github.run_number }}
+          path: tests/DRAAD_209_TEST_RESULTS.json
+          retention-days: 30
+          if-no-files-found: warn
+      
+      # Step 8: Upload test script for reference
+      - name: "📄 Upload Test Script"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: greedy-test-script-${{ github.run_number }}
+          path: tests/test_greedy_api_live.py
+          retention-days: 7
+          if-no-files-found: ignore
+      
+      # Step 9: Create job summary
+      - name: "📝 Create Job Summary"
+        if: always()
+        run: |
+          echo "# 🧪 DRAAD 209: GREEDY Live API Test" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Test Execution" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Service**: GREEDY (Production)" >> $GITHUB_STEP_SUMMARY
+          echo "- **URL**: https://greedy-production.up.railway.app" >> $GITHUB_STEP_SUMMARY
+          echo "- **Date**: $(date -u +%Y-%m-%d\ %H:%M:%SZ)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Run ID**: ${{ github.run_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Tests Executed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Test | Endpoint | Method |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| 1 | Health | GET /api/greedy/health |" >> $GITHUB_STEP_SUMMARY
+          echo "| 2 | Root | GET / |" >> $GITHUB_STEP_SUMMARY
+          echo "| 3 | Validate | POST /api/greedy/validate |" >> $GITHUB_STEP_SUMMARY
+          echo "| 4 | Docs | GET /docs |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f "tests/DRAAD_209_TEST_RESULTS.json" ]; then
+            echo "## Results" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
+            cat tests/DRAAD_209_TEST_RESULTS.json >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      # Step 10: Fail job if tests failed
+      - name: "❌ Fail if Tests Failed"
+        if: failure()
+        run: |
+          echo "❌ GREEDY API tests failed!"
+          exit 1
+      
+      # Step 11: Success notification
+      - name: "✅ Test Execution Complete"
+        if: success()
+        run: |
+          echo ""
+          echo "╔════════════════════════════════════╗"
+          echo "║ ✅ ALL TESTS PASSED!              ║"
+          echo "║                                    ║"
+          echo "║ GREEDY Service Status: OPERATIONAL ║"
+          echo "║ Health: OK                         ║"
+          echo "║ Endpoints: RESPONDING              ║"
+          echo "╚════════════════════════════════════╝"
+          echo ""
+
+  # Optional: Notify on failure
+  notify-failure:
+    name: "📢 Notify on Failure"
+    runs-on: ubuntu-latest
+    needs: greedy-api-test
+    if: failure()
+    steps:
+      - name: "⚠️ Log Failure"
+        run: |
+          echo "❌ GREEDY API Test Workflow Failed"
+          echo ""
+          echo "Workflow Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "Branch: ${{ github.ref }}"
+          echo "Commit: ${{ github.sha }}"
