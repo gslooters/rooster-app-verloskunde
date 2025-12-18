@@ -29,13 +29,17 @@ Constraints:
   HC5: Max per specific service
   HC6: Team-aware logic
 
-DRAAD 208H FIXES:
+DRAD 208H FIXES:
   ✅ FIX 1: shifts_assigned_in_current_run now PER-SERVICE (Dict[str, Dict[str, int]])
   ✅ FIX 4: Sortering direction fixed (reverse=True for fairness)
   ✅ FIX 5: Cache cleared after solve
   ✅ Exception handling added for constraint checks
 
-Author: DRAAD 190 Smart Greedy Allocation + DRAAD 185-2 Implementation + DRAAD 208H Fixes
+DRAD 210 STAP 2 FIXES:
+  ✅ Priority 2: Enhanced logging in Phase 4 (_save_assignments)
+  ✅ Priority 3: Credentials validation at __init__
+
+Author: DRAAD 190 Smart Greedy Allocation + DRAAD 185-2 Implementation + DRAAD 208H Fixes + DRAAD 210 STAP 2
 Date: 2025-12-18
 """
 
@@ -173,6 +177,10 @@ class GreedyRosteringEngine:
     - Sorting direction FIXED (descending for fairness)
     - Cache cleared after solve
     
+    DRAAD 210 STAP 2 FIXES:
+    - Priority 2: Enhanced logging in Phase 4 (detailed connection + operation logging)
+    - Priority 3: Credentials validation at __init__ (fail fast, not during solve)
+    
     Provides 5-phase algorithm:
     1. Lock pre-planned (validate & preserve)
     2. Greedy allocate (fill remaining with HC constraints + smart sorting)
@@ -182,7 +190,12 @@ class GreedyRosteringEngine:
     """
 
     def __init__(self, config: Dict):
-        """Initialize engine with configuration.
+        """
+        Initialize engine with configuration.
+        
+        DRAAD 210 STAP 2 - Priority 3 FIX: Credentials validation at startup
+        - Fail fast if credentials missing
+        - Don't wait until Phase 4 database write
         
         Args:
             config: Dictionary with keys:
@@ -199,11 +212,47 @@ class GreedyRosteringEngine:
         self.end_date = config.get('end_date')
         self.max_shifts_per_employee = config.get('max_shifts_per_employee', 8)
         
-        # Initialize Supabase client
+        # ✅ DRAAD 210 STAP 2 - Priority 3 FIX: Validate Supabase credentials EARLY
         supabase_url = config.get('supabase_url') or os.getenv('SUPABASE_URL')
         supabase_key = config.get('supabase_key') or os.getenv('SUPABASE_KEY')
         
-        self.supabase: Client = create_client(supabase_url, supabase_key)
+        # Log credential status
+        logger.info("\n🔑 [CREDENTIALS CHECK] Validating Supabase credentials...")
+        
+        if not supabase_url:
+            logger.error("❌ CRITICAL: Missing SUPABASE_URL")
+            logger.error("   - SUPABASE_URL: MISSING")
+            logger.error("   - SUPABASE_KEY: " + ("OK" if supabase_key else "MISSING"))
+            raise ValueError(
+                "Cannot initialize GREEDYEngine: missing SUPABASE_URL environment variable. "
+                "Set SUPABASE_URL in Railway environment variables."
+            )
+        
+        if not supabase_key:
+            logger.error("❌ CRITICAL: Missing SUPABASE_KEY")
+            logger.error("   - SUPABASE_URL: OK")
+            logger.error("   - SUPABASE_KEY: MISSING")
+            raise ValueError(
+                "Cannot initialize GREEDYEngine: missing SUPABASE_KEY environment variable. "
+                "Set SUPABASE_KEY in Railway environment variables."
+            )
+        
+        # Log successful credential load
+        logger.info("✅ SUPABASE_URL: FOUND")
+        logger.info(f"   - URL: {supabase_url[:50]}..." if len(supabase_url) > 50 else f"   - URL: {supabase_url}")
+        logger.info("✅ SUPABASE_KEY: FOUND")
+        logger.info(f"   - Key: ***{supabase_key[-10:]}")
+        
+        # Initialize Supabase client with error handling
+        try:
+            logger.info("\n🔗 [INIT] Creating Supabase client...")
+            self.supabase: Client = create_client(supabase_url, supabase_key)
+            logger.info("✅ Supabase client initialized successfully")
+            logger.info(f"   - Client type: {type(self.supabase).__name__}")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize Supabase client: {e}")
+            logger.error(f"   - Error type: {type(e).__name__}")
+            raise
         
         # Initialize constraint checker
         self.constraint_checker = HardConstraintChecker(self.supabase)
@@ -227,16 +276,17 @@ class GreedyRosteringEngine:
         # ✅ NOW PER-SERVICE (was global before)
         self.shifts_assigned_in_current_run: Dict[str, Dict[str, int]] = {}
         
-        logger.info(f"✅ [DRAAD190-SMART] GreedyRosteringEngine initialized for roster {self.roster_id}")
+        logger.info(f"\n✅ [DRAAD190-SMART] GreedyRosteringEngine initialized for roster {self.roster_id}")
         logger.info(f"   🎯 DRAAD 190 Smart Greedy Allocation enabled")
         logger.info(f"   🔧 DRAAD 208H FIXES applied: Per-service tracking, sorting direction, cache clearing")
+        logger.info(f"   📓 DRAAD 210 STAP 2: Credentials validated, enhanced logging enabled")
         
         # Load data
         self._load_data()
 
     def _load_data(self) -> None:
         """Load all required data from Supabase (batch queries)."""
-        logger.info("🔄 Loading data from Supabase...")
+        logger.info("\n🔄 Loading data from Supabase...")
         
         try:
             # Load employees
@@ -381,7 +431,7 @@ class GreedyRosteringEngine:
             SolveResult with all details
         """
         start_time = time.time()
-        logger.info("🚀 [DRAAD190] Starting GREEDY solve with SMART allocation...")
+        logger.info("\n🚀 [DRAAD190] Starting GREEDY solve with SMART allocation...")
         
         try:
             # Phase 1: Lock pre-planned
@@ -687,11 +737,19 @@ class GreedyRosteringEngine:
         return bottlenecks
 
     def _save_assignments(self) -> None:
-        """Phase 4: Bulk insert greedy assignments to database."""
+        """
+        Phase 4: Bulk insert greedy assignments to database.
+        
+        DRAAD 210 STAP 2 - Priority 2 FIX: Enhanced logging
+        - Log before attempt
+        - Log success with details
+        - Log detailed errors with context
+        - Include connection info, record count, error type
+        """
         greedy_assignments = [a for a in self.assignments if a.source == 'greedy']
         
         if not greedy_assignments:
-            logger.info("No greedy assignments to save")
+            logger.info("🔍 No greedy assignments to save")
             return
         
         # Prepare bulk insert data
@@ -710,10 +768,48 @@ class GreedyRosteringEngine:
                 'updated_at': datetime.utcnow().isoformat()
             })
         
+        # 🐱 DRAAD 210 STAP 2 - Priority 2 FIX: Enhanced logging BEFORE attempt
+        logger.info("\n📓 [PHASE 4] Saving greedy assignments to database...")
+        logger.info(f"   📄 Database connection:")
+        logger.info(f"   - Supabase URL: {self.supabase.url}")
+        logger.info(f"   - Table: roster_assignments")
+        logger.info(f"   - Roster ID: {self.roster_id}")
+        logger.info(f"\n   📊 Insert details:")
+        logger.info(f"   - Records to insert: {len(data)}")
+        logger.info(f"   - Source: greedy (DRAAD 190 Smart Greedy Allocation)")
+        logger.info(f"   - Status: 1 (active)")
+        logger.info(f"   - Timestamp: {datetime.utcnow().isoformat()}")
+        
         try:
-            # Bulk insert
+            # Perform bulk insert
+            logger.info("\n   🚀 Executing bulk insert...")
             response = self.supabase.table('roster_assignments').insert(data).execute()
-            logger.info(f"✅ Bulk inserted {len(data)} greedy assignments (DRAAD 190 SMART GREEDY)")
+            
+            # 🐱 Log success with details
+            saved_count = len(response.data) if hasattr(response, 'data') and response.data else len(data)
+            
+            logger.info(f"\n\u2705 [PHASE 4] SUCCESS: Bulk insert completed")
+            logger.info(f"   📈 Records saved: {saved_count}")
+            logger.info(f"   🎯 Source: DRAAD 190 Smart Greedy Allocation")
+            logger.info(f"   🕛 Timestamp: {datetime.utcnow().isoformat()}")
+            logger.info(f"   💻 Response type: {type(response).__name__}")
+            
+            return {
+                "status": "success",
+                "assignments_saved": saved_count,
+                "phase": 4
+            }
+            
         except Exception as e:
-            logger.error(f"❌ Error saving assignments: {e}")
-            raise
+            # 🐱 DRAAD 210 STAP 2 - Priority 2 FIX: Enhanced error logging
+            logger.error(f"\n\u274c [PHASE 4] FAILED: Database write error")
+            logger.error(f"\n   🔧 Error details:")
+            logger.error(f"   - Error type: {type(e).__name__}")
+            logger.error(f"   - Error message: {str(e)}")
+            logger.error(f"   - Records attempted: {len(data)}")
+            logger.error(f"   - Database URL: {self.supabase.url}")
+            logger.error(f"\n   📃 Full traceback:")
+            logger.error(f"   ", exc_info=True)
+            
+            # Re-raise with context
+            raise Exception(f"Database write failed: {str(e)}") from e
