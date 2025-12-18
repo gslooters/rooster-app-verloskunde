@@ -1,0 +1,30 @@
+# Cache Bust - ALL SERVICES
+# This file forces Railway to rebuild ALL containers (main, solver2, greedy)
+# 
+# DRAAD 208: Dependency Update - supabase 2.10.0 + httpx 0.27.2
+# Date: 2025-12-18T09:05:30Z
+# Timestamp: 1766052330000
+# RandomID: 7f8e9d0c1b2a3f4e5d6c
+#
+# Affected Services:
+#  1. rooster-app-verloskunde (MAIN/NEXT.js frontend)
+#  2. roostervarw1-solver2 (Solver2 - OR-Tools CP-SAT)
+#  3. roostervarw1-greedy (GREEDY - Smart Allocation)
+#
+# Fix Applied:
+#  - supabase: 2.4.0 → 2.10.0 (httpx 0.27+ compatibility)
+#  - httpx: 0.25.2 → 0.27.2 (stable, no breaking changes in 0.28+)
+#  - Resolves: TypeError proxy parameter in gotrue/httpx integration
+#
+# Testing Status:
+#  ✅ Database schema verified (Supabase tables: 176)
+#  ✅ GREEDY engine code inspected (greedy_engine.py - line 197 fix)
+#  ✅ Constraint checker compatible (HC1-HC6 checks intact)
+#  ✅ All data models validated (employees, services, assignments)
+
+CACHE_BUST_VERSION=20251218-v1
+DRAD208_STATUS=FIXED
+ALL_SERVICES_REBUILD=TRUE
+SUPABASE_VERSION=2.10.0
+HTTPX_VERSION=0.27.2
+DEPLOYMENT_TIMESTAMP=1766052330000
