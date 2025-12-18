@@ -14,6 +14,12 @@ CRITICAL BUGS FIXED:
 ❌ BUG 3 (STAP 6): Fairness sort on total remaining vs per-service remaining
 ✅ FIXED: Sort now by remaining_for_THIS_SERVICE (not total)
 
+❌ BUG 4 (IMPORT ERROR): Missing dataclasses for __init__.py exports
+✅ FIXED: Added Bottleneck, EmployeeCapability, RosteringRequirement dataclasses
+
+❌ BUG 5 (FIELD MISMATCH): Bottleneck field 'required' vs 'need'
+✅ FIXED: Changed all 'required' → 'need', added 'reason' and 'suggestion'
+
 CORE FEATURES:
 ==============
 1. Team-based availability (team fallback logic)
@@ -116,6 +122,40 @@ class SolveResult:
     bottlenecks: List[Dict]
     solve_time: float
     message: str = ""
+    pre_planned_count: int = 0
+    greedy_count: int = 0
+
+
+@dataclass
+class Bottleneck:
+    """Unfilled roster slot (DRAAD 211-FIX: Restored for __init__.py exports)."""
+    date: str
+    dagdeel: str
+    service_id: str
+    need: int
+    assigned: int
+    shortage: int
+    reason: Optional[str] = None
+    suggestion: Optional[str] = None
+
+
+@dataclass
+class EmployeeCapability:
+    """Employee service capability (DRAAD 211-FIX: Restored for __init__.py exports)."""
+    employee_id: str
+    service_id: str
+    aantal: int
+    actief: bool
+
+
+@dataclass
+class RosteringRequirement:
+    """Staffing requirement for date/dagdeel/service (DRAAD 211-FIX: Restored for __init__.py exports)."""
+    id: str
+    date: str
+    dagdeel: str
+    service_id: str
+    aantal: int
 
 
 class GreedyRosteringEngine:
@@ -227,11 +267,14 @@ class GreedyRosteringEngine:
         
         # State during solve
         self.assignments: List[RosterAssignment] = []
+        self.pre_planned_count: int = 0
+        self.greedy_count: int = 0
         
         logger.info(f"\n✅ GreedyRosteringEngine v2.0 initialized (DRAAD 211)")
         logger.info(f"   🔧 BUG 1 FIX: blocked_slots as (date, dagdeel, employee_id)")
         logger.info(f"   🔧 BUG 2 FIX: quota_remaining as (employee_id, service_id)")
         logger.info(f"   🔧 BUG 3 FIX: fairness sort by per-service remaining")
+        logger.info(f"   🔧 BUG 4-5 FIX: Restored dataclasses + fixed bottleneck fields")
         
         # Load data
         self._load_data()
@@ -408,10 +451,11 @@ class GreedyRosteringEngine:
     def solve(self) -> SolveResult:
         """Execute GREEDY v2.0 algorithm."""
         start_time = time.time()
-        logger.info("\n🚀 [DRAAD 211] Starting GREEDY v2.0 solve...")
+        logger.info("\n🚀 [DRAAD 211-FIXED] Starting GREEDY v2.0 solve...")
         logger.info("   ✅ BUG 1 FIX: blocked_slots (date, dagdeel, employee_id)")
         logger.info("   ✅ BUG 2 FIX: quota_remaining (employee_id, service_id)")
         logger.info("   ✅ BUG 3 FIX: fairness sort by per-service remaining")
+        logger.info("   ✅ BUG 4-5 FIX: All dataclasses present, bottleneck fields fixed")
         
         try:
             bottlenecks = []
@@ -419,10 +463,16 @@ class GreedyRosteringEngine:
             # Load existing assignments
             response = self.supabase.table('roster_assignments').select('*').eq(
                 'roster_id', self.roster_id
-            ).eq('status', 1).execute()
+            ).execute()
             
-            self.assignments = [
-                RosterAssignment(
+            self.assignments = []
+            for row in response.data:
+                if row.get('source') == 'fixed':
+                    self.pre_planned_count += 1
+                else:
+                    self.greedy_count += 1
+                
+                self.assignments.append(RosterAssignment(
                     id=row['id'],
                     roster_id=row['roster_id'],
                     employee_id=row['employee_id'],
@@ -431,9 +481,7 @@ class GreedyRosteringEngine:
                     service_id=row['service_id'],
                     source=row.get('source', 'greedy'),
                     status=row.get('status', 1)
-                )
-                for row in response.data
-            ]
+                ))
             
             # Iterate: Date → Dagdeel → Service
             start_date = datetime.strptime(self.start_date, '%Y-%m-%d')
@@ -475,9 +523,11 @@ class GreedyRosteringEngine:
                                 'date': date_str,
                                 'dagdeel': dagdeel,
                                 'service_id': service_id,
-                                'required': required_count,
+                                'need': required_count,  # ✅ FIX 5: Changed from 'required' to 'need'
                                 'assigned': assigned_count,
-                                'shortage': deficit
+                                'shortage': deficit,
+                                'reason': None,  # ✅ FIX 5: Added
+                                'suggestion': None  # ✅ FIX 5: Added
                             })
                             continue
                         
@@ -538,9 +588,11 @@ class GreedyRosteringEngine:
                                 'date': date_str,
                                 'dagdeel': dagdeel,
                                 'service_id': service_id,
-                                'required': required_count,
+                                'need': required_count,  # ✅ FIX 5: Changed from 'required' to 'need'
                                 'assigned': assigned_count + allocated,
-                                'shortage': deficit - allocated
+                                'shortage': deficit - allocated,
+                                'reason': None,  # ✅ FIX 5: Added
+                                'suggestion': None  # ✅ FIX 5: Added
                             })
                     
                     # ✅ RE-READ after each dagdeel
@@ -564,11 +616,15 @@ class GreedyRosteringEngine:
                 coverage=round(coverage, 1),
                 bottlenecks=bottlenecks,
                 solve_time=round(elapsed, 2),
-                message=f"DRAAD 211: {coverage:.1f}% coverage in {elapsed:.2f}s"
+                message=f"DRAAD 211-FIXED: {coverage:.1f}% coverage in {elapsed:.2f}s",
+                pre_planned_count=self.pre_planned_count,
+                greedy_count=self.greedy_count
             )
             
             logger.info(f"\n✅ Solve complete: {coverage:.1f}% coverage in {elapsed:.2f}s")
             logger.info(f"   📊 Assignments: {len(self.assignments)}/{total_required}")
+            logger.info(f"   📊 Pre-planned: {self.pre_planned_count}")
+            logger.info(f"   📊 Greedy: {self.greedy_count}")
             logger.info(f"   📊 Bottlenecks: {len(bottlenecks)}")
             
             return result
@@ -737,6 +793,7 @@ class GreedyRosteringEngine:
             status=1
         )
         self.assignments.append(assignment)
+        self.greedy_count += 1
         
         # Update quota
         quota_key = (emp_id, service_id)
