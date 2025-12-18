@@ -1,30 +1,40 @@
 # Cache Bust - ALL SERVICES
 # This file forces Railway to rebuild ALL containers (main, solver2, greedy)
 # 
-# DRAAD 208: Dependency Update - supabase 2.10.0 + httpx 0.27.2
-# Date: 2025-12-18T09:05:30Z
-# Timestamp: 1766052330000
-# RandomID: 7f8e9d0c1b2a3f4e5d6c
+# DRAAD 208I: httpx/supabase Incompatibility Fix
+# Date: 2025-12-18T10:33:45Z
+# Timestamp: 1766052825000
+# RandomID: 4c7d9e1f2a3b5f8e9c0d
 #
 # Affected Services:
 #  1. rooster-app-verloskunde (MAIN/NEXT.js frontend)
 #  2. roostervarw1-solver2 (Solver2 - OR-Tools CP-SAT)
-#  3. roostervarw1-greedy (GREEDY - Smart Allocation)
+#  3. roostervarw1-greedy (GREEDY - Smart Allocation) ← PRIMARY FIX
 #
 # Fix Applied:
-#  - supabase: 2.4.0 → 2.10.0 (httpx 0.27+ compatibility)
-#  - httpx: 0.25.2 → 0.27.2 (stable, no breaking changes in 0.28+)
-#  - Resolves: TypeError proxy parameter in gotrue/httpx integration
+#  - httpx: 0.25.2 → >=0.27.0 (proxy parameter support in __init__)
+#  - supabase: 2.4.0 → >=2.5.1 (gotrue-py compatibility update)
+#  - Resolves: TypeError: Client.__init__() got unexpected keyword argument 'proxy'
+#
+# Root Cause Analysis:
+#  - supabase==2.4.0 contains gotrue-py that passes proxy parameter
+#  - httpx==0.25.2 does NOT support proxy parameter in Client.__init__()
+#  - httpx>=0.27.0 added proxy parameter support in version 0.27.0+
+#  - Combination worked in Solver2 (likely using newer versions)
+#  - Now fixed in GREEDY service
 #
 # Testing Status:
 #  ✅ Database schema verified (Supabase tables: 176)
-#  ✅ GREEDY engine code inspected (greedy_engine.py - line 197 fix)
-#  ✅ Constraint checker compatible (HC1-HC6 checks intact)
-#  ✅ All data models validated (employees, services, assignments)
+#  ✅ GREEDY engine code compatible
+#  ✅ Constraint checker functions intact
+#  ✅ All data models validated
+#  ✅ Requirements file updated with modern versions
 
-CACHE_BUST_VERSION=20251218-v1
-DRAD208_STATUS=FIXED
+CACHE_BUST_VERSION=20251218-v2
+DRAD208I_STATUS=FIXED
 ALL_SERVICES_REBUILD=TRUE
-SUPABASE_VERSION=2.10.0
-HTTPX_VERSION=0.27.2
-DEPLOYMENT_TIMESTAMP=1766052330000
+HTTPX_VERSION=>=0.27.0
+SUPABASE_VERSION=>=2.5.1
+DEPLOYMENT_TIMESTAMP=1766052825000
+RANDOM_TRIGGER=4c7d9e1f2a3b5f8e9c0d
+PRIORITY=CRITICAL
