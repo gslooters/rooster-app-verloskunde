@@ -1,0 +1,165 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║                                                                            ║
+║        🚀 DRAAD 209: ONE-CLICK GREEDY API TEST - QUICK START 🚀           ║
+║                                                                            ║
+║                    Geen terminal. Geen lokale setup.                       ║
+║                  Gewoon klikken en resultaten zien!                        ║
+║                                                                            ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+📍 DIRECTE LINK:
+───────────────────────────────────────────────────────────────────────────────
+
+https://github.com/gslooters/rooster-app-verloskunde/actions
+
+
+✅ HOE TE GEBRUIKEN:
+───────────────────────────────────────────────────────────────────────────────
+
+1️⃣  STAP 1: Ga naar Actions
+    
+    Plak deze link in je browser:
+    https://github.com/gslooters/rooster-app-verloskunde/actions
+
+2️⃣  STAP 2: Selecteer Workflow
+    
+    Klik op linkerzijde op:
+    "DRAAD 209 - GREEDY Live API Test"
+
+3️⃣  STAP 3: Run Workflow
+    
+    Rechtsboven zie je gele tekst:
+    "Run workflow ▼"
+    
+    👈 KLIK DAAR
+
+4️⃣  STAP 4: Bevestig
+    
+    Er verschijnt een groene knop:
+    "Run workflow"
+    
+    👈 KLIK DAAR
+
+5️⃣  STAP 5: Wacht
+    
+    Zie je:
+    ⏳ greedy-api-test running
+    
+    Wacht ~30 seconden...
+
+6️⃣  STAP 6: Bekijk Resultaten
+    
+    Zie je:
+    ✅ greedy-api-test completed
+    
+    Klik op "greedy-api-test" voor logs en resultaten!
+
+
+🎯 TESTS UITGEVOERD:
+───────────────────────────────────────────────────────────────────────────────
+
+  ✓ Test 1: Health Endpoint
+    GET https://greedy-production.up.railway.app/api/greedy/health
+    
+  ✓ Test 2: Root Endpoint
+    GET https://greedy-production.up.railway.app/
+    
+  ✓ Test 3: Validate Endpoint
+    POST https://greedy-production.up.railway.app/api/greedy/validate
+    
+  ✓ Test 4: API Docs
+    GET https://greedy-production.up.railway.app/docs
+
+
+📊 RESULTATEN BESCHIKBAAR ALS:
+───────────────────────────────────────────────────────────────────────────────
+
+  ✓ Console Log (in GitHub Actions)
+  ✓ JSON Report (downloadable artifact)
+  ✓ Job Summary (mooi geformateerd)
+
+
+📚 MEER INFO:
+───────────────────────────────────────────────────────────────────────────────
+
+Wil je meer details?
+Lees: DRAAD_209_WORKFLOW_GUIDE.md
+
+Wil je test script zien?
+Lees: tests/test_greedy_api_live.py
+
+Wil je workflow source zien?
+Lees: .github/workflows/draad-209-greedy-live-test.yml
+
+
+⚡ TLDR:
+───────────────────────────────────────────────────────────────────────────────
+
+1. https://github.com/gslooters/rooster-app-verloskunde/actions
+2. Klik: "DRAAD 209 - GREEDY Live API Test"
+3. Klik: "Run workflow ▼"
+4. Klik: "Run workflow" (groene knop)
+5. Wacht ~30 sec
+6. Geniet! 🎉
+
+
+✨ DAT'S IT! ALLES GEAUTOMATISEERD VIA GITHUB ✨
+───────────────────────────────────────────────────────────────────────────────
+
+Geen lokale terminal.
+Geen handmatige setup.
+Gewoon one-click testing.
+
+
+🔗 DIRECT HANDIGE LINKS:
+───────────────────────────────────────────────────────────────────────────────
+
+  Actions Pagina:
+  https://github.com/gslooters/rooster-app-verloskunde/actions
+  
+  Workflow Bestand:
+  https://github.com/gslooters/rooster-app-verloskunde/blob/main/.github/workflows/draad-209-greedy-live-test.yml
+  
+  Test Script:
+  https://github.com/gslooters/rooster-app-verloskunde/blob/main/tests/test_greedy_api_live.py
+  
+  Volledige Gids:
+  https://github.com/gslooters/rooster-app-verloskunde/blob/main/DRAAD_209_WORKFLOW_GUIDE.md
+  
+  GREEDY Service Health:
+  https://greedy-production.up.railway.app/api/greedy/health
+  
+  Railway Project:
+  https://railway.app/project/90165889-1a50-4236-aefe-b1e1ae44dc7f
+
+
+📞 VRAGEN?
+───────────────────────────────────────────────────────────────────────────────
+
+Checkpoint 1: Is GREEDY service online?
+→ https://greedy-production.up.railway.app/api/greedy/health
+
+Checkpoint 2: Kun je Actions openen?
+→ https://github.com/gslooters/rooster-app-verloskunde/actions
+
+Checkpoint 3: Zag je "Run workflow" knop?
+→ Refresh pagina (F5) en retry
+
+Checkpoint 4: Waar zijn mijn resultaten?
+→ Klik op workflow run → Artifacts tab → download JSON
+
+
+═════════════════════════════════════════════════════════════════════════════
+
+  ✅ Setup: VOLTOOID
+  ✅ Workflow: KLAAR
+  ✅ Tests: GEDEFINIEERD
+  ✅ Resultaten: DOWNLOADBAAR
+  
+  Klaar? → Klik hier: https://github.com/gslooters/rooster-app-verloskunde/actions
+
+═════════════════════════════════════════════════════════════════════════════
+
+Document: DRAAD 209 Quick Start
+Datum: 18 December 2025, 18:35 CET
+Status: ✅ PRODUCTION READY
