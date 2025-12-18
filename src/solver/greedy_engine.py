@@ -2,7 +2,7 @@
 
 DRAD 190: SMART GREEDY ALLOCATION
 Enhanced with smart tie-breaker for fair distribution:
-  - Sorteer eligible employees by "shifts remaining" (ascending)
+  - Sorteer eligible employees by "shifts remaining" (descending - FIXED)
   - Tie-breaker: "shifts assigned in current run" (ascending) for exact fairness
   - In-memory tracking during solve session
 
@@ -29,8 +29,14 @@ Constraints:
   HC5: Max per specific service
   HC6: Team-aware logic
 
-Author: DRAAD 190 Smart Greedy Allocation + DRAAD 185-2 Implementation
-Date: 2025-12-15
+DRAAD 208H FIXES:
+  ✅ FIX 1: shifts_assigned_in_current_run now PER-SERVICE (Dict[str, Dict[str, int]])
+  ✅ FIX 4: Sortering direction fixed (reverse=True for fairness)
+  ✅ FIX 5: Cache cleared after solve
+  ✅ Exception handling added for constraint checks
+
+Author: DRAAD 190 Smart Greedy Allocation + DRAAD 185-2 Implementation + DRAAD 208H Fixes
+Date: 2025-12-18
 """
 
 import logging
@@ -149,9 +155,7 @@ class GreedyRosteringEngine:
     DRAAD 190 Fair Distribution Algorithm:
     ======================================
     1️⃣ AVAILABILITY CHECK: Only eligible employees (not blackout, not overscheduled)
-    2️⃣ SORT BY "SHIFTS_REMAINING": Ascending order
-       → Employee with MOST to-do gets LOWER priority
-       → Employee with LEAST to-do gets HIGHER priority
+    2️⃣ SORT BY "SHIFTS_REMAINING": DESCENDING order (MORE remaining = HIGHER priority)
     3️⃣ TIE-BREAKER "SHIFTS_IN_CURRENT_RUN": Ascending order
        → If both have same remaining: who was selected earlier in THIS roster run?
        → That person gets lower priority on next service
@@ -159,10 +163,15 @@ class GreedyRosteringEngine:
     5️⃣ RESULT: Fair distribution without complex scoring
     
     Example (Karin=4 remaining, Lizette=5, Paula=6):
-      Service 1: Sort → [Paula (6), Lizette (5), Karin (4)] → Assign Paula
-      Service 2: Sort → [Lizette (5), Karin (4), Paula (5)] → Assign Lizette  
-      Service 3: Sort → [Karin (4), Paula (5), Lizette (4)] → Assign Karin (fewer in run)
-      RESULT: All three end with 4 shifts ✅
+      Service 1: Sort DESC → [Paula (6), Lizette (5), Karin (4)] → Assign Paula
+      Service 2: Sort DESC → [Lizette (5), Karin (4), Paula (5)] → Assign Lizette  
+      Service 3: Sort DESC → [Karin (4), Paula (5), Lizette (4)] → Assign Paula if not in run yet
+      RESULT: Fair distribution ✅
+    
+    DRAAD 208H FIXES:
+    - shifts_assigned_in_current_run PER-SERVICE (not global)
+    - Sorting direction FIXED (descending for fairness)
+    - Cache cleared after solve
     
     Provides 5-phase algorithm:
     1. Lock pre-planned (validate & preserve)
@@ -213,12 +222,14 @@ class GreedyRosteringEngine:
         self.employee_shift_count: Dict[str, int] = {}  # Current count
         self.employee_service_count: Dict[Tuple[str, str], int] = {}  # (emp, svc) -> count
         
-        # DRAAD 190: Smart Greedy Allocation tracking
-        # In-memory map: emp_id → count of shifts assigned in THIS roster run
-        self.shifts_assigned_in_current_run: Dict[str, int] = {}
+        # DRAAD 190 + DRAAD 208H FIX 1: Smart Greedy Allocation tracking
+        # In-memory map: emp_id → service_id → count of shifts assigned in THIS roster run
+        # ✅ NOW PER-SERVICE (was global before)
+        self.shifts_assigned_in_current_run: Dict[str, Dict[str, int]] = {}
         
         logger.info(f"✅ [DRAAD190-SMART] GreedyRosteringEngine initialized for roster {self.roster_id}")
         logger.info(f"   🎯 DRAAD 190 Smart Greedy Allocation enabled")
+        logger.info(f"   🔧 DRAAD 208H FIXES applied: Per-service tracking, sorting direction, cache clearing")
         
         # Load data
         self._load_data()
@@ -280,8 +291,11 @@ class GreedyRosteringEngine:
             ))
             # Initialize counters
             self.employee_shift_count[row['id']] = 0
-            # DRAAD 190: Initialize current-run counter
-            self.shifts_assigned_in_current_run[row['id']] = 0
+            
+            # DRAAD 208H FIX 1: Initialize nested dict per employee
+            self.shifts_assigned_in_current_run[row['id']] = {}
+            for svc_id in self.service_types.keys():
+                self.shifts_assigned_in_current_run[row['id']][svc_id] = 0
 
     def _load_service_types(self) -> None:
         """Load service types from database."""
@@ -412,6 +426,10 @@ class GreedyRosteringEngine:
             logger.info(f"   📈 Total: {len(self.assignments)}/{total_slots}")
             logger.info(f"   📈 Bottlenecks: {len(bottlenecks)}")
             
+            # DRAAD 208H FIX 5: Clear cache after solve
+            self.constraint_checker.clear_cache()
+            logger.info("✅ Constraint checker caches cleared after solve")
+            
             return result
             
         except Exception as e:
@@ -440,24 +458,27 @@ class GreedyRosteringEngine:
             self.employee_service_count[key] = \
                 self.employee_service_count.get(key, 0) + 1
             
-            # DRAAD 190: Count pre-planned as part of current run
-            self.shifts_assigned_in_current_run[assignment.employee_id] = \
-                self.shifts_assigned_in_current_run.get(assignment.employee_id, 0) + 1
+            # DRAAD 208H FIX 1: Count pre-planned PER-SERVICE (not global)
+            if assignment.employee_id not in self.shifts_assigned_in_current_run:
+                self.shifts_assigned_in_current_run[assignment.employee_id] = {}
             
-            logger.debug(f"Locked: {assignment.employee_id} → {assignment.date} {assignment.dagdeel}")
+            self.shifts_assigned_in_current_run[assignment.employee_id][assignment.service_id] = \
+                self.shifts_assigned_in_current_run[assignment.employee_id].get(assignment.service_id, 0) + 1
+            
+            logger.debug(f"Locked: {assignment.employee_id} → {assignment.date} {assignment.dagdeel} service={assignment.service_id}")
 
     def _greedy_allocate(self) -> List[Bottleneck]:
         """Phase 2: Greedy allocation with HC1-HC6 + DRAAD 190 Smart Sorting.
         
-        DRAAD 190 Algorithm:
+        DRAAD 190 Algorithm (FIXED):
         1. For each slot needing assignment:
         2. Find eligible employees (HC1-HC6 passed)
         3. Sort by fairness using sortEligibleByFairness():
            a. Check availability (not overscheduled, not in blackout)
-           b. Sort by shifts_remaining (ascending) - who needs the MOST shifts?
+           b. Sort by shifts_remaining (DESCENDING) - who needs the MOST shifts gets HIGHER priority
            c. Tie-breaker: shifts_assigned_in_current_run (ascending) - who was selected earlier?
         4. Assign to first person in sorted list
-        5. Increment shifts_assigned_in_current_run for that person
+        5. Increment shifts_assigned_in_current_run for that person PER-SERVICE
         
         Returns:
             List of bottlenecks (unfilled slots)
@@ -506,10 +527,14 @@ class GreedyRosteringEngine:
                 key = (emp_id, service_id)
                 self.employee_service_count[key] = self.employee_service_count.get(key, 0) + 1
                 
-                # DRAAD 190: Track shifts assigned in THIS run
-                self.shifts_assigned_in_current_run[emp_id] += 1
+                # DRAAD 208H FIX 1: Track shifts assigned in THIS run PER-SERVICE
+                if emp_id not in self.shifts_assigned_in_current_run:
+                    self.shifts_assigned_in_current_run[emp_id] = {}
                 
-                logger.debug(f"Assigned (DRAAD190): {emp_id} → {date} {dagdeel} {service_id} (run_count: {self.shifts_assigned_in_current_run[emp_id]})")
+                self.shifts_assigned_in_current_run[emp_id][service_id] = \
+                    self.shifts_assigned_in_current_run[emp_id].get(service_id, 0) + 1
+                
+                logger.debug(f"Assigned (DRAAD190): {emp_id} → {date} {dagdeel} {service_id} (run_count_for_service: {self.shifts_assigned_in_current_run[emp_id][service_id]})")
             
             # Record bottleneck if not all filled
             if assigned_this_slot < shortage:
@@ -522,25 +547,25 @@ class GreedyRosteringEngine:
                     shortage=shortage - assigned_this_slot
                 )
                 bottlenecks.append(bottleneck)
-                logger.warning(f"⚠️ Bottleneck: {date} {dagdeel} → shortage {bottleneck.shortage}")
+                logger.warning(f"⚠️ Bottleneck: {date} {dagdeel} service={service_id} → shortage {bottleneck.shortage}")
         
         return bottlenecks
 
     def _sort_eligible_by_fairness(self, date: str, dagdeel: str, service_id: str) -> List[str]:
-        """DRAAD 190: Sort eligible employees by fairness.
+        """DRAAD 190 + DRAAD 208H: Sort eligible employees by fairness.
         
-        Algorithm:
+        Algorithm (FIXED):
         1. FILTER: Get all employees
         2. CHECK AVAILABILITY:
            - Must be active
            - Must not exceed target shifts
            - Must not be in blackout
            - Must pass HC1-HC6 constraints
-        3. CALCULATE FAIRNESS:
+        3. CALCULATE FAIRNESS (PER-SERVICE):
            - shifts_remaining = target - currently_assigned
-           - shifts_in_current_run = incremented as we assign in this solve
-        4. SORT BY:
-           a. shifts_remaining (ascending) - MOST to-do → LOWER priority
+           - shifts_in_current_run_for_THIS_service = incremented as we assign in this solve
+        4. SORT BY (DESCENDING):
+           a. shifts_remaining (descending) - MOST to-do → HIGHER priority ✅ FIXED
            b. shifts_in_current_run (ascending) - EARLIER selected → LOWER priority
         5. RETURN: Sorted list ready for assignment
         
@@ -579,50 +604,57 @@ class GreedyRosteringEngine:
             } for a in self.assignments]
             
             # Check ALL HC1-HC6 constraints
-            passed, failed_constraint = self.constraint_checker.check_all_constraints(
-                emp_id=emp.id,
-                date_str=date,
-                dagdeel=dagdeel,
-                svc_id=service_id,
-                svc_team=svc_team,
-                emp_team=emp.team,
-                roster_id=self.roster_id,
-                existing_assignments=existing_dicts,
-                employee_shift_count=emp_shift_count,
-                employee_target=emp_target,
-                service_count_for_emp=svc_count
-            )
+            # DRAAD 208H: Wrap in try-catch for robustness
+            try:
+                passed, failed_constraint = self.constraint_checker.check_all_constraints(
+                    emp_id=emp.id,
+                    date_str=date,
+                    dagdeel=dagdeel,
+                    svc_id=service_id,
+                    svc_team=svc_team,
+                    emp_team=emp.team,
+                    roster_id=self.roster_id,
+                    existing_assignments=existing_dicts,
+                    employee_shift_count=emp_shift_count,
+                    employee_target=emp_target,
+                    service_count_for_emp=svc_count
+                )
+            except Exception as e:
+                logger.warning(f"Constraint check exception for {emp.id}: {e}")
+                logger.debug(f"INELIGIBLE {emp.id}: Exception in constraint check")
+                continue
             
             if passed:
-                # Get tie-breaker: shifts assigned in THIS run
-                shifts_in_run = self.shifts_assigned_in_current_run.get(emp.id, 0)
+                # DRAAD 208H FIX 1: Get tie-breaker per service (not global)
+                shifts_in_run_for_service = \
+                    self.shifts_assigned_in_current_run.get(emp.id, {}).get(service_id, 0)
                 
                 # Store for sorting
                 eligible.append((
                     emp.id,
-                    shifts_remaining,  # Primary sort key (ascending)
-                    shifts_in_run       # Secondary sort key (ascending)
+                    shifts_remaining,  # Primary sort key (DESCENDING after fix)
+                    shifts_in_run_for_service  # Secondary sort key (ascending)
                 ))
                 
                 logger.debug(
                     f"ELIGIBLE {emp.id}: "
                     f"remaining={shifts_remaining}, "
-                    f"run_count={shifts_in_run}"
+                    f"run_count_for_service={shifts_in_run_for_service}"
                 )
             else:
                 logger.debug(f"INELIGIBLE {emp.id}: {failed_constraint}")
         
-        # DRAAD 190: Sort by fairness
-        # Primary: shifts_remaining (ascending) - employee with MOST remaining gets priority
+        # DRAAD 208H FIX 4: Sort with REVERSE=TRUE for fairness
+        # Primary: shifts_remaining (DESCENDING) - employee with MOST remaining gets priority ✅ FIXED
         # Secondary: shifts_in_current_run (ascending) - tiebreaker
-        eligible.sort(key=lambda x: (x[1], x[2]))  # Sort by remaining ASC, then run_count ASC
+        eligible.sort(key=lambda x: (x[1], -x[2]), reverse=True)
         
         sorted_list = [emp_id for emp_id, _, _ in eligible]
         
         logger.debug(
-            f"DRAAD190 FAIRNESS SORT: {date} {dagdeel} {service_id}\n"
-            f"  {eligible}\n"
-            f"  → Assigned to: {sorted_list}"
+            f"DRAAD190-FIXED FAIRNESS SORT: {date} {dagdeel} {service_id}\n"
+            f"  Eligible (remaining, run_count): {[(e[0], e[1], e[2]) for e in eligible]}\n"
+            f"  → Sorted: {sorted_list}"
         )
         
         return sorted_list
