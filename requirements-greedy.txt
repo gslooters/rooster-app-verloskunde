@@ -1,6 +1,7 @@
-# DRAAD 195: Requirements for GREEDY Separate Railway Service
-# Minimal, aligned dependencies for GREEDY CP-SAT solver engine
-# FIXED: postgrest-py removed (doesn't exist), aligned with baseline services
+# DRAAD 208I: Requirements for GREEDY Separate Railway Service
+# Modern, compatible dependency versions - httpx>=0.27.0 + supabase>=2.5.1
+# Fixed: httpx proxy parameter support + supabase transitive deps alignment
+# Date: 2025-12-18
 
 # Web Framework (aligned with baseline services)
 fastapi==0.104.1
@@ -9,14 +10,16 @@ pydantic==2.8.0
 pydantic-settings==2.1.0
 python-multipart==0.0.18
 
-# Database (aligned with rooster-app-verloskunde baseline)
-supabase==2.4.0
+# Database (MODERN VERSIONS - CRITICAL FIX)
+# supabase>=2.5.1 ensures gotrue-py compatibility
+supabase>=2.5.1
 # NOTE: postgrest-py, realtime-py, postgres-py, python-gotrue are handled by supabase
-# postgrest-py==0.13.0 doesn't exist on PyPI (max available: 0.10.6)
-# Using supabase==2.4.0 which includes compatible versions internally
+# Using supabase>=2.5.1 which includes compatible versions internally
 
-# HTTP Client (aligned with baseline)
-httpx==0.25.2
+# HTTP Client (CRITICAL FIX - proxy parameter support)
+# httpx>=0.27.0 supports proxy parameter in Client.__init__()
+# httpx 0.25.2 caused: TypeError: got an unexpected keyword argument 'proxy'
+httpx>=0.27.0
 requests==2.32.4
 
 # Utilities
@@ -34,3 +37,6 @@ pytest-asyncio==0.21.1
 
 # Monitoring
 prometheus-client==0.19.0
+
+# Poetry Lock Support (best practice)
+# Run: poetry lock --no-update to generate poetry.lock
