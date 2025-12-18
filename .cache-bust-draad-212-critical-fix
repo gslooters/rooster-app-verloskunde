@@ -1,0 +1,21 @@
+DRAAD-212 CRITICAL FIX: Solve-greedy response summary initialization
+
+Timestamp: 2025-12-18 19:39:26 UTC
+Commit: d2499061a928ae4f5b01b5039b2651047ec33e59
+
+FIX APPLIED:
+✅ Initialize summary ALWAYS in solver response
+✅ Never undefined in response object
+✅ Type-safe response structure
+✅ All solver states (success/partial/failed/error) get consistent summary
+
+IMPACT:
+- Fixes: "Missing solver result in response" dashboard error
+- Fixes: Dashboard crash when solver fails
+- Fixes: Console error "Cannot read property 'status' of undefined"
+
+DEPLOYMENT:
+- Auto-trigger Railway rebuild
+- Services: rooster-app-verloskunde (main app)
+- Expected deploy time: 3-5 minutes
+- No downtime during deployment
