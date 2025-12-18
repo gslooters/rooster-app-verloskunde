@@ -6,6 +6,7 @@
  * DRAAD-191: Type Fix - Aligned GREEDY status responses with handler expectations
  * DRAAD-193: Fix hardcoded localhost in GREEDY_SOLVER_URL (use env var instead)
  * DRAAD-208C: Enhanced error handling + connection validation
+ * DRAAD-212: CRITICAL FIX - Initialize summary ALWAYS to prevent undefined in response
  * 
  * Features:
  * - 5-phase GREEDY algorithm (lock pre-planned, allocate, analyze, save, return)
@@ -54,7 +55,7 @@ interface SolveResponse {
     pre_planned_count: number;
     greedy_count: number;
     message: string;
-    summary?: {
+    summary: {
       total_services_scheduled: number;
       coverage_percentage: number;
       unfilled_slots: number;
@@ -217,23 +218,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     console.log(`  - Assignments: ${solverResult.assignments_created}/${solverResult.total_required}`);
     console.log(`  - Time: ${solverResult.solve_time}s`);
 
-    // DRAAD-191: Compute summary for GREEDY success/partial outcomes
-    // Using Optie C: No explicit null initialization, declare only when assigned
-    let summary: SolveResponse['solver_result']['summary'];
-    if (solverResult.status === 'success' || solverResult.status === 'partial') {
-      const totalSlots = solverResult.total_required;
-      const scheduledSlots = solverResult.assignments_created;
-      const unfilledSlots = Math.max(0, totalSlots - scheduledSlots);
-      const coveragePercentage = totalSlots > 0 ? Math.round((scheduledSlots / totalSlots) * 100) : 0;
+    // DRAAD-212 FIX: ALWAYS initialize summary, even for failed/error states
+    // This prevents undefined values in response and ensures type safety
+    const totalSlots = solverResult.total_required || 0;
+    const scheduledSlots = solverResult.assignments_created || 0;
+    const unfilledSlots = Math.max(0, totalSlots - scheduledSlots);
+    const coveragePercentage = totalSlots > 0 ? Math.round((scheduledSlots / totalSlots) * 100) : 0;
 
-      summary = {
-        total_services_scheduled: scheduledSlots,
-        coverage_percentage: coveragePercentage,
-        unfilled_slots: unfilledSlots,
-      };
+    const summary = {
+      total_services_scheduled: scheduledSlots,
+      coverage_percentage: coveragePercentage,
+      unfilled_slots: unfilledSlots,
+    };
 
-      console.log(`[DRAAD208C] ✓ Summary generated: ${scheduledSlots}/${totalSlots} (${coveragePercentage}%)`);
-    }
+    console.log(`[DRAAD212] ✓ Summary ALWAYS generated: ${scheduledSlots}/${totalSlots} (${coveragePercentage}%)`);
 
     // If GREEDY succeeded, save solver run metadata
     if (solverResult.status === 'success' || solverResult.status === 'partial') {
@@ -253,7 +251,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             constraint_violations: solverResult.bottlenecks,
             solver_config: {
               algorithm: 'GREEDY',
-              version: 'DRAAD208C',
+              version: 'DRAAD212',
               max_shifts_per_employee: 8,
             },
             metadata: {
@@ -303,7 +301,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             constraint_violations: solverResult.bottlenecks,
             solver_config: {
               algorithm: 'GREEDY',
-              version: 'DRAAD208C',
+              version: 'DRAAD212',
             },
             metadata: {
               pre_planned_count: solverResult.pre_planned_count,
@@ -338,12 +336,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         pre_planned_count: solverResult.pre_planned_count,
         greedy_count: solverResult.greedy_count,
         message: solverResult.message,
-        summary, // DRAAD-191: Include summary for feasible outcomes
+        summary, // DRAAD-212: ALWAYS include summary - it's ALWAYS initialized now
       },
       total_time_ms: totalTime,
     };
 
-    console.log(`[DRAAD208C] ✓ Complete - Total time: ${totalTime}ms`);
+    console.log(`[DRAAD212] ✓ Complete - Total time: ${totalTime}ms`);
 
     return NextResponse.json(response, { status: 200 });
   } catch (error: any) {
