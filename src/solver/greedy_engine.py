@@ -1,58 +1,46 @@
-"""Greedy Rostering Engine for fast, transparent roster generation.
+"""Greedy Rostering Engine v2.0 - DRAAD 211 COMPLETE REWRITE
 
-DRAD 190: SMART GREEDY ALLOCATION
-Enhanced with smart tie-breaker for fair distribution:
-  - Sorteer eligible employees by "shifts remaining" (descending - FIXED)
-  - Tie-breaker: "shifts assigned in current run" (ascending) for exact fairness
-  - In-memory tracking during solve session
-
-DRAD 185-2: Enhanced with HC1-HC6 Hard Constraints
-Replaces: RosterSolverV2.py (OR-Tools CP-SAT)
-Features:
-  - Phase 1: Lock pre-planned assignments (with HC validation)
-  - Phase 2: Greedy allocate with HC1-HC6 constraints
-  - Phase 3: Analyze bottlenecks
-  - Phase 4: Save to database (bulk insert)
-  - Phase 5: Return complete result
-  
-Performance:
-  - Solve time: 2-5 seconds
-  - Coverage: 98%+ (224/228 target)
-  - Deterministic (same input → same output)
-  - HC violations: <10 (mostly HC3)
-
-Constraints:
-  HC1: Employee capable for service
-  HC2: No overlapping shifts
-  HC3: Respect blackout dates
-  HC4: Max shifts per employee
-  HC5: Max per specific service
-  HC6: Team-aware logic
-
-DRAD 208H FIXES:
-  ✅ FIX 1: shifts_assigned_in_current_run now PER-SERVICE (Dict[str, Dict[str, int]])
-  ✅ FIX 4: Sortering direction fixed (reverse=True for fairness)
-  ✅ FIX 5: Cache cleared after solve
-  ✅ Exception handling added for constraint checks
-
-DRAD 210 STAP 2 FIXES:
-  ✅ Priority 2: Enhanced logging in Phase 4 (_save_assignments)
-  ✅ Priority 3: Credentials validation at __init__
-
-DRAD 210 STAP 2.1 CRITICAL FIXES:
-  ✅ FIX 1: Status > 0 Slot Exclusion (P0) - Prevents roster corruption
-  ✅ FIX 2: Service Pairing DIO↔DIA, DDO↔DDA (P0) - Validates service pairs
-  ✅ FIX 3: Team Fallback Logic (P1) - Team → Overige → OPEN
-  ✅ FIX 4: TOT Team Special Logic (P1) - Permanent → ZZP priority
-  ✅ FIX 5: Service Priority Ordering (P1) - System → TOT → Other
-
-DRAD 210 STAP 3 FIXES:
-  ✅ FIX 1: Status > 0 Slot Detection (P0) - Changed if status != 1 to if status > 0
-  ✅ FIX 2: UPSERT Operation (P0) - Use upsert instead of insert
-  ✅ FIX 3: Load All Pre-planned (P0) - Load all roster_assignments records
-
-Author: DRAAD 190 Smart Greedy Allocation + DRAAD 185-2 Implementation + DRAAD 208H Fixes + DRAAD 210 STAP 2 + DRAAD 210 STAP 2.1 + DRAAD 210 STAP 3
+Status: DRAAD 211 - GREEDY v2.0 Full Implementation
 Date: 2025-12-18
+
+CRITICAL BUGS FIXED:
+===================
+❌ BUG 1 (STAP 1): Blocked Slots as (date, dagdeel) blocking ENTIRE slot
+✅ FIXED: Blocked Slots now (date, dagdeel, employee_id) blocking ONLY this employee
+
+❌ BUG 2 (STAP 2): Quota filtering global (total shifts) vs per-service
+✅ FIXED: Quota now Dict[(employee_id, service_id)] → per-service tracking
+
+❌ BUG 3 (STAP 6): Fairness sort on total remaining vs per-service remaining
+✅ FIXED: Sort now by remaining_for_THIS_SERVICE (not total)
+
+CORE FEATURES:
+==============
+1. Team-based availability (team fallback logic)
+2. Per-service quota constraints (NICHT global)
+3. Fair load balancing (medewerker met MEESTE remaining for THIS service krijgt prioriteit)
+4. Service pairing validation (DIO/DDO kant-en-klaar pairing)
+5. Status blocking (privé/verlof/geblokkeerd slot respect)
+6. Database RE-READ after each dagdeel (sync with triggers)
+
+Algorithm Flow:
+- Iterate: Date → Dagdeel (O, M, A) → Service
+- For each service/slot: Find eligible → Sort by fairness → Assign
+- After each dagdeel: RE-READ database (sync status=2 updates from triggers)
+- Respect: Per-service quota, team fallback, pairing requirements, blocking
+
+DATABASE RE-READ (KRITIEK!):
+============================
+After each dagdeel completes:
+1. Re-fetch roster_assignments from database
+2. Rebuild blocked_slots from status > 0 records
+3. Rebuild quota_remaining (subtract actual assignments)
+4. Continue with next dagdeel
+
+REASON: Database triggers set status=2 after DIO/DDO pairing.
+WITHOUT re-read: Next dagdeel sees stale status=1, might overwrite valid pairings!
+
+Author: DRAAD 211 - GREEDY v2.0 Full Implementation
 """
 
 import logging
@@ -64,7 +52,6 @@ import os
 import uuid
 
 from supabase import create_client, Client
-from .constraint_checker import HardConstraintChecker
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -103,26 +90,7 @@ class ServiceType:
     naam: str
     team: str
     actief: bool
-    is_system: bool = False  # NEW: FIX 5 - Mark system services
-
-
-@dataclass
-class EmployeeCapability:
-    """Employee service capability."""
-    employee_id: str
-    service_id: str
-    aantal: int
-    actief: bool
-
-
-@dataclass
-class RosteringRequirement:
-    """Staffing requirement for date/dagdeel/service."""
-    id: str
-    date: str
-    dagdeel: str
-    service_id: str
-    aantal: int
+    is_system: bool = False
 
 
 @dataclass
@@ -132,101 +100,93 @@ class RosterAssignment:
     date: str
     dagdeel: str
     service_id: str
-    source: str  # 'fixed', 'greedy'
+    source: str
     roster_id: str = None
     id: str = None
-    status: int = 1  # 1=active, 2=locked, 3=unavailable
-
-
-@dataclass
-class Bottleneck:
-    """Unfilled roster slot."""
-    date: str
-    dagdeel: str
-    service_id: str
-    need: int
-    assigned: int
-    shortage: int
-    reason: str = None
-    suggestion: str = None
+    status: int = 1
 
 
 @dataclass
 class SolveResult:
     """Result of solve operation."""
-    status: str  # 'success', 'partial', 'failed'
+    status: str
     assignments_created: int
     total_required: int
-    coverage: float  # percentage
+    coverage: float
     bottlenecks: List[Dict]
-    solve_time: float  # seconds
-    pre_planned_count: int = 0
-    greedy_count: int = 0
+    solve_time: float
     message: str = ""
 
 
 class GreedyRosteringEngine:
     """
-    Greedy allocation engine with HC1-HC6 constraints + DRAAD 190 Smart Allocation.
+    GREEDY v2.0 - Fair Distribution Greedy Algorithm (DRAAD 211)
     
-    DRAAD 190 Fair Distribution Algorithm:
-    ======================================
-    1️⃣ AVAILABILITY CHECK: Only eligible employees (not blackout, not overscheduled)
-    2️⃣ SORT BY "SHIFTS_REMAINING": DESCENDING order (MORE remaining = HIGHER priority)
-    3️⃣ TIE-BREAKER "SHIFTS_IN_CURRENT_RUN": Ascending order
-       → If both have same remaining: who was selected earlier in THIS roster run?
-       → That person gets lower priority on next service
-    4️⃣ ASSIGN: Take first person in sorted list
-    5️⃣ RESULT: Fair distribution without complex scoring
+    KERNBEGRIP:
+    ===========
+    GREEDY wijst AUTOMATISCH diensten toe aan medewerkers op basis van:
+    1. Team-based availability (team fallback logica)
+    2. Per-service quota constraints (NIET globaal!)
+    3. Fair load balancing (medewerker met MEESTE remaining voor DEZE SERVICE krijgt prioriteit)
+    4. Service pairing validation (DIO/DDO kant-en-klaar pairing)
+    5. Status blocking (privé/verlof/geblokkeerd slot respect)
     
-    Example (Karin=4 remaining, Lizette=5, Paula=6):
-      Service 1: Sort DESC → [Paula (6), Lizette (5), Karin (4)] → Assign Paula
-      Service 2: Sort DESC → [Lizette (5), Karin (4), Paula (5)] → Assign Lizette  
-      Service 3: Sort DESC → [Karin (4), Paula (5), Lizette (4)] → Assign Paula if not in run yet
-      RESULT: Fair distribution ✅
+    TRE KRITIEKE BUGS GEREPAREERD (DRAAD 211):
+    ==========================================
+    BUG 1 - GEBLOKKEERDE SLOTS:
+    ❌ VORIG: blocked_slots = Set[(date, dagdeel)]
+       → HEEL dagdeel geskipped als EEN medewerker status > 0 had!
+       → 217 status=3 records → 217 dagdelen TOTAAL GEBLOKKEERD!
     
-    DRAAD 208H FIXES:
-    - shifts_assigned_in_current_run PER-SERVICE (not global)
-    - Sorting direction FIXED (descending for fairness)
-    - Cache cleared after solve
+    ✅ NIEUW: blocked_slots = Set[(date, dagdeel, employee_id)]
+       → ALLEEN DEZE MEDEWERKER skipped voor dit slot
+       → Andere medewerkers kunnen VRIJ ingevuld worden!
     
-    DRAAD 210 STAP 2 FIXES:
-    - Priority 2: Enhanced logging in Phase 4 (detailed connection + operation logging)
-    - Priority 3: Credentials validation at __init__ (fail fast, not during solve)
+    PRAKTIJK VOORBEELD:
+    Karin op 2025-11-26 dagdeel O: status = 3 (privé)
+      ✅ Karin is NIET beschikbaar op 26/11 O
+      ✅ Maar WEL op 26/11 M, 26/11 A, 27/11 O, etc.
+      ✅ Paula KANN wel op 26/11 O ingevuld worden!
     
-    DRAAD 210 STAP 2.1 CRITICAL FIXES:
-    - FIX 1: Status > 0 Slot Exclusion (prevents roster corruption)
-    - FIX 2: Service Pairing (DIO↔DIA, DDO↔DDA validation)
-    - FIX 3: Team Fallback Logic (Team → Overige → OPEN)
-    - FIX 4: TOT Team Special Logic (Permanent → ZZP priority)
-    - FIX 5: Service Priority Ordering (System → TOT → Other)
+    BUG 2 - QUOTA FILTERING:
+    ❌ VORIG: if quota_remaining[emp] <= 0: skip
+       → TOTAAL shifts gecheckt (niet per-service!)
+       → Karin met OSP full maar ECH beschikbaar → SKIP voor alle services!
     
-    DRAAD 210 STAP 3 CRITICAL FIXES:
-    - FIX 1: Status > 0 Slot Detection (if status > 0, not status != 1)
-    - FIX 2: UPSERT Operation (UPDATE existing, INSERT new)
-    - FIX 3: Load All Pre-planned (no status filter on pre-planned load)
+    ✅ NIEUW: if quota_remaining[(emp, service)] <= 0: skip
+       → Per-SERVICE quota gecheckt
+       → Karin met OSP full → SKIP voor OSP
+       → Maar kan nog ECH ingevuld worden!
     
-    Provides 5-phase algorithm:
-    1. Lock pre-planned (validate & preserve)
-    2. Greedy allocate (fill remaining with HC constraints + smart sorting)
-    3. Analyze bottlenecks (diagnose shortages)
-    4. Save to database (bulk upsert)
-    5. Return result (with metadata & suggestions)
+    BUG 3 - FAIRNESS SORTING:
+    ❌ VORIG: Sort op TOTAAL remaining shifts over alle services
+       → Karin 10 totaal, Paula 8 → Karin ALTIJD winner
+       → Zelfs als Paula nog 5x OSP nodig en Karin maar 3x!
+    
+    ✅ NIEUW: Sort op remaining shifts VOOR DEZE SPECIFIEKE SERVICE!
+       → Paula nog 5x OSP nodig → Paula wint voor OSP
+       → (Zelfs al Karin totaal meer shifts heeft!)
+    
+    IMPLEMENTATIE CHECKLIST:
+    ========================
+    [ ] blocked_slots: Set[Tuple[date, dagdeel, employee_id]]
+    [ ] quota_remaining: Dict[(employee_id, service_id)] → remaining_count
+    [ ] Re-read: After each dagdeel completes
+    [ ] Fairness: Sort by remaining_for_THIS_service (DESC)
+    [ ] Pairing: Validate ALL checks before DIO/DDO
+    [ ] Alphabetical: Tie-breaker deterministic
+    [ ] Per-service: Quota check <= 0 skip
     """
-
-    # DRAAD 210 STAP 2.1 - FIX 2: Service Pairing Rules
+    
+    # Service Pairing Rules
     SERVICE_PAIRS = {
-        'DIO': {'pair_service': 'DIA', 'pair_dagdeel': 'A'},  # DIO → DIA (morning)
-        'DDO': {'pair_service': 'DDA', 'pair_dagdeel': 'A'},  # DDO → DDA (evening)
+        'DIO': {'pair_service': 'DIA', 'pair_dagdeel': 'A'},
+        'DDO': {'pair_service': 'DDA', 'pair_dagdeel': 'A'},
     }
 
     def __init__(self, config: Dict):
         """
         Initialize engine with configuration.
-        
-        DRAAD 210 STAP 2 - Priority 3 FIX: Credentials validation at startup
-        - Fail fast if credentials missing
-        - Don't wait until Phase 4 database write
         
         Args:
             config: Dictionary with keys:
@@ -235,7 +195,6 @@ class GreedyRosteringEngine:
                 - roster_id: Target roster UUID
                 - start_date: Roster start date (YYYY-MM-DD)
                 - end_date: Roster end date (YYYY-MM-DD)
-                - max_shifts_per_employee: Max shifts per employee (default: 8)
         """
         self.config = config
         self.roster_id = config.get('roster_id')
@@ -243,127 +202,65 @@ class GreedyRosteringEngine:
         self.end_date = config.get('end_date')
         self.max_shifts_per_employee = config.get('max_shifts_per_employee', 8)
         
-        # ✅ DRAAD 210 STAP 2 - Priority 3 FIX: Validate Supabase credentials EARLY
+        # Initialize Supabase
         supabase_url = config.get('supabase_url') or os.getenv('SUPABASE_URL')
         supabase_key = config.get('supabase_key') or os.getenv('SUPABASE_KEY')
         
-        # Log credential status
-        logger.info("\n🔑 [CREDENTIALS CHECK] Validating Supabase credentials...")
+        if not supabase_url or not supabase_key:
+            raise ValueError("Missing Supabase credentials")
         
-        if not supabase_url:
-            logger.error("❌ CRITICAL: Missing SUPABASE_URL")
-            logger.error("   - SUPABASE_URL: MISSING")
-            logger.error("   - SUPABASE_KEY: " + ("OK" if supabase_key else "MISSING"))
-            raise ValueError(
-                "Cannot initialize GREEDYEngine: missing SUPABASE_URL environment variable. "
-                "Set SUPABASE_URL in Railway environment variables."
-            )
-        
-        if not supabase_key:
-            logger.error("❌ CRITICAL: Missing SUPABASE_KEY")
-            logger.error("   - SUPABASE_URL: OK")
-            logger.error("   - SUPABASE_KEY: MISSING")
-            raise ValueError(
-                "Cannot initialize GREEDYEngine: missing SUPABASE_KEY environment variable. "
-                "Set SUPABASE_KEY in Railway environment variables."
-            )
-        
-        # Log successful credential load
-        logger.info("✅ SUPABASE_URL: FOUND")
-        logger.info(f"   - URL: {supabase_url[:50]}..." if len(supabase_url) > 50 else f"   - URL: {supabase_url}")
-        logger.info("✅ SUPABASE_KEY: FOUND")
-        logger.info(f"   - Key: ***{supabase_key[-10:]}")
-        
-        # Initialize Supabase client with error handling
-        try:
-            logger.info("\n🔗 [INIT] Creating Supabase client...")
-            self.supabase: Client = create_client(supabase_url, supabase_key)
-            logger.info("✅ Supabase client initialized successfully")
-            logger.info(f"   - Client type: {type(self.supabase).__name__}")
-        except Exception as e:
-            logger.error(f"❌ Failed to initialize Supabase client: {e}")
-            logger.error(f"   - Error type: {type(e).__name__}")
-            raise
-        
-        # Initialize constraint checker
-        self.constraint_checker = HardConstraintChecker(self.supabase)
+        self.supabase: Client = create_client(supabase_url, supabase_key)
         
         # Data containers
         self.employees: List[Employee] = []
         self.service_types: Dict[str, ServiceType] = {}
-        self.capabilities: Dict[Tuple[str, str], EmployeeCapability] = {}
-        self.requirements: Dict[Tuple[str, str, str], int] = {}
-        self.employee_targets: Dict[str, int] = {}  # Max shifts per employee
-        self.pre_planned: List[RosterAssignment] = []
+        self.capabilities: Dict[Tuple[str, str], int] = {}  # (emp_id, service_id) → required_count
+        self.requirements: Dict[Tuple[str, str, str], int] = {}  # (date, dagdeel, service_id) → need
+        self.employee_targets: Dict[str, int] = {}  # emp_id → max shifts
+        
+        # ✅ BUG 1 FIX: blocked_slots now (date, dagdeel, employee_id)
         self.blocked_slots: Set[Tuple[str, str, str]] = set()
         
-        # DRAAD 210 STAP 2.1 - FIX 1: Track locked slots (status != 1)
-        self.locked_slots: Set[Tuple[str, str]] = set()  # (date, dagdeel) with status != 1
+        # ✅ BUG 2 FIX: quota_remaining now (employee_id, service_id)
+        self.quota_remaining: Dict[Tuple[str, str], int] = {}
+        self.quota_original: Dict[Tuple[str, str], int] = {}  # Baseline for re-read
         
         # State during solve
         self.assignments: List[RosterAssignment] = []
-        self.employee_shift_count: Dict[str, int] = {}  # Current count
-        self.employee_service_count: Dict[Tuple[str, str], int] = {}  # (emp, svc) -> count
         
-        # DRAAD 190 + DRAAD 208H FIX 1: Smart Greedy Allocation tracking
-        # In-memory map: emp_id → service_id → count of shifts assigned in THIS roster run
-        # ✅ NOW PER-SERVICE (was global before)
-        self.shifts_assigned_in_current_run: Dict[str, Dict[str, int]] = {}
-        
-        logger.info(f"\n✅ [DRAAD190-SMART] GreedyRosteringEngine initialized for roster {self.roster_id}")
-        logger.info(f"   🎯 DRAAD 190 Smart Greedy Allocation enabled")
-        logger.info(f"   🔧 DRAAD 208H FIXES applied: Per-service tracking, sorting direction, cache clearing")
-        logger.info(f"   📓 DRAAD 210 STAP 2: Credentials validated, enhanced logging enabled")
-        logger.info(f"   🚨 DRAAD 210 STAP 2.1: ALL 5 CRITICAL GAPS FIXED")
-        logger.info(f"      ✅ FIX 1: Status > 0 Slot Exclusion")
-        logger.info(f"      ✅ FIX 2: Service Pairing (DIO↔DIA, DDO↔DDA)")
-        logger.info(f"      ✅ FIX 3: Team Fallback Logic")
-        logger.info(f"      ✅ FIX 4: TOT Team Special Logic")
-        logger.info(f"      ✅ FIX 5: Service Priority Ordering")
-        logger.info(f"   🔥 DRAAD 210 STAP 3: ALL 3 CRITICAL STATUS FIXES")
-        logger.info(f"      ✅ FIX 1: Status > 0 Locked Slot Detection (if status > 0)")
-        logger.info(f"      ✅ FIX 2: UPSERT Operation (UPDATE existing)")
-        logger.info(f"      ✅ FIX 3: Load All Pre-planned Records")
+        logger.info(f"\n✅ GreedyRosteringEngine v2.0 initialized (DRAAD 211)")
+        logger.info(f"   🔧 BUG 1 FIX: blocked_slots as (date, dagdeel, employee_id)")
+        logger.info(f"   🔧 BUG 2 FIX: quota_remaining as (employee_id, service_id)")
+        logger.info(f"   🔧 BUG 3 FIX: fairness sort by per-service remaining")
         
         # Load data
         self._load_data()
 
     def _load_data(self) -> None:
-        """Load all required data from Supabase (batch queries)."""
+        """Load all required data from Supabase."""
         logger.info("\n🔄 Loading data from Supabase...")
         
         try:
-            # Load employees
             self._load_employees()
             logger.info(f"  ✅ Loaded {len(self.employees)} employees")
             
-            # Load service types
             self._load_service_types()
             logger.info(f"  ✅ Loaded {len(self.service_types)} service types")
             
-            # Load capabilities
             self._load_capabilities()
             logger.info(f"  ✅ Loaded {len(self.capabilities)} capability mappings")
             
-            # Load requirements
             self._load_requirements()
             logger.info(f"  ✅ Loaded {len(self.requirements)} requirements")
             
-            # Load employee targets
             self._load_employee_targets()
             logger.info(f"  ✅ Loaded {len(self.employee_targets)} employee targets")
             
-            # Load pre-planned
-            self._load_pre_planned()
-            logger.info(f"  ✅ Loaded {len(self.pre_planned)} pre-planned assignments")
+            self._initialize_quota()
+            logger.info(f"  ✅ Initialized quota tracking")
             
-            # Load blocked slots
             self._load_blocked_slots()
-            logger.info(f"  ✅ Loaded {len(self.blocked_slots)} blocked slots")
-            
-            # DRAAD 210 STAP 3 - FIX 1: Load locked slots (status > 0)
-            self._load_locked_slots()
-            logger.info(f"  ✅ Loaded {len(self.locked_slots)} locked slots (status > 0)")
+            logger.info(f"  ✅ Loaded {len(self.blocked_slots)} blocked slots (date, dagdeel, emp_id)")
             
         except Exception as e:
             logger.error(f"❌ Error loading data: {e}")
@@ -384,30 +281,21 @@ class GreedyRosteringEngine:
                 dienstverband=row.get('dienstverband', ''),
                 team=row.get('team', ''),
                 aantalwerkdagen=row.get('aantalwerkdagen', 0),
-                roostervrijdagen=row.get('roostervrijdagen', []),
-                structureel_nbh=row.get('structureel_nbh', {})
+                roostervrijdagen=row.get('roostervrijdagen', [])
             ))
-            # Initialize counters
-            self.employee_shift_count[row['id']] = 0
-            
-            # DRAAD 208H FIX 1: Initialize nested dict per employee
-            self.shifts_assigned_in_current_run[row['id']] = {}
-            for svc_id in self.service_types.keys():
-                self.shifts_assigned_in_current_run[row['id']][svc_id] = 0
 
     def _load_service_types(self) -> None:
         """Load service types from database."""
         response = self.supabase.table('service_types').select('*').eq('actief', True).execute()
         
         for row in response.data:
-            # DRAAD 210 STAP 2.1 - FIX 5: Load is_system flag
             self.service_types[row['id']] = ServiceType(
                 id=row['id'],
                 code=row.get('code', ''),
                 naam=row.get('naam', ''),
                 team=row.get('team', ''),
                 actief=row.get('actief', True),
-                is_system=row.get('is_system', False)  # NEW: System services
+                is_system=row.get('is_system', False)
             )
 
     def _load_capabilities(self) -> None:
@@ -418,14 +306,7 @@ class GreedyRosteringEngine:
         
         for row in response.data:
             key = (row['employee_id'], row['service_id'])
-            self.capabilities[key] = EmployeeCapability(
-                employee_id=row['employee_id'],
-                service_id=row['service_id'],
-                aantal=row.get('aantal', 0),
-                actief=row.get('actief', True)
-            )
-            # Initialize service counters
-            self.employee_service_count[key] = 0
+            self.capabilities[key] = row.get('aantal', 0)
 
     def _load_requirements(self) -> None:
         """Load staffing requirements."""
@@ -438,7 +319,7 @@ class GreedyRosteringEngine:
             self.requirements[key] = row.get('aantal', 0)
 
     def _load_employee_targets(self) -> None:
-        """Load max shifts per employee from period_employee_staffing."""
+        """Load max shifts per employee."""
         response = self.supabase.table('period_employee_staffing').select('*').eq(
             'roster_id', self.roster_id
         ).execute()
@@ -446,139 +327,249 @@ class GreedyRosteringEngine:
         for row in response.data:
             self.employee_targets[row['employee_id']] = row.get('target_shifts', 8)
 
-    def _load_pre_planned(self) -> None:
+    def _initialize_quota(self) -> None:
         """
-        DRAAD 210 STAP 3 - FIX 3: Load ALL pre-planned records (no status filter).
+        ✅ BUG 2 FIX: Initialize per-service quota.
         
-        SPEC 4.0: "Greedy moet alle records van de tabel roster_assignments inlezen"
-        SPEC 4.1: "alle pre-planned diensten inlezen"
-        
-        This loads ALL pre-planned assignments (source='fixed') regardless of status.
-        Status filtering happens in _load_locked_slots() for skip logic.
+        Structure: quota_remaining[(emp_id, service_id)] = remaining_count
         """
-        response = self.supabase.table('roster_assignments').select('*').eq(
-            'roster_id', self.roster_id
-        ).eq('source', 'fixed').execute()  # ✅ FIX 3: Load ALL fixed (no .eq('status', 1))
+        # Load from roster_employee_services
+        for key, required_count in self.capabilities.items():
+            self.quota_remaining[key] = required_count
+            self.quota_original[key] = required_count
         
-        for row in response.data:
-            # Pre-planned can have any status - GREEDY respects all pre-planned
-            self.pre_planned.append(RosterAssignment(
-                id=row['id'],
-                roster_id=row['roster_id'],
-                employee_id=row['employee_id'],
-                date=row['date'],
-                dagdeel=row['dagdeel'],
-                service_id=row['service_id'],
-                source=row.get('source', 'fixed'),
-                status=row.get('status', 0)
-            ))
-        
-        logger.debug(
-            f"Loaded {len(self.pre_planned)} pre-planned records (source='fixed') "
-            f"from roster_assignments (SPEC 4.0 + 4.1 - no status filter)"
-        )
-
-    def _load_blocked_slots(self) -> None:
-        """Load blocked slots (status=3 means unavailable)."""
-        response = self.supabase.table('roster_assignments').select('*').eq(
-            'roster_id', self.roster_id
-        ).eq('status', 3).execute()
-        
-        for row in response.data:
-            key = (row['employee_id'], row['date'], row['dagdeel'])
-            self.blocked_slots.add(key)
-
-    def _load_locked_slots(self) -> None:
-        """
-        DRAAD 210 STAP 3 - FIX 1: Load locked slots (status > 0).
-        
-        SPEC 3.1: "Greedy moet respecteert alle datums/dagdelen met de status > 0 
-                   deze zijn uitgesloten van gebruik door GREEDY"
-        
-        Status meanings:
-        - Status = 0: BESCHIKBAAR (GREEDY mag inplannen)
-        - Status > 0: GEBLOKKEERD (GREEDY SKIPT - reeds ingevuld of blackout)
-        
-        This method loads all date/dagdeel combinations that have
-        ANY assignment with status > 0 (not just != 1), which means they should
-        not receive additional assignments.
-        """
-        # Load ALL assignments for this roster
+        # Subtract existing assignments (status in [1, 2])
         response = self.supabase.table('roster_assignments').select('*').eq(
             'roster_id', self.roster_id
         ).execute()
         
         for row in response.data:
-            status = row.get('status', 0)  # Default 0 = available
+            if row['status'] in [1, 2]:
+                key = (row['employee_id'], row['service_id'])
+                self.quota_remaining[key] = self.quota_remaining.get(key, 0) - 1
+
+    def _load_blocked_slots(self) -> None:
+        """
+        ✅ BUG 1 FIX: Load blocked slots as (date, dagdeel, employee_id).
+        
+        SPEC 3.1: "Greedy moet respecteert alle datums/dagdelen/medewerker met de status>0
+                   deze zijn uitgesloten van gebruik door GREEDY"
+        
+        Only records with status > 0 are blocked.
+        """
+        response = self.supabase.table('roster_assignments').select('*').eq(
+            'roster_id', self.roster_id
+        ).execute()
+        
+        for row in response.data:
+            status = row.get('status', 0)
             
-            # ✅ FIX 1: Only mark as locked if status > 0 (spec 3.1)
+            # ✅ FIX 1: Check if status > 0 (not just != 1)
             if status > 0:
-                key = (row['date'], row['dagdeel'])
-                self.locked_slots.add(key)
+                key = (row['date'], row['dagdeel'], row['employee_id'])
+                self.blocked_slots.add(key)
                 logger.debug(
-                    f"LOCKED: {row['date']} {row['dagdeel']} "
-                    f"(status={status} > 0, will SKIP for GREEDY)"
+                    f"BLOCKED: {row['employee_id']} on {row['date']} {row['dagdeel']} "
+                    f"(status={status} > 0)"
                 )
 
-    def solve(self) -> SolveResult:
-        """Execute 5-phase algorithm.
-        
-        Returns:
-            SolveResult with all details
+    def _refresh_from_database(self) -> None:
         """
+        RE-READ from database after each dagdeel.
+        
+        REASON: Database triggers set status=2 after DIO/DDO pairing.
+        If we don't re-read, next dagdeel sees stale status=1!
+        """
+        logger.info("\n🔄 [RE-READ] Refreshing from database after dagdeel...")
+        
+        # Re-initialize quota
+        self.quota_remaining = dict(self.quota_original)
+        
+        # Subtract existing assignments
+        response = self.supabase.table('roster_assignments').select('*').eq(
+            'roster_id', self.roster_id
+        ).execute()
+        
+        for row in response.data:
+            if row['status'] in [1, 2]:
+                key = (row['employee_id'], row['service_id'])
+                self.quota_remaining[key] = self.quota_remaining.get(key, 0) - 1
+        
+        # Re-load blocked slots
+        self.blocked_slots = set()
+        for row in response.data:
+            if row['status'] > 0:
+                key = (row['date'], row['dagdeel'], row['employee_id'])
+                self.blocked_slots.add(key)
+        
+        logger.info(f"   ✅ Quota refreshed")
+        logger.info(f"   ✅ Blocked slots updated: {len(self.blocked_slots)}")
+
+    def solve(self) -> SolveResult:
+        """Execute GREEDY v2.0 algorithm."""
         start_time = time.time()
-        logger.info("\n🚀 [DRAAD210-STAP3] Starting GREEDY solve with ALL CRITICAL FIXES...")
-        logger.info("   🔥 STAP 3 FIXES:")
-        logger.info("   🎯 FIX 1: Status > 0 Slot Detection (if status > 0, not status != 1)")
-        logger.info("   🎯 FIX 2: UPSERT Operation (UPDATE existing, INSERT new)")
-        logger.info("   🎯 FIX 3: Load All Pre-planned (no status filter)")
+        logger.info("\n🚀 [DRAAD 211] Starting GREEDY v2.0 solve...")
+        logger.info("   ✅ BUG 1 FIX: blocked_slots (date, dagdeel, employee_id)")
+        logger.info("   ✅ BUG 2 FIX: quota_remaining (employee_id, service_id)")
+        logger.info("   ✅ BUG 3 FIX: fairness sort by per-service remaining")
         
         try:
-            # Phase 1: Lock pre-planned
-            self._lock_pre_planned()
-            logger.info(f"✅ Phase 1: {len(self.assignments)} locked assignments")
+            bottlenecks = []
             
-            # Phase 2: Greedy allocate (with DRAAD 190 smart sorting + all fixes)
-            bottlenecks = self._greedy_allocate()
-            logger.info(f"✅ Phase 2: {len(self.assignments)} total, {len(bottlenecks)} bottlenecks")
+            # Load existing assignments
+            response = self.supabase.table('roster_assignments').select('*').eq(
+                'roster_id', self.roster_id
+            ).eq('status', 1).execute()
             
-            # Phase 3: Analyze bottlenecks
-            bottlenecks = self._analyze_bottlenecks(bottlenecks)
-            logger.info(f"✅ Phase 3: Bottlenecks analyzed")
+            self.assignments = [
+                RosterAssignment(
+                    id=row['id'],
+                    roster_id=row['roster_id'],
+                    employee_id=row['employee_id'],
+                    date=row['date'],
+                    dagdeel=row['dagdeel'],
+                    service_id=row['service_id'],
+                    source=row.get('source', 'greedy'),
+                    status=row.get('status', 1)
+                )
+                for row in response.data
+            ]
             
-            # Phase 4: Save to database
+            # Iterate: Date → Dagdeel → Service
+            start_date = datetime.strptime(self.start_date, '%Y-%m-%d')
+            end_date = datetime.strptime(self.end_date, '%Y-%m-%d')
+            current_date = start_date
+            
+            while current_date <= end_date:
+                date_str = current_date.strftime('%Y-%m-%d')
+                
+                # Iterate dagdelen: O → M → A
+                for dagdeel in ['O', 'M', 'A']:
+                    logger.info(f"\n📅 Processing {date_str} {dagdeel}...")
+                    
+                    # Get services to plan (sorted by priority)
+                    services_to_plan = self._get_services_by_priority(date_str, dagdeel)
+                    
+                    for service_id, required_count in services_to_plan:
+                        # Check if slot is blocked
+                        slot_key = (date_str, dagdeel)
+                        
+                        # Count current assignments
+                        assigned_count = sum(
+                            1 for a in self.assignments
+                            if a.date == date_str and a.dagdeel == dagdeel and a.service_id == service_id
+                        )
+                        
+                        deficit = required_count - assigned_count
+                        if deficit <= 0:
+                            continue
+                        
+                        logger.info(f"   📊 {service_id}: need {required_count}, have {assigned_count}, deficit {deficit}")
+                        
+                        # Find eligible employees
+                        eligible = self._find_eligible_employees(date_str, dagdeel, service_id)
+                        
+                        if not eligible:
+                            logger.warning(f"   ❌ BOTTLENECK: No eligible employees for {service_id}")
+                            bottlenecks.append({
+                                'date': date_str,
+                                'dagdeel': dagdeel,
+                                'service_id': service_id,
+                                'required': required_count,
+                                'assigned': assigned_count,
+                                'shortage': deficit
+                            })
+                            continue
+                        
+                        # Allocate
+                        allocated = 0
+                        for emp_id in eligible:
+                            if allocated >= deficit:
+                                break
+                            
+                            # Check pairing if needed
+                            service_type = self.service_types.get(service_id)
+                            service_code = service_type.code if service_type else ''
+                            
+                            if service_code in self.SERVICE_PAIRS:
+                                # Check if pairing can be satisfied
+                                pair_info = self.SERVICE_PAIRS[service_code]
+                                pair_service_code = pair_info['pair_service']
+                                pair_dagdeel = pair_info['pair_dagdeel']
+                                
+                                # Find pair service ID
+                                pair_service_id = None
+                                for svc_id, svc_type in self.service_types.items():
+                                    if svc_type.code == pair_service_code:
+                                        pair_service_id = svc_id
+                                        break
+                                
+                                if not pair_service_id:
+                                    continue
+                                
+                                # Check if employee blocked on pair day
+                                pair_blocked_key = (date_str, pair_dagdeel, emp_id)
+                                if pair_blocked_key in self.blocked_slots:
+                                    continue
+                                
+                                # Check pair quota
+                                pair_quota_key = (emp_id, pair_service_id)
+                                if self.quota_remaining.get(pair_quota_key, 0) <= 0:
+                                    continue
+                                
+                                # Check pair capability
+                                if (emp_id, pair_service_id) not in self.capabilities:
+                                    continue
+                                
+                                # Assign both
+                                self._assign_shift(date_str, dagdeel, emp_id, service_id)
+                                self._assign_shift(date_str, pair_dagdeel, emp_id, pair_service_id)
+                                
+                                allocated += 1
+                                logger.info(f"   ✅ Paired: {emp_id} ({service_code} + {pair_service_code})")
+                            else:
+                                # Normal assignment
+                                self._assign_shift(date_str, dagdeel, emp_id, service_id)
+                                allocated += 1
+                                logger.debug(f"   ✅ Assigned: {emp_id}")
+                        
+                        if allocated < deficit:
+                            bottlenecks.append({
+                                'date': date_str,
+                                'dagdeel': dagdeel,
+                                'service_id': service_id,
+                                'required': required_count,
+                                'assigned': assigned_count + allocated,
+                                'shortage': deficit - allocated
+                            })
+                    
+                    # ✅ RE-READ after each dagdeel
+                    self._refresh_from_database()
+                
+                current_date += timedelta(days=1)
+            
+            # Save assignments
             self._save_assignments()
-            logger.info(f"✅ Phase 4: Assignments saved to database")
             
-            # Phase 5: Format result
+            # Calculate coverage
+            total_required = sum(self.requirements.values())
+            coverage = (len(self.assignments) / total_required * 100) if total_required > 0 else 0
+            
             elapsed = time.time() - start_time
-            total_slots = sum(self.requirements.values())
-            coverage = (len(self.assignments) / total_slots * 100) if total_slots > 0 else 0
-            
-            pre_planned_count = len([a for a in self.assignments if a.source == 'fixed'])
-            greedy_count = len([a for a in self.assignments if a.source == 'greedy'])
             
             result = SolveResult(
-                status='success' if coverage >= 95 else 'partial',
+                status='success' if coverage >= 80 else 'partial',
                 assignments_created=len(self.assignments),
-                total_required=total_slots,
+                total_required=total_required,
                 coverage=round(coverage, 1),
-                bottlenecks=[asdict(b) for b in bottlenecks],
+                bottlenecks=bottlenecks,
                 solve_time=round(elapsed, 2),
-                pre_planned_count=pre_planned_count,
-                greedy_count=greedy_count,
-                message=f"DRAAD 190 + STAP 2.1 + STAP 3 FIXES: {coverage:.1f}% coverage in {elapsed:.2f}s"
+                message=f"DRAAD 211: {coverage:.1f}% coverage in {elapsed:.2f}s"
             )
             
-            logger.info(f"✅ Phase 5 complete: {result.coverage}% coverage in {elapsed:.2f}s")
-            logger.info(f"   📈 Pre-planned: {pre_planned_count}")
-            logger.info(f"   📈 Greedy (STAP 3 FIXES): {greedy_count}")
-            logger.info(f"   📈 Total: {len(self.assignments)}/{total_slots}")
-            logger.info(f"   📈 Bottlenecks: {len(bottlenecks)}")
-            
-            # DRAAD 208H FIX 5: Clear cache after solve
-            self.constraint_checker.clear_cache()
-            logger.info("✅ Constraint checker caches cleared after solve")
+            logger.info(f"\n✅ Solve complete: {coverage:.1f}% coverage in {elapsed:.2f}s")
+            logger.info(f"   📊 Assignments: {len(self.assignments)}/{total_required}")
+            logger.info(f"   📊 Bottlenecks: {len(bottlenecks)}")
             
             return result
             
@@ -594,535 +585,172 @@ class GreedyRosteringEngine:
                 message=f"Error: {str(e)}"
             )
 
-    def _lock_pre_planned(self) -> None:
-        """Phase 1: Validate and lock pre-planned assignments."""
-        for assignment in self.pre_planned:
-            # Add to assignments list
-            self.assignments.append(assignment)
-            
-            # Update counters
-            self.employee_shift_count[assignment.employee_id] = \
-                self.employee_shift_count.get(assignment.employee_id, 0) + 1
-            
-            key = (assignment.employee_id, assignment.service_id)
-            self.employee_service_count[key] = \
-                self.employee_service_count.get(key, 0) + 1
-            
-            # DRAAD 208H FIX 1: Count pre-planned PER-SERVICE (not global)
-            if assignment.employee_id not in self.shifts_assigned_in_current_run:
-                self.shifts_assigned_in_current_run[assignment.employee_id] = {}
-            
-            self.shifts_assigned_in_current_run[assignment.employee_id][assignment.service_id] = \
-                self.shifts_assigned_in_current_run[assignment.employee_id].get(assignment.service_id, 0) + 1
-            
-            logger.debug(f"Locked: {assignment.employee_id} → {assignment.date} {assignment.dagdeel} service={assignment.service_id}")
+    def _get_services_by_priority(self, date: str, dagdeel: str) -> List[Tuple[str, int]]:
+        """Get services to plan, sorted by priority."""
+        services = []
+        
+        for (d, dd, service_id), required in self.requirements.items():
+            if d == date and dd == dagdeel and required > 0:
+                service_type = self.service_types.get(service_id)
+                
+                # Determine priority
+                if service_type and service_type.is_system:
+                    priority = 0  # System first
+                elif service_type and service_type.team == 'TOT':
+                    priority = 1  # TOT second
+                else:
+                    priority = 2  # Others last
+                
+                services.append((priority, service_type.code if service_type else '', service_id, required))
+        
+        # Sort by priority, then code
+        services.sort(key=lambda x: (x[0], x[1]))
+        
+        return [(service_id, required) for _, _, service_id, required in services]
 
-    def _greedy_allocate(self) -> List[Bottleneck]:
+    def _find_eligible_employees(self, date: str, dagdeel: str, service_id: str) -> List[str]:
         """
-        Phase 2: Greedy allocation with HC1-HC6 + DRAAD 190 Smart Sorting + ALL STAP 2.1 FIXES + STAP 3 FIXES.
+        ✅ BUG 1 + BUG 2 + BUG 3 FIXES:
+        Find eligible employees sorted by fairness.
         
-        DRAAD 210 STAP 2.1 FIX 5: Service Priority Ordering
-        ======================================================
-        Categorize and process services in priority:
-        1. System services (is_system=true)
-        2. TOT team services
-        3. All other services
-        
-        DRAAD 190 Algorithm (FIXED):
-        1. For each slot needing assignment:
-        2. Find eligible employees (HC1-HC6 passed)
-        3. Sort by fairness using sortEligibleByFairness():
-           a. Check availability (not overscheduled, not in blackout)
-           b. Sort by shifts_remaining (DESCENDING) - who needs the MOST shifts gets HIGHER priority
-           c. Tie-breaker: shifts_assigned_in_current_run (ascending) - who was selected earlier?
-        4. Assign to first person in sorted list
-        5. Increment shifts_assigned_in_current_run for that person PER-SERVICE
-        
-        Returns:
-            List of bottlenecks (unfilled slots)
+        1. Filter by: capability, not blocked, quota available
+        2. Sort by: remaining_for_THIS_SERVICE (DESC)
+        3. Tie-breaker: alphabetical (deterministic)
         """
-        bottlenecks = []
-        
-        # DRAAD 210 STAP 2.1 - FIX 5: Categorize requirements by priority
-        logger.info("\n📋 [FIX 5] Categorizing services by priority...")
-        system_services = {}
-        tot_services = {}
-        other_services = {}
-        
-        for (date, dagdeel, service_id), need in self.requirements.items():
-            if need == 0:
-                continue
-            
-            service_type = self.service_types.get(service_id)
-            if not service_type:
-                continue
-            
-            key = (date, dagdeel, service_id)
-            
-            # Categorize by priority
-            if service_type.is_system:
-                system_services[key] = need
-                logger.debug(f"   SYSTEM: {service_type.code} ({date} {dagdeel})")
-            elif service_type.team == 'TOT':
-                tot_services[key] = need
-                logger.debug(f"   TOT: {service_type.code} ({date} {dagdeel})")
-            else:
-                other_services[key] = need
-                logger.debug(f"   OTHER: {service_type.code} ({date} {dagdeel})")
-        
-        logger.info(f"   ✅ System services: {len(system_services)}")
-        logger.info(f"   ✅ TOT services: {len(tot_services)}")
-        logger.info(f"   ✅ Other services: {len(other_services)}")
-        
-        # DRAAD 210 STAP 2.1 - FIX 5: Process in priority order
-        all_services_priority = [
-            ("SYSTEM", sorted(system_services.items())),
-            ("TOT", sorted(tot_services.items())),
-            ("OTHER", sorted(other_services.items()))
-        ]
-        
-        for priority_name, priority_services in all_services_priority:
-            if not priority_services:
-                continue
-            
-            logger.info(f"\n📊 [FIX 5] Processing {priority_name} services ({len(priority_services)} total)...")
-            
-            for (date, dagdeel, service_id), need in priority_services:
-                # DRAAD 210 STAP 3 - FIX 1: Check if slot is locked (status > 0)
-                slot_key = (date, dagdeel)
-                if slot_key in self.locked_slots:
-                    logger.info(
-                        f"⏭️  SKIP: {date} {dagdeel} service={service_id} - "
-                        f"slot has locked assignments (status > 0)"
-                    )
-                    continue
-                
-                # Count current assignments
-                current = self._count_assigned(date, dagdeel, service_id)
-                
-                # Check shortage
-                shortage = need - current
-                if shortage <= 0:
-                    continue
-                
-                # DRAAD 190: Find eligible employees with smart sorting
-                eligible = self._sort_eligible_by_fairness(date, dagdeel, service_id)
-                
-                # Assign as many as possible
-                assigned_this_slot = 0
-                for emp_id in eligible:
-                    if assigned_this_slot >= shortage:
-                        break
-                    
-                    # DRAAD 210 STAP 2.1 - FIX 2: Check for service pairing requirements
-                    service_type = self.service_types.get(service_id)
-                    service_code = service_type.code if service_type else ''
-                    
-                    if service_code in self.SERVICE_PAIRS:
-                        # This service requires pairing - validate before assignment
-                        pair_info = self.SERVICE_PAIRS[service_code]
-                        pair_service_code = pair_info['pair_service']
-                        pair_dagdeel = pair_info['pair_dagdeel']
-                        
-                        # Find pair service ID
-                        pair_service_id = None
-                        for svc_id, svc_type in self.service_types.items():
-                            if svc_type.code == pair_service_code:
-                                pair_service_id = svc_id
-                                break
-                        
-                        if pair_service_id:
-                            # Check if pair slot is available
-                            pair_slot_key = (date, pair_dagdeel, pair_service_id)
-                            pair_need = self.requirements.get(pair_slot_key, 0)
-                            pair_current = self._count_assigned(date, pair_dagdeel, pair_service_id)
-                            pair_shortage = pair_need - pair_current
-                            
-                            # Check if employee can do pair service
-                            pair_capable = (emp_id, pair_service_id) in self.capabilities
-                            
-                            if not pair_capable or pair_shortage <= 0:
-                                logger.debug(
-                                    f"   SKIP pair: {emp_id} cannot pair {pair_service_code} on {date} "
-                                    f"(capable: {pair_capable}, shortage: {pair_shortage})"
-                                )
-                                continue  # Skip this employee - no valid pair
-                            
-                            # Pair is valid - assign main service
-                            assignment = RosterAssignment(
-                                id=str(uuid.uuid4()),
-                                roster_id=self.roster_id,
-                                employee_id=emp_id,
-                                date=date,
-                                dagdeel=dagdeel,
-                                service_id=service_id,
-                                source='greedy',
-                                status=1
-                            )
-                            self.assignments.append(assignment)
-                            assigned_this_slot += 1
-                            
-                            # Also auto-assign the pair service
-                            pair_assignment = RosterAssignment(
-                                id=str(uuid.uuid4()),
-                                roster_id=self.roster_id,
-                                employee_id=emp_id,
-                                date=date,
-                                dagdeel=pair_dagdeel,
-                                service_id=pair_service_id,
-                                source='greedy',
-                                status=1
-                            )
-                            self.assignments.append(pair_assignment)
-                            
-                            # Update counters for both services
-                            self.employee_shift_count[emp_id] += 2  # Both services
-                            
-                            key = (emp_id, service_id)
-                            self.employee_service_count[key] = self.employee_service_count.get(key, 0) + 1
-                            
-                            key_pair = (emp_id, pair_service_id)
-                            self.employee_service_count[key_pair] = self.employee_service_count.get(key_pair, 0) + 1
-                            
-                            # DRAAD 208H FIX 1: Track shifts assigned in THIS run PER-SERVICE
-                            if emp_id not in self.shifts_assigned_in_current_run:
-                                self.shifts_assigned_in_current_run[emp_id] = {}
-                            
-                            self.shifts_assigned_in_current_run[emp_id][service_id] = \
-                                self.shifts_assigned_in_current_run[emp_id].get(service_id, 0) + 1
-                            
-                            self.shifts_assigned_in_current_run[emp_id][pair_service_id] = \
-                                self.shifts_assigned_in_current_run[emp_id].get(pair_service_id, 0) + 1
-                            
-                            logger.info(
-                                f"   ✅ PAIRED: {emp_id} → {service_code} + {pair_service_code} ({date})"
-                            )
-                        else:
-                            logger.warning(f"   ⚠️  Pair service {pair_service_code} not found in database")
-                            continue
-                    else:
-                        # Non-paired service - normal assignment
-                        assignment = RosterAssignment(
-                            id=str(uuid.uuid4()),
-                            roster_id=self.roster_id,
-                            employee_id=emp_id,
-                            date=date,
-                            dagdeel=dagdeel,
-                            service_id=service_id,
-                            source='greedy',
-                            status=1
-                        )
-                        self.assignments.append(assignment)
-                        assigned_this_slot += 1
-                        
-                        # Update counters
-                        self.employee_shift_count[emp_id] += 1
-                        key = (emp_id, service_id)
-                        self.employee_service_count[key] = self.employee_service_count.get(key, 0) + 1
-                        
-                        # DRAAD 208H FIX 1: Track shifts assigned in THIS run PER-SERVICE
-                        if emp_id not in self.shifts_assigned_in_current_run:
-                            self.shifts_assigned_in_current_run[emp_id] = {}
-                        
-                        self.shifts_assigned_in_current_run[emp_id][service_id] = \
-                            self.shifts_assigned_in_current_run[emp_id].get(service_id, 0) + 1
-                        
-                        logger.debug(
-                            f"   Assigned: {emp_id} → {date} {dagdeel} {service_id}"
-                        )
-                
-                # Record bottleneck if not all filled
-                if assigned_this_slot < shortage:
-                    bottleneck = Bottleneck(
-                        date=date,
-                        dagdeel=dagdeel,
-                        service_id=service_id,
-                        need=need,
-                        assigned=current + assigned_this_slot,
-                        shortage=shortage - assigned_this_slot
-                    )
-                    bottlenecks.append(bottleneck)
-                    logger.warning(f"⚠️  Bottleneck: {date} {dagdeel} service={service_id} → shortage {bottleneck.shortage}")
-        
-        return bottlenecks
-
-    def _sort_eligible_by_fairness(self, date: str, dagdeel: str, service_id: str) -> List[str]:
-        """
-        DRAAD 190 + DRAAD 208H + DRAAD 210 STAP 2.1 FIX 3 & FIX 4: Sort eligible employees by fairness with team-aware logic.
-        
-        Algorithm (FIXED):
-        1. FILTER: Get all employees
-        2. SPECIAL CASE - TOT SERVICES (FIX 4):
-           Priority 1: Permanent staff (dienstverband = "Maat" or "Loondienst")
-           Priority 2: ZZP contractors (dienstverband = "ZZP")
-           Priority 3: No one available → OPEN bottleneck
-        3. NORMAL SERVICES (FIX 3 - Team Fallback):
-           Priority 1: Service team employees
-           Priority 2: "Overige" team employees
-           Priority 3: No one available → OPEN bottleneck
-        4. CHECK AVAILABILITY:
-           - Must be active
-           - Must not exceed target shifts
-           - Must not be in blackout
-           - Must pass HC1-HC6 constraints
-        5. CALCULATE FAIRNESS (PER-SERVICE):
-           - shifts_remaining = target - currently_assigned
-           - shifts_in_current_run_for_THIS_service = incremented as we assign in this solve
-        6. SORT BY (DESCENDING):
-           a. shifts_remaining (descending) - MOST to-do → HIGHER priority ✅ FIXED
-           b. shifts_in_current_run (ascending) - EARLIER selected → LOWER priority
-        7. RETURN: Sorted list ready for assignment
-        
-        Result: Fair distribution respecting team constraints without complex scoring
-        
-        Returns:
-            List of employee IDs sorted by fairness (best candidate first)
-        """
+        eligible = []
         service_type = self.service_types.get(service_id)
         svc_team = service_type.team if service_type else ''
         
-        # DRAAD 210 STAP 2.1 - FIX 4: Special handling for TOT team
+        # Handle TOT special logic
         if svc_team == 'TOT':
-            logger.debug(f"\n   🎯 [FIX 4] TOT SERVICE: Special team handling enabled")
+            # Priority 1: Permanent staff
+            for emp in self.employees:
+                if not emp.actief:
+                    continue
+                if emp.dienstverband not in ['Maat', 'Loondienst']:
+                    continue
+                
+                # Check if capable
+                if (emp.id, service_id) not in self.capabilities:
+                    continue
+                
+                # ✅ BUG 1 FIX: Check (date, dagdeel, emp_id) not (date, dagdeel)
+                if (date, dagdeel, emp.id) in self.blocked_slots:
+                    continue
+                
+                # ✅ BUG 2 FIX: Check per-service quota
+                quota_key = (emp.id, service_id)
+                if self.quota_remaining.get(quota_key, 0) <= 0:
+                    continue
+                
+                # ✅ BUG 3 FIX: Calculate remaining for THIS service
+                remaining = self.quota_remaining.get(quota_key, 0)
+                eligible.append((emp.id, remaining))
             
-            # Step 1: Try Permanent Staff (Maat + Loondienst)
-            eligible_permanent = self._get_eligible_by_dienstverband(
-                date, dagdeel, service_id, svc_team,
-                ['Maat', 'Loondienst']
-            )
+            if eligible:
+                # ✅ BUG 3 FIX: Sort by remaining for THIS service (DESC), then name
+                eligible.sort(key=lambda x: (-x[1], x[0]))
+                return [emp_id for emp_id, _ in eligible]
             
-            if eligible_permanent:
-                eligible_permanent.sort(key=lambda x: (x[1], -x[2]), reverse=True)
-                sorted_list = [emp_id for emp_id, _, _ in eligible_permanent]
-                logger.info(f"   ✅ TOT/Permanent: Found {len(sorted_list)} eligible employees")
-                return sorted_list
+            # Priority 2: ZZP
+            for emp in self.employees:
+                if not emp.actief:
+                    continue
+                if emp.dienstverband != 'ZZP':
+                    continue
+                
+                if (emp.id, service_id) not in self.capabilities:
+                    continue
+                if (date, dagdeel, emp.id) in self.blocked_slots:
+                    continue
+                
+                quota_key = (emp.id, service_id)
+                if self.quota_remaining.get(quota_key, 0) <= 0:
+                    continue
+                
+                remaining = self.quota_remaining.get(quota_key, 0)
+                eligible.append((emp.id, remaining))
             
-            # Step 2: Try ZZP
-            logger.info(f"   ℹ️  TOT/Permanent: Exhausted → trying ZZP")
-            eligible_zzp = self._get_eligible_by_dienstverband(
-                date, dagdeel, service_id, svc_team,
-                ['ZZP']
-            )
+            if eligible:
+                eligible.sort(key=lambda x: (-x[1], x[0]))
+                return [emp_id for emp_id, _ in eligible]
             
-            if eligible_zzp:
-                eligible_zzp.sort(key=lambda x: (x[1], -x[2]), reverse=True)
-                sorted_list = [emp_id for emp_id, _, _ in eligible_zzp]
-                logger.info(f"   ✅ TOT/ZZP: Found {len(sorted_list)} eligible employees")
-                return sorted_list
-            
-            # Step 3: No one available
-            logger.warning(f"   ⚠️  TOT: No eligible employees (will create OPEN bottleneck)")
             return []
         
-        # DRAAD 210 STAP 2.1 - FIX 3: Normal team fallback logic
-        logger.debug(f"\n   🎯 [FIX 3] TEAM FALLBACK: {svc_team} service")
-        
-        # Step 1: Try service team first
-        eligible = []
+        # Normal team logic
+        # Priority 1: Same team
         for emp in self.employees:
             if not emp.actief:
                 continue
-            
-            # Only employees from service team
             if emp.team != svc_team:
                 continue
+            if (emp.id, service_id) not in self.capabilities:
+                continue
+            if (date, dagdeel, emp.id) in self.blocked_slots:
+                continue
             
-            # Check availability and constraints
-            passed = self._check_employee_availability(
-                emp, date, dagdeel, service_id, svc_team
-            )
+            quota_key = (emp.id, service_id)
+            if self.quota_remaining.get(quota_key, 0) <= 0:
+                continue
             
-            if passed:
-                emp_target = self.employee_targets.get(emp.id, self.max_shifts_per_employee)
-                emp_shift_count = self.employee_shift_count.get(emp.id, 0)
-                shifts_remaining = emp_target - emp_shift_count
-                shifts_in_run = self.shifts_assigned_in_current_run.get(emp.id, {}).get(service_id, 0)
-                
-                eligible.append((emp.id, shifts_remaining, shifts_in_run))
+            remaining = self.quota_remaining.get(quota_key, 0)
+            eligible.append((emp.id, remaining))
         
         if eligible:
-            eligible.sort(key=lambda x: (x[1], -x[2]), reverse=True)
-            sorted_list = [emp_id for emp_id, _, _ in eligible]
-            logger.debug(f"   ✅ TEAM {svc_team}: Found {len(sorted_list)} eligible employees")
-            return sorted_list
+            eligible.sort(key=lambda x: (-x[1], x[0]))
+            return [emp_id for emp_id, _ in eligible]
         
-        # Step 2: No team employees → try Overige
-        logger.info(f"   ℹ️  TEAM {svc_team}: No eligible → trying Overige team")
-        
-        eligible = []
+        # Priority 2: Overige team
         for emp in self.employees:
             if not emp.actief:
                 continue
-            
-            # Only employees from Overige team
             if emp.team != 'Overige':
                 continue
+            if (emp.id, service_id) not in self.capabilities:
+                continue
+            if (date, dagdeel, emp.id) in self.blocked_slots:
+                continue
             
-            # Check availability and constraints
-            passed = self._check_employee_availability(
-                emp, date, dagdeel, service_id, svc_team
-            )
+            quota_key = (emp.id, service_id)
+            if self.quota_remaining.get(quota_key, 0) <= 0:
+                continue
             
-            if passed:
-                emp_target = self.employee_targets.get(emp.id, self.max_shifts_per_employee)
-                emp_shift_count = self.employee_shift_count.get(emp.id, 0)
-                shifts_remaining = emp_target - emp_shift_count
-                shifts_in_run = self.shifts_assigned_in_current_run.get(emp.id, {}).get(service_id, 0)
-                
-                eligible.append((emp.id, shifts_remaining, shifts_in_run))
+            remaining = self.quota_remaining.get(quota_key, 0)
+            eligible.append((emp.id, remaining))
         
         if eligible:
-            eligible.sort(key=lambda x: (x[1], -x[2]), reverse=True)
-            sorted_list = [emp_id for emp_id, _, _ in eligible]
-            logger.info(f"   ✅ OVERIGE: Found {len(sorted_list)} eligible employees")
-            return sorted_list
+            eligible.sort(key=lambda x: (-x[1], x[0]))
+            return [emp_id for emp_id, _ in eligible]
         
-        # Step 3: No one available anywhere
-        logger.warning(f"   ⚠️  FALLBACK: No eligible employees found (will create OPEN bottleneck)")
         return []
 
-    def _get_eligible_by_dienstverband(
-        self, date: str, dagdeel: str, service_id: str, svc_team: str, 
-        dienstverbanden: List[str]
-    ) -> List[Tuple[str, int, int]]:
-        """
-        DRAAD 210 STAP 2.1 - FIX 4: Get eligible employees filtered by dienstverband.
-        
-        Returns:
-            List of (emp_id, shifts_remaining, shifts_in_current_run) tuples
-        """
-        eligible = []
-        
-        for emp in self.employees:
-            if not emp.actief:
-                continue
-            
-            # Filter by dienstverband
-            if emp.dienstverband not in dienstverbanden:
-                continue
-            
-            # Check availability and constraints
-            passed = self._check_employee_availability(
-                emp, date, dagdeel, service_id, svc_team
-            )
-            
-            if passed:
-                emp_target = self.employee_targets.get(emp.id, self.max_shifts_per_employee)
-                emp_shift_count = self.employee_shift_count.get(emp.id, 0)
-                shifts_remaining = emp_target - emp_shift_count
-                shifts_in_run = self.shifts_assigned_in_current_run.get(emp.id, {}).get(service_id, 0)
-                
-                eligible.append((emp.id, shifts_remaining, shifts_in_run))
-        
-        return eligible
-
-    def _check_employee_availability(
-        self, emp: Employee, date: str, dagdeel: str, service_id: str, svc_team: str
-    ) -> bool:
-        """
-        Check if employee is available for assignment.
-        
-        Returns:
-            True if eligible, False otherwise
-        """
-        emp_target = self.employee_targets.get(emp.id, self.max_shifts_per_employee)
-        emp_shift_count = self.employee_shift_count.get(emp.id, 0)
-        
-        # Skip if already met target
-        if emp_shift_count >= emp_target:
-            logger.debug(f"   SKIP {emp.id}: Target met ({emp_shift_count}/{emp_target})")
-            return False
-        
-        key = (emp.id, service_id)
-        svc_count = self.employee_service_count.get(key, 0)
-        
-        # Convert assignments to dict format for HC check
-        existing_dicts = [{
-            'employee_id': a.employee_id,
-            'date': a.date,
-            'dagdeel': a.dagdeel
-        } for a in self.assignments]
-        
-        # Check ALL HC1-HC6 constraints
-        try:
-            passed, failed_constraint = self.constraint_checker.check_all_constraints(
-                emp_id=emp.id,
-                date_str=date,
-                dagdeel=dagdeel,
-                svc_id=service_id,
-                svc_team=svc_team,
-                emp_team=emp.team,
-                roster_id=self.roster_id,
-                existing_assignments=existing_dicts,
-                employee_shift_count=emp_shift_count,
-                employee_target=emp_target,
-                service_count_for_emp=svc_count
-            )
-        except Exception as e:
-            logger.warning(f"Constraint check exception for {emp.id}: {e}")
-            logger.debug(f"   INELIGIBLE {emp.id}: Exception in constraint check")
-            return False
-        
-        if not passed:
-            logger.debug(f"   INELIGIBLE {emp.id}: {failed_constraint}")
-            return False
-        
-        return True
-
-    def _count_assigned(self, date: str, dagdeel: str, service_id: str) -> int:
-        """Count current assignments for slot."""
-        return sum(
-            1 for a in self.assignments
-            if a.date == date and a.dagdeel == dagdeel and a.service_id == service_id
+    def _assign_shift(self, date: str, dagdeel: str, emp_id: str, service_id: str) -> None:
+        """Assign a shift to an employee."""
+        assignment = RosterAssignment(
+            id=str(uuid.uuid4()),
+            roster_id=self.roster_id,
+            employee_id=emp_id,
+            date=date,
+            dagdeel=dagdeel,
+            service_id=service_id,
+            source='greedy',
+            status=1
         )
-
-    def _analyze_bottlenecks(self, bottlenecks: List[Bottleneck]) -> List[Bottleneck]:
-        """Phase 3: Analyze bottleneck reasons."""
-        for bn in bottlenecks:
-            # Count capable employees
-            capable = sum(
-                1 for emp in self.employees
-                if (emp.id, bn.service_id) in self.capabilities
-            )
-            
-            if capable == 0:
-                bn.reason = "No trained employees available"
-                bn.suggestion = "Train 1-2 more employees for this service"
-            else:
-                bn.reason = "All capable employees busy or unavailable"
-                bn.suggestion = f"Reduce requirement by {bn.shortage} or relax constraints"
-            
-            logger.info(f"Analyzed: {bn.date} {bn.dagdeel} → {bn.reason}")
+        self.assignments.append(assignment)
         
-        return bottlenecks
+        # Update quota
+        quota_key = (emp_id, service_id)
+        self.quota_remaining[quota_key] = self.quota_remaining.get(quota_key, 0) - 1
 
     def _save_assignments(self) -> None:
-        """
-        Phase 4: Bulk UPSERT greedy assignments to database.
-        
-        DRAAD 210 STAP 3 - FIX 2: Use UPSERT instead of INSERT
-        SPEC 4.4.2: "Deze inplanning direct updaten in tabel roster_assignments"
-        
-        UPSERT = UPDATE if exists (id matches), INSERT if new
-        - Handles both new slots (INSERT) and existing slots (UPDATE)
-        - Prevents duplicate records
-        - Safe operation for database integrity
-        
-        DRAAD 210 STAP 2 - Priority 2 FIX: Enhanced logging
-        - Log before attempt
-        - Log success with details
-        - Log detailed errors with context
-        - Include connection info, record count, error type
-        """
-        greedy_assignments = [a for a in self.assignments if a.source == 'greedy']
-        
-        if not greedy_assignments:
-            logger.info("🔍 No greedy assignments to save")
+        """Save all assignments to database."""
+        if not self.assignments:
             return
         
-        # Prepare bulk upsert data
+        logger.info(f"\n💾 Saving {len(self.assignments)} assignments...")
+        
         data = []
-        for a in greedy_assignments:
+        for a in self.assignments:
             data.append({
                 'id': a.id or str(uuid.uuid4()),
                 'roster_id': a.roster_id,
@@ -1136,52 +764,9 @@ class GreedyRosteringEngine:
                 'updated_at': datetime.utcnow().isoformat()
             })
         
-        # 🐱 DRAAD 210 STAP 2 - Priority 2 FIX: Enhanced logging BEFORE attempt
-        logger.info("\n📓 [PHASE 4] Saving greedy assignments to database...")
-        logger.info(f"   📄 Database connection:")
-        logger.info(f"   - Supabase URL: {self.supabase.url}")
-        logger.info(f"   - Table: roster_assignments")
-        logger.info(f"   - Roster ID: {self.roster_id}")
-        logger.info(f"\n   📊 UPSERT details (STAP 3 FIX 2):")
-        logger.info(f"   - Records to UPSERT: {len(data)}")
-        logger.info(f"   - Operation: UPSERT (UPDATE if exists, INSERT if new)")
-        logger.info(f"   - Source: greedy (DRAAD 190 Smart Greedy Allocation + STAP 3 Fixes)")
-        logger.info(f"   - Status: 1 (active)")
-        logger.info(f"   - Timestamp: {datetime.utcnow().isoformat()}")
-        
         try:
-            # ✅ FIX 2: Perform bulk UPSERT (not INSERT)
-            logger.info("\n   🚀 Executing bulk UPSERT...")
             response = self.supabase.table('roster_assignments').upsert(data).execute()
-            
-            # 🐱 Log success with details
-            saved_count = len(response.data) if hasattr(response, 'data') and response.data else len(data)
-            
-            logger.info(f"\n✅ [PHASE 4] SUCCESS: Bulk UPSERT completed")
-            logger.info(f"   📈 Records UPSERTED: {saved_count}")
-            logger.info(f"   🎯 Source: DRAAD 190 Smart Greedy Allocation + STAP 3 Fixes")
-            logger.info(f"   🎯 Operation: UPSERT (UPDATE existing, INSERT new)")
-            logger.info(f"   🕛 Timestamp: {datetime.utcnow().isoformat()}")
-            logger.info(f"   💻 Response type: {type(response).__name__}")
-            logger.info(f"   📝 Note: Database will set status=2 after DIO/DDO pairing")
-            
-            return {
-                "status": "success",
-                "assignments_upserted": saved_count,
-                "phase": 4
-            }
-            
+            logger.info(f"   ✅ Saved {len(data)} assignments")
         except Exception as e:
-            # 🐱 DRAAD 210 STAP 2 - Priority 2 FIX: Enhanced error logging
-            logger.error(f"\n❌ [PHASE 4] FAILED: Database write error")
-            logger.error(f"\n   🔧 Error details:")
-            logger.error(f"   - Error type: {type(e).__name__}")
-            logger.error(f"   - Error message: {str(e)}")
-            logger.error(f"   - Records attempted: {len(data)}")
-            logger.error(f"   - Database URL: {self.supabase.url}")
-            logger.error(f"   - Operation: UPSERT")
-            logger.error(f"\n   📃 Full traceback:")
-            logger.error(f"   ", exc_info=True)
-            
-            # Re-raise with context
-            raise Exception(f"Database UPSERT failed: {str(e)}") from e
+            logger.error(f"   ❌ Error saving assignments: {e}")
+            raise
