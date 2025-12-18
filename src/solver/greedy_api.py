@@ -27,7 +27,11 @@ DRAA 210 STAP 2 - Priority 1:
 ✅ Detect failed solve status
 ✅ Proper exception handling
 
-Author: DRAAD 194 FASE 2 + OPDRACHT 195 + DRAAD 208H Fixes + DRAAD 210 STAP 2 P1
+DRAA 211 FIX #1:
+✅ Wrap SolveResponse in solver_result field
+✅ Frontend now receives correct structure: {solver_result: {...}}
+
+Author: DRAAD 194 FASE 2 + OPDRACHT 195 + DRAAD 208H Fixes + DRAAD 210 STAP 2 P1 + DRAAD 211 FIX #1
 Date: 2025-12-18
 """
 
@@ -115,6 +119,11 @@ class SolveResponse(BaseModel):
     )
 
 
+class SolverResultWrapper(BaseModel):
+    """DRAAD 211 FIX #1: Wrapper for frontend compatibility."""
+    solver_result: SolveResponse
+
+
 # ============================================================================
 # ROUTER SETUP
 # ============================================================================
@@ -126,8 +135,8 @@ router = APIRouter(prefix="/api/greedy", tags=["greedy-solver"])
 # ENDPOINTS
 # ============================================================================
 
-@router.post("/solve", response_model=SolveResponse, status_code=200)
-async def solve_greedy(request: SolveRequest) -> SolveResponse:
+@router.post("/solve", response_model=SolverResultWrapper, status_code=200)
+async def solve_greedy(request: SolveRequest) -> SolverResultWrapper:
     """
     GREEDY Solver Endpoint
     
@@ -154,7 +163,19 @@ async def solve_greedy(request: SolveRequest) -> SolveResponse:
     }
     ```
     
-    **Response:**
+    **Response (DRAAD 211 FIX #1):**
+    ```json
+    {
+        "solver_result": {
+            "status": "success|partial|failed",
+            "assignments_created": 224,
+            "coverage": 98.2,
+            ...
+        }
+    }
+    ```
+    
+    **Status meanings:**
     - **success**: Coverage >= 95%
     - **partial**: Coverage 50-94%
     - **failed**: Error during solve
@@ -163,6 +184,9 @@ async def solve_greedy(request: SolveRequest) -> SolveResponse:
     ✅ Now returns HTTP 500 on failure (was always 200)
     ✅ Detects failed solve status
     ✅ Proper error messaging
+    
+    **DRAAD 211 FIX #1:**
+    ✅ Wraps response in solver_result field for frontend
     
     Raises:
         HTTPException: 400 if validation fails, 500 if solve fails
@@ -207,7 +231,7 @@ async def solve_greedy(request: SolveRequest) -> SolveResponse:
         # ✅ DRAAD 210 STAP 2 - Priority 1 FIX: Check for failure status
         if result.status == 'failed':
             logger.error(f"❌ Solve FAILED: {result.message}")
-            return SolveResponse(
+            response = SolveResponse(
                 status="failed",
                 assignments_created=result.assignments_created,
                 total_required=result.total_required,
@@ -219,7 +243,15 @@ async def solve_greedy(request: SolveRequest) -> SolveResponse:
                 message=result.message,
                 solver_type="GREEDY",
                 timestamp=datetime.utcnow().isoformat() + 'Z'
-            ), 500  # HTTP 500 on failure!
+            )
+            # ✅ DRAAD 211 FIX #1: Wrap in solver_result
+            wrapped_response = SolverResultWrapper(solver_result=response)
+            # Return with 500 status
+            logger.warning("Wrapped error response in solver_result")
+            raise HTTPException(
+                status_code=500,
+                detail=response.message
+            )
         
         # Validate status is valid
         if result.status not in ['success', 'partial', 'failed']:
@@ -250,7 +282,8 @@ async def solve_greedy(request: SolveRequest) -> SolveResponse:
             f"in {response.solve_time}s"
         )
         
-        return response  # HTTP 200 on success
+        # ✅ DRAAD 211 FIX #1: Wrap in solver_result before returning
+        return SolverResultWrapper(solver_result=response)  # HTTP 200 on success
         
     except ValueError as e:
         # Validation error
