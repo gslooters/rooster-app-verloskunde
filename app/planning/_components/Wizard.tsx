@@ -10,14 +10,13 @@ import { Employee, TeamType, DienstverbandType, getFullName } from '@/lib/types/
 import { initializeRosterDesign } from '@/lib/planning/rosterDesign';
 import { useRouter } from 'next/navigation';
 import { generateRosterPeriodStaffing } from '@/lib/planning/roster-period-staffing-storage';
-import { initializePeriodEmployeeStaffing } from '@/lib/services/period-employee-staffing';
 import { loadRosterDesignData } from '@/lib/planning/rosterDesign';
 import { supabase } from '@/lib/supabase';
 
 const FIXED_WEEKS = 5;
 
 type WizardStep = 'period' | 'employees' | 'confirm';
-type CreationPhase = 'idle' | 'creating' | 'initializing' | 'staffing' | 'generating' | 'assignments' | 'verifying' | 'done';
+type CreationPhase = 'idle' | 'creating' | 'initializing' | 'generating' | 'assignments' | 'verifying' | 'done';
 
 interface WizardProps { 
   onClose?: () => void; 
@@ -282,38 +281,15 @@ export default function Wizard({ onClose }: WizardProps = {}) {
       return;
     }
     
-    // === FASE 3: Period Employee Staffing (40-55%) ===
-    try {
-      setCreationPhase('staffing');
-      setCreationMessage('Diensten per medewerker worden voorbereid...');
-      setCreationProgress(45);
-      
-      const activeEmployeeIds = employees
-        .filter(emp => emp.actief)
-        .map(emp => emp.id);
-      
-      console.log(`[Wizard] Actieve medewerkers: ${activeEmployeeIds.length}`);
-      
-      await initializePeriodEmployeeStaffing(rosterId!, activeEmployeeIds);
-      
-      setCreationProgress(55);
-      console.log('[Wizard] ✅ Period employee staffing geïnitialiseerd');
-      console.log('');
-      
-    } catch (err) {
-      console.warn('[Wizard] ⚠️ Waarschuwing bij period employee staffing:', err);
-      // Niet kritiek - ga door
-    }
-    
-    // === FASE 4: Diensten per dag genereren (55-70%) ===
+    // === FASE 3: Diensten per dag genereren (40-60%) ===
     try {
       setCreationPhase('generating');
       setCreationMessage('Diensten per dag worden gegenereerd...');
-      setCreationProgress(60);
+      setCreationProgress(45);
       
       await generateRosterPeriodStaffing(rosterId!, selectedStart, selectedEnd);
       
-      setCreationProgress(70);
+      setCreationProgress(60);
       console.log('[Wizard] ✅ Diensten per dag data gegenereerd');
       console.log('');
       
@@ -322,11 +298,11 @@ export default function Wizard({ onClose }: WizardProps = {}) {
       // Niet kritiek - ga door
     }
     
-    // === FASE 5: NIEUW - DRAAD69: Roster Assignments Initialiseren (70-85%) ===
+    // === FASE 4: DRAAD69: Roster Assignments Initialiseren (60-80%) ===
     try {
       setCreationPhase('assignments');
       setCreationMessage('Roster assignments worden aangemaakt...');
-      setCreationProgress(75);
+      setCreationProgress(70);
       
       const activeEmployeeIds = employees
         .filter(emp => emp.actief)
@@ -369,7 +345,7 @@ export default function Wizard({ onClose }: WizardProps = {}) {
         console.warn(`[Wizard] ⚠️  DRAAD69: Verkeerd aantal assignments! Gevonden: ${assignmentCount}, verwacht: ${expectedCount}`);
       }
       
-      setCreationProgress(85);
+      setCreationProgress(80);
       console.log('');
       
     } catch (err) {
@@ -381,7 +357,7 @@ export default function Wizard({ onClose }: WizardProps = {}) {
       return;
     }
     
-    // === FASE 6: Verificatie (85-100%) ===
+    // === FASE 5: Verificatie (80-100%) ===
     setCreationPhase('verifying');
     setCreationMessage('Database wordt geverifieerd...');
     setCreationProgress(90);
@@ -642,17 +618,16 @@ export default function Wizard({ onClose }: WizardProps = {}) {
                 </div>
               </div>
               
-              {/* Phase Indicators - DRAAD69: Added 'assignments' phase */}
-              <div className="grid grid-cols-6 gap-2 mb-4">
+              {/* Phase Indicators - DRAAD69: 5 phases after FASE 3 removal */}
+              <div className="grid grid-cols-5 gap-2 mb-4">
                 {[
                   { phase: 'creating', label: 'Aanmaken', icon: '📋' },
                   { phase: 'initializing', label: 'Design', icon: '🎨' },
-                  { phase: 'staffing', label: 'Medewerkers', icon: '👥' },
                   { phase: 'generating', label: 'Diensten', icon: '📅' },
                   { phase: 'assignments', label: 'Assignments', icon: '✍️' },
                   { phase: 'verifying', label: 'Verifiëren', icon: '🔍' }
                 ].map((item) => {
-                  const phaseOrder = ['creating', 'initializing', 'staffing', 'generating', 'assignments', 'verifying'];
+                  const phaseOrder = ['creating', 'initializing', 'generating', 'assignments', 'verifying'];
                   const currentIndex = phaseOrder.indexOf(creationPhase);
                   const itemIndex = phaseOrder.indexOf(item.phase);
                   const isActive = creationPhase === item.phase;
@@ -684,7 +659,6 @@ export default function Wizard({ onClose }: WizardProps = {}) {
                   <div className="font-medium text-gray-900 mb-1">
                     {creationPhase === 'creating' && 'Rooster record wordt aangemaakt in database...'}
                     {creationPhase === 'initializing' && 'Medewerker snapshot en basis structuur worden ingesteld...'}
-                    {creationPhase === 'staffing' && 'Beschikbaarheid en voorkeuren worden verwerkt...'}
                     {creationPhase === 'generating' && 'Diensten per dag worden berekend en opgeslagen...'}
                     {creationPhase === 'assignments' && 'Roster assignments worden aangemaakt (11 × 35 × 3 = 1155 records)...'}
                     {creationPhase === 'verifying' && `Database commit wordt geverifieerd (poging ${verifyAttempt}/5)...`}
