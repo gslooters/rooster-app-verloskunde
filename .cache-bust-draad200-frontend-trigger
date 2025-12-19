@@ -1,0 +1,29 @@
+CACHE_BUST_DRAAD200_FRONTEND
+Timestamp: 1734650000000
+Version: DRAAD200
+Service: rooster-app-verloskunde (Frontend + FastAPI)
+
+Trigger Details:
+  Build ID: DRAAD200_1734650000000_frontend
+  Trigger Reason: Complete cache-bust with new timestamp strategy
+  Railway Service: rooster-app-verloskunde
+  Expected Duration: 2-3 minutes
+  
+What's included:
+  - Next.js 14.2.35 (DRAAD197 security fixes applied)
+  - FastAPI backend (psycopg2-binary 2.9.9)
+  - Supabase integration
+  - AutoFillButton with GREEDY endpoint
+  - GreedyRealtimeMonitor component (.tsx)
+  - Health check endpoint
+  
+Verification:
+  - [ ] Build succeeds
+  - [ ] Next.js assets compiled
+  - [ ] FastAPI routes working
+  - [ ] Health endpoint responds
+  - [ ] Supabase connection successful
+  
+Deploy Date: 2025-12-19T22:33:20Z
+Author: GitHub Automation
+Status: READY FOR DEPLOYMENT
