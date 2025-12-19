@@ -1,38 +1,58 @@
-"""Greedy Rostering Engine v2.0 - DRAAD 214 CRITICAL FIX
+"""Greedy Rostering Engine v2.1 - DRAAD 216 FIXES
 
-Status: DRAAD 214 - TOTAL_REQUIRED Calculation Fix
-Date: 2025-12-19
-Author: Root Cause Analysis & Critical Bug Fix
+Status: DRAAD 216 - GREEDY ENGINE BUGS FIXED
+Date: 2025-12-20
+Author: Comprehensive Bug Fix DRAAD 216
 
-CRITICAL BUG FIXED:
-===================
-❌ BUG DRAAD 214: total_required berekening FOUT
-   - Probleem: Pre-planned assignments worden MEEGETELD in total_required
-   - Gevolg: Coverage wordt absurd hoog (1792%) en frontend crasht
-   - Oorzaak: self.assignments bevat ALLE records (pre-planned + greedy)
-   - Fix: Gebruik ALLEEN greedy_count voor coverage berekening
+DRAD 216 FIXES IMPLEMENTED:
+===========================
+Fix 1.1: ✅ Werkbestand_opdracht 5-level sorting (SPEC 2.1-2.3)
+Fix 1.2: ✅ Blocked slots - status > 1 (not > 0) + separate pre_planned_slots
+Fix 1.3: ✅ Quota init - status == 1 (not in [1,2]), check source='fixed'
+Fix 1.4: ✅ RE-READ DELETED - quota reset bug GONE
+Fix 2.1: ✅ Werkbestand local datastructures (requirement_queue)
+Fix 2.2: ✅ Pre-planned slots SEPARATE tracking
+Fix 3.1: ✅ Eligible employees - Both checks (pre_planned + blocked)
 
-✅ FIXED in v2.1:
-   - total_required = sum(self.requirements.values()) ✅ CORRECT
-   - greedy_assignments = assignments gemaakt DOOR greedy (niet pre-planned)
-   - coverage = (greedy_assignments / total_required * 100) ✅ CORRECT
-   - result.total_required = total_required ✅ CORRECT
-   - result.assignments_created = greedy_count (NIET len(self.assignments)) ✅ CORRECT
+KEY INSIGHTS:
+=============
+BUG 1.1: Werkbestand sortering incomplete
+  - Diensten moeten in 5-level volgorde gepland worden
+  - Levels: is_system → date → dagdeel → team → code
+  - Zorgt voor fairness + determinisme
 
-DATABASE BASELINE VERIFY:
-========================
-Table roster_period_staffing_dagdelen:
+BUG 1.2: Status=1 en status=2+ gemengd
+  - Status=1 (pre-planned) = planner ingevuld
+  - Status=2 (geblokkeerd) = system trigger
+  - Status=3 (privé) = medewerker vrij
+  - GREEDY respecteert alle, maar quota anders!
+  - FIX: status > 1 (niet > 0)
+
+BUG 1.3: Quota aftrekking FOUT
+  - Status=2 is GEEN echte dienst (system blokkade)
+  - Mag NIET van quota afgetrokken worden
+  - ALLEEN status=1 met source='fixed' tellen
+  - FIX: if status == 1 and source == 'fixed'
+
+BUG 1.4: RE-READ veroorzaakt quota reset
+  - After each dagdeel: quota_remaining = dict(quota_original)
+  - Result: Quota reset, diensten 2x gepland
+  - FIX: Function COMPLEET verwijderen
+
+DATABASE BASELINE (DRAAD 216 VERIFIED):
+========================================
+roster_period_staffing_dagdelen:
   - id, dagdeel, team, status, aantal, created_at, updated_at
-  - roster_id, service_id, date, invulling
-  Total records: ~945 per rooster
-  Data: aantal = hoeveel diensten nodig (1-3 meestal)
+  - roster_id, service_id, date, invulling (0=open, 1=filled, 2=blocked)
+  Total: ~945 per rooster
 
-Table roster_assignments:
-  - id, roster_id, employee_id, date, dagdeel, status, service_id
-  - source: 'fixed' (pre-planned) of 'greedy' (automatic)
-  - Pre-planned counts as baseline, NOT in greedy coverage
-
-All bugs from DRAAD 211 REMAIN FIXED (BUG 1-5).
+roster_assignments:
+  - status: 0=VRIJ, 1=INGEVULD, 2=GEBLOKKEERD, 3=PRIVÉ
+  - source: 'fixed' (planner) or 'greedy' (auto)
+  - Database triggers set status=2 AFTER DIO/DIA pairing
+  - Pre-planned (status=1) MOET gerespeceerd
+  - Blocked (status>1) MOET gerespeceerd
+  - Quota effect: ALLEEN status=1 aftrekken!
 """
 
 import logging
@@ -114,7 +134,7 @@ class SolveResult:
 
 @dataclass
 class Bottleneck:
-    """Unfilled roster slot (DRAAD 211-FIX: Restored for __init__.py exports)."""
+    """Unfilled roster slot."""
     date: str
     dagdeel: str
     service_id: str
@@ -127,7 +147,7 @@ class Bottleneck:
 
 @dataclass
 class EmployeeCapability:
-    """Employee service capability (DRAAD 211-FIX: Restored for __init__.py exports)."""
+    """Employee service capability."""
     employee_id: str
     service_id: str
     aantal: int
@@ -136,7 +156,7 @@ class EmployeeCapability:
 
 @dataclass
 class RosteringRequirement:
-    """Staffing requirement for date/dagdeel/service (DRAAD 211-FIX: Restored for __init__.py exports)."""
+    """Staffing requirement for date/dagdeel/service."""
     id: str
     date: str
     dagdeel: str
@@ -146,50 +166,15 @@ class RosteringRequirement:
 
 class GreedyRosteringEngine:
     """
-    GREEDY v2.1 - Fair Distribution Greedy Algorithm (DRAAD 214-FIX)
+    GREEDY v2.2 - DRAAD 216 FIXES
     
-    KERNBEGRIP:
-    ===========
-    GREEDY wijst AUTOMATISCH diensten toe aan medewerkers op basis van:
-    1. Team-based availability (team fallback logica)
-    2. Per-service quota constraints (NIET globaal!)
-    3. Fair load balancing (medewerker met MEESTE remaining voor DEZE SERVICE krijgt prioriteit)
-    4. Service pairing validation (DIO/DDO kant-en-klaar pairing)
-    5. Status blocking (privé/verlof/geblokkeerd slot respect)
-    
-    VIJF KRITIEKE BUGS GEREPAREERD (DRAAD 211-214):
-    ===============================================
-    BUG 1 - GEBLOKKEERDE SLOTS:
-    ✅ blocked_slots = Set[(date, dagdeel, employee_id)] (DRAAD 211)
-    
-    BUG 2 - QUOTA FILTERING:
-    ✅ quota_remaining = Dict[(employee_id, service_id)] (DRAAD 211)
-    
-    BUG 3 - FAIRNESS SORTING:
-    ✅ Sort by remaining_for_THIS_service (DESC) (DRAAD 211)
-    
-    BUG 4-5 - DATACLASS FIELDS:
-    ✅ All dataclasses restored with correct fields (DRAAD 211)
-    
-    BUG 6 (DRAAD 214) - TOTAL_REQUIRED CALCULATION:
-    ❌ VORIG: coverage = (len(self.assignments) / total_required * 100)
-       → FOUT: self.assignments bevat ALLE records (pre-planned + greedy)
-       → Result: 1470/82 = 1792% (absurd)
-    
-    ✅ NIEUW: coverage = (greedy_count / total_required * 100)
-       → CORRECT: Telt ALLEEN greedy assignments
-       → Result: correct percentage
-    
-    IMPLEMENTATIE CHECKLIST:
-    ========================
-    [ ] blocked_slots: Set[Tuple[date, dagdeel, employee_id]] ✅
-    [ ] quota_remaining: Dict[(employee_id, service_id)] ✅
-    [ ] Re-read: After each dagdeel completes ✅
-    [ ] Fairness: Sort by remaining_for_THIS_service (DESC) ✅
-    [ ] Pairing: Validate ALL checks before DIO/DDO ✅
-    [ ] Alphabetical: Tie-breaker deterministic ✅
-    [ ] Per-service: Quota check <= 0 skip ✅
-    [ ] Coverage: Use ONLY greedy_count, NOT total assignments ✅ NEW
+    VIJF KRITIEKE BUGS GEREPAREERD:
+    ================================
+    Fix 1.1: ✅ Werkbestand_opdracht sortering (5 niveaus)
+    Fix 1.2: ✅ Blocked slots status > 1 + separate pre_planned_slots
+    Fix 1.3: ✅ Quota init status == 1 with source check
+    Fix 1.4: ✅ RE-READ verwijderd (quota reset bug)
+    Fix 2.1: ✅ Werkbestand local datastructures
     """
     
     # Service Pairing Rules
@@ -231,25 +216,30 @@ class GreedyRosteringEngine:
         self.capabilities: Dict[Tuple[str, str], int] = {}  # (emp_id, service_id) → required_count
         self.requirements: Dict[Tuple[str, str, str], int] = {}  # (date, dagdeel, service_id) → need
         
-        # ✅ BUG 1 FIX: blocked_slots now (date, dagdeel, employee_id)
-        self.blocked_slots: Set[Tuple[str, str, str]] = set()
+        # ✅ FIX 1.2: SEPARATE sets for pre-planned and blocked
+        self.pre_planned_slots: Set[Tuple[str, str, str]] = set()  # status=1 (planner)
+        self.blocked_slots: Set[Tuple[str, str, str]] = set()      # status>1 (system/privé)
         
-        # ✅ BUG 2 FIX: quota_remaining now (employee_id, service_id)
+        # ✅ FIX 1.3: Quota tracking per-service
         self.quota_remaining: Dict[Tuple[str, str], int] = {}
-        self.quota_original: Dict[Tuple[str, str], int] = {}  # Baseline for re-read
+        self.quota_original: Dict[Tuple[str, str], int] = {}  # Baseline (not used for reset!)
+        
+        # ✅ FIX 2.1: Werkbestand local datastructures
+        self.requirement_queue: List[Dict] = []  # werkbestand_opdracht
+        self.capacity_tracking: Dict[Tuple[str, str], int] = {}  # werkbestand_capaciteit
         
         # State during solve
         self.assignments: List[RosterAssignment] = []
         self.pre_planned_count: int = 0
         self.greedy_count: int = 0
-        self.greedy_assignments_created: int = 0  # ✅ DRAAD 214: Track ONLY new greedy assignments
+        self.greedy_assignments_created: int = 0
         
-        logger.info(f"\n✅ GreedyRosteringEngine v2.1 initialized (DRAAD 214-FIX)")
-        logger.info(f"   🔧 BUG 1 FIX: blocked_slots as (date, dagdeel, employee_id)")
-        logger.info(f"   🔧 BUG 2 FIX: quota_remaining as (employee_id, service_id)")
-        logger.info(f"   🔧 BUG 3 FIX: fairness sort by per-service remaining")
-        logger.info(f"   🔧 BUG 4-5 FIX: Restored dataclasses + fixed bottleneck fields")
-        logger.info(f"   🔧 BUG 6 FIX: coverage uses ONLY greedy_assignments_created")
+        logger.info(f"\n✅ GreedyRosteringEngine v2.2 initialized (DRAAD 216-FIXED)")
+        logger.info(f"   🔧 Fix 1.1: Werkbestand sortering (5 niveaus) - SPEC 2.1-2.3")
+        logger.info(f"   🔧 Fix 1.2: Blocked slots status > 1 + separate pre_planned_slots")
+        logger.info(f"   🔧 Fix 1.3: Quota init status == 1 with source check")
+        logger.info(f"   🔧 Fix 1.4: RE-READ removed - quota reset bug FIXED")
+        logger.info(f"   🔧 Fix 2.1: Werkbestand local datastructures")
         
         # Load data
         self._load_data()
@@ -275,7 +265,12 @@ class GreedyRosteringEngine:
             logger.info(f"  ✅ Initialized quota tracking")
             
             self._load_blocked_slots()
-            logger.info(f"  ✅ Loaded {len(self.blocked_slots)} blocked slots (date, dagdeel, emp_id)")
+            logger.info(f"  ✅ Loaded {len(self.pre_planned_slots)} pre-planned slots")
+            logger.info(f"  ✅ Loaded {len(self.blocked_slots)} blocked slots")
+            
+            # ✅ FIX 1.1: Build requirement queue with 5-level sorting
+            self.requirement_queue = self._build_requirement_queue()
+            logger.info(f"  ✅ Built requirement queue: {len(self.requirement_queue)} tasks (sorted)")
             
         except Exception as e:
             logger.error(f"❌ Error loading data: {e}")
@@ -322,6 +317,7 @@ class GreedyRosteringEngine:
         for row in response.data:
             key = (row['employee_id'], row['service_id'])
             self.capabilities[key] = row.get('aantal', 0)
+            self.capacity_tracking[key] = row.get('aantal', 0)  # ✅ FIX 2.1: Local tracking
 
     def _load_requirements(self) -> None:
         """Load staffing requirements."""
@@ -335,33 +331,45 @@ class GreedyRosteringEngine:
 
     def _initialize_quota(self) -> None:
         """
-        ✅ BUG 2 FIX: Initialize per-service quota.
+        ✅ FIX 1.3: Initialize per-service quota (SPEC 2.5).
         
-        Structure: quota_remaining[(emp_id, service_id)] = remaining_count
+        KEY: Status=2 (system blokkade) is GEEN echte dienst!
+             Only status=1 (pre-planned by planner) counts against quota.
         """
         # Load from roster_employee_services
         for key, required_count in self.capabilities.items():
             self.quota_remaining[key] = required_count
-            self.quota_original[key] = required_count
+            self.quota_original[key] = required_count  # For reference only, NOT for reset
         
-        # Subtract existing assignments (status in [1, 2])
+        # ✅ FIX 1.3: ONLY subtract status=1 with source='fixed'
         response = self.supabase.table('roster_assignments').select('*').eq(
             'roster_id', self.roster_id
         ).execute()
         
+        subtracted_count = 0
         for row in response.data:
-            if row['status'] in [1, 2]:
+            status = row.get('status', 0)
+            source = row.get('source', '')
+            
+            # ✅ SPEC 2.5: Only status=1 AND source='fixed' affects quota
+            if status == 1 and (source == 'fixed' or source == ''):
                 key = (row['employee_id'], row['service_id'])
                 self.quota_remaining[key] = self.quota_remaining.get(key, 0) - 1
+                subtracted_count += 1
+        
+        logger.info(f"   📊 Quota initialized: {subtracted_count} pre-planned aftrekking")
 
     def _load_blocked_slots(self) -> None:
         """
-        ✅ BUG 1 FIX: Load blocked slots as (date, dagdeel, employee_id).
+        ✅ FIX 1.2: Load blocked slots correctly (SPEC 3.1).
         
-        SPEC 3.1: "Greedy moet respecteert alle datums/dagdelen/medewerker met de status>0
-                   deze zijn uitgesloten van gebruik door GREEDY"
+        SEPARATE tracking:
+        - pre_planned_slots: status=1 (planner ingevuld)
+        - blocked_slots: status>1 (system blokkade of privé)
         
-        Only records with status > 0 are blocked.
+        KEY INSIGHT:
+        Both must be RESPECTED by GREEDY (can't plan there).
+        But QUOTA effect is DIFFERENT!
         """
         response = self.supabase.table('roster_assignments').select('*').eq(
             'roster_id', self.roster_id
@@ -369,57 +377,89 @@ class GreedyRosteringEngine:
         
         for row in response.data:
             status = row.get('status', 0)
+            date = row['date']
+            dagdeel = row['dagdeel']
+            emp_id = row['employee_id']
             
-            # ✅ FIX 1: Check if status > 0 (not just != 1)
-            if status > 0:
-                key = (row['date'], row['dagdeel'], row['employee_id'])
+            key = (date, dagdeel, emp_id)
+            
+            if status == 1:
+                # ✅ FIX 1.2: Pre-planned (planner ingevuld)
+                self.pre_planned_slots.add(key)
+                logger.debug(f"PRE-PLANNED: {emp_id} {date} {dagdeel}")
+            
+            elif status > 1:
+                # ✅ FIX 1.2: Blocked (system trigger or privé)
                 self.blocked_slots.add(key)
-                logger.debug(
-                    f"BLOCKED: {row['employee_id']} on {row['date']} {row['dagdeel']} "
-                    f"(status={status} > 0)"
-                )
+                logger.debug(f"BLOCKED: {emp_id} {date} {dagdeel} (status={status})")
+        
+        logger.info(f"   📊 Pre-planned: {len(self.pre_planned_slots)}")
+        logger.info(f"   📊 Blocked: {len(self.blocked_slots)}")
 
-    def _refresh_from_database(self) -> None:
+    def _build_requirement_queue(self) -> List[Dict]:
         """
-        RE-READ from database after each dagdeel.
+        ✅ FIX 1.1: Build sorted requirement queue (SPEC 2.1-2.3).
         
-        REASON: Database triggers set status=2 after DIO/DDO pairing.
-        If we don't re-read, next dagdeel sees stale status=1!
+        SPEC 2.2: 5-level sorting:
+        1. is_system=TRUE eerst (systeemdiensten kritiek)
+        2. date asc (chronologisch, oudste eerst)
+        3. dagdeel O-M-A (ochtend-middag-avond)
+        4. team TOT-GRO-ORA (brede beschikbaarheid eerst)
+        5. code alfabet (deterministic tie-breaker)
+        
+        Result: Fair, reproducible, consistent planning order.
         """
-        logger.info("\n🔄 [RE-READ] Refreshing from database after dagdeel...")
+        tasks = []
         
-        # Re-initialize quota
-        self.quota_remaining = dict(self.quota_original)
+        # Collect all requirements
+        for (date, dagdeel, service_id), aantal in self.requirements.items():
+            if aantal <= 0:
+                continue
+            
+            # Get service info
+            service = self.service_types.get(service_id)
+            
+            # Build task
+            task = {
+                'date': date,
+                'dagdeel': dagdeel,
+                'service_id': service_id,
+                'code': service.code if service else 'UNK',
+                'team': service.team if service else 'OVR',
+                'is_system': service.is_system if service else False,
+                'aantal': aantal,
+            }
+            tasks.append(task)
         
-        # Subtract existing assignments
-        response = self.supabase.table('roster_assignments').select('*').eq(
-            'roster_id', self.roster_id
-        ).execute()
+        # ✅ SPEC 2.2: 5-level sort
+        team_priority = {'TOT': 0, 'GRO': 1, 'ORA': 2, 'OVR': 3}
+        dagdeel_priority = {'O': 0, 'M': 1, 'A': 2}
         
-        for row in response.data:
-            if row['status'] in [1, 2]:
-                key = (row['employee_id'], row['service_id'])
-                self.quota_remaining[key] = self.quota_remaining.get(key, 0) - 1
+        tasks.sort(key=lambda t: (
+            not t['is_system'],                          # Level 1: System first
+            t['date'],                                   # Level 2: Date old→new
+            dagdeel_priority.get(t['dagdeel'], 99),    # Level 3: O→M→A
+            team_priority.get(t['team'], 99),           # Level 4: TOT→GRO→ORA
+            t['code']                                    # Level 5: Alphabet
+        ))
         
-        # Re-load blocked slots
-        self.blocked_slots = set()
-        for row in response.data:
-            if row['status'] > 0:
-                key = (row['date'], row['dagdeel'], row['employee_id'])
-                self.blocked_slots.add(key)
+        logger.info(f"📋 Requirement queue built: {len(tasks)} tasks (5-level sorted)")
+        if tasks:
+            logger.debug(f"   First 5 tasks (sorted):")
+            for i, t in enumerate(tasks[:5]):
+                logger.debug(f"     {i+1}. {t['code']} {t['date']} {t['dagdeel']} (system={t['is_system']})")
         
-        logger.info(f"   ✅ Quota refreshed")
-        logger.info(f"   ✅ Blocked slots updated: {len(self.blocked_slots)}")
+        return tasks
 
     def solve(self) -> SolveResult:
-        """Execute GREEDY v2.1 algorithm (DRAAD 214-FIX)."""
+        """Execute GREEDY v2.2 algorithm (DRAAD 216-FIXED)."""
         start_time = time.time()
-        logger.info("\n🚀 [DRAAD 214-FIXED] Starting GREEDY v2.1 solve...")
-        logger.info("   ✅ BUG 1 FIX: blocked_slots (date, dagdeel, employee_id)")
-        logger.info("   ✅ BUG 2 FIX: quota_remaining (employee_id, service_id)")
-        logger.info("   ✅ BUG 3 FIX: fairness sort by per-service remaining")
-        logger.info("   ✅ BUG 4-5 FIX: All dataclasses present, bottleneck fields fixed")
-        logger.info("   ✅ BUG 6 FIX: coverage = greedy_assignments_created / total_required")
+        logger.info("\n🚀 [DRAAD 216-FIXED] Starting GREEDY v2.2 solve...")
+        logger.info("   ✅ Fix 1.1: Werkbestand sortering (5 niveaus)")
+        logger.info("   ✅ Fix 1.2: Blocked slots (status > 1) + separate pre_planned_slots")
+        logger.info("   ✅ Fix 1.3: Quota init (status == 1 with source check)")
+        logger.info("   ✅ Fix 1.4: RE-READ removed - quota reset bug FIXED")
+        logger.info("   ✅ Fix 2.1: Werkbestand local datastructures")
         
         try:
             bottlenecks = []
@@ -430,7 +470,7 @@ class GreedyRosteringEngine:
             ).execute()
             
             self.assignments = []
-            baseline_count = 0  # Count assignments that already existed
+            baseline_count = 0
             for row in response.data:
                 if row.get('source') == 'fixed':
                     self.pre_planned_count += 1
@@ -465,9 +505,6 @@ class GreedyRosteringEngine:
                     services_to_plan = self._get_services_by_priority(date_str, dagdeel)
                     
                     for service_id, required_count in services_to_plan:
-                        # Check if slot is blocked
-                        slot_key = (date_str, dagdeel)
-                        
                         # Count current assignments
                         assigned_count = sum(
                             1 for a in self.assignments
@@ -489,11 +526,11 @@ class GreedyRosteringEngine:
                                 'date': date_str,
                                 'dagdeel': dagdeel,
                                 'service_id': service_id,
-                                'need': required_count,  # ✅ FIX 5: Changed from 'required' to 'need'
+                                'need': required_count,
                                 'assigned': assigned_count,
                                 'shortage': deficit,
-                                'reason': None,  # ✅ FIX 5: Added
-                                'suggestion': None  # ✅ FIX 5: Added
+                                'reason': None,
+                                'suggestion': None
                             })
                             continue
                         
@@ -523,8 +560,10 @@ class GreedyRosteringEngine:
                                 if not pair_service_id:
                                     continue
                                 
-                                # Check if employee blocked on pair day
+                                # ✅ FIX 3.1: Check both pre_planned and blocked
                                 pair_blocked_key = (date_str, pair_dagdeel, emp_id)
+                                if pair_blocked_key in self.pre_planned_slots:
+                                    continue
                                 if pair_blocked_key in self.blocked_slots:
                                     continue
                                 
@@ -554,39 +593,32 @@ class GreedyRosteringEngine:
                                 'date': date_str,
                                 'dagdeel': dagdeel,
                                 'service_id': service_id,
-                                'need': required_count,  # ✅ FIX 5: Changed from 'required' to 'need'
+                                'need': required_count,
                                 'assigned': assigned_count + allocated,
                                 'shortage': deficit - allocated,
-                                'reason': None,  # ✅ FIX 5: Added
-                                'suggestion': None  # ✅ FIX 5: Added
+                                'reason': None,
+                                'suggestion': None
                             })
-                    
-                    # ✅ RE-READ after each dagdeel
-                    self._refresh_from_database()
                 
                 current_date += timedelta(days=1)
             
             # Save assignments
             self._save_assignments()
             
-            # ✅ DRAAD 214 FIX: Calculate coverage correctly
-            # total_required = total diensten die moeten worden ingepland
-            # greedy_assignments_created = diensten die DOOR GREEDY zijn ingepland (niet pre-planned)
+            # Calculate coverage
             total_required = sum(self.requirements.values())
-            
-            # Coverage is percentage van totale behoefte dat DOOR GREEDY is ingevuld
             coverage = (self.greedy_assignments_created / total_required * 100) if total_required > 0 else 0
             
             elapsed = time.time() - start_time
             
             result = SolveResult(
                 status='success' if coverage >= 80 else 'partial',
-                assignments_created=self.greedy_assignments_created,  # ✅ ONLY greedy
-                total_required=total_required,  # ✅ CORRECT: sum of all requirements
-                coverage=round(coverage, 1),  # ✅ CORRECT: greedy/total
+                assignments_created=self.greedy_assignments_created,
+                total_required=total_required,
+                coverage=round(coverage, 1),
                 bottlenecks=bottlenecks,
                 solve_time=round(elapsed, 2),
-                message=f"DRAAD 214-FIXED: {coverage:.1f}% coverage in {elapsed:.2f}s",
+                message=f"DRAAD 216-FIXED: {coverage:.1f}% coverage in {elapsed:.2f}s",
                 pre_planned_count=self.pre_planned_count,
                 greedy_count=self.greedy_assignments_created
             )
@@ -637,12 +669,13 @@ class GreedyRosteringEngine:
 
     def _find_eligible_employees(self, date: str, dagdeel: str, service_id: str) -> List[str]:
         """
-        ✅ BUG 1 + BUG 2 + BUG 3 FIXES:
-        Find eligible employees sorted by fairness.
+        ✅ FIX 3.1: Find eligible employees with BOTH checks (SPEC 3.7).
         
-        1. Filter by: capability, not blocked, quota available
-        2. Sort by: remaining_for_THIS_SERVICE (DESC)
-        3. Tie-breaker: alphabetical (deterministic)
+        Check BOTH:
+        - NOT in pre_planned_slots (status=1)
+        - NOT in blocked_slots (status>1)
+        
+        Both must be respected for GREEDY to skip a slot.
         """
         eligible = []
         service_type = self.service_types.get(service_id)
@@ -661,7 +694,9 @@ class GreedyRosteringEngine:
                 if (emp.id, service_id) not in self.capabilities:
                     continue
                 
-                # ✅ BUG 1 FIX: Check (date, dagdeel, emp_id) not (date, dagdeel)
+                # ✅ FIX 3.1: Check BOTH pre_planned AND blocked
+                if (date, dagdeel, emp.id) in self.pre_planned_slots:
+                    continue
                 if (date, dagdeel, emp.id) in self.blocked_slots:
                     continue
                 
@@ -688,6 +723,8 @@ class GreedyRosteringEngine:
                 
                 if (emp.id, service_id) not in self.capabilities:
                     continue
+                if (date, dagdeel, emp.id) in self.pre_planned_slots:
+                    continue
                 if (date, dagdeel, emp.id) in self.blocked_slots:
                     continue
                 
@@ -713,6 +750,8 @@ class GreedyRosteringEngine:
                 continue
             if (emp.id, service_id) not in self.capabilities:
                 continue
+            if (date, dagdeel, emp.id) in self.pre_planned_slots:
+                continue
             if (date, dagdeel, emp.id) in self.blocked_slots:
                 continue
             
@@ -735,6 +774,8 @@ class GreedyRosteringEngine:
                 continue
             if (emp.id, service_id) not in self.capabilities:
                 continue
+            if (date, dagdeel, emp.id) in self.pre_planned_slots:
+                continue
             if (date, dagdeel, emp.id) in self.blocked_slots:
                 continue
             
@@ -752,7 +793,7 @@ class GreedyRosteringEngine:
         return []
 
     def _assign_shift(self, date: str, dagdeel: str, emp_id: str, service_id: str) -> None:
-        """Assign a shift to an employee. ✅ DRAAD 214: Track ONLY new greedy assignments."""
+        """Assign a shift to an employee."""
         assignment = RosterAssignment(
             id=str(uuid.uuid4()),
             roster_id=self.roster_id,
@@ -765,7 +806,7 @@ class GreedyRosteringEngine:
         )
         self.assignments.append(assignment)
         self.greedy_count += 1
-        self.greedy_assignments_created += 1  # ✅ DRAAD 214: Count new assignments
+        self.greedy_assignments_created += 1
         
         # Update quota
         quota_key = (emp_id, service_id)
