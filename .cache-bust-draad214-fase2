@@ -1,0 +1,46 @@
+# Cache Bust Trigger - DRAAD-214 FASE 2
+
+## Timestamp: 2025-12-19T16:49:37Z
+## Branch: DRAAD-214-fase2-improvements
+## Status: FASE 2 Implementation Complete
+
+This file triggers a clean rebuild on Railway for the greedy-service.
+
+## Deployed Components:
+
+- ✅ greedy_solver_v2.py - GreedySolverV2 algorithm
+- ✅ constraint_validator.py - Constraint validation system
+- ✅ solver_api.py - FastAPI integration
+- ✅ requirements.txt - Updated dependencies
+- ✅ Dockerfile - Multi-stage build configuration
+- ✅ test_fase2.py - Comprehensive test suite
+
+## Quality Assurance:
+
+- ✅ Syntax validation passed
+- ✅ Type hints verified
+- ✅ Error handling checked
+- ✅ Logging configured
+- ✅ Tests included
+- ✅ Documentation complete
+
+## Deployment Notes:
+
+Railway will:
+1. Detect Dockerfile
+2. Build greedy-service container
+3. Run health checks
+4. Deploy to railway.app
+5. Expose /health, /solve, /validate endpoints
+
+## Service Coordination:
+
+This service runs independently alongside:
+- rooster-app (frontend)
+- Solver2 (constraint-programming solver)
+
+GREATER can now choose between greedy and CP-SAT solving strategies.
+
+---
+FASE 2: Implementation Complete
+Ready for Production Deployment
