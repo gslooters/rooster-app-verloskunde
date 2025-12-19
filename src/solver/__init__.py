@@ -15,7 +15,8 @@ from .greedy_engine import (
     RosterAssignment,
     Bottleneck,
     EmployeeCapability,
-    RosteringRequirement
+    RosteringRequirement,
+    SolveResult
 )
 from .bottleneck_analyzer import (
     BottleneckAnalyzer,
@@ -28,6 +29,13 @@ from .DRAAD_181_CACHE_BUSTER import (
     DEPLOYMENT_ID,
     get_cache_version,
     log_deployment
+)
+from .DRAAD_217_CACHE_BUSTER import (
+    CACHE_KEY as CACHE_KEY_217,
+    VERSION as VERSION_217,
+    DEPLOYMENT_ID as DEPLOYMENT_ID_217,
+    get_cache_version as get_cache_version_217,
+    log_deployment as log_deployment_217
 )
 
 __all__ = [
@@ -45,17 +53,25 @@ __all__ = [
     'Bottleneck',
     'EmployeeCapability',
     'RosteringRequirement',
+    'SolveResult',
     'BottleneckAnalyzer',
     'ReasonsEnum',
     'SuggestionsEnum',
+    # DRAAD-181 Cache Buster
     'CACHE_KEY',
     'VERSION',
     'DEPLOYMENT_ID',
     'get_cache_version',
-    'log_deployment'
+    'log_deployment',
+    # DRAAD-217 Cache Buster (Restoration)
+    'CACHE_KEY_217',
+    'VERSION_217',
+    'DEPLOYMENT_ID_217',
+    'get_cache_version_217',
+    'log_deployment_217'
 ]
 
-__version__ = '1.1.0'  # Updated for Greedy Engine
-__description__ = 'Greedy Rostering Engine (DRAAD-181)'
+__version__ = '1.1.1'  # Updated for DRAAD-217 Restoration
+__description__ = 'Greedy Rostering Engine (DRAAD-181 + DRAAD-217 Restoration)'
 __status__ = 'PRODUCTION-READY'
-__deployment__ = DEPLOYMENT_ID
+__deployment__ = DEPLOYMENT_ID_217  # Use latest cache buster
