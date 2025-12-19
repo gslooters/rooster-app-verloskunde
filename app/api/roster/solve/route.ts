@@ -1,296 +1,57 @@
 /**
  * API Route: POST /api/roster/solve
  * 
- * DRAAD-204 FASE 3: BACKEND GREEDY REFACTOR - SELF-SERVICE MODEL
+ * DRAAD-214 FIX: Make response synchronous (wait for GREEDY completion before returning)
+ * 
+ * CRITICAL ARCHITECTURE CHANGE:
+ * BEFORE (DRAAD-204): Fire-and-forget async → Frontend gets undefined solver_result
+ * AFTER (DRAAD-214):  Wait for GREEDY → Frontend gets complete solver_result ✅
  * 
  * ============================================================================
- * ARCHITECTURE OVERVIEW
+ * ROOT CAUSE ANALYSIS (DRAAD-214)
  * ============================================================================
  * 
- * Frontend
- *    ↓
- *    POST /api/roster/solve { roster_id }
- *    ↓
- * Backend (THIS FILE)
- *    1. Validate: roster exists, status='draft', dates valid
- *    2. Build GreedyRequest (minimal: roster_id + Supabase credentials)
- *    3. Send to Greedy service (async, fire-and-forget)
- *    4. Return immediately: { success: true, status: 'running' }
- *    ↓
- * Greedy Service (AUTONOMOUS)
- *    1. Initialize own Supabase client
- *    2. Fetch: roster config, employees, services, constraints
- *    3. Run greedy algorithm (day/dagdeel iteration)
- *    4. Write assignments DIRECTLY to roster_assignments table
- *    5. Realtime updates flow to Frontend via Supabase subscription
+ * THE BUG:
+ * Backend was sending async request to GREEDY and returning immediately WITHOUT
+ * waiting for result or including solver_result in response.
  * 
- * Frontend (REALTIME MONITORING)
- *    1. Subscribe to roster_assignments changes (realtime)
- *    2. Live UI updates as Greedy assigns shifts
- *    3. No polling required
+ * Frontend console error:
+ *   [Dashboard] Missing solver_result in response
+ *   [DRAAD129] Solver status: undefined
  * 
- * ============================================================================
- * KEY CHANGES FROM DRAAD-202 (PREVIOUS VERSION)
- * ============================================================================
+ * THE FIX:
+ * 1. Wait for GREEDY to complete (with timeout)
+ * 2. Parse GREEDY response to extract solver_result
+ * 3. Return complete response WITH solver_result to frontend
+ * 4. Use async/await to make this SYNCHRONOUS from frontend perspective
  * 
- * REMOVED (Massive Data Fetching):
- *   - const { data: employees } = await supabase.from('employees')...
- *   - const { data: services } = await supabase.from('service_types')...
- *   - const { data: rosterEmpServices } = await supabase.from('roster_employee_services')...
- *   - const { data: fixedData } = await supabase.from('roster_assignments')...
- *   - const { data: blockedData } = await supabase.from('roster_assignments')...
- *   - const { data: suggestedData } = await supabase.from('roster_assignments')...
- *   - const { data: staffingData } = await supabase.from('roster_period_staffing_dagdelen')...
- * 
- * REMOVED (UPDATE Loop):
- *   - for (const assignment of greedySolution.assignments) {
- *       await supabase.from('roster_assignments').update(...)
- *     }
- *   - Greedy now writes DIRECTLY to DB
- * 
- * REMOVED (Massive GreedyPayload):
- *   - GreedyPayload with 1000+ fields
- *   - All deserialization complexity
- * 
- * ADDED (Minimal GreedyRequest):
- *   - interface GreedyRequest {
- *       roster_id: string;
- *       start_date: string;        // ← DRAAD-207B
- *       end_date: string;          // ← DRAAD-207B
- *       supabase_url: string;
- *       supabase_key: string;
- *     }
- * 
- * IMPROVED (Architecture):
- *   - Backend = routing layer only
- *   - Greedy = autonomous microservice
- *   - Realtime updates = Supabase subscriptions
- *   - Immediate response = no waiting
+ * TIMING:
+ * - Frontend sends POST /api/roster/solve
+ * - Backend waits for GREEDY (~10-15 seconds)
+ * - GREEDY completes and returns solution
+ * - Backend returns complete response with solver_result
+ * - Frontend receives data and renders schedule ✅
  * 
  * ============================================================================
- * GREEDY RESPONSIBILITIES (NOW AUTONOMOUS)
+ * KEY ARCHITECTURE CHANGES
  * ============================================================================
  * 
- * 1. INITIALIZATION
- *    - Initialize own Supabase client using provided credentials
- *    - Verify roster exists and has valid date range
+ * REMOVED (Fire-and-forget async):
+ *   - sendToGreedyAsync() - didn't wait for response
+ *   - Immediate 200 OK response without solver_result
+ *   - Frontend subscription pattern (workaround for missing data)
  * 
- * 2. DATA LOADING (FROM SUPABASE DIRECTLY)
- *    - Load roster (start_date, end_date)
- *    - Load active employees
- *    - Load active service types
- *    - Load roster_employee_services (bevoegdheden)
- *    - Load roster_period_staffing_dagdelen (vereiste diensten)
- *    - Load roster_assignments (existing assignments)
- *    - Load planning_constraints (rules)
+ * ADDED (Synchronous wait):
+ *   - sendToGreedySync() - waits for complete response
+ *   - Parses GREEDY response for solver_result
+ *   - Returns solver_result in response body ✅
+ *   - Timeout protection (30 sec default)
  * 
- * 3. ALGORITHM EXECUTION
- *    FOR each date in [start_date, end_date]:
- *      FOR each dagdeel in ['O', 'M', 'A']:  // Ochtend, Middag, Avond
- *        1. Fetch services needed for this date/dagdeel
- *        2. Sort services by priority
- *        3. FOR each service:
- *           - Select eligible employee (greedy: first available)
- *           - UPDATE roster_assignments directly in DB
- *           - Move to next service
- * 
- * 4. GREEDY SELECTION CRITERIA
- *    Employee is eligible if:
- *    - Qualified for this service (roster_employee_services.actief=true)
- *    - Not blocked on this date/dagdeel (blocked_slots check)
- *    - Not already assigned on this date (max 1 per day per dagdeel)
- *    - Meets constraint rules (planning_constraints)
- *    - Has fewest shifts so far (load balancing)
- * 
- * 5. DATABASE UPDATES
- *    UPDATE roster_assignments
- *    SET
- *      service_id = $1,
- *      status = 1,  // assigned (see: roster_assignments.status values)
- *      source = 'greedy',
- *      ort_run_id = $2,
- *      updated_at = NOW()
- *    WHERE
- *      id = $3
- *      AND status = 0;  // only unassigned slots
- * 
- * ============================================================================
- * DATABASE SCHEMA REFERENCES (FROM SUPABASE)
- * ============================================================================
- * 
- * roster_assignments (PRIMARY TABLE - 19 columns)
- *   - id: uuid (PK)
- *   - roster_id: uuid (FK → roosters)
- *   - employee_id: text (FK → employees.id)
- *   - date: date
- *   - dagdeel: text ('O' | 'M' | 'A')
- *   - status: integer (0=unassigned, 1=assigned, 2=blocked, 3=fixed)
- *   - service_id: uuid (FK → service_types.id)
- *   - source: text ('greedy' | 'manual' | 'suggested' | 'fixed')
- *   - ort_run_id: uuid (tracks which Greedy run created this)
- *   - ort_confidence: numeric (0-100, not used in Greedy)
- *   - is_protected: boolean
- *   - constraint_reason: jsonb
- *   - created_at, updated_at: timestamps
- * 
- * roster_employee_services (COMPETENCIES TABLE - 8 columns)
- *   - id: uuid (PK)
- *   - roster_id: uuid (FK → roosters)
- *   - employee_id: text (FK → employees.id)
- *   - service_id: uuid (FK → service_types.id)
- *   - aantal: integer
- *   - actief: boolean ← CRITICAL: only fetch where actief=true
- *   - created_at, updated_at: timestamps
- * 
- * roster_period_staffing_dagdelen (REQUIREMENTS TABLE - 12 columns)
- *   - id: uuid (PK)
- *   - roster_id: uuid (FK → roosters)
- *   - date: date
- *   - dagdeel: text ('O' | 'M' | 'A')
- *   - service_id: uuid (FK → service_types.id)
- *   - aantal: integer (how many of this service needed)
- *   - status: text ('open' | 'covered' | 'understaffed')
- *   - invulling: integer (how many assigned so far)
- *   - team: text (optional team filter)
- *   - created_at, updated_at: timestamps
- * 
- * employees (8 columns relevant to roster)
- *   - id: text (PK, e.g. 'EMP001')
- *   - voornaam, achternaam: text
- *   - actief: boolean ← CRITICAL: only active employees
- *   - dienstverband: text (type of employment)
- *   - team: text
- *   - roostervrijdagen: ARRAY (dates when unavailable)
- *   - structureel_nbh: jsonb (structured unavailability)
- * 
- * service_types (14 columns relevant)
- *   - id: uuid (PK)
- *   - code: text (e.g. 'V001', 'Z001')
- *   - naam: text (e.g. 'Verloskunde', 'Zuigelingenonderzoek')
- *   - kleur: text (UI color)
- *   - duur: numeric (service duration in hours)
- *   - dienstwaarde: numeric (priority/weight)
- *   - actief: boolean ← CRITICAL
- *   - blokkeert_volgdag: boolean (blocks next day)
- * 
- * roosters (6 columns)
- *   - id: uuid (PK)
- *   - start_date: date
- *   - end_date: date
- *   - status: text ('draft', 'in_progress', 'completed', 'finalized')
- *   - created_at, updated_at: timestamps
- * 
- * ============================================================================
- * GREEDY STATUS TRACKING (solver_runs table)
- * ============================================================================
- * 
- * After Greedy completes, it can write to solver_runs:
- *   - id: uuid
- *   - roster_id: uuid
- *   - status: 'SUCCESS' | 'PARTIAL' | 'FAILED'
- *   - started_at, completed_at: timestamps
- *   - solve_time_seconds: numeric
- *   - coverage_rate: numeric (percentage of services covered)
- *   - total_assignments: integer
- *   - constraint_violations: jsonb
- *   - solver_status: text
- * 
- * This is OPTIONAL - Greedy can update it when done
- * 
- * ============================================================================
- * ERROR HANDLING & RESILIENCE
- * ============================================================================
- * 
- * Backend Errors (THIS LAYER):
- *   - Roster not found: 404
- *   - Missing date range: 400
- *   - Status != 'draft': 400
- *   - Missing Supabase credentials: 500
- *   - Network error sending to Greedy: return warning but still 200
- * 
- * Greedy Errors (HANDLED BY GREEDY):
- *   - Database connection failure: log and retry
- *   - Service not found: skip and log
- *   - Employee not available: mark as open/unassigned
- *   - Constraint violations: track in constraint_violations table
- *   - Partial coverage: return status='PARTIAL' with details
- * 
- * Frontend Error Handling:
- *   - No response from Greedy after timeout: show warning
- *   - No realtime updates after N seconds: poll /api/roster/{id}/status
- *   - Some services still unassigned: show notification with count
- * 
- * ============================================================================
- * DRAAD REFERENCES & DEPENDENCIES
- * ============================================================================
- * 
- * DRAAD-155: UPDATE Pattern & SAFETY_GUARD
- *   - roster_assignments is write-protected (NO DELETE)
- *   - Always UPDATE, never DELETE
- *   - UPSERT pattern only
- *   - Tracked in _status_audit_log
- * 
- * DRAAD-202: Backend Analysis & Type System
- *   - Fixed dagdeel strict literals ('O' | 'M' | 'A')
- *   - Fixed structureel_nbh JSON conversion
- *   - Error classification with Dutch messages
- *   - Comprehensive logging patterns
- * 
- * DRAAD-203: Architecture Refactor Plan
- *   - Defined this self-service model
- *   - Specified Greedy responsibilities
- *   - Database schema mapping
- * 
- * DRAAD-204 (THIS FILE):
- *   - Implementation of Fase 3 backend refactor
- *   - Simplified route.ts
- *   - Minimal GreedyRequest interface
- *   - Async fire-and-forget pattern
- * 
- * DRAAD-207B: Fix Greedy API Payload (START/END DATES)
- *   - Added start_date and end_date to GreedyRequest
- *   - Fixes HTTP 422 validation error in Greedy service
- *   - Dates now passed from backend to Greedy
- * 
- * ============================================================================
- * DEPLOYMENT CHECKLIST
- * ============================================================================
- * 
- * Before deploying:
- * - [ ] Greedy service is running and accessible
- * - [ ] GREEDY_ENDPOINT environment variable set
- * - [ ] Supabase credentials in environment
- * - [ ] Supabase SERVICE_ROLE_KEY has write permissions
- * - [ ] roster_assignments table is prepared with status=0 slots
- * - [ ] solver_runs table exists and is empty
- * - [ ] SAFETY_GUARD active (no DELETE operations)
- * - [ ] Error logging configured
- * - [ ] Realtime subscriptions enabled in Supabase
- * - [ ] Frontend subscription code deployed
- * 
- * ============================================================================
- * FUTURE IMPROVEMENTS (PHASE 4+)
- * ============================================================================
- * 
- * 1. Webhook Response from Greedy
- *    - After completion, Greedy calls backend webhook
- *    - Backend updates solver_runs with final stats
- *    - Triggers Frontend notification
- * 
- * 2. Progress Tracking
- *    - Greedy periodically updates progress (e.g., 45% complete)
- *    - Frontend polls /api/roster/{id}/progress
- *    - Shows progress bar to user
- * 
- * 3. Cancellation Support
- *    - Frontend can call /api/roster/{id}/solve/cancel
- *    - Backend sends signal to Greedy
- *    - Greedy stops gracefully, saves partial results
- * 
- * 4. Multiple Algorithm Support
- *    - Support other solvers (CP-SAT, OR-Tools, etc.)
- *    - Route to different endpoints based on config
- *    - Compare solution quality
+ * IMPROVED (Error handling):
+ *   - 422 validation errors now caught
+ *   - 500 server errors handled
+ *   - Timeout errors with clear message
+ *   - User-friendly Dutch error messages
  * 
  * ============================================================================
  */
@@ -298,152 +59,65 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
-// ============================================================================
-// GREEDY SERVICE CONFIGURATION
-// ============================================================================
-
 const GREEDY_ENDPOINT = process.env.GREEDY_ENDPOINT ||
   'https://greedy-production.up.railway.app/api/greedy/solve';
-const GREEDY_TIMEOUT = parseInt(process.env.GREEDY_TIMEOUT || '30000', 10);
+const GREEDY_TIMEOUT = parseInt(process.env.GREEDY_TIMEOUT || '45000', 10);
 
-console.log('[DRAAD-204] ========== GREEDY SERVICE CONFIGURATION =========');
-console.log(`[DRAAD-204] Endpoint: ${GREEDY_ENDPOINT}`);
-console.log(`[DRAAD-204] Timeout: ${GREEDY_TIMEOUT}ms`);
-console.log('[DRAAD-204] Model: SELF-SERVICE (Greedy autonomous)');
-console.log('[DRAAD-204] =====================================================');
+console.log('[DRAAD-214] ========== GREEDY SERVICE CONFIGURATION (DRAAD-214 FIX) =========');
+console.log(`[DRAAD-214] Endpoint: ${GREEDY_ENDPOINT}`);
+console.log(`[DRAAD-214] Timeout: ${GREEDY_TIMEOUT}ms`);
+console.log('[DRAAD-214] Model: SYNCHRONOUS WAIT (wait for completion + return solver_result)');
+console.log('[DRAAD-214] =====================================================');
 
 // ============================================================================
 // TYPE DEFINITIONS
 // ============================================================================
 
-/**
- * DRAAD-204 FASE 3: Minimal GreedyRequest
- * Backend ONLY sends roster_id + Supabase credentials + date range
- * Greedy is now self-sufficient and autonomous
- * 
- * DRAAD-207B: Added start_date and end_date for Greedy validation
- */
 interface GreedyRequest {
   roster_id: string;
-  start_date: string;  // ← ADDED DRAAD-207B
-  end_date: string;    // ← ADDED DRAAD-207B
+  start_date: string;
+  end_date: string;
   supabase_url: string;
   supabase_key: string;
 }
 
-/**
- * Response from Greedy (async, not waited for)
- * Greedy will webhook back with completion status if needed
- */
 interface GreedyResponse {
   status: 'SUCCESS' | 'PARTIAL' | 'FAILED';
   coverage: number;
   total_assignments: number;
   assignments_created: number;
+  solution?: any; // The solver_result from GREEDY
+  solver_result?: any; // Alternative field name
   message?: string;
+  error?: string;
 }
 
-/**
- * Greedy error classification
- */
-type GreedyErrorType =
-  | 'NETWORK_ERROR'
-  | 'TIMEOUT'
-  | 'SERVER_ERROR'
-  | 'CLIENT_ERROR'
-  | 'VALIDATION_ERROR';
-
 interface GreedyErrorDetail {
-  type: GreedyErrorType;
+  type: string;
   userMessage: string;
   technicalDetails: string;
 }
 
 // ============================================================================
-// ERROR HANDLING & CLASSIFICATION (DRAAD-202 STYLE)
+// GREEDY API CALL (SYNCHRONOUS - WAIT FOR RESPONSE)
 // ============================================================================
 
 /**
- * Classify Greedy errors and return Dutch user message
- * DRAAD-202: Comprehensive error classification
+ * DRAAD-214: Send request to GREEDY and WAIT for complete response
+ * This is different from DRAAD-204 which was fire-and-forget
+ * 
+ * Returns:
+ * - { success: true, solver_result: {...} } on success
+ * - { success: false, error: {...} } on failure
  */
-function classifyGreedyError(error: any): GreedyErrorDetail {
-  console.error('[DRAAD-204] Error classification:', {
-    name: error?.name,
-    message: error?.message,
-    code: error?.code,
-    status: error?.status
-  });
-
-  // Timeout errors
-  if (error?.name === 'AbortError' || error?.message?.includes('timeout')) {
-    return {
-      type: 'TIMEOUT',
-      userMessage: 'GREEDY service reageert niet (timeout). Probeer later opnieuw.',
-      technicalDetails: `Timeout na ${GREEDY_TIMEOUT}ms`
-    };
-  }
-
-  // Network errors
-  if (
-    error?.code === 'ECONNREFUSED' ||
-    error?.code === 'ENOTFOUND' ||
-    error?.code === 'ERR_INVALID_URL' ||
-    error?.message?.includes('fetch') ||
-    error?.message?.includes('network')
-  ) {
-    return {
-      type: 'NETWORK_ERROR',
-      userMessage: 'Netwerkverbinding onderbroken. Controleer uw internetverbinding.',
-      technicalDetails: error.message
-    };
-  }
-
-  // Server errors (5xx)
-  if (error?.status >= 500) {
-    return {
-      type: 'SERVER_ERROR',
-      userMessage: 'GREEDY service error. Probeer over enkele momenten opnieuw.',
-      technicalDetails: `HTTP ${error.status}: ${error.message}`
-    };
-  }
-
-  // Client errors (4xx)
-  if (error?.status >= 400 && error?.status < 500) {
-    return {
-      type: 'CLIENT_ERROR',
-      userMessage: 'Request error. Controleer uw gegevens.',
-      technicalDetails: `HTTP ${error.status}: ${error.message}`
-    };
-  }
-
-  // Unknown error
-  return {
-    type: 'VALIDATION_ERROR',
-    userMessage: 'Onbekende fout opgetreden.',
-    technicalDetails: JSON.stringify(error)
-  };
-}
-
-// ============================================================================
-// GREEDY API CALL (ASYNC - FIRE AND FORGET)
-// ============================================================================
-
-/**
- * Send GreedyRequest to Greedy service
- * DRAAD-204: Async/fire-and-forget pattern
- *
- * Backend sends the request and returns immediately.
- * Greedy runs asynchronously and writes directly to DB.
- * Frontend monitors via Supabase realtime subscription.
- */
-async function sendToGreedyAsync(
+async function sendToGreedySync(
   payload: GreedyRequest
-): Promise<{ success: boolean; error?: GreedyErrorDetail }> {
-  console.log('[DRAAD-204] === SENDING TO GREEDY (ASYNC) ===');
-  console.log(`[DRAAD-204] Endpoint: ${GREEDY_ENDPOINT}`);
-  console.log(`[DRAAD-204] Roster ID: ${payload.roster_id}`);
-  console.log(`[DRAAD-204] Date range: ${payload.start_date} to ${payload.end_date}`);
+): Promise<{ success: boolean; solver_result?: any; error?: GreedyErrorDetail }> {
+  console.log('[DRAAD-214] === SENDING TO GREEDY (SYNCHRONOUS - WAIT FOR RESPONSE) ===');
+  console.log(`[DRAAD-214] Endpoint: ${GREEDY_ENDPOINT}`);
+  console.log(`[DRAAD-214] Roster ID: ${payload.roster_id}`);
+  console.log(`[DRAAD-214] Timeout: ${GREEDY_TIMEOUT}ms`);
+  console.log(`[DRAAD-214] Date range: ${payload.start_date} to ${payload.end_date}`);
 
   const startTime = Date.now();
 
@@ -457,7 +131,7 @@ async function sendToGreedyAsync(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'rooster-app-verloskunde/DRAAD-207B'
+          'User-Agent': 'rooster-app-verloskunde/DRAAD-214'
         },
         body: JSON.stringify(payload),
         signal: controller.signal
@@ -466,333 +140,278 @@ async function sendToGreedyAsync(
       clearTimeout(timeoutId);
       const elapsedMs = Date.now() - startTime;
 
-      console.log(
-        `[DRAAD-204] Greedy accepted request after ${elapsedMs}ms (HTTP ${response.status})`
-      );
+      console.log(`[DRAAD-214] GREEDY responded after ${elapsedMs}ms with HTTP ${response.status}`);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[DRAAD-204] Greedy returned error: HTTP ${response.status}`);
-        console.error(`[DRAAD-204] Error body: ${errorText}`);
+      // Try to parse response body regardless of status
+      let greedyData: any = {};
+      try {
+        greedyData = await response.json();
+        console.log('[DRAAD-214] GREEDY response parsed:', {
+          status: greedyData.status,
+          coverage: greedyData.coverage,
+          total_assignments: greedyData.total_assignments,
+          has_solution: !!greedyData.solution,
+          has_solver_result: !!greedyData.solver_result
+        });
+      } catch (parseError: any) {
+        console.warn('[DRAAD-214] Could not parse GREEDY response as JSON:', parseError.message);
+      }
 
+      // Success responses
+      if (response.ok) {
+        if (greedyData.status === 'SUCCESS' || greedyData.status === 'PARTIAL') {
+          const solver_result = greedyData.solution || greedyData.solver_result || greedyData;
+          console.log('[DRAAD-214] ✅ GREEDY successful');
+          console.log(`[DRAAD-214]   - Status: ${greedyData.status}`);
+          console.log(`[DRAAD-214]   - Coverage: ${greedyData.coverage}%`);
+          console.log(`[DRAAD-214]   - Assignments: ${greedyData.total_assignments}`);
+          console.log('[DRAAD-214] === GREEDY SUCCESS ===');
+
+          return {
+            success: true,
+            solver_result: {
+              status: greedyData.status,
+              coverage: greedyData.coverage,
+              total_assignments: greedyData.total_assignments,
+              assignments_created: greedyData.assignments_created,
+              message: greedyData.message,
+              solution: solver_result,
+              elapsed_ms: elapsedMs
+            }
+          };
+        }
+      }
+
+      // Error responses
+      console.error(`[DRAAD-214] ❌ GREEDY returned HTTP ${response.status}`);
+      console.error('[DRAAD-214] Response body:', greedyData);
+
+      // Handle different error codes
+      if (response.status === 422) {
         return {
           success: false,
           error: {
-            type: 'SERVER_ERROR',
-            userMessage: 'GREEDY service fout bij verwerking van request',
-            technicalDetails: `HTTP ${response.status}: ${errorText}`
+            type: 'VALIDATION_ERROR',
+            userMessage: 'GREEDY validatiefout: request data ongeldig',
+            technicalDetails: `HTTP 422: ${greedyData.error || 'Validation failed'}`
           }
         };
       }
 
-      console.log('[DRAAD-204] ✅ Greedy request accepted (async processing started)');
-      console.log('[DRAAD-204] === GREEDY SUCCESS ===');
+      if (response.status === 500) {
+        return {
+          success: false,
+          error: {
+            type: 'SERVER_ERROR',
+            userMessage: 'GREEDY service error. Probeer over enkele momenten opnieuw.',
+            technicalDetails: `HTTP 500: ${greedyData.error || 'Internal server error'}`
+          }
+        };
+      }
 
-      return { success: true };
+      return {
+        success: false,
+        error: {
+          type: 'SERVER_ERROR',
+          userMessage: 'GREEDY service error',
+          technicalDetails: `HTTP ${response.status}: ${greedyData.error || greedyData.message || 'Unknown error'}`
+        }
+      };
     } catch (fetchError: any) {
       clearTimeout(timeoutId);
 
       if (fetchError.name === 'AbortError') {
-        console.error(`[DRAAD-204] ❌ Request timeout after ${GREEDY_TIMEOUT}ms`);
+        console.error(`[DRAAD-214] ❌ GREEDY timeout after ${GREEDY_TIMEOUT}ms`);
         return {
           success: false,
-          error: classifyGreedyError(fetchError)
+          error: {
+            type: 'TIMEOUT',
+            userMessage: `GREEDY solver timeout (>${GREEDY_TIMEOUT / 1000}s). Probeer met minder vereisten.`,
+            technicalDetails: `Timeout after ${GREEDY_TIMEOUT}ms`
+          }
         };
       }
 
       throw fetchError;
     }
   } catch (error: any) {
-    const errorDetail = classifyGreedyError(error);
-    console.error('[DRAAD-204] ❌ Greedy request failed:', errorDetail);
-    console.log('[DRAAD-204] === GREEDY FAILED ===');
+    console.error('[DRAAD-214] ❌ GREEDY request failed:', error.message);
+
+    let errorType = 'NETWORK_ERROR';
+    let userMessage = 'Netwerkverbinding onderbroken';
+    let details = error.message;
+
+    if (error.code === 'ECONNREFUSED') {
+      userMessage = 'GREEDY service is niet beschikbaar';
+    } else if (error.code === 'ENOTFOUND') {
+      userMessage = 'GREEDY service kon niet worden bereikt (DNS error)';
+    } else if (error.message?.includes('timeout')) {
+      errorType = 'TIMEOUT';
+      userMessage = 'Aanvraag timeout - GREEDY reageert niet';
+    }
 
     return {
       success: false,
-      error: errorDetail
+      error: {
+        type: errorType,
+        userMessage,
+        technicalDetails: details
+      }
     };
   }
 }
 
 // ============================================================================
-// MAIN ROUTE HANDLER (DRAAD-204 FASE 3 + DRAAD-207B)
+// MAIN ROUTE HANDLER (DRAAD-214 FIX)
 // ============================================================================
 
 /**
  * POST /api/roster/solve
  * 
- * Request: { roster_id: string }
- * Response: { success: true, status: 'running', message: '...' }
+ * DRAAD-214 FIX:
+ * - Sends request to GREEDY
+ * - WAITS for GREEDY to complete (with timeout)
+ * - Returns COMPLETE response with solver_result
  * 
- * DRAAD-204 FASE 3 Features:
- * - Minimal validation (roster exists, status=draft, dates valid)
- * - No data fetching (removed all Supabase queries for employees/services/constraints)
- * - No UPDATE loop (Greedy writes directly)
- * - Immediate response (fire-and-forget to Greedy)
- * - Async processing (no waiting for Greedy to complete)
- * - Realtime Frontend monitoring (via Supabase subscription)
- * 
- * DRAAD-207B Fix:
- * - Added start_date and end_date to greedy payload
- * - Fixes HTTP 422 validation error
- * - Greedy can now validate date range independently
+ * Request:  { roster_id: string }
+ * Response: { success: true, solver_result: {...} } ✅ (now includes data!)
  */
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
-  const cacheBustId = `DRAAD-207B-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+  const cacheId = `DRAAD-214-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
-  console.log(
-    '[DRAAD-207B] ========== POST /api/roster/solve (SELF-SERVICE GREEDY + FIX) =========='
-  );
-  console.log(`[DRAAD-207B] Cache bust ID: ${cacheBustId}`);
-  console.log('[DRAAD-207B] Fix: Added start_date & end_date to greedy payload');
+  console.log('[DRAAD-214] ========== POST /api/roster/solve ==========')
+  console.log(`[DRAAD-214] Cache ID: ${cacheId}`);
+  console.log('[DRAAD-214] FIX: Return solver_result in response + wait for GREEDY completion');
 
   try {
-    // Parse request
     const { roster_id } = await request.json();
 
     if (!roster_id) {
-      console.error('[DRAAD-207B] Missing roster_id in request');
-      return NextResponse.json(
-        { error: 'roster_id is verplicht' },
-        { status: 400 }
-      );
+      console.error('[DRAAD-214] Missing roster_id');
+      return NextResponse.json({ error: 'roster_id is required' }, { status: 400 });
     }
 
-    console.log(`[DRAAD-207B] Roster ID: ${roster_id}`);
+    console.log(`[DRAAD-214] Roster ID: ${roster_id}`);
     const supabase = await createClient();
 
-    // ========================================================================
-    // PHASE 1: VALIDATION (minimal - ONLY verify roster exists)
-    // ========================================================================
-
-    console.log('[DRAAD-207B] === PHASE 1: VALIDATION (minimal) ===');
-
-    // Fetch ONLY roster metadata (to verify existence and dates)
-    // NO other data fetching here
+    // PHASE 1: Validate roster
+    console.log('[DRAAD-214] === PHASE 1: VALIDATION ===');
     const { data: roster, error: rosterError } = await supabase
       .from('roosters')
-      .select('id, start_date, end_date, status, created_at')
+      .select('id, start_date, end_date, status')
       .eq('id', roster_id)
       .single();
 
     if (rosterError || !roster) {
-      console.error('[DRAAD-207B] Roster not found');
-      return NextResponse.json(
-        {
-          error: 'Roster niet gevonden',
-          roster_id
-        },
-        { status: 404 }
-      );
+      console.error('[DRAAD-214] Roster not found');
+      return NextResponse.json({ error: 'Roster not found' }, { status: 404 });
     }
 
-    // Verify date range
     if (!roster.start_date || !roster.end_date) {
-      console.error('[DRAAD-207B] Roster missing date range', {
-        start_date: roster.start_date,
-        end_date: roster.end_date
-      });
-      return NextResponse.json(
-        {
-          error: 'Roster heeft geen geldige begindatum of einddatum'
-        },
-        { status: 400 }
-      );
+      console.error('[DRAAD-214] Roster missing dates');
+      return NextResponse.json({ error: 'Roster has invalid date range' }, { status: 400 });
     }
 
-    // Verify roster status is 'draft'
     if (roster.status !== 'draft') {
-      console.error(
-        `[DRAAD-207B] Roster status validation failed: status='${roster.status}', expected 'draft'`
-      );
+      console.error(`[DRAAD-214] Roster status is '${roster.status}', expected 'draft'`);
       return NextResponse.json(
-        {
-          error: `Roster kan niet gerosterd worden. Status is '${roster.status}' (verwacht 'draft')`
-        },
+        { error: `Cannot schedule roster with status '${roster.status}'` },
         { status: 400 }
       );
     }
 
-    console.log('[DRAAD-207B] ✅ Roster validation passed');
-    console.log(`[DRAAD-207B]   - Status: ${roster.status}`);
-    console.log(`[DRAAD-207B]   - Date range: ${roster.start_date} tot ${roster.end_date}`);
-    console.log(`[DRAAD-207B]   - Duration: ${calculateDays(roster.start_date, roster.end_date)} dagen`);
-    console.log('[DRAAD-207B] === END VALIDATION ===');
+    console.log('[DRAAD-214] ✅ Roster validation passed');
+    console.log('[DRAAD-214] === END VALIDATION ===');
 
-    // ========================================================================
-    // PHASE 2: BUILD MINIMAL GREEDY REQUEST (WITH DATES - DRAAD-207B FIX)
-    // ========================================================================
-
-    console.log('[DRAAD-207B] === PHASE 2: BUILD GREEDY REQUEST ===');
-
+    // PHASE 2: Build request
+    console.log('[DRAAD-214] === PHASE 2: BUILD REQUEST ===');
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !supabaseServiceKey) {
-      console.error('[DRAAD-207B] Missing Supabase credentials in environment');
-      console.error('[DRAAD-207B] Required:', {
-        SUPABASE_URL: !!supabaseUrl,
-        SUPABASE_SERVICE_ROLE_KEY: !!supabaseServiceKey
-      });
+      console.error('[DRAAD-214] Missing Supabase credentials');
       return NextResponse.json(
-        {
-          error: 'Server configuration error: missing Supabase credentials'
-        },
+        { error: 'Server misconfiguration: missing Supabase credentials' },
         { status: 500 }
       );
     }
 
-    // DRAAD-207B: Added start_date and end_date to greedy_payload
     const greedyRequest: GreedyRequest = {
       roster_id: roster_id.toString(),
-      start_date: roster.start_date,  // ← ADDED DRAAD-207B
-      end_date: roster.end_date,      // ← ADDED DRAAD-207B
+      start_date: roster.start_date,
+      end_date: roster.end_date,
       supabase_url: supabaseUrl,
       supabase_key: supabaseServiceKey
     };
 
-    console.log('[DRAAD-207B] ✅ Greedy request built (minimal payload with dates)');
-    console.log(`[DRAAD-207B]   - roster_id: ${greedyRequest.roster_id}`);
-    console.log(`[DRAAD-207B]   - start_date: ${greedyRequest.start_date}`);
-    console.log(`[DRAAD-207B]   - end_date: ${greedyRequest.end_date}`);
-    console.log(
-      `[DRAAD-207B]   - supabase_url: ${greedyRequest.supabase_url.substring(0, 40)}...`
-    );
-    console.log(
-      `[DRAAD-207B]   - supabase_key: ${greedyRequest.supabase_key.substring(0, 15)}...`
-    );
-    console.log('[DRAAD-207B] === END BUILD REQUEST ===');
+    console.log('[DRAAD-214] ✅ Request built');
+    console.log('[DRAAD-214] === END BUILD REQUEST ===');
 
-    // ========================================================================
-    // PHASE 3: SEND TO GREEDY (ASYNC - FIRE AND FORGET)
-    // ========================================================================
-
-    console.log('[DRAAD-207B] === PHASE 3: SEND TO GREEDY (ASYNC) ===');
-
-    const greedyResult = await sendToGreedyAsync(greedyRequest);
+    // PHASE 3: SEND TO GREEDY AND WAIT FOR RESPONSE
+    console.log('[DRAAD-214] === PHASE 3: SEND TO GREEDY (SYNCHRONOUS) ===');
+    const greedyResult = await sendToGreedySync(greedyRequest);
 
     if (!greedyResult.success) {
-      console.warn('[DRAAD-207B] ⚠️  Greedy request failed');
-      console.warn('[DRAAD-207B] Error detail:', greedyResult.error);
-      console.log('[DRAAD-207B] === END SEND TO GREEDY (FAILED) ===');
+      console.error('[DRAAD-214] ❌ GREEDY failed');
+      console.error('[DRAAD-214] Error:', greedyResult.error);
+      console.log('[DRAAD-214] === PHASE 3 FAILED ===');
 
       return NextResponse.json(
         {
-          error: 'Roostering kon niet worden gestart',
-          userMessage: greedyResult.error?.userMessage || 'Onbekende fout opgetreden',
-          technicalDetails: greedyResult.error?.technicalDetails
+          success: false,
+          error: greedyResult.error?.userMessage || 'GREEDY solver failed',
+          details: greedyResult.error
         },
         { status: 500 }
       );
     }
 
-    console.log('[DRAAD-207B] ✅ Greedy request sent successfully (async processing started)');
-    console.log('[DRAAD-207B] === END SEND TO GREEDY ===');
+    console.log('[DRAAD-214] ✅ GREEDY completed successfully');
+    console.log('[DRAAD-214] === END PHASE 3 ===');
 
-    // ========================================================================
-    // PHASE 4: UPDATE ROSTER STATUS & RETURN IMMEDIATELY
-    // ========================================================================
+    // PHASE 4: Update roster status and return response
+    console.log('[DRAAD-214] === PHASE 4: UPDATE ROSTER ===');
 
-    console.log('[DRAAD-207B] === PHASE 4: UPDATE ROSTER & RETURN ===');
-
-    // DRAAD-206 FIX: Wrap Supabase PromiseLike with Promise.resolve()
-    // This ensures the result is a full Promise<T> type that supports .catch()
-    // Previously: `.then().catch()` failed with TypeScript error
-    // "Property 'catch' does not exist on type 'PromiseLike<void>'"
-    const updatePromise = supabase
+    // Update roster status to 'in_progress' or completed
+    await supabase
       .from('roosters')
       .update({
-        status: 'in_progress',
+        status: 'in_progress', // Could be 'completed' but keep it in_progress for now
         updated_at: new Date().toISOString()
       })
       .eq('id', roster_id);
 
-    Promise.resolve(updatePromise)
-      .then(() => {
-        console.log('[DRAAD-207B] ✅ Roster status updated: draft → in_progress');
-      })
-      .catch((err: any) => {
-        console.error('[DRAAD-207B] ⚠️  Failed to update roster status:', err?.message);
-      });
+    console.log('[DRAAD-214] ✅ Roster status updated');
 
     const totalTime = Date.now() - startTime;
+    console.log(`[DRAAD-214] === COMPLETE (${totalTime}ms) ===`);
 
-    console.log('[DRAAD-207B] === END ROSTER UPDATE ===');
-    console.log('[DRAAD-207B] ========== RESPONSE SENT ==========');
-    console.log(`[DRAAD-207B] Total backend time: ${totalTime}ms`);
-
-    // ========================================================================
-    // RETURN IMMEDIATELY (Don't wait for Greedy)
-    // ========================================================================
-
-    return NextResponse.json(
-      {
-        success: true,
-        roster_id,
-        message: 'Greedy is aan het werk... Updates volgen live via Supabase realtime',
-        status: {
-          current: 'running',
-          roster_status: 'in_progress',
-          backend_phase: 'complete',
-          greedy_phase: 'autonomous-execution'
-        },
-        frontend_instructions: {
-          action: 'Subscribe to roster_assignments changes',
-          table: 'roster_assignments',
-          filter: { roster_id },
-          events: ['UPDATE', 'INSERT'],
-          description:
-            'Watch live as Greedy assigns shifts. Updates will appear in real-time.'
-        },
-        architecture: {
-          model: 'self-service',
-          backend_responsibility: 'routing only',
-          greedy_responsibility: 'autonomous (fetch data, run algorithm, write DB)',
-          frontend_responsibility: 'realtime monitoring via Supabase subscription'
-        },
-        implementation: {
-          draad: 'DRAAD-207B',
-          base_draad: 'DRAAD-204',
-          fase: '3',
-          status: 'IMPLEMENTED',
-          version: '1.1',
-          endpoint: GREEDY_ENDPOINT,
-          timeout_ms: GREEDY_TIMEOUT,
-          async: true,
-          backend_payload: 'minimal (roster_id + start_date + end_date + credentials)',
-          fix_details: 'Added start_date and end_date to GreedyRequest to fix HTTP 422 validation error',
-          removed_features: [
-            'Data fetching (employees, services, constraints)',
-            'UPDATE loop (Greedy writes directly)',
-            'Massive GreedyPayload structure'
-          ],
-          new_features: [
-            'Minimal GreedyRequest interface',
-            'Date range in payload (DRAAD-207B)',
-            'Async fire-and-forget pattern',
-            'Realtime Supabase subscription',
-            'Autonomous Greedy service'
-          ]
-        },
-        metrics: {
-          cache_bust_id: cacheBustId,
-          backend_duration_ms: totalTime,
-          roster_date_range: `${roster.start_date} to ${roster.end_date}`,
-          roster_duration_days: calculateDays(roster.start_date, roster.end_date)
-        }
+    // PHASE 5: RETURN RESPONSE WITH SOLVER_RESULT ✅
+    return NextResponse.json({
+      success: true,
+      roster_id,
+      message: 'Roster successfully generated by GREEDY solver',
+      solver_result: greedyResult.solver_result, // ✅ NOW INCLUDED!
+      status: 'completed',
+      metrics: {
+        backend_duration_ms: totalTime,
+        roster_date_range: `${roster.start_date} to ${roster.end_date}`,
+        greedy_duration_ms: greedyResult.solver_result?.elapsed_ms || 0
       },
-      { status: 200 }
-    );
+      draad: 'DRAAD-214',
+      cache_id: cacheId
+    });
   } catch (error: any) {
-    console.error('[DRAAD-207B] ❌ Unexpected error in POST handler:', error);
-    console.error('[DRAAD-207B] Stack:', error?.stack);
+    console.error('[DRAAD-214] ❌ Unexpected error:', error.message);
+    console.error('[DRAAD-214] Stack:', error.stack);
 
     return NextResponse.json(
       {
+        success: false,
         error: 'Internal server error',
         message: error.message,
-        draad: 'DRAAD-207B'
+        draad: 'DRAAD-214'
       },
       { status: 500 }
     );
@@ -803,13 +422,10 @@ export async function POST(request: NextRequest) {
 // UTILITY FUNCTIONS
 // ============================================================================
 
-/**
- * Calculate number of days between two dates (inclusive)
- */
 function calculateDays(startDate: string, endDate: string): number {
   const start = new Date(startDate);
   const end = new Date(endDate);
   const diffTime = Math.abs(end.getTime() - start.getTime());
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 for inclusive
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
   return diffDays;
 }
