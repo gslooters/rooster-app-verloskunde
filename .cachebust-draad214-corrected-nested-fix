@@ -1,0 +1,12 @@
+DRAAD-214-CORRECTED: Nested solver_result extraction fix
+Timestamp: 2025-12-19T21:26:38Z
+Fix ID: cb-1766187998547
+
+Problem: Response parsing checked root level for status, real data was in solver_result
+Solution: Extract solver_result first, validate at correct nesting level
+Result: HTTP 200 responses now parsed correctly
+
+Files updated:
+- app/api/roster/solve/route.ts (nested extraction logic)
+
+Deploy trigger: YES - Cache bust needed
