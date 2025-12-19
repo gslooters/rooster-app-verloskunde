@@ -1,0 +1,26 @@
+RAILWAY DEPLOYMENT TRIGGER
+
+DRAD-214-CORRECTED: Nested GREEDY Response Extraction Fix
+Deploy Timestamp: 2025-12-19T21:26:47Z
+Trigger ID: rt-1766187998600-4521
+Priority: 🔴 CRITICAL
+
+🎯 What's Fixed:
+- Root cause: Code checked greedyData.status (undefined), real data at greedyData.solver_result.status
+- Solution: Extract solver_result first, validate at correct nesting level
+- Result: HTTP 200 responses now parsed correctly instead of cascading to error handler
+
+📋 Deployment Actions:
+1. Build frontend with new route.ts
+2. Update Next.js API endpoint
+3. Clear CDN cache
+4. Smoke test /api/roster/solve endpoint
+
+✅ Verification:
+- GREEDY HTTP 200 → solver_result extracted correctly
+- Response includes full solver_result object
+- No more fake "GREEDY service error" for successful requests
+- Frontend receives data and renders rooster
+
+Do NOT deploy older versions of this file.
+This fix is production-ready.
