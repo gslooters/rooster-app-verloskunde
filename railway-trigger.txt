@@ -1,23 +1,19 @@
-RAILWAY DEPLOY TRIGGER #99888
-Timestamp: 2025-12-08T22:20:00Z
-Commit: 628807acd1adb03e99f4bcfc3107ba97defc8717
-Fix: BATCH_DEDUP_FIX - Per-batch deduplication before UPSERT
-Random: 99888
-
-ROOT CAUSE:
-- PostgreSQL cannot handle duplicate keys WITHIN a single INSERT statement
-- Previous global dedup (before batching) missed batch-level duplicates
-- Result: 22/23 batches failed with "cannot affect row a second time" error
-
-SOLUTION:
-- Per-batch deduplication BEFORE Supabase .upsert() call
-- Helper: deduplicateBatch(batch, batchNumber) - O(n) dedup using Map
-- Strategy: Keep LAST occurrence per composite key (solver final decision)
-
-EXPECTED RESULT:
-- All batches now succeed (100% vs previous 4.3%)
-- Eliminates ALL "cannot affect row a second time" errors
-
-FILES CHANGED:
-1. app/api/cache-bust/BATCH_DEDUP_FIX.ts (NEW)
-2. app/api/roster/solve/route.ts (UPDATED with deduplicateBatch())
+# Railway Deployment Trigger - DRAAD-214
+# Timestamp: 2025-12-19T20:04:45Z
+# Deployed commits:
+#   1. DRAAD-214: Fix async/sync mismatch (route.ts) - 1256a216
+#   2. Cache bust marker (.cachebust-draad214) - 678c7ce0
+#
+# Fix Details:
+#   - Backend now WAITS for GREEDY completion
+#   - Returns solver_result in response
+#   - Frontend gets data (no more 'undefined')
+#   - Timeout protection: 45 seconds
+#
+# Services to deploy:
+#   1. rooster-app (main app) - PRIORITY
+#   2. Greedy - check if running
+#   3. Solver2 - optional
+#
+# This file triggers Railway CI/CD pipeline
+DRAAD-214-RAILWAY-TRIGGER-2025-12-19-20-04-45-${Math.random()}
