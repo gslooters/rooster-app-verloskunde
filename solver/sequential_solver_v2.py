@@ -15,6 +15,8 @@ Doel: Implement a deterministic sequential solver that:
 FASE 2: Sequential Priority Queue Solver met iteratieve UPDATE+RE-READ
 
 Based on DRAAD172 template but with REAL DATABASE, correct logic, proper error handling.
+
+DRAARD214-FIX: Added solver_result='sequential_v2' to all responses
 """
 
 import logging
@@ -162,6 +164,7 @@ class SolveResponse:
     total_assignments: int = 0
     violations: List[ConstraintViolation] = field(default_factory=list)
     solver_metadata: Dict = field(default_factory=dict)
+    solver_result: str = "sequential_v2"  # DRAAD214-FIX: Always set
     
     def to_dict(self) -> Dict:
         return {
@@ -171,7 +174,8 @@ class SolveResponse:
             "solve_time_seconds": self.solve_time_seconds,
             "total_assignments": self.total_assignments,
             "violations": [v.to_dict() for v in self.violations],
-            "solver_metadata": self.solver_metadata
+            "solver_metadata": self.solver_metadata,
+            "solver_result": self.solver_result
         }
 
 
@@ -523,7 +527,8 @@ class SequentialSolverV2:
                     constraint_type="sequential_error",
                     message=f"Sequential solver error: {str(e)[:200]}",
                     severity="critical"
-                )]
+                )],
+                solver_result="sequential_v2"  # DRAAD214-FIX: Even in error
             )
     
     def _process_requirement(self, requirement: Requirement):
@@ -749,7 +754,8 @@ class SequentialSolverV2:
                 "update_count": self.update_count,
                 "reread_count": self.reread_count,
                 "eva4_mode": "active"
-            }
+            },
+            solver_result="sequential_v2"  # DRAAD214-FIX: Always set
         )
 
 
@@ -787,3 +793,4 @@ if __name__ == "__main__":
     print(f"RE-READs: {response.solver_metadata.get('reread_count', 0)}")
     print(f"Failures: {len(response.violations)}")
     print(f"Time: {response.solve_time_seconds}s")
+    print(f"Solver Result: {response.solver_result}")
