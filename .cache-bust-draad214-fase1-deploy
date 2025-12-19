@@ -1,0 +1,13 @@
+Deployment Trigger for DRAAD-214 FASE1
+
+Date: 2025-12-19 17:40 CET
+Branch: main (merged from DRAAD-214-fase1-baseline)
+PR: #97 (squash merged)
+Status: Ready for deployment
+
+Phase: FASE 1 - Foundation Baseline
+Deliverables: 11 files (models, loader, tests, docs)
+Services: greedy-service ready
+Database: Supabase verified
+
+Next: FASE 2 Core Algorithm
