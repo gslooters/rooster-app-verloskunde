@@ -1,0 +1,7 @@
+# GREEDY Service Dependencies
+# Python 3.9+
+
+supabase>=2.1.0
+python-dotenv>=0.21.0
+requests>=2.28.0
+pydantic>=2.0.0
