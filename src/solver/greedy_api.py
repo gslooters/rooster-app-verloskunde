@@ -31,13 +31,14 @@ DRAA 211 FIX #1:
 ✅ Wrap SolveResponse in solver_result field
 ✅ Frontend now receives correct structure: {solver_result: {...}}
 
-DRAA 214 FIX (CRITICAL):
+DRAA 214 FIX (CRITICAL) - STAP 2:
 ✅ HTTPException in error path now returns wrapped response
 ✅ Frontend always gets {solver_result: {...}} structure
 ✅ No more "undefined solver_result" errors
 ✅ Clear error messages in response.message field
+✅ Added response wrapping logging for debugging
 
-Author: DRAAD 194 FASE 2 + OPDRACHT 195 + DRAAD 208H Fixes + DRAAD 210 STAP 2 P1 + DRAAD 211 FIX #1 + DRAAD 214 FIX
+Author: DRAAD 194 FASE 2 + OPDRACHT 195 + DRAAD 208H Fixes + DRAAD 210 STAP 2 P1 + DRAAD 211 FIX #1 + DRAAD 214 FIX STAP 2
 Date: 2025-12-19
 """
 
@@ -271,6 +272,11 @@ async def solve_greedy(request: SolveRequest) -> SolverResultWrapper:
                 f"in {response.solve_time}s"
             )
         
+        # ✅ DRAAD 214 FIX STAP 2: Add logging for response wrapping
+        logger.info("[GREEDY-API-RESPONSE] Wrapping result in solver_result")
+        logger.info(f"[GREEDY-API-RESPONSE] Status: {response.status}")
+        logger.info(f"[GREEDY-API-RESPONSE] Coverage: {response.coverage}%")
+        
         # ✅ DRAAD 214 FIX: Always wrap and return with 200 status
         # Status field in response indicates success/partial/failed
         # Frontend can check response.solver_result.status for error handling
@@ -303,6 +309,9 @@ async def solve_greedy(request: SolveRequest) -> SolverResultWrapper:
             timestamp=datetime.utcnow().isoformat() + 'Z'
         )
         # ✅ DRAAD 214 FIX: Return wrapped response even for exceptions
+        logger.info("[GREEDY-API-RESPONSE] Wrapping error response in solver_result")
+        logger.info(f"[GREEDY-API-RESPONSE] Status: {error_response.status}")
+        logger.info(f"[GREEDY-API-RESPONSE] Message: {error_response.message}")
         return SolverResultWrapper(solver_result=error_response)
 
 
