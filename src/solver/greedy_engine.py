@@ -1,52 +1,38 @@
-"""Greedy Rostering Engine v2.0 - DRAAD 211 COMPLETE REWRITE
+"""Greedy Rostering Engine v2.0 - DRAAD 214 CRITICAL FIX
 
-Status: DRAAD 211 - GREEDY v2.0 Full Implementation
-Date: 2025-12-18
+Status: DRAAD 214 - TOTAL_REQUIRED Calculation Fix
+Date: 2025-12-19
+Author: Root Cause Analysis & Critical Bug Fix
 
-CRITICAL BUGS FIXED:
+CRITICAL BUG FIXED:
 ===================
-❌ BUG 1 (STAP 1): Blocked Slots as (date, dagdeel) blocking ENTIRE slot
-✅ FIXED: Blocked Slots now (date, dagdeel, employee_id) blocking ONLY this employee
+❌ BUG DRAAD 214: total_required berekening FOUT
+   - Probleem: Pre-planned assignments worden MEEGETELD in total_required
+   - Gevolg: Coverage wordt absurd hoog (1792%) en frontend crasht
+   - Oorzaak: self.assignments bevat ALLE records (pre-planned + greedy)
+   - Fix: Gebruik ALLEEN greedy_count voor coverage berekening
 
-❌ BUG 2 (STAP 2): Quota filtering global (total shifts) vs per-service
-✅ FIXED: Quota now Dict[(employee_id, service_id)] → per-service tracking
+✅ FIXED in v2.1:
+   - total_required = sum(self.requirements.values()) ✅ CORRECT
+   - greedy_assignments = assignments gemaakt DOOR greedy (niet pre-planned)
+   - coverage = (greedy_assignments / total_required * 100) ✅ CORRECT
+   - result.total_required = total_required ✅ CORRECT
+   - result.assignments_created = greedy_count (NIET len(self.assignments)) ✅ CORRECT
 
-❌ BUG 3 (STAP 6): Fairness sort on total remaining vs per-service remaining
-✅ FIXED: Sort now by remaining_for_THIS_SERVICE (not total)
+DATABASE BASELINE VERIFY:
+========================
+Table roster_period_staffing_dagdelen:
+  - id, dagdeel, team, status, aantal, created_at, updated_at
+  - roster_id, service_id, date, invulling
+  Total records: ~945 per rooster
+  Data: aantal = hoeveel diensten nodig (1-3 meestal)
 
-❌ BUG 4 (IMPORT ERROR): Missing dataclasses for __init__.py exports
-✅ FIXED: Added Bottleneck, EmployeeCapability, RosteringRequirement dataclasses
+Table roster_assignments:
+  - id, roster_id, employee_id, date, dagdeel, status, service_id
+  - source: 'fixed' (pre-planned) of 'greedy' (automatic)
+  - Pre-planned counts as baseline, NOT in greedy coverage
 
-❌ BUG 5 (FIELD MISMATCH): Bottleneck field 'required' vs 'need'
-✅ FIXED: Changed all 'required' → 'need', added 'reason' and 'suggestion'
-
-CORE FEATURES:
-==============
-1. Team-based availability (team fallback logic)
-2. Per-service quota constraints (NICHT global)
-3. Fair load balancing (medewerker met MEESTE remaining for THIS service krijgt prioriteit)
-4. Service pairing validation (DIO/DDO kant-en-klaar pairing)
-5. Status blocking (privé/verlof/geblokkeerd slot respect)
-6. Database RE-READ after each dagdeel (sync with triggers)
-
-Algorithm Flow:
-- Iterate: Date → Dagdeel (O, M, A) → Service
-- For each service/slot: Find eligible → Sort by fairness → Assign
-- After each dagdeel: RE-READ database (sync status=2 updates from triggers)
-- Respect: Per-service quota, team fallback, pairing requirements, blocking
-
-DATABASE RE-READ (KRITIEK!):
-============================
-After each dagdeel completes:
-1. Re-fetch roster_assignments from database
-2. Rebuild blocked_slots from status > 0 records
-3. Rebuild quota_remaining (subtract actual assignments)
-4. Continue with next dagdeel
-
-REASON: Database triggers set status=2 after DIO/DDO pairing.
-WITHOUT re-read: Next dagdeel sees stale status=1, might overwrite valid pairings!
-
-Author: DRAAD 211 - GREEDY v2.0 Full Implementation
+All bugs from DRAAD 211 REMAIN FIXED (BUG 1-5).
 """
 
 import logging
@@ -160,7 +146,7 @@ class RosteringRequirement:
 
 class GreedyRosteringEngine:
     """
-    GREEDY v2.0 - Fair Distribution Greedy Algorithm (DRAAD 211)
+    GREEDY v2.1 - Fair Distribution Greedy Algorithm (DRAAD 214-FIX)
     
     KERNBEGRIP:
     ===========
@@ -171,51 +157,39 @@ class GreedyRosteringEngine:
     4. Service pairing validation (DIO/DDO kant-en-klaar pairing)
     5. Status blocking (privé/verlof/geblokkeerd slot respect)
     
-    TRE KRITIEKE BUGS GEREPAREERD (DRAAD 211):
-    ==========================================
+    VIJF KRITIEKE BUGS GEREPAREERD (DRAAD 211-214):
+    ===============================================
     BUG 1 - GEBLOKKEERDE SLOTS:
-    ❌ VORIG: blocked_slots = Set[(date, dagdeel)]
-       → HEEL dagdeel geskipped als EEN medewerker status > 0 had!
-       → 217 status=3 records → 217 dagdelen TOTAAL GEBLOKKEERD!
-    
-    ✅ NIEUW: blocked_slots = Set[(date, dagdeel, employee_id)]
-       → ALLEEN DEZE MEDEWERKER skipped voor dit slot
-       → Andere medewerkers kunnen VRIJ ingevuld worden!
-    
-    PRAKTIJK VOORBEELD:
-    Karin op 2025-11-26 dagdeel O: status = 3 (privé)
-      ✅ Karin is NIET beschikbaar op 26/11 O
-      ✅ Maar WEL op 26/11 M, 26/11 A, 27/11 O, etc.
-      ✅ Paula KANN wel op 26/11 O ingevuld worden!
+    ✅ blocked_slots = Set[(date, dagdeel, employee_id)] (DRAAD 211)
     
     BUG 2 - QUOTA FILTERING:
-    ❌ VORIG: if quota_remaining[emp] <= 0: skip
-       → TOTAAL shifts gecheckt (niet per-service!)
-       → Karin met OSP full maar ECH beschikbaar → SKIP voor alle services!
-    
-    ✅ NIEUW: if quota_remaining[(emp, service)] <= 0: skip
-       → Per-SERVICE quota gecheckt
-       → Karin met OSP full → SKIP voor OSP
-       → Maar kan nog ECH ingevuld worden!
+    ✅ quota_remaining = Dict[(employee_id, service_id)] (DRAAD 211)
     
     BUG 3 - FAIRNESS SORTING:
-    ❌ VORIG: Sort op TOTAAL remaining shifts over alle services
-       → Karin 10 totaal, Paula 8 → Karin ALTIJD winner
-       → Zelfs als Paula nog 5x OSP nodig en Karin maar 3x!
+    ✅ Sort by remaining_for_THIS_service (DESC) (DRAAD 211)
     
-    ✅ NIEUW: Sort op remaining shifts VOOR DEZE SPECIFIEKE SERVICE!
-       → Paula nog 5x OSP nodig → Paula wint voor OSP
-       → (Zelfs al Karin totaal meer shifts heeft!)
+    BUG 4-5 - DATACLASS FIELDS:
+    ✅ All dataclasses restored with correct fields (DRAAD 211)
+    
+    BUG 6 (DRAAD 214) - TOTAL_REQUIRED CALCULATION:
+    ❌ VORIG: coverage = (len(self.assignments) / total_required * 100)
+       → FOUT: self.assignments bevat ALLE records (pre-planned + greedy)
+       → Result: 1470/82 = 1792% (absurd)
+    
+    ✅ NIEUW: coverage = (greedy_count / total_required * 100)
+       → CORRECT: Telt ALLEEN greedy assignments
+       → Result: correct percentage
     
     IMPLEMENTATIE CHECKLIST:
     ========================
-    [ ] blocked_slots: Set[Tuple[date, dagdeel, employee_id]]
-    [ ] quota_remaining: Dict[(employee_id, service_id)] → remaining_count
-    [ ] Re-read: After each dagdeel completes
-    [ ] Fairness: Sort by remaining_for_THIS_service (DESC)
-    [ ] Pairing: Validate ALL checks before DIO/DDO
-    [ ] Alphabetical: Tie-breaker deterministic
-    [ ] Per-service: Quota check <= 0 skip
+    [ ] blocked_slots: Set[Tuple[date, dagdeel, employee_id]] ✅
+    [ ] quota_remaining: Dict[(employee_id, service_id)] ✅
+    [ ] Re-read: After each dagdeel completes ✅
+    [ ] Fairness: Sort by remaining_for_THIS_service (DESC) ✅
+    [ ] Pairing: Validate ALL checks before DIO/DDO ✅
+    [ ] Alphabetical: Tie-breaker deterministic ✅
+    [ ] Per-service: Quota check <= 0 skip ✅
+    [ ] Coverage: Use ONLY greedy_count, NOT total assignments ✅ NEW
     """
     
     # Service Pairing Rules
@@ -268,12 +242,14 @@ class GreedyRosteringEngine:
         self.assignments: List[RosterAssignment] = []
         self.pre_planned_count: int = 0
         self.greedy_count: int = 0
+        self.greedy_assignments_created: int = 0  # ✅ DRAAD 214: Track ONLY new greedy assignments
         
-        logger.info(f"\n✅ GreedyRosteringEngine v2.0 initialized (DRAAD 211)")
+        logger.info(f"\n✅ GreedyRosteringEngine v2.1 initialized (DRAAD 214-FIX)")
         logger.info(f"   🔧 BUG 1 FIX: blocked_slots as (date, dagdeel, employee_id)")
         logger.info(f"   🔧 BUG 2 FIX: quota_remaining as (employee_id, service_id)")
         logger.info(f"   🔧 BUG 3 FIX: fairness sort by per-service remaining")
         logger.info(f"   🔧 BUG 4-5 FIX: Restored dataclasses + fixed bottleneck fields")
+        logger.info(f"   🔧 BUG 6 FIX: coverage uses ONLY greedy_assignments_created")
         
         # Load data
         self._load_data()
@@ -436,13 +412,14 @@ class GreedyRosteringEngine:
         logger.info(f"   ✅ Blocked slots updated: {len(self.blocked_slots)}")
 
     def solve(self) -> SolveResult:
-        """Execute GREEDY v2.0 algorithm."""
+        """Execute GREEDY v2.1 algorithm (DRAAD 214-FIX)."""
         start_time = time.time()
-        logger.info("\n🚀 [DRAAD 211-FIXED] Starting GREEDY v2.0 solve...")
+        logger.info("\n🚀 [DRAAD 214-FIXED] Starting GREEDY v2.1 solve...")
         logger.info("   ✅ BUG 1 FIX: blocked_slots (date, dagdeel, employee_id)")
         logger.info("   ✅ BUG 2 FIX: quota_remaining (employee_id, service_id)")
         logger.info("   ✅ BUG 3 FIX: fairness sort by per-service remaining")
         logger.info("   ✅ BUG 4-5 FIX: All dataclasses present, bottleneck fields fixed")
+        logger.info("   ✅ BUG 6 FIX: coverage = greedy_assignments_created / total_required")
         
         try:
             bottlenecks = []
@@ -453,11 +430,11 @@ class GreedyRosteringEngine:
             ).execute()
             
             self.assignments = []
+            baseline_count = 0  # Count assignments that already existed
             for row in response.data:
                 if row.get('source') == 'fixed':
                     self.pre_planned_count += 1
-                else:
-                    self.greedy_count += 1
+                    baseline_count += 1
                 
                 self.assignments.append(RosterAssignment(
                     id=row['id'],
@@ -469,6 +446,8 @@ class GreedyRosteringEngine:
                     source=row.get('source', 'greedy'),
                     status=row.get('status', 1)
                 ))
+            
+            logger.info(f"📊 Baseline assignments: {baseline_count} (pre-planned)")
             
             # Iterate: Date → Dagdeel → Service
             start_date = datetime.strptime(self.start_date, '%Y-%m-%d')
@@ -590,29 +569,34 @@ class GreedyRosteringEngine:
             # Save assignments
             self._save_assignments()
             
-            # Calculate coverage
+            # ✅ DRAAD 214 FIX: Calculate coverage correctly
+            # total_required = total diensten die moeten worden ingepland
+            # greedy_assignments_created = diensten die DOOR GREEDY zijn ingepland (niet pre-planned)
             total_required = sum(self.requirements.values())
-            coverage = (len(self.assignments) / total_required * 100) if total_required > 0 else 0
+            
+            # Coverage is percentage van totale behoefte dat DOOR GREEDY is ingevuld
+            coverage = (self.greedy_assignments_created / total_required * 100) if total_required > 0 else 0
             
             elapsed = time.time() - start_time
             
             result = SolveResult(
                 status='success' if coverage >= 80 else 'partial',
-                assignments_created=len(self.assignments),
-                total_required=total_required,
-                coverage=round(coverage, 1),
+                assignments_created=self.greedy_assignments_created,  # ✅ ONLY greedy
+                total_required=total_required,  # ✅ CORRECT: sum of all requirements
+                coverage=round(coverage, 1),  # ✅ CORRECT: greedy/total
                 bottlenecks=bottlenecks,
                 solve_time=round(elapsed, 2),
-                message=f"DRAAD 211-FIXED: {coverage:.1f}% coverage in {elapsed:.2f}s",
+                message=f"DRAAD 214-FIXED: {coverage:.1f}% coverage in {elapsed:.2f}s",
                 pre_planned_count=self.pre_planned_count,
-                greedy_count=self.greedy_count
+                greedy_count=self.greedy_assignments_created
             )
             
             logger.info(f"\n✅ Solve complete: {coverage:.1f}% coverage in {elapsed:.2f}s")
-            logger.info(f"   📊 Assignments: {len(self.assignments)}/{total_required}")
+            logger.info(f"   📊 Total required: {total_required}")
+            logger.info(f"   📊 GREEDY created: {self.greedy_assignments_created}")
             logger.info(f"   📊 Pre-planned: {self.pre_planned_count}")
-            logger.info(f"   📊 Greedy: {self.greedy_count}")
             logger.info(f"   📊 Bottlenecks: {len(bottlenecks)}")
+            logger.info(f"   📊 Coverage: {coverage:.1f}%")
             
             return result
             
@@ -768,7 +752,7 @@ class GreedyRosteringEngine:
         return []
 
     def _assign_shift(self, date: str, dagdeel: str, emp_id: str, service_id: str) -> None:
-        """Assign a shift to an employee."""
+        """Assign a shift to an employee. ✅ DRAAD 214: Track ONLY new greedy assignments."""
         assignment = RosterAssignment(
             id=str(uuid.uuid4()),
             roster_id=self.roster_id,
@@ -781,6 +765,7 @@ class GreedyRosteringEngine:
         )
         self.assignments.append(assignment)
         self.greedy_count += 1
+        self.greedy_assignments_created += 1  # ✅ DRAAD 214: Count new assignments
         
         # Update quota
         quota_key = (emp_id, service_id)
@@ -791,26 +776,32 @@ class GreedyRosteringEngine:
         if not self.assignments:
             return
         
-        logger.info(f"\n💾 Saving {len(self.assignments)} assignments...")
+        logger.info(f"\n💾 Saving {self.greedy_assignments_created} assignments (GREEDY created)...")
         
         data = []
         for a in self.assignments:
-            data.append({
-                'id': a.id or str(uuid.uuid4()),
-                'roster_id': a.roster_id,
-                'employee_id': a.employee_id,
-                'date': a.date,
-                'dagdeel': a.dagdeel,
-                'service_id': a.service_id,
-                'status': a.status,
-                'source': a.source,
-                'created_at': datetime.utcnow().isoformat(),
-                'updated_at': datetime.utcnow().isoformat()
-            })
+            # Only save GREEDY assignments (source='greedy')
+            if a.source == 'greedy':
+                data.append({
+                    'id': a.id or str(uuid.uuid4()),
+                    'roster_id': a.roster_id,
+                    'employee_id': a.employee_id,
+                    'date': a.date,
+                    'dagdeel': a.dagdeel,
+                    'service_id': a.service_id,
+                    'status': a.status,
+                    'source': a.source,
+                    'created_at': datetime.utcnow().isoformat(),
+                    'updated_at': datetime.utcnow().isoformat()
+                })
+        
+        if not data:
+            logger.info("   ⚠️  No new GREEDY assignments to save")
+            return
         
         try:
             response = self.supabase.table('roster_assignments').upsert(data).execute()
-            logger.info(f"   ✅ Saved {len(data)} assignments")
+            logger.info(f"   ✅ Saved {len(data)} GREEDY assignments")
         except Exception as e:
             logger.error(f"   ❌ Error saving assignments: {e}")
             raise
