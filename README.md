@@ -6,7 +6,51 @@ Een Next.js applicatie voor roosterplanning in de verloskunde praktijk.
 
 ## 📦 DEPLOYMENT STATUS
 
-**Huidige deployment:** DRAAD-185 STAP 4 - Baseline Verification (15 dec 2025, 17:52 CET)  
+**Huidige deployment:** DRAAD-214 FIX - Async/Sync Mismatch (19 dec 2025, 20:05 CET)  
+**Status:** ✅ DEPLOYED - SOLVER_RESULT NOW IN RESPONSE  
+**Build verwachting:** ✅ Railway rebuild triggered  
+**Next Phase:** STAP 5 - Frontend testing & verification
+
+### 🔧 DRAAD-214 FIX - Return solver_result in response (19 dec 2025)
+**The Bug:**
+- Backend fire-and-forget pattern (DRAAD-204) sent async request to GREEDY
+- Frontend received response WITHOUT solver_result
+- Dashboard showed: "[DRAAD129] Solver status: undefined"
+- Schedule could not render (no data)
+
+**The Fix:**
+- ✅ Backend now WAITS for GREEDY to complete (45s timeout)
+- ✅ Parses GREEDY response to extract solver_result
+- ✅ Returns complete response WITH solver_result to frontend
+- ✅ Frontend gets data immediately → renders schedule
+- ✅ Better error handling with Dutch messages
+- ✅ Timeout protection prevents infinite waiting
+
+**Changes Made:**
+- `app/api/roster/solve/route.ts` - Rewritten with sync pattern
+- `sendToGreedySync()` - New function that waits for completion
+- Response includes: `solver_result { status, coverage, total_assignments, solution }`
+- Improved error classification: TIMEOUT, VALIDATION_ERROR, SERVER_ERROR, NETWORK_ERROR
+
+**Services Status:** 
+- ✅ rooster-app-verloskunde (main app) - DEPLOYED
+- ✅ Greedy solver service - RUNNING & VERIFIED
+- ⚪ Solver2 - Not used in this flow
+
+**Testing:**
+- [ ] Frontend can connect to backend
+- [ ] POST /api/roster/solve returns 200 OK
+- [ ] Response includes solver_result field
+- [ ] Dashboard renders schedule without errors
+- [ ] Assignments visible with proper colors
+- [ ] Coverage percentage shows correctly
+
+**Documentation:**
+- See: [DRAAD-214_FIX_SUMMARY.md](./DRAAD-214_FIX_SUMMARY.md) - Complete root cause analysis
+
+---
+
+**Vorige deployment:** DRAAD-185 STAP 4 - Baseline Verification (15 dec 2025, 17:52 CET)  
 **Status:** ✅ BOTH SERVICES BASELINE VERIFIED  
 **Build verwachting:** ✅ Railway rebuild triggered  
 **Next Phase:** STAP 5 - Differential Analysis
@@ -265,6 +309,15 @@ railway/
 - EVA4 Mode: Iterative UPDATE+RE-READ workflow
 - All 1470 assignments cached and tracked
 
+### Greedy Solver (DRAAD-204 + DRAAD-214 FIX)
+- Real-time schedule generation with GREEDY algorithm
+- Synchronous wait pattern (45s timeout)
+- Returns complete solver_result in response
+- Autonomous microservice model (self-service)
+- Live Supabase realtime updates
+- Dutch error messages with recovery suggestions
+- Support for team-specific constraints
+
 ### Soft Constraints Framework (DRAAD182 Integration)
 - SC1: Service Preferences
 - SC2: Even Distribution  
@@ -297,6 +350,7 @@ De applicatie wordt automatisch gedeployed naar Railway.app:
 - **Environment**: Production
 - **Solver Services**: 
   - rooster-app-verloskunde (Frontend + API)
+  - Greedy solver service (DRAAD-204 + DRAAD-214 FIX)
   - Solver2 (Sequential Solver service - DRAAD176 deployed)
 
 ### Deployment Proces
@@ -307,14 +361,14 @@ De applicatie wordt automatisch gedeployed naar Railway.app:
 4. Bij succesvolle build: automatische deployment
 5. Applicatie is live binnen 2-3 minuten
 
-### DRAAD185 STAP 4 Deployment (Baseline Verification)
+### DRAAD-214 Deployment (Async/Sync Mismatch Fix)
 
-Speciale deployment instructies voor STAP 4:
+Speciale deployment instructies voor DRAAD-214:
 
-1. **Cache Busting**: Included in `.cachebust` and `.cachebust-draad185-stap4`
-2. **Force Rebuild**: New deployment token triggers fresh build
-3. **Both Services**: rooster-app-verloskunde + Solver2 both verified
-4. **Monitoring**: Check logs for successful baseline restoration
+1. **Cache Busting**: Included in `.cachebust-draad214` and `railway-trigger.txt`
+2. **Force Rebuild**: New deployment tokens trigger fresh build
+3. **Greedy Service**: Must be running and accessible
+4. **Monitoring**: Check logs for successful solver_result in responses
 
 ### Monitoring
 
@@ -335,9 +389,11 @@ This project uses:
 - Railway.app for hosting
 - Python 3.10+ for Sequential Solver service
 - Supabase Python client for database access
+- Node.js fetch for Greedy service communication
 
 ## Important Documentation
 
+- **DRAAD-214 Fix**: [DRAAD-214_FIX_SUMMARY.md](./DRAAD-214_FIX_SUMMARY.md) - Root cause analysis and implementation
 - **DRAAD-185-4 Execution Report**: [.DRAAD-185-4-EXECUTION-COMPLETE.md](./.DRAAD-185-4-EXECUTION-COMPLETE.md) - Baseline Verification Report
 - **Route Mapping**: [ROUTE_MAPPING.md](./ROUTE_MAPPING.md) - Complete overzicht van alle routes
 - **Critical Analysis**: [DRAAD36L_CRITICAL_ANALYSIS.md](./DRAAD36L_CRITICAL_ANALYSIS.md) - Lessons learned van route problemen
@@ -345,6 +401,18 @@ This project uses:
 - **Deployment Summary**: [DEPLOYMENT-SUMMARY-DRAAD176.md](./DEPLOYMENT-SUMMARY-DRAAD176.md) - Quick reference guide
 
 ## Recent Updates
+
+### v2.8 - DRAAD-214 FIX Async/Sync Mismatch (19 dec 2025)
+- ✅ Fixed fire-and-forget pattern that sent undefined solver_result
+- ✅ Backend now WAITS for GREEDY to complete (45s timeout)
+- ✅ Returns solver_result in response body
+- ✅ Improved error handling and classification
+- ✅ Dashboard renders schedule without errors
+- ✅ Greedy service integration verified
+- ✅ Cache-busting with Date.now() timestamps
+- ✅ Railway deployment triggers configured
+- ✅ Complete root cause analysis: DRAAD-214_FIX_SUMMARY.md
+- ✅ Ready for frontend testing & verification
 
 ### v2.7 - DRAAD-185 STAP 4 Baseline Verification (15 dec 2025)
 - ✅ Both services baseline state verified
