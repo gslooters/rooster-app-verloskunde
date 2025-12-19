@@ -1,0 +1,33 @@
+DRAAD 217 - ROOSTER-APP (FRONTEND) SERVICE DEPLOYMENT
+=====================================================
+
+Trigger: Complete rebuild of frontend service
+Reason: Cache-bust after emergency restoration
+Timestamp: 2025-12-20T00:02:00Z
+
+Frontend Updates:
+  ✅ Fresh build cache cleared
+  ✅ New asset bundle generated
+  ✅ GREEDY API integration verified
+  ✅ Health check endpoints configured
+
+Services Affected:
+  - rooster-app (PRIMARY - frontend)
+  - Connects to greedy service
+  - Connects to solver2 service
+
+Expected Result:
+  - Frontend loads without cache issues
+  - API calls to /api/greedy/solve work correctly
+  - WebSocket connections stable
+  - UI responsive and up-to-date
+
+Verification:
+  1. curl https://rooster-app-production.up.railway.app/
+     Expected: HTML response with latest app
+  
+  2. Open browser dev console, check Network tab
+     Expected: All resources load successfully
+  
+  3. Try generating a roster
+     Expected: Calls reach GREEDY service successfully
