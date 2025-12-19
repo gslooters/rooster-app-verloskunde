@@ -160,14 +160,15 @@ class AssignmentReport:
         overview = {}
 
         try:
-            # Get all employee targets
+            # DRAAD 214 FIX: Get target shifts from employee record (employees.aantalwerkdagen)
+            # NOT from period_employee_staffing (which is incomplete!)
             sql = """
-                SELECT employee_id, target_shifts
-                FROM period_employee_staffing
-                WHERE roster_id = ?
+                SELECT id, aantalwerkdagen as target_shifts
+                FROM employees
+                WHERE actief = true
             """
-            targets = self.db.query(sql, [self.roster_id])
-            target_map = {row['employee_id']: row['target_shifts'] for row in targets}
+            targets = self.db.query(sql)
+            target_map = {row['id']: row['target_shifts'] for row in targets}
 
             # Count assignments
             for assign in self.solve_result.assignments_created:
