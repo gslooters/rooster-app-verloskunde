@@ -1,0 +1,7 @@
+# DRAAD-214: Fix async/sync mismatch
+# Timestamp: 2025-12-19T20:04:40Z
+# Commit: 1256a216fea8f5b084566d2012e39c364d44140d
+# Status: DEPLOYED
+# Change: Added solver_result to response + wait for GREEDY completion
+# Result: Frontend no longer shows 'undefined solver_result' error ✅
+DRAAD-214-DEPLOYED-2025-12-19-20-04-40-${Math.random()}
