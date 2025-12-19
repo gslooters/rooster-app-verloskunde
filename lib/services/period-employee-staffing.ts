@@ -1,16 +1,27 @@
 /**
  * SERVICE LAYER: Period Employee Staffing
- * DRAAD27 - Diensten per Medewerker per Periode
  * 
- * Database tabel: period_employee_staffing
- * Opslag: Target shifts (Dst) per medewerker per rooster
+ * ⚠️ **DEPRECATED - DO NOT USE**
  * 
- * Functionaliteit:
- * - initializePeriodEmployeeStaffing: Auto-fill bij rooster aanmaken
- * - getPeriodEmployeeStaffingByRosterId: Ophalen alle Dst waarden
- * - updateTargetShifts: Update één medewerker (debounced auto-save)
+ * DRAAD 214: Deze service is DEPRECATED en wordt verwijderd in volgende fase.
+ * 
+ * Reden:
+ * - Onderliggende tabel (period_employee_staffing) bevat slechts 14 INCOMPLETE rijen
+ * - Wordt NIET gebruikt in huidige code
+ * - Er is geen frontend component dat deze service aanroept
+ * 
+ * Alternatief:
+ * - Gebruik employees.aantalwerkdagen (COMPLEET: 106 rijen)
+ * - Laad dit rechtstreeks uit employees tabel bij rooster initialization
+ * 
+ * Verwijdering plannen:
+ * - DRAAD 214 FASE 2: Verwijder deze file geheel
+ * - DRAAD 214 FASE 3: Verwijder period_employee_staffing database tabel
+ * 
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  */
 
+/*
 import { supabase } from '@/lib/supabase';
 import { getActiveEmployees } from './employees-storage';
 
@@ -23,7 +34,7 @@ import { getActiveEmployees } from './employees-storage';
  * @param rosterId - UUID van nieuw aangemaakt rooster
  * @param employeeIds - Array van employee IDs (TEXT, niet UUID!)
  * @throws Error bij database fout
- */
+ * /
 export async function initializePeriodEmployeeStaffing(
   rosterId: string,
   employeeIds: string[]
@@ -114,7 +125,7 @@ export async function initializePeriodEmployeeStaffing(
  * 
  * @param rosterId - UUID van rooster
  * @returns Map<employeeId, targetShifts>
- */
+ * /
 export async function getPeriodEmployeeStaffingByRosterId(
   rosterId: string
 ): Promise<Map<string, number>> {
@@ -162,7 +173,7 @@ export async function getPeriodEmployeeStaffingByRosterId(
  * @param employeeId - TEXT ID van medewerker
  * @param targetShifts - Nieuw aantal shifts (0-35)
  * @throws Error bij validatie fout of database fout
- */
+ * /
 export async function updateTargetShifts(
   rosterId: string,
   employeeId: string,
@@ -207,3 +218,7 @@ export async function updateTargetShifts(
     throw error;
   }
 }
+*/
+
+// PLACEHOLDER: Functions are deprecated and commented out
+// Do not use this service - refer to employees table instead
