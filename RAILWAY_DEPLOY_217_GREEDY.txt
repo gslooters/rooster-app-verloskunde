@@ -1,0 +1,26 @@
+DRAAD 217 - GREEDY SERVICE DEPLOYMENT
+======================================
+
+Trigger: Complete rebuild of GREEDY service
+Reason: Restoration of corrupted greedy_engine.py
+Timestamp: 2025-12-20T00:01:00Z
+
+Changes:
+  ✅ greedy_engine.py restored with full implementation
+  ✅ SolveResult and all data classes included
+  ✅ GreedyRosteringEngine fully functional
+  ✅ Cache-bust DRAAD_217_CACHE_BUSTER.py created
+  ✅ __init__.py updated with new imports
+
+Services Affected:
+  - greedy (PRIMARY)
+
+Expected Result:
+  - GREEDY service starts successfully
+  - API endpoints /api/greedy/* respond to requests
+  - No SyntaxError on module import
+  - Solver returns proper JSON responses
+
+Verification:
+  curl https://greedy-production.up.railway.app/api/greedy/health
+  Expected: {"status": "ok", "solver": "greedy", "timestamp": "..."}
