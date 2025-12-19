@@ -6,12 +6,20 @@ Integrates pairing logic into the greedy solving process:
 2. Applies blocking during assignment
 3. Exports blocked slots to database
 4. Generates pairing reports
+
+DRAAD214 FIX: 
+- Fixed critical capacity loading bug
+- Capacity now loads from roster_employee_services (CORRECT table)
+- Pre-planned assignments (status=1) are now subtracted from capacity
+- This fixes "have 0" issue where all employees were marked as having no capacity
 """
 
 import logging
+import os
 from datetime import date, timedelta
 from typing import Dict, List, Set, Tuple, Optional
 from dataclasses import dataclass
+from supabase import create_client
 
 from pairing_logic import PairingLogic, PairingRule, BlockingCalendar
 
@@ -29,17 +37,129 @@ class PairingConfig:
     max_consecutive_days_override: Optional[int] = None
 
 
+class CapacityLoaderDB:
+    """
+    DRAAD214: Load capacity directly from database with correct logic.
+    
+    Replaces incorrect capacity loading from roster_assignments.
+    Uses correct source: roster_employee_services table.
+    """
+    
+    def __init__(self):
+        """Initialize database client"""
+        self.client = create_client(
+            os.getenv('SUPABASE_URL'),
+            os.getenv('SUPABASE_KEY')
+        )
+    
+    def load_capacity(self, roster_id: str) -> Dict[Tuple[str, str], int]:
+        """
+        Load capacity from roster_employee_services table.
+        
+        DRAAD214 FIX: Load from CORRECT table:
+        - Source: roster_employee_services (with veld 'aantal')
+        - Filter: roster_id=X AND actief=TRUE AND aantal>0
+        - Result: Dict[(emp_id, service_id)] = aantal
+        
+        Then subtract pre-planned assignments (status=1 in roster_assignments).
+        
+        Args:
+            roster_id: Roster UUID
+        
+        Returns:
+            Capacity dict: {(emp_id, service_id): remaining_count, ...}
+        """
+        
+        logger.info(f"📊 DRAAD214 FIX: Loading capacity from roster_employee_services...")
+        
+        capacity = {}
+        
+        try:
+            # STEP 1: Load BASE CAPACITY from roster_employee_services
+            # This is the CORRECT source per GREEDYAlternatief.txt section 2.5
+            logger.info(f"  STEP 1: Querying roster_employee_services...")
+            
+            base_records = self.client.table('roster_employee_services') \
+                .select('employee_id, service_id, aantal') \
+                .eq('roster_id', roster_id) \
+                .eq('actief', True) \
+                .gt('aantal', 0) \
+                .execute()
+            
+            # Build initial capacity dict from base records
+            for record in base_records.data:
+                emp_id = record.get('employee_id')
+                service_id = record.get('service_id')
+                aantal = record.get('aantal', 0)
+                
+                if emp_id and service_id and aantal > 0:
+                    key = (emp_id, service_id)
+                    capacity[key] = aantal
+                    logger.debug(f"    Loaded: {emp_id} + {service_id[:8]}... = {aantal}")
+            
+            logger.info(f"  ✅ BASE CAPACITY: {len(base_records.data)} records loaded")
+            logger.info(f"     Unique (emp, service) combinations: {len(capacity)}")
+            
+            # STEP 2: Subtract pre-planned assignments (status=1)
+            # Per GREEDYAlternatief.txt section 2.5.1
+            logger.info(f"  STEP 2: Subtracting pre-planned assignments...")
+            
+            preplanned_records = self.client.table('roster_assignments') \
+                .select('employee_id, service_id') \
+                .eq('roster_id', roster_id) \
+                .eq('status', 1) \
+                .execute()
+            
+            subtract_count = 0
+            for record in preplanned_records.data:
+                emp_id = record.get('employee_id')
+                service_id = record.get('service_id')
+                
+                if emp_id and service_id:
+                    key = (emp_id, service_id)
+                    if key in capacity:
+                        capacity[key] -= 1
+                        subtract_count += 1
+                        if capacity[key] < 0:
+                            capacity[key] = 0  # Prevent negative
+                        logger.debug(f"    Subtracted: {emp_id} + {service_id[:8]}... -> {capacity[key]}")
+            
+            logger.info(f"  ✅ SUBTRACTED: {subtract_count} pre-planned assignments")
+            
+            # STEP 3: Summary
+            zero_capacity = sum(1 for v in capacity.values() if v == 0)
+            positive_capacity = sum(1 for v in capacity.values() if v > 0)
+            total_remaining = sum(capacity.values())
+            
+            logger.info(f"  📊 CAPACITY SUMMARY:")
+            logger.info(f"     Total combinations: {len(capacity)}")
+            logger.info(f"     With capacity > 0: {positive_capacity}")
+            logger.info(f"     With capacity = 0: {zero_capacity}")
+            logger.info(f"     Total remaining slots: {total_remaining}")
+            
+            return capacity
+        
+        except Exception as e:
+            logger.error(f"❌ DRAAD214 ERROR loading capacity: {e}")
+            logger.error(f"   Returning empty dict - this will cause scheduling to fail!")
+            logger.error(f"   Check database connection and table permissions")
+            return {}
+
+
 class PairingIntegratedSolver:
     """
     GreedySolverV2 with integrated pairing logic.
     Wraps the solver to add pairing awareness.
+    
+    DRAAD214 UPDATE: Now uses correct capacity loading via CapacityLoaderDB
     """
     
     def __init__(
         self,
         greedy_solver,
         pairing_logic: Optional[PairingLogic] = None,
-        config: Optional[PairingConfig] = None
+        config: Optional[PairingConfig] = None,
+        capacity_loader: Optional[CapacityLoaderDB] = None
     ):
         """
         Initialize integrated solver.
@@ -48,10 +168,12 @@ class PairingIntegratedSolver:
             greedy_solver: GreedySolverV2 instance
             pairing_logic: PairingLogic instance (created if None)
             config: PairingConfig for behavior
+            capacity_loader: CapacityLoaderDB instance (created if None)
         """
         self.solver = greedy_solver
         self.pairing_logic = pairing_logic or PairingLogic()
         self.config = config or PairingConfig()
+        self.capacity_loader = capacity_loader or CapacityLoaderDB()
     
     def solve_with_pairing(
         self,
@@ -65,6 +187,8 @@ class PairingIntegratedSolver:
     ) -> Dict:
         """
         Main solving method with integrated pairing logic.
+        
+        DRAAD214 FIX: Now loads capacity correctly from roster_employee_services.
         
         Args:
             roster_id: Roster ID
@@ -80,6 +204,7 @@ class PairingIntegratedSolver:
         """
         logger.info("="*80)
         logger.info("FASE 3: Starting PAIRING-INTEGRATED solve")
+        logger.info("DRAAD214: Using CORRECT capacity loading from roster_employee_services")
         logger.info("="*80)
         
         # Reset pairing logic for fresh processing
@@ -88,7 +213,16 @@ class PairingIntegratedSolver:
         # Register standard pairing rules
         self.pairing_logic.register_standard_pairing_rules(service_types)
         
-        # Process assignments with pairing awareness
+        # DRAAD214 FIX: Load capacity from CORRECT table
+        logger.info("\n🔧 DRAAD214: Loading capacity from database...")
+        capacity = self.capacity_loader.load_capacity(roster_id)
+        
+        if not capacity:
+            logger.warning("⚠️  DRAAD214: No capacity data loaded! Scheduling will fail.")
+        else:
+            logger.info(f"✅ DRAAD214: Loaded {len(capacity)} capacity entries")
+        
+        # Process assignments with pairing awareness and CORRECT capacity
         solution = self._process_assignments_with_pairing(
             roster_id,
             period_start,
@@ -96,14 +230,16 @@ class PairingIntegratedSolver:
             assignments_workspace,
             service_types,
             employees_data,
-            constraints
+            constraints,
+            capacity  # Use CORRECT capacity from database
         )
         
         # Enhance solution with pairing data
         solution['pairing_data'] = {
             'blocking_calendar': self.pairing_logic.export_blocking_calendar(),
             'pairing_report': self.pairing_logic.generate_pairing_report(),
-            'status': 'integrated'
+            'status': 'integrated',
+            'draad214_fix': 'Capacity loaded from roster_employee_services'
         }
         
         logger.info(f"✅ Pairing-integrated solve completed")
@@ -120,10 +256,14 @@ class PairingIntegratedSolver:
         assignments_workspace: Dict,
         service_types: Dict,
         employees_data: Dict,
-        constraints: Optional[Dict]
+        constraints: Optional[Dict],
+        capacity: Dict[Tuple[str, str], int]  # DRAAD214: Now passed as parameter with CORRECT values
     ) -> Dict:
         """
         Process assignments with pairing-aware logic.
+        
+        DRAAD214 FIX: Now uses capacity loaded from roster_employee_services table,
+        with pre-planned assignments (status=1) subtracted correctly.
         
         Workflow:
         1. Iterate through each task in assignments_workspace['tasks']
@@ -136,10 +276,10 @@ class PairingIntegratedSolver:
         """
         
         tasks = assignments_workspace.get('tasks', [])
-        capacity = assignments_workspace.get('capacity', {})
         current_assignments = assignments_workspace.get('assignments', [])
         
         logger.info(f"Processing {len(tasks)} tasks with pairing logic")
+        logger.info(f"Using DRAAD214-corrected capacity: {len(capacity)} entries")
         
         # Build service_id -> service_data map
         service_map = {s.get('id'): s for s in service_types.values()}
@@ -147,6 +287,7 @@ class PairingIntegratedSolver:
         assignments_made = []
         blocked_by_pairing = 0
         soft_penalties_applied = 0
+        no_capacity = 0
         
         for task_idx, task in enumerate(tasks):
             if task_idx % 100 == 0:
@@ -168,11 +309,12 @@ class PairingIntegratedSolver:
             # Find candidate employees
             candidates = []
             for emp_id, emp_data in employees_data.items():
-                # Check capacity for this service
+                # DRAAD214 FIX: Check capacity using CORRECT loaded dict
                 capacity_key = (emp_id, service_id)
                 remaining = capacity.get(capacity_key, 0)
                 
                 if remaining <= 0:
+                    no_capacity += 1
                     continue  # No capacity left
                 
                 # Check team match
@@ -234,26 +376,29 @@ class PairingIntegratedSolver:
                     best_emp_id, work_date, dagdeel, service_code, service_id
                 )
                 
-                # Update capacity
+                # Update capacity (DRAAD214: Update our correct dict)
                 capacity_key = (best_emp_id, service_id)
                 if capacity_key in capacity:
                     capacity[capacity_key] -= 1
         
-        logger.info(f"\n📊 PAIRING PROCESSING STATISTICS:")
+        logger.info(f"\n📊 DRAAD214 PROCESSING STATISTICS:")
         logger.info(f"   Total assignments made: {len(assignments_made)}")
+        logger.info(f"   Skipped (no capacity): {no_capacity}")
         logger.info(f"   Blocked by pairing: {blocked_by_pairing}")
         logger.info(f"   Soft penalties applied: {soft_penalties_applied}")
-        logger.info(f"   Total blocked slots: {len(self.pairing_logic.blocking_calendar.blocked_slots)}")
+        logger.info(f"   Total blocked slots created: {len(self.pairing_logic.blocking_calendar.blocked_slots)}")
         
         return {
             'status': 'solved_with_pairing',
             'assignments': assignments_made,
             'statistics': {
                 'total_assignments': len(assignments_made),
+                'skipped_no_capacity': no_capacity,
                 'blocked_by_pairing': blocked_by_pairing,
                 'soft_penalties_applied': soft_penalties_applied,
                 'blocked_slots_created': len(self.pairing_logic.blocking_calendar.blocked_slots)
-            }
+            },
+            'draad214_note': 'Capacity loaded from roster_employee_services with pre-planned subtractions'
         }
     
     def export_results_for_database(
@@ -305,7 +450,8 @@ class PairingIntegratedSolver:
                 'total_assignments': len(assignments),
                 'total_blocked_slots': len(blocked_slots),
                 'pairing_rules_registered': len(pairing_report.get('pairing_rules', [])),
-                'employees_affected': pairing_report.get('employees_affected', 0)
+                'employees_affected': pairing_report.get('employees_affected', 0),
+                'draad214_applied': 'Correct capacity loading from roster_employee_services'
             }
         }
 
@@ -344,10 +490,12 @@ class PairingReportGenerator:
                 .stat { background-color: #e8f4f8; padding: 10px; margin: 10px 0; border-radius: 4px; }
                 .warning { background-color: #fcf8e3; padding: 10px; margin: 10px 0; border-left: 4px solid #f0ad4e; }
                 .critical { background-color: #f2dede; padding: 10px; margin: 10px 0; border-left: 4px solid #d9534f; }
+                .fix-note { background-color: #d4edda; padding: 10px; margin: 10px 0; border-left: 4px solid #28a745; }
             </style>
         </head>
         <body>
             <h1>🔗 Pairing Logic Report - FASE 3</h1>
+            <div class="fix-note">✅ DRAAD214 FIX APPLIED: Capacity now loads from roster_employee_services table</div>
             <div class="stat">Report generated at runtime for roster planning analysis</div>
         """
         
@@ -395,6 +543,7 @@ class PairingReportGenerator:
         text = """
 ╔════════════════════════════════════════════════════════════╗
 ║        🔗 PAIRING LOGIC REPORT - FASE 3                   ║
+║   ✅ DRAAD214 FIX: Correct capacity loading applied       ║
 ╚════════════════════════════════════════════════════════════╝
 
 📋 REGISTERED PAIRING RULES:
