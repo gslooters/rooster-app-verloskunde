@@ -54,6 +54,25 @@
  *   - User-friendly Dutch error messages
  * 
  * ============================================================================
+ * DRAAD-214 DEBUG: Response Structure Logging
+ * ============================================================================
+ * 
+ * PROBLEM:
+ * GREEDY returns HTTP 200 but parsed response has undefined fields:
+ *   - status: undefined
+ *   - coverage: undefined
+ *   - total_assignments: undefined
+ * 
+ * HYPOTHESIS:
+ * Response structure is wrapped or transformed differently than expected.
+ * Log ENTIRE response to diagnose.
+ * 
+ * SOLUTION:
+ * 1. Log complete response.json() output as JSON string
+ * 2. Log response headers (Content-Type, etc)
+ * 3. Identify correct field names for extraction
+ * 
+ * ============================================================================
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -141,21 +160,40 @@ async function sendToGreedySync(
       const elapsedMs = Date.now() - startTime;
 
       console.log(`[DRAAD-214] GREEDY responded after ${elapsedMs}ms with HTTP ${response.status}`);
+      
+      // DRAAD-214 DEBUG: Log response headers
+      console.log('[DRAAD-214] Response headers:');
+      console.log(`[DRAAD-214]   Content-Type: ${response.headers.get('content-type')}`);
+      console.log(`[DRAAD-214]   Content-Length: ${response.headers.get('content-length')}`);
 
       // Try to parse response body regardless of status
       let greedyData: any = {};
+      let responseText = '';
       try {
-        greedyData = await response.json();
-        console.log('[DRAAD-214] GREEDY response parsed:', {
-          status: greedyData.status,
-          coverage: greedyData.coverage,
-          total_assignments: greedyData.total_assignments,
-          has_solution: !!greedyData.solution,
-          has_solver_result: !!greedyData.solver_result
-        });
+        responseText = await response.text();
+        console.log(`[DRAAD-214] Raw response text (first 500 chars): ${responseText.substring(0, 500)}`);
+        
+        if (responseText) {
+          greedyData = JSON.parse(responseText);
+          console.log('[DRAAD-214] Raw response JSON parsed successfully');
+          console.log(`[DRAAD-214] Response structure: ${JSON.stringify(greedyData, null, 2).substring(0, 1000)}`);
+        } else {
+          console.warn('[DRAAD-214] Response text is empty!');
+        }
       } catch (parseError: any) {
-        console.warn('[DRAAD-214] Could not parse GREEDY response as JSON:', parseError.message);
+        console.error('[DRAAD-214] ❌ JSON parse error:', parseError.message);
+        console.error(`[DRAAD-214] Could not parse GREEDY response as JSON`);
+        console.error(`[DRAAD-214] Raw response was: ${responseText}`);
       }
+
+      // DRAAD-214 DEBUG: Log actual field values
+      console.log('[DRAAD-214] Parsed field values:');
+      console.log(`[DRAAD-214]   greedyData.status = ${greedyData.status} (type: ${typeof greedyData.status})`);
+      console.log(`[DRAAD-214]   greedyData.coverage = ${greedyData.coverage} (type: ${typeof greedyData.coverage})`);
+      console.log(`[DRAAD-214]   greedyData.total_assignments = ${greedyData.total_assignments} (type: ${typeof greedyData.total_assignments})`);
+      console.log(`[DRAAD-214]   greedyData.solution = ${!!greedyData.solution}`);
+      console.log(`[DRAAD-214]   greedyData.solver_result = ${!!greedyData.solver_result}`);
+      console.log(`[DRAAD-214]   All keys: ${Object.keys(greedyData).join(', ')}`);
 
       // Success responses
       if (response.ok) {
@@ -280,7 +318,7 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now();
   const cacheId = `DRAAD-214-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
-  console.log('[DRAAD-214] ========== POST /api/roster/solve ==========')
+  console.log('[DRAAD-214] ========== POST /api/roster/solve ==========' )
   console.log(`[DRAAD-214] Cache ID: ${cacheId}`);
   console.log('[DRAAD-214] FIX: Return solver_result in response + wait for GREEDY completion');
 
