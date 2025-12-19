@@ -399,25 +399,22 @@ class GreedyPlanner:
             return None
     
     def _load_employees(self) -> List[Dict]:
-        """Load employee data"""
+        """Load employee data
+        
+        DRAAD 214 FIX: Laad target_shifts uit employees.aantalwerkdagen (COMPLEET)
+        Gebruik NIET period_employee_staffing (INCOMPLEET!)
+        """
         try:
             if not self.db:
                 return []
             
-            # First get from period_employee_staffing for target_shifts
-            response = self.db.table('period_employee_staffing').select('*').eq(
-                'roster_id', self.roster_id
-            ).execute()
-            
-            staff_map = {s['employee_id']: s.get('target_shifts', 16) for s in response.data}
-            
-            # Then get all employees
+            # Get all active employees with target_shifts from employees table
             emp_response = self.db.table('employees').select('*').eq('actief', True).execute()
             
-            # Merge data
+            # Map employees with target_shifts from aantalwerkdagen
             employees = []
             for emp in emp_response.data:
-                emp['target_shifts'] = staff_map.get(emp['id'], 16)
+                emp['target_shifts'] = emp.get('aantalwerkdagen', 16)
                 employees.append(emp)
             
             return employees
