@@ -31,8 +31,14 @@ DRAA 211 FIX #1:
 ✅ Wrap SolveResponse in solver_result field
 ✅ Frontend now receives correct structure: {solver_result: {...}}
 
-Author: DRAAD 194 FASE 2 + OPDRACHT 195 + DRAAD 208H Fixes + DRAAD 210 STAP 2 P1 + DRAAD 211 FIX #1
-Date: 2025-12-18
+DRAA 214 FIX (CRITICAL):
+✅ HTTPException in error path now returns wrapped response
+✅ Frontend always gets {solver_result: {...}} structure
+✅ No more "undefined solver_result" errors
+✅ Clear error messages in response.message field
+
+Author: DRAAD 194 FASE 2 + OPDRACHT 195 + DRAAD 208H Fixes + DRAAD 210 STAP 2 P1 + DRAAD 211 FIX #1 + DRAAD 214 FIX
+Date: 2025-12-19
 """
 
 import logging
@@ -41,6 +47,7 @@ import traceback
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ConfigDict
 import uuid
 
@@ -163,13 +170,14 @@ async def solve_greedy(request: SolveRequest) -> SolverResultWrapper:
     }
     ```
     
-    **Response (DRAAD 211 FIX #1):**
+    **Response (DRAAD 211 FIX #1 + DRAAD 214 FIX):**
     ```json
     {
         "solver_result": {
             "status": "success|partial|failed",
             "assignments_created": 224,
             "coverage": 98.2,
+            "message": "...",
             ...
         }
     }
@@ -181,15 +189,19 @@ async def solve_greedy(request: SolveRequest) -> SolverResultWrapper:
     - **failed**: Error during solve
     
     **DRAAD 210 STAP 2 - Priority 1 FIX:**
-    ✅ Now returns HTTP 500 on failure (was always 200)
     ✅ Detects failed solve status
     ✅ Proper error messaging
     
     **DRAAD 211 FIX #1:**
     ✅ Wraps response in solver_result field for frontend
     
+    **DRAAD 214 FIX (CRITICAL):**
+    ✅ Error responses now returned with solver_result wrapper
+    ✅ Frontend always gets correct JSON structure
+    ✅ Status field always populated
+    
     Raises:
-        HTTPException: 400 if validation fails, 500 if solve fails
+        HTTPException: 400 if validation fails, 500 if config missing
     """
     logger.info(
         f"[GREEDY-API] Solve request: roster={request.roster_id}, "
@@ -228,40 +240,7 @@ async def solve_greedy(request: SolveRequest) -> SolverResultWrapper:
         logger.info("Starting GREEDY algorithm (DRAAD 190 Smart Allocation)...")
         result: SolveResult = engine.solve()
         
-        # ✅ DRAAD 210 STAP 2 - Priority 1 FIX: Check for failure status
-        if result.status == 'failed':
-            logger.error(f"❌ Solve FAILED: {result.message}")
-            response = SolveResponse(
-                status="failed",
-                assignments_created=result.assignments_created,
-                total_required=result.total_required,
-                coverage=result.coverage,
-                pre_planned_count=result.pre_planned_count,
-                greedy_count=result.greedy_count,
-                solve_time=result.solve_time,
-                bottlenecks=[BottleneckResponse(**bn) for bn in result.bottlenecks],
-                message=result.message,
-                solver_type="GREEDY",
-                timestamp=datetime.utcnow().isoformat() + 'Z'
-            )
-            # ✅ DRAAD 211 FIX #1: Wrap in solver_result
-            wrapped_response = SolverResultWrapper(solver_result=response)
-            # Return with 500 status
-            logger.warning("Wrapped error response in solver_result")
-            raise HTTPException(
-                status_code=500,
-                detail=response.message
-            )
-        
-        # Validate status is valid
-        if result.status not in ['success', 'partial', 'failed']:
-            logger.error(f"❌ Invalid status returned: {result.status}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Invalid solve status: {result.status}"
-            )
-        
-        # Success case (includes 'partial' as partial success)
+        # ✅ DRAAD 214 FIX: Build response regardless of status
         response = SolveResponse(
             status=result.status,
             assignments_created=result.assignments_created,
@@ -276,14 +255,26 @@ async def solve_greedy(request: SolveRequest) -> SolverResultWrapper:
             timestamp=datetime.utcnow().isoformat() + 'Z'
         )
         
-        logger.info(
-            f"[GREEDY-API] SUCCESS: {response.coverage}% coverage "
-            f"({response.assignments_created}/{response.total_required}) "
-            f"in {response.solve_time}s"
-        )
+        # Log based on status
+        if result.status == 'failed':
+            logger.error(f"❌ Solve FAILED: {result.message}")
+        elif result.status == 'partial':
+            logger.warning(
+                f"⚠️ Solve PARTIAL: {response.coverage}% coverage "
+                f"({response.assignments_created}/{response.total_required}) "
+                f"in {response.solve_time}s"
+            )
+        else:  # success
+            logger.info(
+                f"✅ Solve SUCCESS: {response.coverage}% coverage "
+                f"({response.assignments_created}/{response.total_required}) "
+                f"in {response.solve_time}s"
+            )
         
-        # ✅ DRAAD 211 FIX #1: Wrap in solver_result before returning
-        return SolverResultWrapper(solver_result=response)  # HTTP 200 on success
+        # ✅ DRAAD 214 FIX: Always wrap and return with 200 status
+        # Status field in response indicates success/partial/failed
+        # Frontend can check response.solver_result.status for error handling
+        return SolverResultWrapper(solver_result=response)
         
     except ValueError as e:
         # Validation error
@@ -291,17 +282,28 @@ async def solve_greedy(request: SolveRequest) -> SolverResultWrapper:
         raise HTTPException(status_code=400, detail=str(e))
         
     except HTTPException as e:
-        # Already formatted HTTP exception
+        # Already formatted HTTP exception (config missing, etc)
         logger.error(f"❌ HTTP exception: {e.status_code} - {e.detail}")
         raise
         
     except Exception as e:
-        # Server error - HTTP 500
+        # Unexpected error - wrap in response
         logger.error(f"❌ Unexpected error: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Solver error: {str(e)}"
+        error_response = SolveResponse(
+            status="failed",
+            assignments_created=0,
+            total_required=0,
+            coverage=0,
+            pre_planned_count=0,
+            greedy_count=0,
+            solve_time=0,
+            bottlenecks=[],
+            message=f"Unexpected error: {str(e)}",
+            solver_type="GREEDY",
+            timestamp=datetime.utcnow().isoformat() + 'Z'
         )
+        # ✅ DRAAD 214 FIX: Return wrapped response even for exceptions
+        return SolverResultWrapper(solver_result=error_response)
 
 
 @router.get("/health", status_code=200)
