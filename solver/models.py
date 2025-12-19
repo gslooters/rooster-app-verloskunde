@@ -26,6 +26,11 @@ DRAD128: BlockedSlot validation fix
 - REASON: DRAAD130 includes status 1 fixed assignments in blocked_slots array
 - SEMANTICS: Status 1 = Fixed (MUST be respected), Status 2-3 = Blocked (CANNOT be used)
 - COMPATIBILITY: Solver properly handles all three statuses as hard constraints
+
+DRAD214-FIX: Add missing solver_result field
+- ISSUE: Frontend received undefined solver_result, causing dashboard errors
+- ROOT CAUSE: Field was used by frontend but never defined in model
+- SOLUTION: Add optional solver_result: str field to SolveResponse
 """
 
 from pydantic import BaseModel, Field, validator, ConfigDict
@@ -466,6 +471,7 @@ class SolveResponse(BaseModel):
     
     DRAAD106: Respecteer fixed, blocked, suggested assignments
     DRAAD128: BlockedSlot.status validation now accepts 1, 2, 3
+    DRAAD214-FIX: Added missing solver_result field for frontend compatibility
     """
     status: SolveStatus
     roster_id: str  # uuid in database (als string)
@@ -495,6 +501,12 @@ class SolveResponse(BaseModel):
     solver_metadata: Dict[str, Any] = Field(
         default_factory=dict,
         description="Extra metadata: objective_value, branches, walltime, etc."
+    )
+    
+    # DRAAD214-FIX: Missing field that frontend expects
+    solver_result: Optional[str] = Field(
+        default=None,
+        description="Which solver was used: 'sequential_v2' or 'cpsat' or None if error"
     )
 
 
