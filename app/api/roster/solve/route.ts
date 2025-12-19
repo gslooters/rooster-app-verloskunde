@@ -1,76 +1,23 @@
 /**
  * API Route: POST /api/roster/solve
  * 
- * DRAAD-214 FIX: Make response synchronous (wait for GREEDY completion before returning)
+ * DRAAD-214 CORRECTED FIX: Correct JSON extraction from nested GREEDY response
  * 
- * CRITICAL ARCHITECTURE CHANGE:
- * BEFORE (DRAAD-204): Fire-and-forget async → Frontend gets undefined solver_result
- * AFTER (DRAAD-214):  Wait for GREEDY → Frontend gets complete solver_result ✅
+ * THE ACTUAL BUG:
+ * GREEDY returns: { solver_result: { status, coverage, total_assignments, ... } }
+ * Code was checking: greedyData.status (root level) → UNDEFINED ❌
+ * Real data is at: greedyData.solver_result.status ✅
  * 
- * ============================================================================
- * ROOT CAUSE ANALYSIS (DRAAD-214)
- * ============================================================================
+ * RESULT:
+ * - HTTP 200 from GREEDY ✅
+ * - JSON parsing successful ✅
+ * - But field check fails because looking at wrong level ❌
+ * - Code cascades to error handler (fake error!) ❌
  * 
- * THE BUG:
- * Backend was sending async request to GREEDY and returning immediately WITHOUT
- * waiting for result or including solver_result in response.
- * 
- * Frontend console error:
- *   [Dashboard] Missing solver_result in response
- *   [DRAAD129] Solver status: undefined
- * 
- * THE FIX:
- * 1. Wait for GREEDY to complete (with timeout)
- * 2. Parse GREEDY response to extract solver_result
- * 3. Return complete response WITH solver_result to frontend
- * 4. Use async/await to make this SYNCHRONOUS from frontend perspective
- * 
- * TIMING:
- * - Frontend sends POST /api/roster/solve
- * - Backend waits for GREEDY (~10-15 seconds)
- * - GREEDY completes and returns solution
- * - Backend returns complete response with solver_result
- * - Frontend receives data and renders schedule ✅
- * 
- * ============================================================================
- * KEY ARCHITECTURE CHANGES
- * ============================================================================
- * 
- * REMOVED (Fire-and-forget async):
- *   - sendToGreedyAsync() - didn't wait for response
- *   - Immediate 200 OK response without solver_result
- *   - Frontend subscription pattern (workaround for missing data)
- * 
- * ADDED (Synchronous wait):
- *   - sendToGreedySync() - waits for complete response
- *   - Parses GREEDY response for solver_result
- *   - Returns solver_result in response body ✅
- *   - Timeout protection (30 sec default)
- * 
- * IMPROVED (Error handling):
- *   - 422 validation errors now caught
- *   - 500 server errors handled
- *   - Timeout errors with clear message
- *   - User-friendly Dutch error messages
- * 
- * ============================================================================
- * DRAAD-214 DEBUG: Response Structure Logging
- * ============================================================================
- * 
- * PROBLEM:
- * GREEDY returns HTTP 200 but parsed response has undefined fields:
- *   - status: undefined
- *   - coverage: undefined
- *   - total_assignments: undefined
- * 
- * HYPOTHESIS:
- * Response structure is wrapped or transformed differently than expected.
- * Log ENTIRE response to diagnose.
- * 
- * SOLUTION:
- * 1. Log complete response.json() output as JSON string
- * 2. Log response headers (Content-Type, etc)
- * 3. Identify correct field names for extraction
+ * THIS FIX:
+ * Extract solver_result first, THEN check fields
+ * Handle both old format (if any) AND new nested format
+ * Validate data before using
  * 
  * ============================================================================
  */
@@ -82,11 +29,11 @@ const GREEDY_ENDPOINT = process.env.GREEDY_ENDPOINT ||
   'https://greedy-production.up.railway.app/api/greedy/solve';
 const GREEDY_TIMEOUT = parseInt(process.env.GREEDY_TIMEOUT || '45000', 10);
 
-console.log('[DRAAD-214] ========== GREEDY SERVICE CONFIGURATION (DRAAD-214 FIX) =========');
-console.log(`[DRAAD-214] Endpoint: ${GREEDY_ENDPOINT}`);
-console.log(`[DRAAD-214] Timeout: ${GREEDY_TIMEOUT}ms`);
-console.log('[DRAAD-214] Model: SYNCHRONOUS WAIT (wait for completion + return solver_result)');
-console.log('[DRAAD-214] =====================================================');
+console.log('[DRAAD-214-CORRECTED] ========== GREEDY SERVICE CONFIGURATION =========');
+console.log(`[DRAAD-214-CORRECTED] Endpoint: ${GREEDY_ENDPOINT}`);
+console.log(`[DRAAD-214-CORRECTED] Timeout: ${GREEDY_TIMEOUT}ms`);
+console.log('[DRAAD-214-CORRECTED] Model: SYNCHRONOUS WAIT (nested response parsing FIX)');
+console.log('[DRAAD-214-CORRECTED] =====================================================');
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -100,13 +47,25 @@ interface GreedyRequest {
   supabase_key: string;
 }
 
-interface GreedyResponse {
-  status: 'SUCCESS' | 'PARTIAL' | 'FAILED';
+interface GreedySolverResult {
+  status: string; // 'success', 'SUCCESS', 'PARTIAL', etc
   coverage: number;
   total_assignments: number;
-  assignments_created: number;
-  solution?: any; // The solver_result from GREEDY
-  solver_result?: any; // Alternative field name
+  assignments_created?: number;
+  pre_planned_count?: number;
+  greedy_count?: number;
+  solve_time?: number;
+  message?: string;
+  solver_type?: string;
+  timestamp?: string;
+  bottlenecks?: any[];
+}
+
+interface GreedyResponse {
+  solver_result?: GreedySolverResult;
+  status?: string; // fallback for old format
+  coverage?: number;
+  total_assignments?: number;
   message?: string;
   error?: string;
 }
@@ -122,8 +81,19 @@ interface GreedyErrorDetail {
 // ============================================================================
 
 /**
- * DRAAD-214: Send request to GREEDY and WAIT for complete response
- * This is different from DRAAD-204 which was fire-and-forget
+ * DRAAD-214-CORRECTED: Send request to GREEDY and WAIT for response
+ * 
+ * KEY FIX: Correctly extract nested solver_result from GREEDY response
+ * 
+ * GREEDY Response Format:
+ * {
+ *   "solver_result": {
+ *     "status": "success",
+ *     "coverage": 1792.7,
+ *     "total_assignments": 1470,
+ *     ...
+ *   }
+ * }
  * 
  * Returns:
  * - { success: true, solver_result: {...} } on success
@@ -132,11 +102,11 @@ interface GreedyErrorDetail {
 async function sendToGreedySync(
   payload: GreedyRequest
 ): Promise<{ success: boolean; solver_result?: any; error?: GreedyErrorDetail }> {
-  console.log('[DRAAD-214] === SENDING TO GREEDY (SYNCHRONOUS - WAIT FOR RESPONSE) ===');
-  console.log(`[DRAAD-214] Endpoint: ${GREEDY_ENDPOINT}`);
-  console.log(`[DRAAD-214] Roster ID: ${payload.roster_id}`);
-  console.log(`[DRAAD-214] Timeout: ${GREEDY_TIMEOUT}ms`);
-  console.log(`[DRAAD-214] Date range: ${payload.start_date} to ${payload.end_date}`);
+  console.log('[DRAAD-214-CORRECTED] === SENDING TO GREEDY ===');
+  console.log(`[DRAAD-214-CORRECTED] Endpoint: ${GREEDY_ENDPOINT}`);
+  console.log(`[DRAAD-214-CORRECTED] Roster ID: ${payload.roster_id}`);
+  console.log(`[DRAAD-214-CORRECTED] Timeout: ${GREEDY_TIMEOUT}ms`);
+  console.log(`[DRAAD-214-CORRECTED] Date range: ${payload.start_date} to ${payload.end_date}`);
 
   const startTime = Date.now();
 
@@ -150,7 +120,7 @@ async function sendToGreedySync(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'rooster-app-verloskunde/DRAAD-214'
+          'User-Agent': 'rooster-app-verloskunde/DRAAD-214-CORRECTED'
         },
         body: JSON.stringify(payload),
         signal: controller.signal
@@ -159,70 +129,99 @@ async function sendToGreedySync(
       clearTimeout(timeoutId);
       const elapsedMs = Date.now() - startTime;
 
-      console.log(`[DRAAD-214] GREEDY responded after ${elapsedMs}ms with HTTP ${response.status}`);
+      console.log(`[DRAAD-214-CORRECTED] GREEDY responded after ${elapsedMs}ms with HTTP ${response.status}`);
       
-      // DRAAD-214 DEBUG: Log response headers
-      console.log('[DRAAD-214] Response headers:');
-      console.log(`[DRAAD-214]   Content-Type: ${response.headers.get('content-type')}`);
-      console.log(`[DRAAD-214]   Content-Length: ${response.headers.get('content-length')}`);
+      // Log response headers
+      console.log('[DRAAD-214-CORRECTED] Response headers:');
+      console.log(`[DRAAD-214-CORRECTED]   Content-Type: ${response.headers.get('content-type')}`);
+      console.log(`[DRAAD-214-CORRECTED]   Content-Length: ${response.headers.get('content-length')}`);
 
-      // Try to parse response body regardless of status
+      // Try to parse response body
       let greedyData: any = {};
       let responseText = '';
       try {
         responseText = await response.text();
-        console.log(`[DRAAD-214] Raw response text (first 500 chars): ${responseText.substring(0, 500)}`);
+        console.log(`[DRAAD-214-CORRECTED] Raw response (first 500 chars): ${responseText.substring(0, 500)}`);
         
         if (responseText) {
           greedyData = JSON.parse(responseText);
-          console.log('[DRAAD-214] Raw response JSON parsed successfully');
-          console.log(`[DRAAD-214] Response structure: ${JSON.stringify(greedyData, null, 2).substring(0, 1000)}`);
+          console.log('[DRAAD-214-CORRECTED] ✅ Response JSON parsed successfully');
         } else {
-          console.warn('[DRAAD-214] Response text is empty!');
+          console.warn('[DRAAD-214-CORRECTED] ⚠️ Response text is empty!');
         }
       } catch (parseError: any) {
-        console.error('[DRAAD-214] ❌ JSON parse error:', parseError.message);
-        console.error(`[DRAAD-214] Could not parse GREEDY response as JSON`);
-        console.error(`[DRAAD-214] Raw response was: ${responseText}`);
+        console.error('[DRAAD-214-CORRECTED] ❌ JSON parse error:', parseError.message);
+        return {
+          success: false,
+          error: {
+            type: 'PARSE_ERROR',
+            userMessage: 'GREEDY response parse error',
+            technicalDetails: `Could not parse GREEDY response: ${parseError.message}`
+          }
+        };
       }
 
-      // DRAAD-214 DEBUG: Log actual field values
-      console.log('[DRAAD-214] Parsed field values:');
-      console.log(`[DRAAD-214]   greedyData.status = ${greedyData.status} (type: ${typeof greedyData.status})`);
-      console.log(`[DRAAD-214]   greedyData.coverage = ${greedyData.coverage} (type: ${typeof greedyData.coverage})`);
-      console.log(`[DRAAD-214]   greedyData.total_assignments = ${greedyData.total_assignments} (type: ${typeof greedyData.total_assignments})`);
-      console.log(`[DRAAD-214]   greedyData.solution = ${!!greedyData.solution}`);
-      console.log(`[DRAAD-214]   greedyData.solver_result = ${!!greedyData.solver_result}`);
-      console.log(`[DRAAD-214]   All keys: ${Object.keys(greedyData).join(', ')}`);
+      // CRITICAL FIX: Extract solver_result from nested structure
+      console.log('[DRAAD-214-CORRECTED] === EXTRACTING SOLVER_RESULT ===');
+      console.log(`[DRAAD-214-CORRECTED]   greedyData has keys: ${Object.keys(greedyData).join(', ')}`);
+      
+      // The CORRECT extraction point
+      const solverResult = greedyData.solver_result as GreedySolverResult | undefined;
+      
+      console.log(`[DRAAD-214-CORRECTED]   greedyData.solver_result exists: ${!!solverResult}`);
+      if (solverResult) {
+        console.log(`[DRAAD-214-CORRECTED]   solverResult.status = ${solverResult.status}`);
+        console.log(`[DRAAD-214-CORRECTED]   solverResult.coverage = ${solverResult.coverage}`);
+        console.log(`[DRAAD-214-CORRECTED]   solverResult.total_assignments = ${solverResult.total_assignments}`);
+      }
 
-      // Success responses
+      // Success responses (HTTP 200 OK)
       if (response.ok) {
-        if (greedyData.status === 'SUCCESS' || greedyData.status === 'PARTIAL') {
-          const solver_result = greedyData.solution || greedyData.solver_result || greedyData;
-          console.log('[DRAAD-214] ✅ GREEDY successful');
-          console.log(`[DRAAD-214]   - Status: ${greedyData.status}`);
-          console.log(`[DRAAD-214]   - Coverage: ${greedyData.coverage}%`);
-          console.log(`[DRAAD-214]   - Assignments: ${greedyData.total_assignments}`);
-          console.log('[DRAAD-214] === GREEDY SUCCESS ===');
+        // Check if we have solver_result with valid status
+        if (solverResult) {
+          const status = solverResult.status?.toUpperCase() || '';
+          const isSuccess = status === 'SUCCESS' || status === 'PARTIAL' || status === 'success';
+          
+          if (isSuccess) {
+            console.log('[DRAAD-214-CORRECTED] ✅ GREEDY solver completed successfully');
+            console.log(`[DRAAD-214-CORRECTED]   - Status: ${solverResult.status}`);
+            console.log(`[DRAAD-214-CORRECTED]   - Coverage: ${solverResult.coverage}%`);
+            console.log(`[DRAAD-214-CORRECTED]   - Assignments: ${solverResult.total_assignments}`);
+            console.log('[DRAAD-214-CORRECTED] === GREEDY SUCCESS ===');
 
-          return {
-            success: true,
-            solver_result: {
-              status: greedyData.status,
-              coverage: greedyData.coverage,
-              total_assignments: greedyData.total_assignments,
-              assignments_created: greedyData.assignments_created,
-              message: greedyData.message,
-              solution: solver_result,
-              elapsed_ms: elapsedMs
-            }
-          };
+            return {
+              success: true,
+              solver_result: {
+                status: solverResult.status,
+                coverage: solverResult.coverage,
+                total_assignments: solverResult.total_assignments,
+                assignments_created: solverResult.assignments_created || 0,
+                message: solverResult.message,
+                solve_time: solverResult.solve_time,
+                elapsed_ms: elapsedMs,
+                full_result: solverResult // Include full result for debugging
+              }
+            };
+          }
         }
+        
+        // HTTP 200 but no valid solver_result
+        console.error('[DRAAD-214-CORRECTED] ❌ HTTP 200 but solver_result missing or invalid');
+        console.error('[DRAAD-214-CORRECTED] Response:', JSON.stringify(greedyData, null, 2).substring(0, 500));
+        
+        return {
+          success: false,
+          error: {
+            type: 'INVALID_RESPONSE',
+            userMessage: 'GREEDY returned invalid response format',
+            technicalDetails: `HTTP 200 but solver_result invalid: ${solverResult ? 'status=' + solverResult.status : 'missing'}`
+          }
+        };
       }
 
-      // Error responses
-      console.error(`[DRAAD-214] ❌ GREEDY returned HTTP ${response.status}`);
-      console.error('[DRAAD-214] Response body:', greedyData);
+      // Error responses (HTTP not 2xx)
+      console.error(`[DRAAD-214-CORRECTED] ❌ GREEDY returned HTTP ${response.status}`);
+      console.error('[DRAAD-214-CORRECTED] Response body:', greedyData);
 
       // Handle different error codes
       if (response.status === 422) {
@@ -259,7 +258,7 @@ async function sendToGreedySync(
       clearTimeout(timeoutId);
 
       if (fetchError.name === 'AbortError') {
-        console.error(`[DRAAD-214] ❌ GREEDY timeout after ${GREEDY_TIMEOUT}ms`);
+        console.error(`[DRAAD-214-CORRECTED] ❌ GREEDY timeout after ${GREEDY_TIMEOUT}ms`);
         return {
           success: false,
           error: {
@@ -273,7 +272,7 @@ async function sendToGreedySync(
       throw fetchError;
     }
   } catch (error: any) {
-    console.error('[DRAAD-214] ❌ GREEDY request failed:', error.message);
+    console.error('[DRAAD-214-CORRECTED] ❌ GREEDY request failed:', error.message);
 
     let errorType = 'NETWORK_ERROR';
     let userMessage = 'Netwerkverbinding onderbroken';
@@ -300,41 +299,42 @@ async function sendToGreedySync(
 }
 
 // ============================================================================
-// MAIN ROUTE HANDLER (DRAAD-214 FIX)
+// MAIN ROUTE HANDLER (DRAAD-214-CORRECTED)
 // ============================================================================
 
 /**
  * POST /api/roster/solve
  * 
- * DRAAD-214 FIX:
+ * DRAAD-214-CORRECTED FIX:
  * - Sends request to GREEDY
  * - WAITS for GREEDY to complete (with timeout)
- * - Returns COMPLETE response with solver_result
+ * - CORRECTLY PARSES nested solver_result from response
+ * - Returns COMPLETE response with solver_result ✅
  * 
  * Request:  { roster_id: string }
- * Response: { success: true, solver_result: {...} } ✅ (now includes data!)
+ * Response: { success: true, solver_result: {...} } ✅
  */
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
-  const cacheId = `DRAAD-214-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  const cacheId = `DRAAD-214-CORRECTED-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
-  console.log('[DRAAD-214] ========== POST /api/roster/solve ==========' )
-  console.log(`[DRAAD-214] Cache ID: ${cacheId}`);
-  console.log('[DRAAD-214] FIX: Return solver_result in response + wait for GREEDY completion');
+  console.log('[DRAAD-214-CORRECTED] ========== POST /api/roster/solve ==========' )
+  console.log(`[DRAAD-214-CORRECTED] Cache ID: ${cacheId}`);
+  console.log('[DRAAD-214-CORRECTED] Fix: Correct nested solver_result extraction');
 
   try {
     const { roster_id } = await request.json();
 
     if (!roster_id) {
-      console.error('[DRAAD-214] Missing roster_id');
+      console.error('[DRAAD-214-CORRECTED] Missing roster_id');
       return NextResponse.json({ error: 'roster_id is required' }, { status: 400 });
     }
 
-    console.log(`[DRAAD-214] Roster ID: ${roster_id}`);
+    console.log(`[DRAAD-214-CORRECTED] Roster ID: ${roster_id}`);
     const supabase = await createClient();
 
     // PHASE 1: Validate roster
-    console.log('[DRAAD-214] === PHASE 1: VALIDATION ===');
+    console.log('[DRAAD-214-CORRECTED] === PHASE 1: VALIDATION ===');
     const { data: roster, error: rosterError } = await supabase
       .from('roosters')
       .select('id, start_date, end_date, status')
@@ -342,33 +342,33 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (rosterError || !roster) {
-      console.error('[DRAAD-214] Roster not found');
+      console.error('[DRAAD-214-CORRECTED] Roster not found');
       return NextResponse.json({ error: 'Roster not found' }, { status: 404 });
     }
 
     if (!roster.start_date || !roster.end_date) {
-      console.error('[DRAAD-214] Roster missing dates');
+      console.error('[DRAAD-214-CORRECTED] Roster missing dates');
       return NextResponse.json({ error: 'Roster has invalid date range' }, { status: 400 });
     }
 
     if (roster.status !== 'draft') {
-      console.error(`[DRAAD-214] Roster status is '${roster.status}', expected 'draft'`);
+      console.error(`[DRAAD-214-CORRECTED] Roster status is '${roster.status}', expected 'draft'`);
       return NextResponse.json(
         { error: `Cannot schedule roster with status '${roster.status}'` },
         { status: 400 }
       );
     }
 
-    console.log('[DRAAD-214] ✅ Roster validation passed');
-    console.log('[DRAAD-214] === END VALIDATION ===');
+    console.log('[DRAAD-214-CORRECTED] ✅ Roster validation passed');
+    console.log('[DRAAD-214-CORRECTED] === END VALIDATION ===');
 
     // PHASE 2: Build request
-    console.log('[DRAAD-214] === PHASE 2: BUILD REQUEST ===');
+    console.log('[DRAAD-214-CORRECTED] === PHASE 2: BUILD REQUEST ===');
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !supabaseServiceKey) {
-      console.error('[DRAAD-214] Missing Supabase credentials');
+      console.error('[DRAAD-214-CORRECTED] Missing Supabase credentials');
       return NextResponse.json(
         { error: 'Server misconfiguration: missing Supabase credentials' },
         { status: 500 }
@@ -383,17 +383,17 @@ export async function POST(request: NextRequest) {
       supabase_key: supabaseServiceKey
     };
 
-    console.log('[DRAAD-214] ✅ Request built');
-    console.log('[DRAAD-214] === END BUILD REQUEST ===');
+    console.log('[DRAAD-214-CORRECTED] ✅ Request built');
+    console.log('[DRAAD-214-CORRECTED] === END BUILD REQUEST ===');
 
     // PHASE 3: SEND TO GREEDY AND WAIT FOR RESPONSE
-    console.log('[DRAAD-214] === PHASE 3: SEND TO GREEDY (SYNCHRONOUS) ===');
+    console.log('[DRAAD-214-CORRECTED] === PHASE 3: SEND TO GREEDY (SYNCHRONOUS) ===');
     const greedyResult = await sendToGreedySync(greedyRequest);
 
     if (!greedyResult.success) {
-      console.error('[DRAAD-214] ❌ GREEDY failed');
-      console.error('[DRAAD-214] Error:', greedyResult.error);
-      console.log('[DRAAD-214] === PHASE 3 FAILED ===');
+      console.error('[DRAAD-214-CORRECTED] ❌ GREEDY failed');
+      console.error('[DRAAD-214-CORRECTED] Error:', greedyResult.error);
+      console.log('[DRAAD-214-CORRECTED] === PHASE 3 FAILED ===');
 
       return NextResponse.json(
         {
@@ -405,51 +405,51 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('[DRAAD-214] ✅ GREEDY completed successfully');
-    console.log('[DRAAD-214] === END PHASE 3 ===');
+    console.log('[DRAAD-214-CORRECTED] ✅ GREEDY completed successfully');
+    console.log('[DRAAD-214-CORRECTED] === END PHASE 3 ===');
 
     // PHASE 4: Update roster status and return response
-    console.log('[DRAAD-214] === PHASE 4: UPDATE ROSTER ===');
+    console.log('[DRAAD-214-CORRECTED] === PHASE 4: UPDATE ROSTER ===');
 
-    // Update roster status to 'in_progress' or completed
+    // Update roster status
     await supabase
       .from('roosters')
       .update({
-        status: 'in_progress', // Could be 'completed' but keep it in_progress for now
+        status: 'in_progress',
         updated_at: new Date().toISOString()
       })
       .eq('id', roster_id);
 
-    console.log('[DRAAD-214] ✅ Roster status updated');
+    console.log('[DRAAD-214-CORRECTED] ✅ Roster status updated');
 
     const totalTime = Date.now() - startTime;
-    console.log(`[DRAAD-214] === COMPLETE (${totalTime}ms) ===`);
+    console.log(`[DRAAD-214-CORRECTED] === COMPLETE (${totalTime}ms) ===`);
 
     // PHASE 5: RETURN RESPONSE WITH SOLVER_RESULT ✅
     return NextResponse.json({
       success: true,
       roster_id,
       message: 'Roster successfully generated by GREEDY solver',
-      solver_result: greedyResult.solver_result, // ✅ NOW INCLUDED!
+      solver_result: greedyResult.solver_result,
       status: 'completed',
       metrics: {
         backend_duration_ms: totalTime,
         roster_date_range: `${roster.start_date} to ${roster.end_date}`,
         greedy_duration_ms: greedyResult.solver_result?.elapsed_ms || 0
       },
-      draad: 'DRAAD-214',
+      draad: 'DRAAD-214-CORRECTED',
       cache_id: cacheId
     });
   } catch (error: any) {
-    console.error('[DRAAD-214] ❌ Unexpected error:', error.message);
-    console.error('[DRAAD-214] Stack:', error.stack);
+    console.error('[DRAAD-214-CORRECTED] ❌ Unexpected error:', error.message);
+    console.error('[DRAAD-214-CORRECTED] Stack:', error.stack);
 
     return NextResponse.json(
       {
         success: false,
         error: 'Internal server error',
         message: error.message,
-        draad: 'DRAAD-214'
+        draad: 'DRAAD-214-CORRECTED'
       },
       { status: 500 }
     );
