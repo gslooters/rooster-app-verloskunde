@@ -256,7 +256,6 @@ class GreedyRosteringEngine:
         self.service_types: Dict[str, ServiceType] = {}
         self.capabilities: Dict[Tuple[str, str], int] = {}  # (emp_id, service_id) → required_count
         self.requirements: Dict[Tuple[str, str, str], int] = {}  # (date, dagdeel, service_id) → need
-        self.employee_targets: Dict[str, int] = {}  # emp_id → max shifts
         
         # ✅ BUG 1 FIX: blocked_slots now (date, dagdeel, employee_id)
         self.blocked_slots: Set[Tuple[str, str, str]] = set()
@@ -295,9 +294,6 @@ class GreedyRosteringEngine:
             
             self._load_requirements()
             logger.info(f"  ✅ Loaded {len(self.requirements)} requirements")
-            
-            self._load_employee_targets()
-            logger.info(f"  ✅ Loaded {len(self.employee_targets)} employee targets")
             
             self._initialize_quota()
             logger.info(f"  ✅ Initialized quota tracking")
@@ -360,15 +356,6 @@ class GreedyRosteringEngine:
         for row in response.data:
             key = (row['date'], row['dagdeel'], row['service_id'])
             self.requirements[key] = row.get('aantal', 0)
-
-    def _load_employee_targets(self) -> None:
-        """Load max shifts per employee."""
-        response = self.supabase.table('period_employee_staffing').select('*').eq(
-            'roster_id', self.roster_id
-        ).execute()
-        
-        for row in response.data:
-            self.employee_targets[row['employee_id']] = row.get('target_shifts', 8)
 
     def _initialize_quota(self) -> None:
         """
