@@ -1,0 +1,25 @@
+DRAAD 217 - SOLVER2 SERVICE DEPLOYMENT
+=======================================
+
+Trigger: Complete rebuild of SOLVER2 service
+Reason: Restoration of solver module after greedy_engine.py fix
+Timestamp: 2025-12-20T00:01:30Z
+
+Dependencies Updated:
+  ✅ greedy_engine.py (restored)
+  ✅ __init__.py (updated imports)
+  ✅ Cache-buster DRAAD_217 active
+
+Services Affected:
+  - solver2 (PRIMARY)
+  - Depends on greedy_engine module
+
+Expected Result:
+  - SOLVER2 service starts successfully
+  - Can import from src.solver without errors
+  - All solver classes available
+  - Integration with GREEDY service working
+
+Verification:
+  curl https://solver2-production.up.railway.app/api/health
+  Expected: Service online and responding
