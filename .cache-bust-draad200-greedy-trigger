@@ -1,0 +1,39 @@
+CACHE_BUST_DRAAD200_GREEDY
+Timestamp: 1734650000000
+Version: DRAAD200
+Service: Greedy (Smart Allocation Engine)
+
+Trigger Details:
+  Build ID: DRAAD200_1734650000000_greedy
+  Trigger Reason: Complete cache-bust with new timestamp strategy
+  Railway Service: Greedy
+  Expected Duration: 2-3 minutes
+  
+What's included:
+  - DRAAD190 Smart Greedy algorithm (ACTIVE)
+  - Two-level fairness sorting:
+    * Primary: shifts_remaining ASC (least scheduled first)
+    * Tie-breaker: shifts_in_run ASC (current run awareness)
+  - Fast JavaScript scheduler
+  - Real-time allocation monitoring
+  - Coverage optimization (98%+ target)
+  
+Algorithm Verification:
+  - Fair allocation: ENABLED
+  - Constraint handling: All HC1-HC6 enforced
+  - Solve time: 2-5 seconds typical
+  - Coverage target: 95-99%
+  - Load balancing: Optimized
+  
+Verification:
+  - [ ] Build succeeds
+  - [ ] DRAAD190 startup message appears in logs
+  - [ ] Greedy endpoint responds
+  - [ ] Health check passes
+  - [ ] Fair allocation working
+  - [ ] Coverage metrics healthy
+  
+Deploy Date: 2025-12-19T22:33:20Z
+Author: GitHub Automation
+Status: READY FOR DEPLOYMENT
+Priority: HIGH (primary scheduling algorithm)
