@@ -6,6 +6,11 @@
  * Integration Point: RoosterBewerking > Preplanning view
  * Endpoint: POST https://greedy-production.up.railway.app/api/greedy/solve
  * 
+ * DRAAD 214 FIX STAP 3: Response parsing fix
+ * - Extract solver_result from wrapped response
+ * - Add type safety with ApiResponse interface
+ * - Console logging for debugging
+ * 
  * Behavior:
  *   1. Show loading spinner + "Bezig met roostering..."
  *   2. Call GREEDY endpoint POST /api/greedy/solve
@@ -48,6 +53,11 @@ interface SolveResult {
       suggestion?: string;
     }>;
   };
+}
+
+// DRAAD 214 FIX STAP 3: Type safe API response wrapper
+interface ApiResponse {
+  solver_result: SolveResult;
 }
 
 interface ErrorClassification {
@@ -183,7 +193,18 @@ const AutoFillButton: React.FC<AutoFillButtonProps> = ({
         }
       }
 
-      const solveResult: SolveResult = await response.json();
+      // DRAAD 214 FIX STAP 3: Extract solver_result from wrapped response
+      const responseData: ApiResponse = await response.json();
+      console.log('[AutoFillButton] Raw response:', responseData);
+      
+      // Validate response structure
+      if (!responseData.solver_result) {
+        throw new Error("Invalid response format: missing solver_result");
+      }
+      
+      const solveResult: SolveResult = responseData.solver_result;
+      console.log('[AutoFillButton] Extracted solver_result:', solveResult);
+      
       setResult(solveResult);
 
       if (onSolveComplete) {
