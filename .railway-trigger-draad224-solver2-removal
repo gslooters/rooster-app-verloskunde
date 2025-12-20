@@ -1,0 +1,76 @@
+# DRAAD-SOLVER2-REMOVAL DEPLOYMENT TRIGGER
+
+Date: 2025-12-20 19:51 CET
+Status: READY FOR DEPLOYMENT
+Version: 2.0.0-DRAAD224-SIMPLIFIED
+
+## Summary
+
+Solver2 (SequentialSolverV2) completely removed from codebase:
+- 12 Solver2-specific Python files deleted
+- 4 Solver2-specific test files deleted
+- main.py simplified (direct RosterSolverV2 CP-SAT routing)
+- All imports and references updated
+- No breaking changes for frontend (already not using solver)
+
+## Changes Made
+
+### Deleted Files (12)
+- solver/sequential_solver_v2.py
+- solver/sequential_solver.py
+- solver/requirement_queue.py
+- solver/employee_availability.py
+- solver/assignment_report.py
+- solver/solver_selector.py
+- solver/solver_patches_draad167.py
+- solver/solver_patches_draad167_fase2.py
+- solver/test_sequential_solver_v2.py
+- solver/test_requirement_queue_priority.py
+- solver/test_integration_db_solver.py
+- solver/test_e2e_roster_workflow.py
+
+### Updated Files (1)
+- solver/main.py: Removed SequentialSolverV2/SolverSelector imports; simplified to direct RosterSolverV2 calls
+
+## Architecture (Now)
+
+FastAPI -> RosterSolverV2 (CP-SAT) -> Supabase
+
+No fallback routing. Direct optimization only.
+
+## Deployment
+
+Railway will:
+1. Pull latest main branch (14 commits: 12 deletes + 1 update + 1 summary)
+2. Run: docker build solver/
+3. Run: python solver/main.py
+4. Verify: GET /health returns version 2.0.0-DRAAD224-SIMPLIFIED
+5. Verify: POST /api/v1/solve-schedule endpoint works with CP-SAT only
+
+## Expected Result
+
+✓ Build succeeds (no import errors)
+✓ Service starts (all imports valid)
+✓ Database integration works (graceful degradation if offline)
+✓ Solver endpoint functional (direct RosterSolverV2)
+✓ No Solver2 references in logs
+
+## Monitoring
+
+Check Railway logs for:
+- Successful Python package installation
+- FastAPI startup messages
+- No "SequentialSolverV2" or "sequential_solver_v2" errors
+- Database connection status (may degrade gracefully)
+
+Test endpoint:
+POST https://rooster-app-verloskunde.up.railway.app/api/v1/solve-schedule
+
+Expect: Direct CP-SAT solving (no Solver2 routing)
+
+---
+
+DRAARD224 EXECUTION COMPLETE
+All automated deletions and updates applied via GitHub MCP tools
+No manual intervention required
+Readyfor production deployment
