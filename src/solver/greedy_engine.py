@@ -21,6 +21,7 @@ DRAA 218B: FASE 3 - Pre-planned handling verbeterd
 DRAA 218B: FASE 4 - GREEDY ALLOCATIE met HC1-HC6 + Blokkeringsregels
 DRAA 218B: FASE 5 - DATABASE UPDATES (invulling + roster status) - COMPLEET
 DRAA 218B: STAP 6 - SCORING ALGORITME (HC4-HC5) - COMPLEET
+DRAA 218B: STAP 7 - BLOKKERINGSREGELS VERFIJND - COMPLEET
 """
 
 import logging
@@ -260,6 +261,7 @@ class GreedyRosteringEngine:
     DRAAD 218B FASE 4: GREEDY ALLOCATIE met HC1-HC6 + Blokkeringsregels
     DRAAD 218B FASE 5: DATABASE UPDATES (invulling + roster status) - COMPLEET
     DRAAD 218B STAP 6: SCORING ALGORITME (HC4-HC5) - COMPLEET
+    DRAAD 218B STAP 7: BLOKKERINGSREGELS VERFIJND - COMPLEET
     """
     
     def __init__(self, config: Dict[str, Any]):
@@ -369,7 +371,7 @@ class GreedyRosteringEngine:
                 status_msg = f"FAILED: {coverage:.1f}% coverage"
             
             message = (
-                f"DRAAD 218B STAP 6 COMPLEET: {coverage:.1f}% coverage "
+                f"DRAAD 218B STAP 7 COMPLEET: {coverage:.1f}% coverage "
                 f"({assigned_count}/{total_required}) in {solve_time:.2f}s | "
                 f"Pre-planned: {pre_planned_count}, GREEDY: {len(new_assignments)}"
             )
@@ -778,7 +780,7 @@ class GreedyRosteringEngine:
                                       planning_db: Dict[Tuple[str, str, str], RosterAssignment]) -> None:
         """Apply blocking rules voor systeemdiensten (DIO/DIA/DDO/DDA).
         
-        DRAAD 218B FASE 4 STAP 7: Systeemdienst-blokkeringsregels
+        DRAAD 218B STAP 7: Systeemdienst-blokkeringsregels VERFIJND
         
         Spec 3.7.1-3.7.2:
         DIO (dagdeel O) → block M (same day) + probeer DIA (same day A)
@@ -792,94 +794,118 @@ class GreedyRosteringEngine:
             middag_key = (date, 'M', emp_id)
             if middag_key in planning_db:
                 planning_db[middag_key].status = 2
-                logger.debug(f"Blocked {middag_key} (middag after {service_code})")
+                logger.debug(f"✅ STAP 7: Blocked {middag_key} (middag after {service_code})")
             
             # 3.7.1.3 / 3.7.2.3: Probeer evening service (DIA of DDA)
             # DIT WORDT IN ALLOCATIE AFGEHANDELD (separate requirement)
+            avond_key = (date, 'A', emp_id)
+            if avond_key in planning_db and planning_db[avond_key].status == 0:
+                logger.debug(
+                    f"✅ STAP 7: Evening slot {avond_key} available for "
+                    f"{'DIA' if service_code == 'DIO' else 'DDA'}"
+                )
             
         elif service_code in ['DIA', 'DDA']:  # Avond services
             # 3.7.1.4-5 / 3.7.2.4-5: Block volgende dag
             # MAAR: Niet als date == end_date!
             
-            next_date_obj = datetime.strptime(date, '%Y-%m-%d') + timedelta(days=1)
-            next_date = next_date_obj.strftime('%Y-%m-%d')
-            
-            # Check if next_date is NOT past end_date
-            end_date = datetime.strptime(self.end_date, '%Y-%m-%d')
-            
-            if next_date_obj <= end_date:
-                # Block next day O (ochtend)
-                next_o_key = (next_date, 'O', emp_id)
-                if next_o_key in planning_db:
-                    planning_db[next_o_key].status = 2
-                    logger.debug(f"Blocked {next_o_key} (O after {service_code})")
+            try:
+                next_date_obj = datetime.strptime(date, '%Y-%m-%d') + timedelta(days=1)
+                next_date = next_date_obj.strftime('%Y-%m-%d')
                 
-                # Block next day M (middag)
-                next_m_key = (next_date, 'M', emp_id)
-                if next_m_key in planning_db:
-                    planning_db[next_m_key].status = 2
-                    logger.debug(f"Blocked {next_m_key} (M after {service_code})")
+                # Check if next_date is NOT past end_date
+                end_date_obj = datetime.strptime(self.end_date, '%Y-%m-%d')
+                
+                if next_date_obj <= end_date_obj:
+                    # Block next day O (ochtend)
+                    next_o_key = (next_date, 'O', emp_id)
+                    if next_o_key in planning_db:
+                        planning_db[next_o_key].status = 2
+                        logger.debug(f"✅ STAP 7: Blocked {next_o_key} (O after {service_code})")
+                    
+                    # Block next day M (middag)
+                    next_m_key = (next_date, 'M', emp_id)
+                    if next_m_key in planning_db:
+                        planning_db[next_m_key].status = 2
+                        logger.debug(f"✅ STAP 7: Blocked {next_m_key} (M after {service_code})")
+                else:
+                    logger.debug(
+                        f"✅ STAP 7: {service_code} on last day - no next day blocking needed"
+                    )
+            except Exception as e:
+                logger.warning(f"Error in blocking rules for {service_code}: {e}")
     
     def _can_allocate_with_blocks(self, emp_id: str, req: RosteringRequirement,
                                   planning_db: Dict[Tuple[str, str, str], RosterAssignment]) -> bool:
         """Check if allocation is possible considering blocking rules.
         
-        DRAAD 218B FASE 4 STAP 7: Check blocking constraints
+        DRAAD 218B STAP 7: VERFIJND - Flexibelere checks voor systeemdiensten
         
         Voor systeemdiensten: Check of alle slots die geblokkeerd worden beschikbaar zijn.
         """
         service_code = req.service_code
         
-        if service_code == 'DIO':
+        if service_code in ['DIO', 'DDO']:  # Ochtend services - DIO and DDO have same logic
             # Moet O beschikbaar zijn (current)
             o_key = (req.date, 'O', emp_id)
             if o_key in planning_db and planning_db[o_key].status != 0:
+                logger.debug(f"❌ STAP 7: {service_code} blocked - O-slot not available")
                 return False
             
             # Moet M beschikbaar zijn (current, wordt geblokkeerd)
             m_key = (req.date, 'M', emp_id)
             if m_key in planning_db and planning_db[m_key].status != 0:
+                logger.debug(f"❌ STAP 7: {service_code} blocked - M-slot not available")
                 return False
             
-            # Probeer DIA ook - check of A beschikbaar is
+            # Check of A beschikbaar is (flexibel - warning maar niet blokkeren)
             a_key = (req.date, 'A', emp_id)
             if a_key in planning_db and planning_db[a_key].status != 0:
-                # A niet beschikbaar - kunnen DIO niet allocate
-                return False
+                logger.debug(
+                    f"⚠️ STAP 7: {service_code} allocated but A-slot not available "
+                    f"for {'DIA' if service_code == 'DIO' else 'DDA'}"
+                )
+                # We blokkeren NIET volledig - avonddienst kan optioneel zijn
             
             return True
         
-        elif service_code == 'DDO':
-            # Zelfde als DIO
-            return self._can_allocate_with_blocks(emp_id, req, planning_db)
-        
-        elif service_code == 'DIA':
+        elif service_code in ['DIA', 'DDA']:  # Avond services - DIA and DDA have same logic
             # Moet A beschikbaar zijn (current)
             a_key = (req.date, 'A', emp_id)
             if a_key in planning_db and planning_db[a_key].status != 0:
+                logger.debug(f"❌ STAP 7: {service_code} blocked - A-slot not available")
                 return False
             
             # Check next day slots (als niet end_date)
-            next_date_obj = datetime.strptime(req.date, '%Y-%m-%d') + timedelta(days=1)
-            next_date = next_date_obj.strftime('%Y-%m-%d')
-            end_date = datetime.strptime(self.end_date, '%Y-%m-%d')
-            
-            if next_date_obj <= end_date:
-                # Volgende dag O moet beschikbaar zijn
-                next_o_key = (next_date, 'O', emp_id)
-                if next_o_key in planning_db and planning_db[next_o_key].status != 0:
-                    return False
+            try:
+                next_date_obj = datetime.strptime(req.date, '%Y-%m-%d') + timedelta(days=1)
+                next_date = next_date_obj.strftime('%Y-%m-%d')
+                end_date_obj = datetime.strptime(self.end_date, '%Y-%m-%d')
                 
-                # Volgende dag M moet beschikbaar zijn
-                next_m_key = (next_date, 'M', emp_id)
-                if next_m_key in planning_db and planning_db[next_m_key].status != 0:
-                    return False
-            
-            return True
-        
-        elif service_code == 'DDA':
-            # Zelfde als DIA
-            return self._can_allocate_with_blocks(emp_id, req, planning_db)
+                if next_date_obj <= end_date_obj:
+                    # Volgende dag O moet beschikbaar zijn
+                    next_o_key = (next_date, 'O', emp_id)
+                    if next_o_key in planning_db and planning_db[next_o_key].status != 0:
+                        logger.debug(
+                            f"❌ STAP 7: {service_code} blocked - next day O-slot not available"
+                        )
+                        return False
+                    
+                    # Volgende dag M moet beschikbaar zijn
+                    next_m_key = (next_date, 'M', emp_id)
+                    if next_m_key in planning_db and planning_db[next_m_key].status != 0:
+                        logger.debug(
+                            f"❌ STAP 7: {service_code} blocked - next day M-slot not available"
+                        )
+                        return False
+                else:
+                    logger.debug(f"✅ STAP 7: {service_code} on last day - no next day check needed")
+                
+                return True
+                
+            except Exception as e:
+                logger.warning(f"Error checking next day for {service_code}: {e}")
+                return True  # Bij fout, sta allocatie toe
         
         # Non-system services - altijd ok
         return True
@@ -889,6 +915,7 @@ class GreedyRosteringEngine:
         
         DRAAD 218B FASE 4 STAP 8: Complete herschrijving
         DRAAD 218B STAP 6: Gebruikt nieuwe _score_employee() methode
+        DRAAD 218B STAP 7: Gebruikt verfijnde blokkeringsregels
         
         Spec Section 3 & 4:
         - HC1: Respect unavailability (status > 0)
@@ -963,7 +990,7 @@ class GreedyRosteringEngine:
                     if employee_shifts[emp_id] >= self.max_shifts:
                         continue  # Max shifts exceeded
                     
-                    # HC6: Check blocking rules for system services
+                    # STAP 7: Check blocking rules for system services
                     if not self._can_allocate_with_blocks(emp_id, req, planning_db):
                         continue
                     
