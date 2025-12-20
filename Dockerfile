@@ -1,7 +1,8 @@
 # Rooster App - Next.js Frontend Production Dockerfile  
 # DRAAD-200: FASE 2 FIX - Use npm install instead of npm ci (generate lock dynamically)
-# Date: 2025-12-17T18:20:00Z
+# Date: 2025-12-20T19:15:00Z
 # Status: BUILD WILL GENERATE LOCKFILE AUTOMATICALLY
+# DRAAD-223: CardContent export fix applied - CACHE BUST TRIGGER
 
 FROM node:20-alpine
 
