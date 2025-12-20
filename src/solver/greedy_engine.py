@@ -17,6 +17,7 @@ DRAA 217: Restoration after corruption
 DRAA 218B: FASE 1 - Baseline fixes (service_types join, team logic, sorting)
 DRAA 218B: FASE 2 - Team-selectie helper methode
 DRAA 218B: FASE 3 - Pre-planned handling verbeterd
+DRAA 218B: FASE 4 - GREEDY ALLOCATIE met HC1-HC6 + Blokkeringsregels
 """
 
 import logging
@@ -214,6 +215,7 @@ class GreedyRosteringEngine:
     DRAAD 218B FASE 1: Service_types join, team logic, sorting fixes
     DRAAD 218B FASE 2: Team-selectie helper methode
     DRAAD 218B FASE 3: Pre-planned handling verbeterd
+    DRAAD 218B FASE 4: GREEDY ALLOCATIE met HC1-HC6 + Blokkeringsregels
     """
     
     def __init__(self, config: Dict[str, Any]):
@@ -312,7 +314,7 @@ class GreedyRosteringEngine:
                 status = "failed"
                 status_msg = f"FAILED: {coverage:.1f}% coverage"
             
-            message = f"DRAAD 218B FASE 3 GREEDY: {coverage:.1f}% coverage ({assigned_count}/{total_required}) in {solve_time:.2f}s"
+            message = f"DRAAD 218B FASE 4 GREEDY: {coverage:.1f}% coverage ({assigned_count}/{total_required}) in {solve_time:.2f}s"
             
             logger.info(f"✅ {status_msg} in {solve_time:.2f}s")
             
@@ -375,7 +377,7 @@ class GreedyRosteringEngine:
     def _load_employees(self) -> None:
         """Load employees from database.
         
-        DRAAD 218B STAP 3: Added team loading and normalization
+        DRAAA 218B STAP 3: Added team loading and normalization
         """
         if not self.supabase:
             logger.warning("Supabase not available, using empty employee list")
@@ -659,119 +661,265 @@ class GreedyRosteringEngine:
         
         return candidates
     
+    def _apply_system_service_blocks(self, emp_id: str, date: str, 
+                                      dagdeel: str, service_code: str,
+                                      planning_db: Dict[Tuple[str, str, str], RosterAssignment]) -> None:
+        """Apply blocking rules voor systeemdiensten (DIO/DIA/DDO/DDA).
+        
+        DRAAD 218B FASE 4 STAP 7: Systeemdienst-blokkeringsregels
+        
+        Spec 3.7.1-3.7.2:
+        DIO (dagdeel O) → block M (same day) + probeer DIA (same day A)
+                          DIA (if success) → block next O & next M
+        DDO (dagdeel O) → block M (same day) + probeer DDA (same day A)
+                          DDA (if success) → block next O & next M
+        """
+        
+        if service_code in ['DIO', 'DDO']:  # Ochtend services
+            # 3.7.1.2 / 3.7.2.2: Block hetzelfde dagdeel M (middag)
+            middag_key = (date, 'M', emp_id)
+            if middag_key in planning_db:
+                planning_db[middag_key].status = 2
+                logger.debug(f"Blocked {middag_key} (middag after {service_code})")
+            
+            # 3.7.1.3 / 3.7.2.3: Probeer evening service (DIA of DDA)
+            # DIT WORDT IN ALLOCATIE AFGEHANDELD (separate requirement)
+            
+        elif service_code in ['DIA', 'DDA']:  # Avond services
+            # 3.7.1.4-5 / 3.7.2.4-5: Block volgende dag
+            # MAAR: Niet als date == end_date!
+            
+            next_date_obj = datetime.strptime(date, '%Y-%m-%d') + timedelta(days=1)
+            next_date = next_date_obj.strftime('%Y-%m-%d')
+            
+            # Check if next_date is NOT past end_date
+            end_date = datetime.strptime(self.end_date, '%Y-%m-%d')
+            
+            if next_date_obj <= end_date:
+                # Block next day O (ochtend)
+                next_o_key = (next_date, 'O', emp_id)
+                if next_o_key in planning_db:
+                    planning_db[next_o_key].status = 2
+                    logger.debug(f"Blocked {next_o_key} (O after {service_code})")
+                
+                # Block next day M (middag)
+                next_m_key = (next_date, 'M', emp_id)
+                if next_m_key in planning_db:
+                    planning_db[next_m_key].status = 2
+                    logger.debug(f"Blocked {next_m_key} (M after {service_code})")
+    
+    def _can_allocate_with_blocks(self, emp_id: str, req: RosteringRequirement,
+                                  planning_db: Dict[Tuple[str, str, str], RosterAssignment]) -> bool:
+        """Check if allocation is possible considering blocking rules.
+        
+        DRAAD 218B FASE 4 STAP 7: Check blocking constraints
+        
+        Voor systeemdiensten: Check of alle slots die geblokkeerd worden beschikbaar zijn.
+        """
+        service_code = req.service_code
+        
+        if service_code == 'DIO':
+            # Moet O beschikbaar zijn (current)
+            o_key = (req.date, 'O', emp_id)
+            if o_key in planning_db and planning_db[o_key].status != 0:
+                return False
+            
+            # Moet M beschikbaar zijn (current, wordt geblokkeerd)
+            m_key = (req.date, 'M', emp_id)
+            if m_key in planning_db and planning_db[m_key].status != 0:
+                return False
+            
+            # Probeer DIA ook - check of A beschikbaar is
+            a_key = (req.date, 'A', emp_id)
+            if a_key in planning_db and planning_db[a_key].status != 0:
+                # A niet beschikbaar - kunnen DIO niet allocate
+                return False
+            
+            return True
+        
+        elif service_code == 'DDO':
+            # Zelfde als DIO
+            return self._can_allocate_with_blocks(emp_id, req, planning_db)
+        
+        elif service_code == 'DIA':
+            # Moet A beschikbaar zijn (current)
+            a_key = (req.date, 'A', emp_id)
+            if a_key in planning_db and planning_db[a_key].status != 0:
+                return False
+            
+            # Check next day slots (als niet end_date)
+            next_date_obj = datetime.strptime(req.date, '%Y-%m-%d') + timedelta(days=1)
+            next_date = next_date_obj.strftime('%Y-%m-%d')
+            end_date = datetime.strptime(self.end_date, '%Y-%m-%d')
+            
+            if next_date_obj <= end_date:
+                # Volgende dag O moet beschikbaar zijn
+                next_o_key = (next_date, 'O', emp_id)
+                if next_o_key in planning_db and planning_db[next_o_key].status != 0:
+                    return False
+                
+                # Volgende dag M moet beschikbaar zijn
+                next_m_key = (next_date, 'M', emp_id)
+                if next_m_key in planning_db and planning_db[next_m_key].status != 0:
+                    return False
+            
+            return True
+        
+        elif service_code == 'DDA':
+            # Zelfde als DIA
+            return self._can_allocate_with_blocks(emp_id, req, planning_db)
+        
+        # Non-system services - altijd ok
+        return True
+    
     def _allocate_greedy(self) -> List[RosterAssignment]:
-        """Greedy allocation with constraints.
+        """Greedy allocation with HC1-HC6 constraints.
         
-        HC1-HC6 Constraints:
-        - HC1: Respect employee unavailability
-        - HC2: Don't exceed service quotas
-        - HC3: Don't exceed max shifts per employee
-        - HC4: Prefer skilled/available employees
-        - HC5: Balance load across team
-        - HC6: Avoid conflicts
+        DRAAD 218B FASE 4 STAP 8: Complete herschrijving
         
-        DRAAD 218B FASE 2: Uses _get_team_candidates for team prioritization
+        Spec Section 3 & 4:
+        - HC1: Respect unavailability (status > 0)
+        - HC2: Only assign if capable (in roster_employee_services)
+        - HC3: Don't exceed max_shifts
+        - HC4: Prefer employees with most quota remaining
+        - HC5: Among equals, prefer longest without work
+        - HC6: Alphabetical tiebreaker
         """
         new_assignments = []
         employee_shifts = {emp_id: 0 for emp_id in self.employees}
+        employee_last_work = {emp_id: '1900-01-01' for emp_id in self.employees}
         
-        # Sort requirements by urgency (harder to fill first)
-        sorted_reqs = sorted(
-            self.requirements,
-            key=lambda r: (r.shortage(), -r.needed),
-            reverse=True
-        )
+        # Build planning database for fast lookup
+        planning_db: Dict[Tuple[str, str, str], RosterAssignment] = {}
+        for req in self.requirements:
+            for dagdeel in ['O', 'M', 'A']:
+                for emp_id in self.employees:
+                    key = (req.date, dagdeel, emp_id)
+                    planning_db[key] = RosterAssignment(
+                        roster_id=self.roster_id,
+                        employee_id=emp_id,
+                        date=req.date,
+                        dagdeel=dagdeel,
+                        service_id='',
+                        status=0  # Start beschikbaar
+                    )
         
-        for req in sorted_reqs:
-            while req.shortage() > 0:
-                # FASE 2: Get team candidates
+        # Load existing unavailability (status=2,3)
+        try:
+            existing = self.supabase.table('roster_assignments').select(
+                'employee_id, date, dagdeel, status'
+            ).eq('roster_id', self.roster_id).gt('status', 0).execute()
+            
+            for row in existing.data:
+                key = (row['date'], row['dagdeel'], row['employee_id'])
+                if key in planning_db:
+                    planning_db[key].status = row['status']
+            
+            logger.debug(f"Loaded {len(existing.data)} existing assignments")
+        except Exception as e:
+            logger.warning(f"Could not load existing assignments: {e}")
+        
+        # MAIN LOOP: Process requirements in sorted order
+        for req in self.requirements:
+            # How many slots still open for this requirement?
+            remaining = req.needed - req.assigned
+            
+            while remaining > 0:
+                # STAP 1: Get team candidates (Spec 3.3)
                 candidates = self._get_team_candidates(req.team)
                 
-                # Find best employee from candidates
-                best_emp = None
-                best_score = -999
+                # STAP 2: Filter on availability & capability (HC1, HC2, HC3)
+                eligible = []
                 
                 for emp_id in candidates:
                     emp = self.employees[emp_id]
                     
-                    # Skip if already pre-planned for this slot
-                    if emp_id in req.pre_planned_ids:
-                        continue
-                    
                     # HC1: Check availability
-                    if not emp.can_work(req.date, req.service_id):
-                        continue
+                    slot_key = (req.date, req.dagdeel, emp_id)
+                    if slot_key not in planning_db or planning_db[slot_key].status != 0:
+                        continue  # Slot not available
                     
-                    # HC3: Check max shifts
+                    # HC2: Check capability
+                    if req.service_id not in emp.service_quotas:
+                        continue  # Not qualified
+                    
+                    # HC3: Check quota & max shifts
+                    if emp.service_quotas[req.service_id] <= 0:
+                        continue  # No quota left
+                    
                     if employee_shifts[emp_id] >= self.max_shifts:
+                        continue  # Max shifts exceeded
+                    
+                    # HC6: Check blocking rules for system services
+                    if not self._can_allocate_with_blocks(emp_id, req, planning_db):
                         continue
                     
-                    # HC2: Check service quota
-                    quota = emp.get_shift_capacity(req.service_id)
-                    if quota <= 0:
-                        continue
-                    
-                    # HC4-HC5: Score employee
-                    score = self._score_employee(emp, req)
-                    
-                    if score > best_score:
-                        best_score = score
-                        best_emp = emp_id
+                    eligible.append(emp_id)
                 
-                # Create assignment if found
-                if best_emp:
-                    assignment = RosterAssignment(
-                        roster_id=self.roster_id,
-                        employee_id=best_emp,
-                        date=req.date,
-                        dagdeel=req.dagdeel,
-                        service_id=req.service_id,
-                        status=1,  # ingepland
-                        source="greedy"
-                    )
-                    new_assignments.append(assignment)
-                    self.assignments[assignment.id] = assignment
-                    req.assigned += 1
-                    req.invulling = 1  # Mark as GREEDY-filled
-                    employee_shifts[best_emp] += 1
-                    
-                    # Decrease quota
-                    emp = self.employees[best_emp]
-                    emp.service_quotas[req.service_id] = max(
-                        0,
-                        emp.service_quotas.get(req.service_id, 0) - 1
-                    )
-                    
+                if not eligible:
+                    # No eligible employee - Spec 3.3.3, 3.4.1: Service stays OPEN
                     logger.debug(
-                        f"Assigned {emp.name} to {req.date}/{req.dagdeel}/{req.service_code} "
-                        f"(team={req.team}, quota left={emp.service_quotas.get(req.service_id, 0)})"
+                        f"Requirement {req.date}/{req.dagdeel}/{req.service_id[:8]}... "
+                        f"could not be filled (no eligible employees)"
                     )
-                else:
-                    # Can't fill this slot
-                    logger.debug(
-                        f"No eligible employee for {req.date}/{req.dagdeel}/{req.service_code} "
-                        f"(team={req.team})"
+                    break  # Move to next requirement
+                
+                # STAP 3: Score & select best (HC4, HC5, HC6)
+                best_emp = max(
+                    eligible,
+                    key=lambda e_id: (
+                        # HC4: Quota remaining (descending)
+                        self.employees[e_id].service_quotas[req.service_id],
+                        # HC5: Last work date (ascending = oldest first)
+                        -datetime.strptime(employee_last_work[e_id], '%Y-%m-%d').timestamp(),
+                        # HC6: Alphabetical name (tiebreaker)
+                        self.employees[e_id].name
                     )
-                    break
+                )
+                
+                # STAP 4: Create assignment
+                assignment = RosterAssignment(
+                    roster_id=self.roster_id,
+                    employee_id=best_emp,
+                    date=req.date,
+                    dagdeel=req.dagdeel,
+                    service_id=req.service_id,
+                    status=1,
+                    source="greedy"
+                )
+                
+                new_assignments.append(assignment)
+                self.assignments[assignment.id] = assignment
+                
+                # Update planning DB
+                slot_key = (req.date, req.dagdeel, best_emp)
+                planning_db[slot_key].status = 1
+                planning_db[slot_key].service_id = req.service_id
+                
+                # STAP 5: Apply blocking rules (if system service)
+                if req.is_system:
+                    self._apply_system_service_blocks(best_emp, req.date, req.dagdeel, 
+                                                     req.service_code, planning_db)
+                
+                # STAP 6: Update tracking
+                req.assigned += 1
+                req.invulling = 1  # Marked as GREEDY-filled
+                employee_shifts[best_emp] += 1
+                employee_last_work[best_emp] = req.date
+                
+                # Decrease quota
+                self.employees[best_emp].service_quotas[req.service_id] -= 1
+                
+                remaining -= 1
+                
+                logger.debug(
+                    f"Assigned {self.employees[best_emp].name} to "
+                    f"{req.date}/{req.dagdeel}/{req.service_code} "
+                    f"(quota left: {self.employees[best_emp].service_quotas[req.service_id]})"
+                )
         
         logger.info(f"Created {len(new_assignments)} greedy assignments")
         return new_assignments
-    
-    def _score_employee(self, emp: Employee, req: RosteringRequirement) -> float:
-        """Score employee for requirement (HC4-HC5)."""
-        score = 100.0  # Base score
-        
-        # Prefer employees with quota for this service
-        if req.service_id in emp.preferred_services:
-            score += 50
-        elif req.service_id in emp.reluctant_services:
-            score -= 50
-        
-        # Small random boost for variety
-        import random
-        score += random.random() * 10
-        
-        return score
     
     def _find_bottlenecks(self) -> None:
         """Identify unfilled slots."""
