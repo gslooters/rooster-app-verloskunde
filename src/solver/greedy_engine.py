@@ -15,6 +15,7 @@ DRAA 190: Smart greedy allocation
 DRAA 214: Coverage calculation fixes
 DRAA 217: Restoration after corruption
 DRAA 218B: FASE 1 - Baseline fixes (service_types join, team logic, sorting)
+DRAA 218B: FASE 2 - Team-selectie helper methode
 """
 
 import logging
@@ -210,6 +211,7 @@ class GreedyRosteringEngine:
     DRAAD 190: HC1-HC6 constraint handling
     DRAAD 214: Coverage calculations fixed
     DRAAD 218B FASE 1: Service_types join, team logic, sorting fixes
+    DRAAD 218B FASE 2: Team-selectie helper methode
     """
     
     def __init__(self, config: Dict[str, Any]):
@@ -308,7 +310,7 @@ class GreedyRosteringEngine:
                 status = "failed"
                 status_msg = f"FAILED: {coverage:.1f}% coverage"
             
-            message = f"DRAAD 218B FASE 1 GREEDY: {coverage:.1f}% coverage ({assigned_count}/{total_required}) in {solve_time:.2f}s"
+            message = f"DRAAD 218B FASE 2 GREEDY: {coverage:.1f}% coverage ({assigned_count}/{total_required}) in {solve_time:.2f}s"
             
             logger.info(f"✅ {status_msg} in {solve_time:.2f}s")
             
@@ -554,6 +556,49 @@ class GreedyRosteringEngine:
         """Lock pre-planned assignments (already counted)."""
         logger.info(f"Locked {len(self.pre_planned_ids)} pre-planned assignments")
     
+    def _get_team_candidates(self, required_team: str) -> List[str]:
+        """Get employee IDs for team, with fallback logic.
+        
+        DRAAD 218B FASE 2: Team-selectie helper methode
+        
+        Spec 3.3-3.4:
+        - If team=TOT: Use all employees (GRO + ORA + OVERIG)
+        - If team=GRO: Use GRO, fallback to OVERIG
+        - If team=ORA: Use ORA, fallback to OVERIG
+        
+        Returns:
+            List of employee IDs in priority order.
+        """
+        team = self._normalize_team(required_team)
+        candidates = []
+        
+        if team == 'TOT':
+            # Use ALL employees (all teams)
+            candidates = list(self.employees.keys())
+        
+        elif team == 'GRO':
+            # First GRO team
+            gro = [eid for eid, e in self.employees.items() if e.team == 'GRO']
+            candidates.extend(gro)
+            
+            # Fallback: OVERIG
+            overig = [eid for eid, e in self.employees.items() if e.team == 'OVERIG']
+            candidates.extend(overig)
+        
+        elif team == 'ORA':
+            # First ORA team
+            ora = [eid for eid, e in self.employees.items() if e.team == 'ORA']
+            candidates.extend(ora)
+            
+            # Fallback: OVERIG
+            overig = [eid for eid, e in self.employees.items() if e.team == 'OVERIG']
+            candidates.extend(overig)
+        
+        else:  # team == 'OVERIG'
+            candidates = [eid for eid, e in self.employees.items() if e.team == 'OVERIG']
+        
+        return candidates
+    
     def _allocate_greedy(self) -> List[RosterAssignment]:
         """Greedy allocation with constraints.
         
@@ -564,6 +609,8 @@ class GreedyRosteringEngine:
         - HC4: Prefer skilled/available employees
         - HC5: Balance load across team
         - HC6: Avoid conflicts
+        
+        DRAAD 218B FASE 2: Uses _get_team_candidates for team prioritization
         """
         new_assignments = []
         employee_shifts = {emp_id: 0 for emp_id in self.employees}
@@ -577,11 +624,16 @@ class GreedyRosteringEngine:
         
         for req in sorted_reqs:
             while req.shortage() > 0:
-                # Find best employee
+                # FASE 2: Get team candidates
+                candidates = self._get_team_candidates(req.team)
+                
+                # Find best employee from candidates
                 best_emp = None
                 best_score = -999
                 
-                for emp_id, emp in self.employees.items():
+                for emp_id in candidates:
+                    emp = self.employees[emp_id]
+                    
                     # Skip if already pre-planned for this slot
                     if emp_id in req.pre_planned_ids:
                         continue
@@ -629,8 +681,17 @@ class GreedyRosteringEngine:
                         0,
                         emp.service_quotas.get(req.service_id, 0) - 1
                     )
+                    
+                    logger.debug(
+                        f"Assigned {emp.name} to {req.date}/{req.dagdeel}/{req.service_code} "
+                        f"(team={req.team}, quota left={emp.service_quotas.get(req.service_id, 0)})"
+                    )
                 else:
                     # Can't fill this slot
+                    logger.debug(
+                        f"No eligible employee for {req.date}/{req.dagdeel}/{req.service_code} "
+                        f"(team={req.team})"
+                    )
                     break
         
         logger.info(f"Created {len(new_assignments)} greedy assignments")
