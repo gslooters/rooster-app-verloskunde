@@ -11,6 +11,7 @@ Key Features:
 - DIO/DIA and DDO/DDA blocking rules
 - Comprehensive debug logging
 - Full database integration with Supabase
+- **DRAAD-FINAL FIX**: Safe integer type conversion for status field
 
 Database Tables Used:
 - roosters: Roster metadata (start_date, end_date, status)
@@ -20,7 +21,7 @@ Database Tables Used:
 - service_types: Service definitions (code, is_systeem)
 - employees: Employee metadata (team, dienstverband)
 
-Author: GREEDY Engine v0.3 - DRAAD 221
+Author: GREEDY Engine v0.4 - DRAAD FINAL FIX
 Date: 2025-12-20
 """
 
@@ -31,6 +32,36 @@ from dataclasses import dataclass, field
 from collections import defaultdict
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_int(value, default=0):
+    """
+    DRAAD-FINAL-FIX: Safely convert value to integer
+    
+    Handles:
+    - None values → default
+    - Already integers → unchanged
+    - String values → int()
+    - Invalid values → default with warning
+    
+    Args:
+        value: Value to convert
+        default: Default value if conversion fails
+        
+    Returns:
+        Integer value
+    """
+    if value is None:
+        return default
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            logger.warning(f"[DRAAD-TYPEFIX] Cannot convert '{value}' to int, using {default}")
+            return default
+    return default
 
 
 @dataclass
@@ -94,6 +125,9 @@ class GreedyRosteringEngine:
     3. Select employee with most remaining shifts (fair distribution)
     4. Assign shift and block related slots (DIO/DIA, DDO/DDA rules)
     5. Update status and capacity tracking
+    
+    DRAAD-FINAL-FIX: All status field conversions now use _safe_int() to handle
+    STRING values from Supabase Postgrest API
     """
     
     def __init__(self, db_client):
@@ -123,7 +157,7 @@ class GreedyRosteringEngine:
             "blocked_slots": 0
         }
         
-        logger.info("[DRAAD221-BASELINE] GreedyRosteringEngine initialized")
+        logger.info("[DRAAD221-BASELINE] GreedyRosteringEngine initialized with type-safe conversions")
     
     def solve_roster(self, roster_id: str) -> Dict:
         """
@@ -233,6 +267,8 @@ class GreedyRosteringEngine:
         """
         Load current assignments from roster_assignments
         Creates werkbestand_planning with ALL slots (available and blocked)
+        
+        DRAAD-FINAL-FIX: Use _safe_int() for status field conversion
         """
         logger.info("[DRAAD221-BASELINE] Loading current planning state...")
         
@@ -243,13 +279,16 @@ class GreedyRosteringEngine:
         ).eq("roster_id", self.roster_id).execute()
         
         for row in result.data:
+            # DRAAD-FINAL-FIX: Convert status to integer safely
+            status_value = _safe_int(row.get("status"), default=3)
+            
             key = (row["employee_id"], row["date"], row["dagdeel"])
             assignment = Assignment(
                 roster_id=row["roster_id"],
                 employee_id=row["employee_id"],
                 date=row["date"],
                 dagdeel=row["dagdeel"],
-                status=row["status"],
+                status=status_value,  # Now guaranteed INTEGER
                 service_id=row.get("service_id"),
                 blocked_by_date=row.get("blocked_by_date"),
                 blocked_by_dagdeel=row.get("blocked_by_dagdeel"),
@@ -266,14 +305,21 @@ class GreedyRosteringEngine:
         DRAAD-221 BASELINE VERIFICATION:
         Verify that blocked slots (status > 0) are correctly set
         and count them for statistics
+        
+        DRAAD-FINAL-FIX: Enhanced logging with type information
         """
         logger.info("[DRAAD221-BASELINE] === BASELINE VERIFICATION START ===")
         
         blocked_count = 0
         available_count = 0
         pre_planned_count = 0
+        status_type_info = {}
         
         for key, assignment in self.werkbestand_planning.items():
+            # Log type info for first 5 entries (for debugging)
+            if len(status_type_info) < 5:
+                status_type_info[assignment.status] = type(assignment.status).__name__
+            
             if assignment.status == 0:
                 available_count += 1
             elif assignment.status == 1:
@@ -287,9 +333,10 @@ class GreedyRosteringEngine:
         self.stats["blocked_slots"] = blocked_count
         self.stats["pre_planned"] = pre_planned_count
         
-        logger.info(f"[DRAAD221-BASELINE] Available slots: {available_count}")
-        logger.info(f"[DRAAD221-BASELINE] Pre-planned slots: {pre_planned_count}")
-        logger.info(f"[DRAAD221-BASELINE] Blocked slots: {blocked_count}")
+        logger.info(f"[DRAAD221-BASELINE] Available slots (status=0): {available_count}")
+        logger.info(f"[DRAAD221-BASELINE] Pre-planned slots (status=1): {pre_planned_count}")
+        logger.info(f"[DRAAD221-BASELINE] Blocked slots (status>1): {blocked_count}")
+        logger.info(f"[DRAAD221-BASELINE] Status type info: {status_type_info}")
         logger.info("[DRAAD221-BASELINE] === BASELINE VERIFICATION COMPLETE ===")
     
     def _load_capaciteit(self):
