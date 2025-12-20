@@ -1,6 +1,6 @@
-"""Greedy Rostering Engine v2.0 - DRAAD 211 COMPLETE REWRITE + DRAAD 218C DIO/DDA Pairing
+"""Greedy Rostering Engine v2.0 - DRAAD 211 COMPLETE REWRITE + DRAAD 218C DIO/DDA Pairing + DRAAD 219B Shortage Analysis
 
-Status: DRAAD 218C - DIO/DDA PAIRING FIXES ON STABLE DRAAD 211 BASE
+Status: DRAAD 219B - SHORTAGE FIELD HANDLING ON DRAAD 218C BASE
 Date: 2025-12-20
 
 CRITICAL BUGS FIXED (DRAAD 211):
@@ -28,6 +28,15 @@ NEW FEATURES (DRAAD 218C):
 ✅ Blocking Rules: Auto-blocks conflicting slots per spec 3.7.1 and 3.7.2
 ✅ End-Date Boundary: No next-day blocks when date = end_date
 
+NEW FEATURES (DRAAD 219B):
+==========================
+✅ Shortage Reason Analysis: Intelligent categorization why slot couldn't be filled
+✅ Shortage Suggestion: Actionable suggestions for resolution
+✅ Category 1: No eligible employees (quota exhausted, all blocked, etc.)
+✅ Category 2: Partial fill (some but not all positions filled)
+✅ Category 3: Pairing failure (DIO/DIA pairing requirements not met)
+✅ All messages in Dutch (customer language)
+
 CORE FEATURES:
 ==============
 1. Team-based availability (team fallback logic)
@@ -37,6 +46,7 @@ CORE FEATURES:
 5. Status blocking (privé/verlof/geblokkeerd slot respect)
 6. Database RE-READ after each dagdeel (sync with triggers)
 7. Pairing auto-assignment with recursive flagging to prevent loops
+8. Intelligent shortage analysis (DRAAD 219B NEW)
 
 Algorithm Flow:
 - Iterate: Date → Dagdeel (O, M, A) → Service
@@ -44,6 +54,7 @@ Algorithm Flow:
 - After assignment of DIO/DDO: Auto-assign pair (DIA/DDA) if possible
 - After each dagdeel: RE-READ database (sync status=2 updates from triggers + pairing)
 - Respect: Per-service quota, team fallback, pairing requirements, blocking
+- For unfilled slots: Analyze reason and suggest solution (DRAAD 219B NEW)
 
 DATABASE RE-READ (KRITIEK!):
 ============================
@@ -75,7 +86,35 @@ PAIRING LOGIC FLOW:
    - DDO blocks: Same day M (status=2), same day A reserved for DDA  
    - DDA blocks: Next day O,M (status=2) if not end_date
 
-Author: DRAAD 218C on DRAAD 211 v2.0 Base
+SHORTAGE ANALYSIS (DRAAD 219B):
+================================
+When a slot cannot be fully filled, analyze WHY:
+
+1. No Eligible Employees:
+   - All quota exhausted for this service
+   - All employees blocked (absent/verlof/privé)
+   - No employees with this service capability
+   
+   Reason: "Geen medewerkers beschikbaar"
+   Suggestion: "Voeg medewerker toe met capability" OR "Verhoog quota"
+
+2. Partial Fill:
+   - Some but not all positions filled
+   - Quota limits reached before deficit covered
+   - Pairing requirements partially satisfied
+   
+   Reason: "Onvoldoende beschikbare medewerkers"
+   Suggestion: "Verhoog quota voor medewerkers"
+
+3. Pairing Failure:
+   - Employee available for DIO but NOT for DIA
+   - Quota available for DIO but NOT for DIA
+   - Next day blocked for DIA
+   
+   Reason: "Pairing-vereiste kan niet vervuld"
+   Suggestion: "Check quota en beschikbaarheid volgende dag"
+
+Author: DRAAD 219B on DRAAD 218C + DRAAD 211 v2.0 Base
 """
 
 import logging
@@ -189,7 +228,7 @@ class RosteringRequirement:
 
 class GreedyRosteringEngine:
     """
-    GREEDY v2.0 + DRAAD 218C - Fair Distribution Greedy Algorithm with DIO/DDA Pairing
+    GREEDY v2.0 + DRAAD 218C + DRAAD 219B - Fair Distribution Greedy Algorithm with DIO/DDA Pairing + Shortage Analysis
     
     KERNBEGRIP:
     ===========
@@ -199,6 +238,7 @@ class GreedyRosteringEngine:
     3. Fair load balancing (medewerker met MEESTE remaining voor DEZE SERVICE krijgt prioriteit)
     4. Service pairing validation (DIO/DDO ↔ DIA/DDA auto-pairing)
     5. Status blocking (privé/verlof/geblokkeerd slot respect)
+    6. Intelligent shortage analysis (DRAAD 219B NEW)
     
     TRE KRITIEKE BUGS GEREPAREERD (DRAAD 211):
     ==========================================
@@ -229,6 +269,13 @@ class GreedyRosteringEngine:
     ✅ Validation: Check availability, quota, capability for BOTH services
     ✅ Blocking: Apply spec 3.7.1/3.7.2 blocking rules after pairing
     ✅ Recursion guard: Use auto_pair=False on recursive call to prevent loops
+    
+    SHORTAGE ANALYSIS (DRAAD 219B):
+    ===============================
+    ✅ Intelligent reason categorization (no eligible, quota, blocking, pairing)
+    ✅ Actionable suggestions (Dutch language)
+    ✅ Per-bottleneck analysis without extra queries
+    ✅ Performance optimized
     """
     
     # Service Pairing Rules (DRAAD 218C NEW)
@@ -283,12 +330,13 @@ class GreedyRosteringEngine:
         self.pre_planned_count: int = 0
         self.greedy_count: int = 0
         
-        logger.info(f"\n✅ GreedyRosteringEngine v2.0 + DRAAD 218C initialized")
+        logger.info(f"\n✅ GreedyRosteringEngine v2.0 + DRAAD 218C + DRAAD 219B initialized")
         logger.info(f"   🔧 BUG 1 FIX: blocked_slots as (date, dagdeel, employee_id)")
         logger.info(f"   🔧 BUG 2 FIX: quota_remaining as (employee_id, service_id)")
         logger.info(f"   🔧 BUG 3 FIX: fairness sort by per-service remaining")
         logger.info(f"   🔧 BUG 4-5 FIX: Restored dataclasses + fixed bottleneck fields")
         logger.info(f"   ✨ DRAAD 218C: DIO/DIA + DDO/DDA pairing with validation")
+        logger.info(f"   ✨ DRAAD 219B: Intelligent shortage reason/suggestion analysis")
         
         # Load data
         self._load_data()
@@ -540,6 +588,139 @@ class GreedyRosteringEngine:
         logger.debug(f"   ✅ Pairing validation passed: {emp_id} can pair {service_code} + {pair_service_code}")
         return True
 
+    def _check_all_quota_exhausted(self, service_id: str) -> bool:
+        """
+        DRAAD 219B NEW: Check if ALL employees have zero remaining quota for this service.
+        
+        Args:
+            service_id: Service ID to check
+        
+        Returns:
+            True if all employees have quota <= 0 for this service, else False
+        """
+        for emp_id in [e.id for e in self.employees if e.actief]:
+            key = (emp_id, service_id)
+            if self.quota_remaining.get(key, 0) > 0:
+                return False
+        return True
+
+    def _check_many_blocked(self, date: str, dagdeel: str) -> bool:
+        """
+        DRAAD 219B NEW: Check if majority (>50%) of active employees are blocked for this slot.
+        
+        Args:
+            date: Date (YYYY-MM-DD)
+            dagdeel: Dagdeel (O, M, A)
+        
+        Returns:
+            True if >50% of active employees are blocked for this slot, else False
+        """
+        total_active = len([e for e in self.employees if e.actief])
+        if total_active == 0:
+            return False
+        
+        blocked_count = 0
+        for emp_id in [e.id for e in self.employees if e.actief]:
+            if (date, dagdeel, emp_id) in self.blocked_slots:
+                blocked_count += 1
+        
+        return (blocked_count / total_active) > 0.5
+
+    def _count_pairing_failures(self, date: str, dagdeel: str, service_id: str) -> int:
+        """
+        DRAAD 219B NEW: Count how many otherwise-eligible employees can't be paired.
+        
+        Args:
+            date: Date (YYYY-MM-DD)
+            dagdeel: Dagdeel (O, M, A)
+            service_id: Service ID
+        
+        Returns:
+            Number of eligible employees that can't be paired
+        """
+        service = self.service_types.get(service_id)
+        if not service or service.code not in ('DIO', 'DDO', 'DIA', 'DDA'):
+            return 0
+        
+        eligible = self._find_eligible_employees(date, dagdeel, service_id)
+        pair_fails = 0
+        
+        for emp_id in eligible:
+            if not self._can_pair(date, dagdeel, emp_id, service_id):
+                pair_fails += 1
+        
+        return pair_fails
+
+    def _get_shortage_reason(self, date: str, dagdeel: str, service_id: str) -> str:
+        """
+        DRAAD 219B NEW: Analyze WHY a slot couldn't be fully filled.
+        
+        Returns human-readable reason in Dutch.
+        
+        Logic:
+        1. Check if ANY eligible employees exist
+           → if none: analyze further (quota, blocked, no capability)
+        
+        2. Check pairing requirements (if system service)
+           → if pair failures: "Pairing-vereiste kan niet vervuld"
+        
+        3. Default to generic message
+        """
+        service = self.service_types.get(service_id)
+        service_code = service.code if service else ''
+        
+        # Check 1: Are there ANY eligible employees?
+        eligible = self._find_eligible_employees(date, dagdeel, service_id)
+        
+        if not eligible:
+            # No eligible employees - analyze WHY
+            if self._check_all_quota_exhausted(service_id):
+                return "Quota-limiet bereikt voor alle medewerkers"
+            elif self._check_many_blocked(date, dagdeel):
+                return "Veel medewerkers afwezig/privé/verlof"
+            else:
+                return "Geen medewerkers beschikbaar"
+        
+        # Check 2: Pairing failures (if system service)
+        if service and service.is_system and service_code in ('DIO', 'DDO', 'DIA', 'DDA'):
+            pair_fails = self._count_pairing_failures(date, dagdeel, service_id)
+            if pair_fails > 0:
+                return f"Pairing-vereiste kan niet vervuld ({pair_fails} mismatches)"
+        
+        # Check 3: Partial coverage (some but not all)
+        return "Onvoldoende beschikbare medewerkers"
+
+    def _get_shortage_suggestion(self, date: str, dagdeel: str, service_id: str) -> str:
+        """
+        DRAAD 219B NEW: Provide actionable suggestion for resolver.
+        
+        Returns human-readable suggestion in Dutch.
+        
+        Based on reason, suggest actions to resolve the shortage.
+        """
+        reason = self._get_shortage_reason(date, dagdeel, service_id)
+        service = self.service_types.get(service_id)
+        service_code = service.code if service else ''
+        
+        if "Quota-limiet" in reason:
+            return f"Verhoog quota voor medewerkers met capability voor {service_code}"
+        
+        elif "afwezig/privé" in reason:
+            return "Controleer status-velden (privé/verlof/geblokkeerd) in rooster"
+        
+        elif "Pairing-vereiste" in reason:
+            pair_info = self._get_pair_service(service_code)
+            if pair_info:
+                pair_service_code, _ = pair_info
+                return f"Check quota en beschikbaarheid voor {pair_service_code}"
+            return "Herverken pairing-vereisten voor deze dag"
+        
+        elif "Geen medewerkers beschikbaar" in reason:
+            return f"Voeg medewerker toe met capability voor {service_code}"
+        
+        else:
+            return "Verhoog quota of voeg medewerker toe"
+
     def _refresh_from_database(self) -> None:
         """
         RE-READ from database after each dagdeel.
@@ -621,14 +802,15 @@ class GreedyRosteringEngine:
         logger.info(f"   ✅ Blocked slots updated: {len(self.blocked_slots)}")
 
     def solve(self) -> SolveResult:
-        """Execute GREEDY v2.0 + DRAAD 218C algorithm."""
+        """Execute GREEDY v2.0 + DRAAD 218C + DRAAD 219B algorithm."""
         start_time = time.time()
-        logger.info("\n🚀 [DRAAD 218C] Starting GREEDY v2.0 + DIO/DDA Pairing solve...")
+        logger.info("\n🚀 [DRAAD 219B] Starting GREEDY v2.0 + DIO/DDA Pairing + Shortage Analysis...")
         logger.info("   ✅ BUG 1 FIX: blocked_slots (date, dagdeel, employee_id)")
         logger.info("   ✅ BUG 2 FIX: quota_remaining (employee_id, service_id)")
         logger.info("   ✅ BUG 3 FIX: fairness sort by per-service remaining")
         logger.info("   ✅ BUG 4-5 FIX: All dataclasses present, bottleneck fields fixed")
         logger.info("   ✨ DRAAD 218C: DIO/DIA + DDO/DDA auto-pairing with full validation")
+        logger.info("   ✨ DRAAD 219B: Intelligent shortage reason/suggestion analysis")
         
         try:
             bottlenecks = []
@@ -692,6 +874,10 @@ class GreedyRosteringEngine:
                         
                         if not eligible:
                             logger.warning(f"   ❌ BOTTLENECK: No eligible employees for {service_id}")
+                            reason = self._get_shortage_reason(date_str, dagdeel, service_id)
+                            suggestion = self._get_shortage_suggestion(date_str, dagdeel, service_id)
+                            logger.warning(f"       Reason: {reason}")
+                            logger.warning(f"       Suggestion: {suggestion}")
                             bottlenecks.append({
                                 'date': date_str,
                                 'dagdeel': dagdeel,
@@ -699,8 +885,8 @@ class GreedyRosteringEngine:
                                 'need': required_count,
                                 'assigned': assigned_count,
                                 'shortage': deficit,
-                                'reason': None,
-                                'suggestion': None
+                                'reason': reason,
+                                'suggestion': suggestion
                             })
                             continue
                         
@@ -745,6 +931,11 @@ class GreedyRosteringEngine:
                                 logger.debug(f"   ✅ Assigned: {emp_id}")
                         
                         if allocated < deficit:
+                            reason = self._get_shortage_reason(date_str, dagdeel, service_id)
+                            suggestion = self._get_shortage_suggestion(date_str, dagdeel, service_id)
+                            logger.warning(f"   ⚠️  PARTIAL BOTTLENECK: {allocated}/{deficit} filled")
+                            logger.warning(f"       Reason: {reason}")
+                            logger.warning(f"       Suggestion: {suggestion}")
                             bottlenecks.append({
                                 'date': date_str,
                                 'dagdeel': dagdeel,
@@ -752,8 +943,8 @@ class GreedyRosteringEngine:
                                 'need': required_count,
                                 'assigned': assigned_count + allocated,
                                 'shortage': deficit - allocated,
-                                'reason': None,
-                                'suggestion': None
+                                'reason': reason,
+                                'suggestion': suggestion
                             })
                     
                     # ✅ RE-READ after each dagdeel
@@ -777,7 +968,7 @@ class GreedyRosteringEngine:
                 coverage=round(coverage, 1),
                 bottlenecks=bottlenecks,
                 solve_time=round(elapsed, 2),
-                message=f"DRAAD 218C: {coverage:.1f}% coverage in {elapsed:.2f}s",
+                message=f"DRAAD 219B: {coverage:.1f}% coverage in {elapsed:.2f}s",
                 pre_planned_count=self.pre_planned_count,
                 greedy_count=self.greedy_count
             )
