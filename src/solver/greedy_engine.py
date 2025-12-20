@@ -1,7 +1,15 @@
-"""Greedy Rostering Engine v2.0 - DRAAD 211 COMPLETE REWRITE + DRAAD 218C DIO/DDA Pairing + DRAAD 219B Shortage Analysis + DRAAD 220 SCHEMA FIX
+"""Greedy Rostering Engine v2.0 - DRAAD 221 DIAGNOSTICS (FASE 1)
 
-Status: DRAAD 220 - DATABASE SCHEMA CORRECTION + VALIDATION
+Status: FASE 1 DIAGNOSTICS - QUOTA INITIALIZATION ANALYSIS
 Date: 2025-12-20
+
+FASE 1 OBJECTIVE (DRAAD 221):
+=============================
+Add extensive diagnostics to _initialize_quota() to identify:
+1. How many capabilities are loaded
+2. Status field TYPE (integer vs string)
+3. Skip reasons during quota subtraction
+4. Final quota distribution
 
 CRITICAL FIX (DRAAD 220):
 ========================
@@ -55,6 +63,7 @@ CORE FEATURES:
 7. Pairing auto-assignment with recursive flagging to prevent loops
 8. Intelligent shortage analysis (DRAAD 219B NEW)
 9. Database schema validation at startup (DRAAD 220 NEW)
+10. Extensive diagnostics in _initialize_quota (DRAAD 221 FASE 1 NEW)
 
 Algorithm Flow:
 - Iterate: Date → Dagdeel (O, M, A) → Service
@@ -122,7 +131,7 @@ When a slot cannot be fully filled, analyze WHY:
    Reason: "Pairing-vereiste kan niet vervuld"
    Suggestion: "Check quota en beschikbaarheid volgende dag"
 
-Author: DRAAD 220 SCHEMA FIX on DRAAD 219B on DRAAD 218C + DRAAD 211 v2.0 Base
+Author: DRAAD 221 FASE 1 DIAGNOSTICS on DRAAD 220 SCHEMA FIX on DRAAD 219B on DRAAD 218C + DRAAD 211 v2.0 Base
 """
 
 import logging
@@ -236,7 +245,7 @@ class RosteringRequirement:
 
 class GreedyRosteringEngine:
     """
-    GREEDY v2.0 + DRAAD 218C + DRAAD 219B + DRAAD 220 - Fair Distribution Greedy Algorithm with DIO/DDA Pairing + Shortage Analysis + Schema Validation
+    GREEDY v2.0 + DRAAD 218C + DRAAD 219B + DRAAD 220 + DRAAD 221 FASE 1 - Fair Distribution Greedy Algorithm with DIO/DDA Pairing + Shortage Analysis + Schema Validation + Diagnostics
     
     KERNBEGRIP:
     ===========
@@ -248,6 +257,7 @@ class GreedyRosteringEngine:
     5. Status blocking (privé/verlof/geblokkeerd slot respect)
     6. Intelligent shortage analysis (DRAAD 219B NEW)
     7. Database schema validation (DRAAD 220 NEW)
+    8. Extensive diagnostics in _initialize_quota (DRAAD 221 FASE 1 NEW)
     
     TRE KRITIEKE BUGS GEREPAREERD (DRAAD 211):
     ==========================================
@@ -291,6 +301,13 @@ class GreedyRosteringEngine:
     ✅ Corrected table name in _load_employee_targets()
     ✅ Added _validate_schema() for early validation
     ✅ Enhanced logging for debugging
+    
+    DIAGNOSTICS (DRAAD 221 FASE 1):
+    ===============================
+    ✅ Extensive logging in _initialize_quota()
+    ✅ Check status field TYPE (integer vs string)
+    ✅ Track skip reasons (NULL service_id, no capability, etc.)
+    ✅ Report final quota distribution
     """
     
     # Service Pairing Rules (DRAAD 218C NEW)
@@ -345,7 +362,7 @@ class GreedyRosteringEngine:
         self.pre_planned_count: int = 0
         self.greedy_count: int = 0
         
-        logger.info(f"\n✅ GreedyRosteringEngine v2.0 + DRAAD 218C + DRAAD 219B + DRAAD 220 initialized")
+        logger.info(f"\n✅ GreedyRosteringEngine v2.0 + DRAAD 221 FASE 1 DIAGNOSTICS initialized")
         logger.info(f"   🔧 BUG 1 FIX: blocked_slots as (date, dagdeel, employee_id)")
         logger.info(f"   🔧 BUG 2 FIX: quota_remaining as (employee_id, service_id)")
         logger.info(f"   🔧 BUG 3 FIX: fairness sort by per-service remaining")
@@ -353,6 +370,7 @@ class GreedyRosteringEngine:
         logger.info(f"   ✨ DRAAD 218C: DIO/DIA + DDO/DDA pairing with validation")
         logger.info(f"   ✨ DRAAD 219B: Intelligent shortage reason/suggestion analysis")
         logger.info(f"   ✨ DRAAD 220: Database schema validation + corrected table names")
+        logger.info(f"   ✨ DRAAD 221 FASE 1: Extensive diagnostics in _initialize_quota()")
         
         # DRAAD 220: Validate schema before loading data
         self._validate_schema()
@@ -422,7 +440,7 @@ class GreedyRosteringEngine:
             logger.info(f"  ✅ Loaded {len(self.employee_targets)} employee targets")
             
             self._initialize_quota()
-            logger.info(f"  ✅ Initialized quota tracking")
+            logger.info(f"  ✅ Initialized quota tracking with DIAGNOSTICS (DRAAD 221 FASE 1)")
             
             self._load_blocked_slots()
             logger.info(f"  ✅ Loaded {len(self.blocked_slots)} blocked slots (date, dagdeel, emp_id)")
@@ -535,24 +553,161 @@ class GreedyRosteringEngine:
 
     def _initialize_quota(self) -> None:
         """
-        ✅ BUG 2 FIX: Initialize per-service quota.
+        ✅ DRAAD 221 FASE 1: Initialize per-service quota WITH EXTENSIVE DIAGNOSTICS.
         
         Structure: quota_remaining[(emp_id, service_id)] = remaining_count
-        """
-        # Load from roster_employee_services
-        for key, required_count in self.capabilities.items():
-            self.quota_remaining[key] = required_count
-            self.quota_original[key] = required_count
         
-        # Subtract existing assignments (status in [1, 2])
+        This method now includes comprehensive logging to identify why quota
+        becomes zero/negative during initialization.
+        """
+        logger.info("\n" + "="*80)
+        logger.info("🔍 [DRAAD 221 FASE 1] QUOTA INITIALIZATION START WITH DIAGNOSTICS")
+        logger.info("="*80)
+
+        # Check 1: Capabilities loaded?
+        if not self.capabilities:
+            logger.error("❌ FATAL: self.capabilities is EMPTY!")
+            raise ValueError("No capabilities loaded")
+
+        logger.info(f"\n✅ Capabilities loaded: {len(self.capabilities)} entries")
+        logger.info(f"   Total capacity: {sum(self.capabilities.values())} shifts")
+
+        # Initialize from capabilities
+        for key, aantal in self.capabilities.items():
+            self.quota_remaining[key] = aantal
+            self.quota_original[key] = aantal
+
+        logger.info(f"\n✅ Initial quota set: {len(self.quota_remaining)} entries")
+        logger.info(f"   Total: {sum(self.quota_remaining.values())} shifts")
+
+        # Load assignments
+        logger.info(f"\n📥 Loading roster_assignments...")
         response = self.supabase.table('roster_assignments').select('*').eq(
             'roster_id', self.roster_id
         ).execute()
+
+        logger.info(f"   ✅ Loaded {len(response.data)} roster_assignments")
+
+        # CRITICAL: Check status types (DRAAD 221 FASE 1 NEW)
+        logger.info(f"\n🔍 [DRAAD 221 FASE 1] Analyzing status field TYPE...")
+        status_types = {}
+        status_counts = {}
         
         for row in response.data:
-            if row['status'] in [1, 2]:
-                key = (row['employee_id'], row['service_id'])
-                self.quota_remaining[key] = self.quota_remaining.get(key, 0) - 1
+            status = row.get('status', 0)
+            status_type = type(status).__name__
+            status_types[status_type] = status_types.get(status_type, 0) + 1
+            status_counts[status] = status_counts.get(status, 0) + 1
+
+        logger.info(f"\n   📊 Status FIELD TYPE distribution:")
+        for stype, count in status_types.items():
+            logger.info(f"      {stype}: {count} records")
+
+        logger.info(f"\n   📊 Status VALUE distribution:")
+        for sval in sorted(status_counts.keys(), key=lambda x: (isinstance(x, str), x)):
+            logger.info(f"      status={repr(sval)}: {status_counts[sval]} records")
+
+        # Subtract assignments (DRAAD 221 FASE 1: WITH EXTENSIVE TRACKING)
+        logger.info(f"\n📊 [DRAAD 221 FASE 1] Subtracting existing assignments...")
+        
+        subtracted = 0
+        skipped_null_service = 0
+        skipped_no_capability = 0
+        skipped_wrong_status_type = 0
+        skipped_status_not_eligible = 0
+
+        for row in response.data:
+            status = row.get('status', 0)
+
+            # ✅ DRAAD 221 FASE 1: Force integer conversion with logging
+            if not isinstance(status, int):
+                logger.warning(f"   ⚠️  Status field is {type(status).__name__}: {repr(status)}")
+                try:
+                    status = int(status)
+                except (ValueError, TypeError):
+                    skipped_wrong_status_type += 1
+                    logger.debug(f"      Cannot convert to int, skipping this record")
+                    continue
+
+            # ✅ PHASE 1: Check if status is eligible for subtraction
+            if status not in [1, 2]:
+                skipped_status_not_eligible += 1
+                logger.debug(f"      status={status} not in [1,2], skipping")
+                continue
+
+            service_id = row.get('service_id')
+
+            # ✅ BUG FIX (DRAAD 221 FASE 1): Skip if service_id is NULL
+            if service_id is None:
+                skipped_null_service += 1
+                logger.debug(f"      NULL service_id detected (status={status}), SKIPPING")
+                continue
+
+            emp_id = row['employee_id']
+            key = (emp_id, service_id)
+
+            # ✅ BUG FIX: Skip if no capability
+            if key not in self.quota_remaining:
+                skipped_no_capability += 1
+                logger.debug(
+                    f"      Assignment without capability: "
+                    f"emp={emp_id[-8:]} service={service_id[-8:]}, SKIPPING"
+                )
+                continue
+
+            # Subtract
+            old = self.quota_remaining[key]
+            self.quota_remaining[key] = old - 1
+            subtracted += 1
+
+            if self.quota_remaining[key] < 0:
+                logger.warning(
+                    f"   ⚠️  NEGATIVE QUOTA after subtraction: emp={emp_id[-8:]} "
+                    f"service={service_id[-8:]} quota {old} → {self.quota_remaining[key]}"
+                )
+
+        logger.info(f"\n📊 [DRAAD 221 FASE 1] Subtraction Summary:")
+        logger.info(f"   ✅ Successfully subtracted: {subtracted}")
+        logger.info(f"   ⚠️  Skipped NULL service_id: {skipped_null_service}")
+        logger.info(f"   ⚠️  Skipped no capability: {skipped_no_capability}")
+        logger.info(f"   ⚠️  Skipped wrong type: {skipped_wrong_status_type}")
+        logger.info(f"   ⚠️  Skipped status not in [1,2]: {skipped_status_not_eligible}")
+
+        # Final state (DRAAD 221 FASE 1: COMPREHENSIVE REPORT)
+        final_total = sum(self.quota_remaining.values())
+        positive = sum(1 for v in self.quota_remaining.values() if v > 0)
+        zero = sum(1 for v in self.quota_remaining.values() if v == 0)
+        negative = sum(1 for v in self.quota_remaining.values() if v < 0)
+
+        logger.info(f"\n📊 [DRAAD 221 FASE 1] FINAL QUOTA STATE:")
+        logger.info(f"   Total remaining: {final_total} shifts")
+        logger.info(f"   ✅ Positive (>0): {positive} entries")
+        logger.info(f"   ⚠️  Zero (=0): {zero} entries")
+        logger.info(f"   ❌ Negative (<0): {negative} entries")
+
+        # Health check
+        if positive == 0:
+            logger.error("\n" + "="*80)
+            logger.error("❌ [DRAAD 221 FASE 1] FATAL: NO positive quota remaining!")
+            logger.error("="*80)
+            logger.error("\nDIAGNOSIS:")
+            logger.error(f"  - Started with: {sum(self.quota_original.values())} total shifts")
+            logger.error(f"  - Subtracted: {subtracted} assignments")
+            logger.error(f"  - Skipped NULL service_id: {skipped_null_service}")
+            logger.error(f"  - Skipped no capability: {skipped_no_capability}")
+            logger.error(f"\nPOSSIBLE CAUSES:")
+            if skipped_null_service > 50:
+                logger.error(f"  ❌ TOO MANY NULL service_id records ({skipped_null_service})")
+                logger.error(f"     → These are likely status=2 blocked slots from DB triggers")
+                logger.error(f"     → Need to SKIP them instead of subtracting!")
+            if skipped_no_capability > 20:
+                logger.error(f"  ❌ TOO MANY records without capability ({skipped_no_capability})")
+                logger.error(f"     → Assignments for services employees don't have?")
+            raise ValueError("All quota <= 0 after initialization - CANNOT PROCEED")
+
+        logger.info("\n" + "="*80)
+        logger.info(f"✅ [DRAAD 221 FASE 1] QUOTA INITIALIZATION COMPLETE - {positive} eligible (emp, service) pairs")
+        logger.info("="*80 + "\n")
 
     def _load_blocked_slots(self) -> None:
         """
@@ -903,16 +1058,13 @@ class GreedyRosteringEngine:
         logger.info(f"   ✅ Blocked slots updated: {len(self.blocked_slots)}")
 
     def solve(self) -> SolveResult:
-        """Execute GREEDY v2.0 + DRAAD 218C + DRAAD 219B + DRAAD 220 algorithm."""
+        """Execute GREEDY v2.0 + DRAAD 221 FASE 1 DIAGNOSTICS algorithm."""
         start_time = time.time()
-        logger.info("\n🚀 [DRAAD 220] Starting GREEDY v2.0 + DIO/DDA Pairing + Shortage Analysis + Schema Validation...")
+        logger.info("\n🚀 [DRAAD 221 FASE 1] Starting GREEDY with QUOTA DIAGNOSTICS...")
         logger.info("   ✅ BUG 1 FIX: blocked_slots (date, dagdeel, employee_id)")
         logger.info("   ✅ BUG 2 FIX: quota_remaining (employee_id, service_id)")
         logger.info("   ✅ BUG 3 FIX: fairness sort by per-service remaining")
-        logger.info("   ✅ BUG 4-5 FIX: All dataclasses present, bottleneck fields fixed")
-        logger.info("   ✨ DRAAD 218C: DIO/DIA + DDO/DDA auto-pairing with full validation")
-        logger.info("   ✨ DRAAD 219B: Intelligent shortage reason/suggestion analysis")
-        logger.info("   ✨ DRAAD 220: Database schema validation + corrected _load_employee_targets()")
+        logger.info("   ✨ DRAAD 221 FASE 1: Extensive diagnostics in _initialize_quota()")
         
         try:
             bottlenecks = []
@@ -1070,7 +1222,7 @@ class GreedyRosteringEngine:
                 coverage=round(coverage, 1),
                 bottlenecks=bottlenecks,
                 solve_time=round(elapsed, 2),
-                message=f"DRAAD 220: {coverage:.1f}% coverage in {elapsed:.2f}s",
+                message=f"DRAAD 221 FASE 1: {coverage:.1f}% coverage in {elapsed:.2f}s",
                 pre_planned_count=self.pre_planned_count,
                 greedy_count=self.greedy_count
             )
