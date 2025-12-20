@@ -7,6 +7,7 @@
  * DRAAD-193: Fix hardcoded localhost in GREEDY_SOLVER_URL (use env var instead)
  * DRAAD-208C: Enhanced error handling + connection validation
  * DRAAD-212: CRITICAL FIX - Initialize summary ALWAYS to prevent undefined in response
+ * DRAAD-221: Database schema fix - Remove solver_runs references (table does not exist)
  * 
  * Features:
  * - 5-phase GREEDY algorithm (lock pre-planned, allocate, analyze, save, return)
@@ -110,7 +111,6 @@ async function validateSolverConnection(): Promise<{ valid: boolean; error?: str
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const startTime = Date.now();
-  const solverRunId = crypto.randomUUID();
   const executionTimestamp = new Date().toISOString();
 
   try {
@@ -123,16 +123,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    console.log(`[DRAAD208C] Starting GREEDY solve for roster ${roster_id}`);
-    console.log(`[DRAAD208C] Using GREEDY_SOLVER_URL: ${GREEDY_SOLVER_URL}`);
+    console.log(`[DRAAD221] Starting GREEDY solve for roster ${roster_id}`);
+    console.log(`[DRAAD221] Using GREEDY_SOLVER_URL: ${GREEDY_SOLVER_URL}`);
 
     const supabase = await createClient();
 
     // DRAAD-208C: Validate solver connection FIRST
-    console.log('[DRAAD208C] Step 1: Validating GREEDY solver connection...');
+    console.log('[DRAAD221] Step 1: Validating GREEDY solver connection...');
     const connectionCheck = await validateSolverConnection();
     if (!connectionCheck.valid) {
-      console.error(`[DRAAD208C] ✗ Solver connection invalid: ${connectionCheck.error}`);
+      console.error(`[DRAAD221] ✗ Solver connection invalid: ${connectionCheck.error}`);
       return NextResponse.json(
         {
           error: 'GREEDY solver unreachable',
@@ -143,10 +143,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { status: 503 } // Service Unavailable
       );
     }
-    console.log('[DRAAD208C] ✓ Solver connection validated');
+    console.log('[DRAAD221] ✓ Solver connection validated');
 
     // Verify roster exists and is in draft status
-    console.log(`[DRAAD208C] Step 2: Verifying roster ${roster_id}...`);
+    console.log(`[DRAAD221] Step 2: Verifying roster ${roster_id}...`);
     const { data: roster, error: rosterError } = await supabase
       .from('roosters')
       .select('*')
@@ -154,7 +154,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       .single();
 
     if (rosterError || !roster) {
-      console.error(`[DRAAD208C] ✗ Roster not found: ${roster_id}`);
+      console.error(`[DRAAD221] ✗ Roster not found: ${roster_id}`);
       return NextResponse.json(
         { error: 'Roster not found' },
         { status: 404 }
@@ -162,7 +162,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     if (roster.status !== 'draft') {
-      console.error(`[DRAAD208C] ✗ Roster status is '${roster.status}', expected 'draft'`);
+      console.error(`[DRAAD221] ✗ Roster status is '${roster.status}', expected 'draft'`);
       return NextResponse.json(
         {
           error: `Roster status is '${roster.status}', must be 'draft'`,
@@ -170,9 +170,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { status: 400 }
       );
     }
-    console.log(`[DRAAD208C] ✓ Roster verified and in draft status`);
+    console.log(`[DRAAD221] ✓ Roster verified and in draft status`);
 
-    console.log(`[DRAAD208C] Step 3: Calling GREEDY solver service...`);
+    console.log(`[DRAAD221] Step 3: Calling GREEDY solver service...`);
 
     // Call the GREEDY solver (Python service)
     const greedySolveResponse = await fetch(
@@ -193,7 +193,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     if (!greedySolveResponse.ok) {
       const errorText = await greedySolveResponse.text();
-      console.error(`[DRAAD208C] ✗ Solver error: ${errorText}`);
+      console.error(`[DRAAD221] ✗ Solver error: ${errorText}`);
       
       // DRAAD-208C: Enhanced error response
       const errorResponse = {
@@ -212,7 +212,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const solverResult = await greedySolveResponse.json();
 
-    console.log(`[DRAAD208C] ✓ Solver result received:`);
+    console.log(`[DRAAD221] ✓ Solver result received:`);
     console.log(`  - Status: ${solverResult.status}`);
     console.log(`  - Coverage: ${solverResult.coverage}%`);
     console.log(`  - Assignments: ${solverResult.assignments_created}/${solverResult.total_required}`);
@@ -231,47 +231,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       unfilled_slots: unfilledSlots,
     };
 
-    console.log(`[DRAAD212] ✓ Summary ALWAYS generated: ${scheduledSlots}/${totalSlots} (${coveragePercentage}%)`);
+    console.log(`[DRAAD221] ✓ Summary generated: ${scheduledSlots}/${totalSlots} (${coveragePercentage}%)`);
 
-    // If GREEDY succeeded, save solver run metadata
+    // DRAAD-221 FIX: Update roster status based on solver result
+    // Note: solver_runs table does NOT exist in database schema - removed all references
     if (solverResult.status === 'success' || solverResult.status === 'partial') {
-      console.log(`[DRAAD208C] Step 4: Saving solver run metadata...`);
-      const { error: metadataError } = await supabase
-        .from('solver_runs')
-        .insert([
-          {
-            id: solverRunId,
-            roster_id,
-            status: solverResult.status,
-            solver_status: solverResult.status,
-            solve_time: solverResult.solve_time,
-            solve_time_seconds: solverResult.solve_time,
-            coverage_rate: solverResult.coverage / 100,
-            total_assignments: solverResult.assignments_created,
-            constraint_violations: solverResult.bottlenecks,
-            solver_config: {
-              algorithm: 'GREEDY',
-              version: 'DRAAD212',
-              max_shifts_per_employee: 8,
-            },
-            metadata: {
-              pre_planned_count: solverResult.pre_planned_count,
-              greedy_count: solverResult.greedy_count,
-              bottleneck_count: solverResult.bottlenecks.length,
-            },
-            created_at: executionTimestamp,
-            started_at: executionTimestamp,
-            completed_at: new Date().toISOString(),
-          },
-        ]);
-
-      if (metadataError) {
-        console.warn(`[DRAAD208C] Warning: Failed to save solver run metadata: ${metadataError.message}`);
-      } else {
-        console.log(`[DRAAD208C] ✓ Solver run metadata saved: ${solverRunId}`);
-      }
-
-      // Update roster status
+      console.log(`[DRAAD221] Step 4: Updating roster status...`);
       const { error: updateError } = await supabase
         .from('roosters')
         .update({
@@ -280,43 +245,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         })
         .eq('id', roster_id);
 
-      if (!updateError) {
-        console.log(`[DRAAD208C] ✓ Roster status updated: draft → in_progress`);
-      }
-    } else if (solverResult.status === 'failed') {
-      // DRAAD-191: Save failed solver run for bottleneck analysis
-      console.log(`[DRAAD208C] Step 4: Saving failed solver run metadata...`);
-      const { error: metadataError } = await supabase
-        .from('solver_runs')
-        .insert([
-          {
-            id: solverRunId,
-            roster_id,
-            status: 'completed',
-            solver_status: 'failed',
-            solve_time: solverResult.solve_time,
-            solve_time_seconds: solverResult.solve_time,
-            coverage_rate: solverResult.coverage / 100,
-            total_assignments: solverResult.assignments_created,
-            constraint_violations: solverResult.bottlenecks,
-            solver_config: {
-              algorithm: 'GREEDY',
-              version: 'DRAAD212',
-            },
-            metadata: {
-              pre_planned_count: solverResult.pre_planned_count,
-              greedy_count: solverResult.greedy_count,
-              bottleneck_count: solverResult.bottlenecks.length,
-              reason: solverResult.message,
-            },
-            created_at: executionTimestamp,
-            started_at: executionTimestamp,
-            completed_at: new Date().toISOString(),
-          },
-        ]);
-
-      if (metadataError) {
-        console.warn(`[DRAAD208C] Warning: Failed to save failed solver run: ${metadataError.message}`);
+      if (updateError) {
+        console.warn(`[DRAAD221] Warning: Failed to update roster status: ${updateError.message}`);
+      } else {
+        console.log(`[DRAAD221] ✓ Roster status updated: draft → in_progress`);
       }
     }
 
@@ -341,11 +273,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       total_time_ms: totalTime,
     };
 
-    console.log(`[DRAAD212] ✓ Complete - Total time: ${totalTime}ms`);
+    console.log(`[DRAAD221] ✓ Complete - Total time: ${totalTime}ms`);
 
     return NextResponse.json(response, { status: 200 });
   } catch (error: any) {
-    console.error('[DRAAD208C] ✗ Error:', error);
+    console.error('[DRAAD221] ✗ Error:', error);
     
     // DRAAD-208C: Distinguish between timeout and other errors
     const isTimeout = error.name === 'AbortError';
