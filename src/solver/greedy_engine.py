@@ -18,6 +18,7 @@ DRAA 218B: FASE 1 - Baseline fixes (service_types join, team logic, sorting)
 DRAA 218B: FASE 2 - Team-selectie helper methode
 DRAA 218B: FASE 3 - Pre-planned handling verbeterd
 DRAA 218B: FASE 4 - GREEDY ALLOCATIE met HC1-HC6 + Blokkeringsregels
+DRAA 218B: FASE 5 - DATABASE UPDATES (invulling + roster status) - COMPLEET
 """
 
 import logging
@@ -216,6 +217,7 @@ class GreedyRosteringEngine:
     DRAAD 218B FASE 2: Team-selectie helper methode
     DRAAD 218B FASE 3: Pre-planned handling verbeterd
     DRAAD 218B FASE 4: GREEDY ALLOCATIE met HC1-HC6 + Blokkeringsregels
+    DRAAD 218B FASE 5: DATABASE UPDATES (invulling + roster status) - COMPLEET
     """
     
     def __init__(self, config: Dict[str, Any]):
@@ -291,11 +293,11 @@ class GreedyRosteringEngine:
             logger.info("[Phase 4] Analyzing bottlenecks...")
             self._find_bottlenecks()
             
-            # Phase 5: Save results
+            # Phase 5: Save results (FASE 5 COMPLEET)
             logger.info("[Phase 5] Saving to database...")
             self._save_assignments()
-            self._update_invulling()
-            self._update_roster_status()
+            self._update_invulling()  # ✅ FASE 5
+            self._update_roster_status()  # ✅ FASE 5
             
             # Calculate result
             assigned_count = sum(r.assigned for r in self.requirements)
@@ -314,7 +316,7 @@ class GreedyRosteringEngine:
                 status = "failed"
                 status_msg = f"FAILED: {coverage:.1f}% coverage"
             
-            message = f"DRAAD 218B FASE 4 GREEDY: {coverage:.1f}% coverage ({assigned_count}/{total_required}) in {solve_time:.2f}s"
+            message = f"DRAAD 218B FASE 5 COMPLEET: {coverage:.1f}% coverage ({assigned_count}/{total_required}) in {solve_time:.2f}s"
             
             logger.info(f"✅ {status_msg} in {solve_time:.2f}s")
             
@@ -941,7 +943,10 @@ class GreedyRosteringEngine:
         logger.info(f"Found {len(self.bottlenecks)} bottlenecks")
     
     def _save_assignments(self) -> None:
-        """Save new assignments to database."""
+        """Save new assignments to database.
+        
+        DRAAD 218B FASE 5: Database INSERT voor nieuwe assignments
+        """
         if not self.supabase or not self.assignments:
             logger.warning("Skipping save (no Supabase or no assignments)")
             return
@@ -951,7 +956,7 @@ class GreedyRosteringEngine:
             
             if rows:
                 self.supabase.table('roster_assignments').insert(rows).execute()
-                logger.info(f"Inserted {len(rows)} assignments to database")
+                logger.info(f"✅ FASE 5: Inserted {len(rows)} assignments to database")
         
         except Exception as e:
             logger.error(f"Error saving assignments: {e}", exc_info=True)
@@ -959,7 +964,11 @@ class GreedyRosteringEngine:
     def _update_invulling(self) -> None:
         """Update invulling field in roster_period_staffing_dagdelen.
         
-        DRAAD 218B STAP 9: Update invulling per requirement
+        DRAAD 218B FASE 5: Update invulling per requirement
+        
+        Spec 4.6: Update invulling per requirement:
+        - invulling=1 for GREEDY-filled
+        - invulling=2 for manually-filled (pre-planned)
         """
         if not self.supabase:
             return
@@ -985,7 +994,7 @@ class GreedyRosteringEngine:
                         
                         update_count += 1
             
-            logger.info(f"Updated invulling field in {update_count} staffing records")
+            logger.info(f"✅ FASE 5: Updated invulling field in {update_count} staffing records")
         
         except Exception as e:
             logger.error(f"Error updating invulling: {e}", exc_info=True)
@@ -993,7 +1002,9 @@ class GreedyRosteringEngine:
     def _update_roster_status(self) -> None:
         """Update roster status to 'in_progress'.
         
-        DRAAD 218B STAP 9: Roster status → in_progress after GREEDY runs
+        DRAAD 218B FASE 5: Roster status → in_progress after GREEDY runs
+        
+        Spec 4.7: Rooster status → in_progress after GREEDY runs.
         """
         if not self.supabase:
             return
@@ -1003,7 +1014,7 @@ class GreedyRosteringEngine:
                 'status': 'in_progress'
             }).eq('id', self.roster_id).execute()
             
-            logger.info(f"Updated roster {self.roster_id} status to in_progress")
+            logger.info(f"✅ FASE 5: Updated roster {self.roster_id} status to in_progress")
         
         except Exception as e:
             logger.error(f"Error updating roster status: {e}", exc_info=True)
