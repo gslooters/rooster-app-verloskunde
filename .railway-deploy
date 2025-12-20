@@ -1,0 +1,8 @@
+# Railway Deployment Trigger
+# DRAAD 218B FASE 6 - Rapportage uitbreiding
+# Timestamp: 2025-12-20T10:40:00Z
+
+DEPLOYMENT_VERSION=fase6_rapportage
+COMMIT_SHA=69a58f617e7cf334d8600cb15fdaf8c837e4cbc1
+FEATURES=employee_stats,service_stats,team_breakdown,enhanced_logging
+STATUS=production_ready
