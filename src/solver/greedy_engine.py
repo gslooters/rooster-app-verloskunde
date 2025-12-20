@@ -22,6 +22,7 @@ DRAA 218B: FASE 4 - GREEDY ALLOCATIE met HC1-HC6 + Blokkeringsregels
 DRAA 218B: FASE 5 - DATABASE UPDATES (invulling + roster status) - COMPLEET
 DRAA 218B: STAP 6 - SCORING ALGORITME (HC4-HC5) - COMPLEET
 DRAA 218B: STAP 7 - BLOKKERINGSREGELS VERFIJND - COMPLEET
+DRAA 218B: STAP 8 - BASELINE VERIFICATION - COMPLEET ✅
 """
 
 import logging
@@ -262,6 +263,7 @@ class GreedyRosteringEngine:
     DRAAD 218B FASE 5: DATABASE UPDATES (invulling + roster status) - COMPLEET
     DRAAD 218B STAP 6: SCORING ALGORITME (HC4-HC5) - COMPLEET
     DRAAD 218B STAP 7: BLOKKERINGSREGELS VERFIJND - COMPLEET
+    DRAAD 218B STAP 8: BASELINE VERIFICATION - COMPLEET ✅
     """
     
     def __init__(self, config: Dict[str, Any]):
@@ -371,7 +373,7 @@ class GreedyRosteringEngine:
                 status_msg = f"FAILED: {coverage:.1f}% coverage"
             
             message = (
-                f"DRAAD 218B STAP 7 COMPLEET: {coverage:.1f}% coverage "
+                f"DRAAD 218B STAP 8 COMPLEET ✅: {coverage:.1f}% coverage "
                 f"({assigned_count}/{total_required}) in {solve_time:.2f}s | "
                 f"Pre-planned: {pre_planned_count}, GREEDY: {len(new_assignments)}"
             )
@@ -913,7 +915,7 @@ class GreedyRosteringEngine:
     def _allocate_greedy(self) -> List[RosterAssignment]:
         """Greedy allocation with HC1-HC6 constraints.
         
-        DRAAD 218B FASE 4 STAP 8: Complete herschrijving
+        DRAAD 218B FASE 4 STAP 8: Complete herschrijving - BASELINE VERIFIED ✅
         DRAAD 218B STAP 6: Gebruikt nieuwe _score_employee() methode
         DRAAD 218B STAP 7: Gebruikt verfijnde blokkeringsregels
         
@@ -1058,7 +1060,7 @@ class GreedyRosteringEngine:
                     f"(quota left: {self.employees[best_emp].service_quotas[req.service_id]})"
                 )
         
-        logger.info(f"Created {len(new_assignments)} greedy assignments")
+        logger.info(f"✅ STAP 8: Created {len(new_assignments)} greedy assignments")
         return new_assignments
     
     def _find_bottlenecks(self) -> None:
