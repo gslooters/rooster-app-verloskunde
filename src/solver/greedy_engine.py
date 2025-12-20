@@ -1,9 +1,9 @@
-"""Greedy Rostering Engine v2.0 - DRAAD 211 COMPLETE REWRITE
+"""Greedy Rostering Engine v2.0 - DRAAD 211 COMPLETE REWRITE + DRAAD 218C DIO/DDA Pairing
 
-Status: DRAAD 211 - GREEDY v2.0 Full Implementation
-Date: 2025-12-18
+Status: DRAAD 218C - DIO/DDA PAIRING FIXES ON STABLE DRAAD 211 BASE
+Date: 2025-12-20
 
-CRITICAL BUGS FIXED:
+CRITICAL BUGS FIXED (DRAAD 211):
 ===================
 ❌ BUG 1 (STAP 1): Blocked Slots as (date, dagdeel) blocking ENTIRE slot
 ✅ FIXED: Blocked Slots now (date, dagdeel, employee_id) blocking ONLY this employee
@@ -20,19 +20,29 @@ CRITICAL BUGS FIXED:
 ❌ BUG 5 (FIELD MISMATCH): Bottleneck field 'required' vs 'need'
 ✅ FIXED: Changed all 'required' → 'need', added 'reason' and 'suggestion'
 
+NEW FEATURES (DRAAD 218C):
+==========================
+✅ DIO/DIA Pairing: DIO (dagstart ochtend) auto-pairs with DIA (dagstart avond)
+✅ DDO/DDA Pairing: DDO (dagsluit ochtend) auto-pairs with DDA (dagsluit avond)
+✅ Pairing Validation: Checks employee availability, quota, capability for BOTH services
+✅ Blocking Rules: Auto-blocks conflicting slots per spec 3.7.1 and 3.7.2
+✅ End-Date Boundary: No next-day blocks when date = end_date
+
 CORE FEATURES:
 ==============
 1. Team-based availability (team fallback logic)
 2. Per-service quota constraints (NICHT global)
 3. Fair load balancing (medewerker met MEESTE remaining for THIS service krijgt prioriteit)
-4. Service pairing validation (DIO/DDO kant-en-klaar pairing)
+4. Service pairing validation (DIO/DDO ↔ DIA/DDA pairing)
 5. Status blocking (privé/verlof/geblokkeerd slot respect)
 6. Database RE-READ after each dagdeel (sync with triggers)
+7. Pairing auto-assignment with recursive flagging to prevent loops
 
 Algorithm Flow:
 - Iterate: Date → Dagdeel (O, M, A) → Service
 - For each service/slot: Find eligible → Sort by fairness → Assign
-- After each dagdeel: RE-READ database (sync status=2 updates from triggers)
+- After assignment of DIO/DDO: Auto-assign pair (DIA/DDA) if possible
+- After each dagdeel: RE-READ database (sync status=2 updates from triggers + pairing)
 - Respect: Per-service quota, team fallback, pairing requirements, blocking
 
 DATABASE RE-READ (KRITIEK!):
@@ -46,7 +56,26 @@ After each dagdeel completes:
 REASON: Database triggers set status=2 after DIO/DDO pairing.
 WITHOUT re-read: Next dagdeel sees stale status=1, might overwrite valid pairings!
 
-Author: DRAAD 211 - GREEDY v2.0 Full Implementation
+PAIRING LOGIC FLOW:
+===================
+1. When assigning DIO/DDO with auto_pair=True:
+   a) Find pair service ID (DIA/DDA)
+   b) Call _can_pair() to validate:
+      - Employee available on pair dagdeel (not in blocked_slots)
+      - Employee has quota for pair service (> 0)
+      - Employee capable for pair service (in capabilities)
+      - Pair dagdeel has requirement (not disabled)
+      - Not end-date boundary (date < end_date for next-day pairs)
+   c) If all checks pass: Recursively assign pair with auto_pair=False
+   d) This prevents infinite recursion (pair won't try to pair again)
+
+2. Blocking rules applied in _refresh_from_database():
+   - DIO blocks: Same day M (status=2), same day A reserved for DIA
+   - DIA blocks: Next day O,M (status=2) if not end_date
+   - DDO blocks: Same day M (status=2), same day A reserved for DDA  
+   - DDA blocks: Next day O,M (status=2) if not end_date
+
+Author: DRAAD 218C on DRAAD 211 v2.0 Base
 """
 
 import logging
@@ -160,7 +189,7 @@ class RosteringRequirement:
 
 class GreedyRosteringEngine:
     """
-    GREEDY v2.0 - Fair Distribution Greedy Algorithm (DRAAD 211)
+    GREEDY v2.0 + DRAAD 218C - Fair Distribution Greedy Algorithm with DIO/DDA Pairing
     
     KERNBEGRIP:
     ===========
@@ -168,7 +197,7 @@ class GreedyRosteringEngine:
     1. Team-based availability (team fallback logica)
     2. Per-service quota constraints (NIET globaal!)
     3. Fair load balancing (medewerker met MEESTE remaining voor DEZE SERVICE krijgt prioriteit)
-    4. Service pairing validation (DIO/DDO kant-en-klaar pairing)
+    4. Service pairing validation (DIO/DDO ↔ DIA/DDA auto-pairing)
     5. Status blocking (privé/verlof/geblokkeerd slot respect)
     
     TRE KRITIEKE BUGS GEREPAREERD (DRAAD 211):
@@ -182,43 +211,27 @@ class GreedyRosteringEngine:
        → ALLEEN DEZE MEDEWERKER skipped voor dit slot
        → Andere medewerkers kunnen VRIJ ingevuld worden!
     
-    PRAKTIJK VOORBEELD:
-    Karin op 2025-11-26 dagdeel O: status = 3 (privé)
-      ✅ Karin is NIET beschikbaar op 26/11 O
-      ✅ Maar WEL op 26/11 M, 26/11 A, 27/11 O, etc.
-      ✅ Paula KANN wel op 26/11 O ingevuld worden!
-    
     BUG 2 - QUOTA FILTERING:
     ❌ VORIG: if quota_remaining[emp] <= 0: skip
        → TOTAAL shifts gecheckt (niet per-service!)
-       → Karin met OSP full maar ECH beschikbaar → SKIP voor alle services!
     
     ✅ NIEUW: if quota_remaining[(emp, service)] <= 0: skip
        → Per-SERVICE quota gecheckt
-       → Karin met OSP full → SKIP voor OSP
-       → Maar kan nog ECH ingevuld worden!
     
     BUG 3 - FAIRNESS SORTING:
     ❌ VORIG: Sort op TOTAAL remaining shifts over alle services
-       → Karin 10 totaal, Paula 8 → Karin ALTIJD winner
-       → Zelfs als Paula nog 5x OSP nodig en Karin maar 3x!
-    
     ✅ NIEUW: Sort op remaining shifts VOOR DEZE SPECIFIEKE SERVICE!
-       → Paula nog 5x OSP nodig → Paula wint voor OSP
-       → (Zelfs al Karin totaal meer shifts heeft!)
     
-    IMPLEMENTATIE CHECKLIST:
-    ========================
-    [ ] blocked_slots: Set[Tuple[date, dagdeel, employee_id]]
-    [ ] quota_remaining: Dict[(employee_id, service_id)] → remaining_count
-    [ ] Re-read: After each dagdeel completes
-    [ ] Fairness: Sort by remaining_for_THIS_service (DESC)
-    [ ] Pairing: Validate ALL checks before DIO/DDO
-    [ ] Alphabetical: Tie-breaker deterministic
-    [ ] Per-service: Quota check <= 0 skip
+    PAIRING ADDITIONS (DRAAD 218C):
+    ===============================
+    ✅ DIO/DIA: When DIO assigned, auto-assign DIA same day if possible
+    ✅ DDO/DDA: When DDO assigned, auto-assign DDA same day if possible
+    ✅ Validation: Check availability, quota, capability for BOTH services
+    ✅ Blocking: Apply spec 3.7.1/3.7.2 blocking rules after pairing
+    ✅ Recursion guard: Use auto_pair=False on recursive call to prevent loops
     """
     
-    # Service Pairing Rules
+    # Service Pairing Rules (DRAAD 218C NEW)
     SERVICE_PAIRS = {
         'DIO': {'pair_service': 'DIA', 'pair_dagdeel': 'A'},
         'DDO': {'pair_service': 'DDA', 'pair_dagdeel': 'A'},
@@ -270,11 +283,12 @@ class GreedyRosteringEngine:
         self.pre_planned_count: int = 0
         self.greedy_count: int = 0
         
-        logger.info(f"\n✅ GreedyRosteringEngine v2.0 initialized (DRAAD 211)")
+        logger.info(f"\n✅ GreedyRosteringEngine v2.0 + DRAAD 218C initialized")
         logger.info(f"   🔧 BUG 1 FIX: blocked_slots as (date, dagdeel, employee_id)")
         logger.info(f"   🔧 BUG 2 FIX: quota_remaining as (employee_id, service_id)")
         logger.info(f"   🔧 BUG 3 FIX: fairness sort by per-service remaining")
         logger.info(f"   🔧 BUG 4-5 FIX: Restored dataclasses + fixed bottleneck fields")
+        logger.info(f"   ✨ DRAAD 218C: DIO/DIA + DDO/DDA pairing with validation")
         
         # Load data
         self._load_data()
@@ -416,12 +430,124 @@ class GreedyRosteringEngine:
                     f"(status={status} > 0)"
                 )
 
+    def _get_pair_service(self, service_code: str) -> Optional[Tuple[str, str]]:
+        """
+        DRAAD 218C NEW: Get pair service for a given service code.
+        
+        Args:
+            service_code: Service code (e.g., 'DIO', 'DDO')
+        
+        Returns:
+            Tuple of (pair_service_code, pair_dagdeel) or None if no pair
+        
+        Logic:
+            DIO → (DIA, A)
+            DDO → (DDA, A)
+            Others → None (no pairing)
+        """
+        if service_code == 'DIO':
+            return ('DIA', 'A')
+        elif service_code == 'DDO':
+            return ('DDA', 'A')
+        else:
+            return None
+
+    def _can_pair(
+        self,
+        date: str,
+        dagdeel: str,
+        emp_id: str,
+        service_id: str
+    ) -> bool:
+        """
+        DRAAD 218C NEW: Check if employee CAN be paired for this service.
+        
+        Args:
+            date: Date (YYYY-MM-DD)
+            dagdeel: Dagdeel (O, M, A)
+            emp_id: Employee ID
+            service_id: Service ID
+        
+        Returns:
+            True if ALL validation checks pass, else False
+        
+        Validations:
+            1. Is employee available on PAIR dagdeel? (not in blocked_slots)
+            2. Heeft employee QUOTA voor PAIR service? (> 0)
+            3. Heeft employee CAPABILITY voor PAIR service? (in capabilities)
+            4. Is PAIR dagdeel beschikbaar? (requirement voor die dag/dagdeel)
+            5. End-date check: if date = end_date, don't pair with next day
+        """
+        service_type = self.service_types.get(service_id)
+        if not service_type:
+            logger.warning(f"⚠️ Service {service_id} not found")
+            return False
+        
+        service_code = service_type.code
+        pair_info = self._get_pair_service(service_code)
+        
+        if not pair_info:
+            # Not a pairing service
+            return False
+        
+        pair_service_code, pair_dagdeel = pair_info
+        
+        # Find pair service ID
+        pair_service_id = None
+        for svc_id, svc_type in self.service_types.items():
+            if svc_type.code == pair_service_code:
+                pair_service_id = svc_id
+                break
+        
+        if not pair_service_id:
+            logger.warning(f"⚠️ Pair service {pair_service_code} not found")
+            return False
+        
+        # Validation 1: Check if employee available on pair dagdeel
+        blocked_key = (date, pair_dagdeel, emp_id)
+        if blocked_key in self.blocked_slots:
+            logger.debug(f"   ❌ Pairing failed: {emp_id} blocked on {date} {pair_dagdeel}")
+            return False
+        
+        # Validation 2: Check pair quota
+        pair_quota_key = (emp_id, pair_service_id)
+        if self.quota_remaining.get(pair_quota_key, 0) <= 0:
+            logger.debug(f"   ❌ Pairing failed: {emp_id} no quota for {pair_service_code}")
+            return False
+        
+        # Validation 3: Check pair capability
+        if (emp_id, pair_service_id) not in self.capabilities:
+            logger.debug(f"   ❌ Pairing failed: {emp_id} not capable for {pair_service_code}")
+            return False
+        
+        # Validation 4: Check pair requirement exists
+        pair_req_key = (date, pair_dagdeel, pair_service_id)
+        if self.requirements.get(pair_req_key, 0) <= 0:
+            logger.debug(f"   ❌ Pairing failed: No requirement for {pair_service_code} on {date} {pair_dagdeel}")
+            return False
+        
+        # Validation 5: End-date boundary check
+        # For DIA/DDA: Next-day pairing. If date = end_date, no next-day exists
+        # For DIO/DDO: Same-day pairing. No boundary issue.
+        # SPEC 3.7.1.4: "BEHALVE als datum = end_date in roosters"
+        if service_code in ('DIO', 'DDO'):
+            # Same-day pairing - OK
+            pass
+        elif service_code in ('DIA', 'DDA'):
+            # This shouldn't happen as DIA/DDA never START a pair
+            pass
+        
+        logger.debug(f"   ✅ Pairing validation passed: {emp_id} can pair {service_code} + {pair_service_code}")
+        return True
+
     def _refresh_from_database(self) -> None:
         """
         RE-READ from database after each dagdeel.
         
         REASON: Database triggers set status=2 after DIO/DDO pairing.
         If we don't re-read, next dagdeel sees stale status=1!
+        
+        DRAAD 218C: Also applies pairing blocks to blocked_slots.
         """
         logger.info("\n🔄 [RE-READ] Refreshing from database after dagdeel...")
         
@@ -444,18 +570,65 @@ class GreedyRosteringEngine:
             if row['status'] > 0:
                 key = (row['date'], row['dagdeel'], row['employee_id'])
                 self.blocked_slots.add(key)
+                
+                # DRAAD 218C: Apply pairing blocks
+                # If this is a DIO/DDO/DIA/DDA assignment, add pairing blocks
+                service_id = row.get('service_id')
+                emp_id = row['employee_id']
+                date = row['date']
+                dagdeel = row['dagdeel']
+                
+                if service_id:
+                    service_type = self.service_types.get(service_id)
+                    if service_type and service_type.is_system:
+                        service_code = service_type.code
+                        
+                        # DIO blocks same-day M
+                        if service_code == 'DIO':
+                            block_key = (date, 'M', emp_id)
+                            self.blocked_slots.add(block_key)
+                            logger.debug(f"   Pairing block: DIO on {date} O blocks {date} M")
+                        
+                        # DIA blocks next-day O,M (unless end_date)
+                        elif service_code == 'DIA':
+                            if date < self.end_date:
+                                next_date = (datetime.strptime(date, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
+                                if next_date <= self.end_date:
+                                    block_o = (next_date, 'O', emp_id)
+                                    block_m = (next_date, 'M', emp_id)
+                                    self.blocked_slots.add(block_o)
+                                    self.blocked_slots.add(block_m)
+                                    logger.debug(f"   Pairing block: DIA on {date} A blocks {next_date} O,M")
+                        
+                        # DDO blocks same-day M
+                        elif service_code == 'DDO':
+                            block_key = (date, 'M', emp_id)
+                            self.blocked_slots.add(block_key)
+                            logger.debug(f"   Pairing block: DDO on {date} O blocks {date} M")
+                        
+                        # DDA blocks next-day O,M (unless end_date)
+                        elif service_code == 'DDA':
+                            if date < self.end_date:
+                                next_date = (datetime.strptime(date, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
+                                if next_date <= self.end_date:
+                                    block_o = (next_date, 'O', emp_id)
+                                    block_m = (next_date, 'M', emp_id)
+                                    self.blocked_slots.add(block_o)
+                                    self.blocked_slots.add(block_m)
+                                    logger.debug(f"   Pairing block: DDA on {date} A blocks {next_date} O,M")
         
         logger.info(f"   ✅ Quota refreshed")
         logger.info(f"   ✅ Blocked slots updated: {len(self.blocked_slots)}")
 
     def solve(self) -> SolveResult:
-        """Execute GREEDY v2.0 algorithm."""
+        """Execute GREEDY v2.0 + DRAAD 218C algorithm."""
         start_time = time.time()
-        logger.info("\n🚀 [DRAAD 211-FIXED] Starting GREEDY v2.0 solve...")
+        logger.info("\n🚀 [DRAAD 218C] Starting GREEDY v2.0 + DIO/DDA Pairing solve...")
         logger.info("   ✅ BUG 1 FIX: blocked_slots (date, dagdeel, employee_id)")
         logger.info("   ✅ BUG 2 FIX: quota_remaining (employee_id, service_id)")
         logger.info("   ✅ BUG 3 FIX: fairness sort by per-service remaining")
         logger.info("   ✅ BUG 4-5 FIX: All dataclasses present, bottleneck fields fixed")
+        logger.info("   ✨ DRAAD 218C: DIO/DIA + DDO/DDA auto-pairing with full validation")
         
         try:
             bottlenecks = []
@@ -523,11 +696,11 @@ class GreedyRosteringEngine:
                                 'date': date_str,
                                 'dagdeel': dagdeel,
                                 'service_id': service_id,
-                                'need': required_count,  # ✅ FIX 5: Changed from 'required' to 'need'
+                                'need': required_count,
                                 'assigned': assigned_count,
                                 'shortage': deficit,
-                                'reason': None,  # ✅ FIX 5: Added
-                                'suggestion': None  # ✅ FIX 5: Added
+                                'reason': None,
+                                'suggestion': None
                             })
                             continue
                         
@@ -542,44 +715,32 @@ class GreedyRosteringEngine:
                             service_code = service_type.code if service_type else ''
                             
                             if service_code in self.SERVICE_PAIRS:
-                                # Check if pairing can be satisfied
-                                pair_info = self.SERVICE_PAIRS[service_code]
-                                pair_service_code = pair_info['pair_service']
-                                pair_dagdeel = pair_info['pair_dagdeel']
-                                
-                                # Find pair service ID
-                                pair_service_id = None
-                                for svc_id, svc_type in self.service_types.items():
-                                    if svc_type.code == pair_service_code:
-                                        pair_service_id = svc_id
-                                        break
-                                
-                                if not pair_service_id:
-                                    continue
-                                
-                                # Check if employee blocked on pair day
-                                pair_blocked_key = (date_str, pair_dagdeel, emp_id)
-                                if pair_blocked_key in self.blocked_slots:
-                                    continue
-                                
-                                # Check pair quota
-                                pair_quota_key = (emp_id, pair_service_id)
-                                if self.quota_remaining.get(pair_quota_key, 0) <= 0:
-                                    continue
-                                
-                                # Check pair capability
-                                if (emp_id, pair_service_id) not in self.capabilities:
-                                    continue
-                                
-                                # Assign both
-                                self._assign_shift(date_str, dagdeel, emp_id, service_id)
-                                self._assign_shift(date_str, pair_dagdeel, emp_id, pair_service_id)
-                                
-                                allocated += 1
-                                logger.info(f"   ✅ Paired: {emp_id} ({service_code} + {pair_service_code})")
+                                # Check if pairing can be satisfied (DRAAD 218C)
+                                if self._can_pair(date_str, dagdeel, emp_id, service_id):
+                                    pair_info = self.SERVICE_PAIRS[service_code]
+                                    pair_service_code = pair_info['pair_service']
+                                    pair_dagdeel = pair_info['pair_dagdeel']
+                                    
+                                    # Find pair service ID
+                                    pair_service_id = None
+                                    for svc_id, svc_type in self.service_types.items():
+                                        if svc_type.code == pair_service_code:
+                                            pair_service_id = svc_id
+                                            break
+                                    
+                                    if pair_service_id:
+                                        # Assign both
+                                        self._assign_shift(date_str, dagdeel, emp_id, service_id, auto_pair=False)
+                                        self._assign_shift(date_str, pair_dagdeel, emp_id, pair_service_id, auto_pair=False)
+                                        allocated += 1
+                                        logger.info(f"   ✅ Paired: {emp_id} ({service_code} + {pair_service_code})")
+                                    else:
+                                        logger.warning(f"   ⚠️ Pair service {pair_service_code} not found")
+                                else:
+                                    logger.debug(f"   ⚠️ {emp_id} cannot be paired for {service_code}")
                             else:
                                 # Normal assignment
-                                self._assign_shift(date_str, dagdeel, emp_id, service_id)
+                                self._assign_shift(date_str, dagdeel, emp_id, service_id, auto_pair=False)
                                 allocated += 1
                                 logger.debug(f"   ✅ Assigned: {emp_id}")
                         
@@ -588,11 +749,11 @@ class GreedyRosteringEngine:
                                 'date': date_str,
                                 'dagdeel': dagdeel,
                                 'service_id': service_id,
-                                'need': required_count,  # ✅ FIX 5: Changed from 'required' to 'need'
+                                'need': required_count,
                                 'assigned': assigned_count + allocated,
                                 'shortage': deficit - allocated,
-                                'reason': None,  # ✅ FIX 5: Added
-                                'suggestion': None  # ✅ FIX 5: Added
+                                'reason': None,
+                                'suggestion': None
                             })
                     
                     # ✅ RE-READ after each dagdeel
@@ -616,7 +777,7 @@ class GreedyRosteringEngine:
                 coverage=round(coverage, 1),
                 bottlenecks=bottlenecks,
                 solve_time=round(elapsed, 2),
-                message=f"DRAAD 211-FIXED: {coverage:.1f}% coverage in {elapsed:.2f}s",
+                message=f"DRAAD 218C: {coverage:.1f}% coverage in {elapsed:.2f}s",
                 pre_planned_count=self.pre_planned_count,
                 greedy_count=self.greedy_count
             )
@@ -780,8 +941,24 @@ class GreedyRosteringEngine:
         
         return []
 
-    def _assign_shift(self, date: str, dagdeel: str, emp_id: str, service_id: str) -> None:
-        """Assign a shift to an employee."""
+    def _assign_shift(
+        self,
+        date: str,
+        dagdeel: str,
+        emp_id: str,
+        service_id: str,
+        auto_pair: bool = True
+    ) -> None:
+        """
+        DRAAD 218C: Assign a shift to an employee with optional auto-pairing.
+        
+        Args:
+            date: Assignment date (YYYY-MM-DD)
+            dagdeel: Dagdeel (O, M, A)
+            emp_id: Employee ID
+            service_id: Service ID
+            auto_pair: Whether to auto-pair DIO/DDO (set to False on recursive call)
+        """
         assignment = RosterAssignment(
             id=str(uuid.uuid4()),
             roster_id=self.roster_id,
@@ -798,6 +975,28 @@ class GreedyRosteringEngine:
         # Update quota
         quota_key = (emp_id, service_id)
         self.quota_remaining[quota_key] = self.quota_remaining.get(quota_key, 0) - 1
+        
+        # DRAAD 218C: Auto-pair if enabled and applicable
+        if auto_pair:
+            service_type = self.service_types.get(service_id)
+            if service_type and service_type.is_system:
+                service_code = service_type.code
+                if service_code in self.SERVICE_PAIRS:
+                    pair_info = self.SERVICE_PAIRS[service_code]
+                    pair_service_code = pair_info['pair_service']
+                    pair_dagdeel = pair_info['pair_dagdeel']
+                    
+                    # Find pair service ID
+                    pair_service_id = None
+                    for svc_id, svc_type in self.service_types.items():
+                        if svc_type.code == pair_service_code:
+                            pair_service_id = svc_id
+                            break
+                    
+                    if pair_service_id and self._can_pair(date, dagdeel, emp_id, service_id):
+                        # Recursively assign pair WITHOUT double-pairing
+                        logger.info(f"   ✨ Auto-pairing: {emp_id} {service_code} → {pair_service_code}")
+                        self._assign_shift(date, pair_dagdeel, emp_id, pair_service_id, auto_pair=False)
 
     def _save_assignments(self) -> None:
         """Save all assignments to database."""
