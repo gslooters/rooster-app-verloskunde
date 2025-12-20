@@ -1,7 +1,14 @@
-"""Greedy Rostering Engine v2.0 - DRAAD 211 COMPLETE REWRITE + DRAAD 218C DIO/DDA Pairing + DRAAD 219B Shortage Analysis
+"""Greedy Rostering Engine v2.0 - DRAAD 211 COMPLETE REWRITE + DRAAD 218C DIO/DDA Pairing + DRAAD 219B Shortage Analysis + DRAAD 220 SCHEMA FIX
 
-Status: DRAAD 219B - SHORTAGE FIELD HANDLING ON DRAAD 218C BASE
+Status: DRAAD 220 - DATABASE SCHEMA CORRECTION + VALIDATION
 Date: 2025-12-20
+
+CRITICAL FIX (DRAAD 220):
+========================
+❌ BUG: _load_employee_targets() queried non-existent table 'period_employee_staffing'
+✅ FIX: Use correct table 'roster_employee_services' per actual database schema
+✅ NEW: _validate_schema() method for early database validation
+✅ NEW: Enhanced logging in _load_employee_targets()
 
 CRITICAL BUGS FIXED (DRAAD 211):
 ===================
@@ -47,6 +54,7 @@ CORE FEATURES:
 6. Database RE-READ after each dagdeel (sync with triggers)
 7. Pairing auto-assignment with recursive flagging to prevent loops
 8. Intelligent shortage analysis (DRAAD 219B NEW)
+9. Database schema validation at startup (DRAAD 220 NEW)
 
 Algorithm Flow:
 - Iterate: Date → Dagdeel (O, M, A) → Service
@@ -114,7 +122,7 @@ When a slot cannot be fully filled, analyze WHY:
    Reason: "Pairing-vereiste kan niet vervuld"
    Suggestion: "Check quota en beschikbaarheid volgende dag"
 
-Author: DRAAD 219B on DRAAD 218C + DRAAD 211 v2.0 Base
+Author: DRAAD 220 SCHEMA FIX on DRAAD 219B on DRAAD 218C + DRAAD 211 v2.0 Base
 """
 
 import logging
@@ -228,7 +236,7 @@ class RosteringRequirement:
 
 class GreedyRosteringEngine:
     """
-    GREEDY v2.0 + DRAAD 218C + DRAAD 219B - Fair Distribution Greedy Algorithm with DIO/DDA Pairing + Shortage Analysis
+    GREEDY v2.0 + DRAAD 218C + DRAAD 219B + DRAAD 220 - Fair Distribution Greedy Algorithm with DIO/DDA Pairing + Shortage Analysis + Schema Validation
     
     KERNBEGRIP:
     ===========
@@ -239,6 +247,7 @@ class GreedyRosteringEngine:
     4. Service pairing validation (DIO/DDO ↔ DIA/DDA auto-pairing)
     5. Status blocking (privé/verlof/geblokkeerd slot respect)
     6. Intelligent shortage analysis (DRAAD 219B NEW)
+    7. Database schema validation (DRAAD 220 NEW)
     
     TRE KRITIEKE BUGS GEREPAREERD (DRAAD 211):
     ==========================================
@@ -276,6 +285,12 @@ class GreedyRosteringEngine:
     ✅ Actionable suggestions (Dutch language)
     ✅ Per-bottleneck analysis without extra queries
     ✅ Performance optimized
+    
+    DATABASE SCHEMA FIX (DRAAD 220):
+    ================================
+    ✅ Corrected table name in _load_employee_targets()
+    ✅ Added _validate_schema() for early validation
+    ✅ Enhanced logging for debugging
     """
     
     # Service Pairing Rules (DRAAD 218C NEW)
@@ -330,16 +345,61 @@ class GreedyRosteringEngine:
         self.pre_planned_count: int = 0
         self.greedy_count: int = 0
         
-        logger.info(f"\n✅ GreedyRosteringEngine v2.0 + DRAAD 218C + DRAAD 219B initialized")
+        logger.info(f"\n✅ GreedyRosteringEngine v2.0 + DRAAD 218C + DRAAD 219B + DRAAD 220 initialized")
         logger.info(f"   🔧 BUG 1 FIX: blocked_slots as (date, dagdeel, employee_id)")
         logger.info(f"   🔧 BUG 2 FIX: quota_remaining as (employee_id, service_id)")
         logger.info(f"   🔧 BUG 3 FIX: fairness sort by per-service remaining")
         logger.info(f"   🔧 BUG 4-5 FIX: Restored dataclasses + fixed bottleneck fields")
         logger.info(f"   ✨ DRAAD 218C: DIO/DIA + DDO/DDA pairing with validation")
         logger.info(f"   ✨ DRAAD 219B: Intelligent shortage reason/suggestion analysis")
+        logger.info(f"   ✨ DRAAD 220: Database schema validation + corrected table names")
+        
+        # DRAAD 220: Validate schema before loading data
+        self._validate_schema()
         
         # Load data
         self._load_data()
+
+    def _validate_schema(self) -> None:
+        """
+        DRAAD 220 NEW: Validate that all required database tables exist.
+        
+        This provides early failure with clear error messages if database schema
+        is incorrect or tables are missing.
+        
+        Raises:
+            ValueError: If any required table is not found
+        """
+        required_tables = [
+            "roosters",
+            "roster_assignments", 
+            "roster_employee_services",
+            "roster_period_staffing_dagdelen",
+            "employees",
+            "service_types"
+        ]
+        
+        logger.info("\n🔍 [DRAAD 220] Validating database schema...")
+        
+        errors = []
+        for table_name in required_tables:
+            try:
+                # Test query to check table existence
+                result = self.supabase.table(table_name).select("id").limit(1).execute()
+                logger.info(f"   ✅ Table '{table_name}' exists and accessible")
+            except Exception as e:
+                error_msg = f"Table '{table_name}' NOT FOUND or not accessible: {str(e)}"
+                logger.error(f"   ❌ {error_msg}")
+                errors.append(error_msg)
+        
+        if errors:
+            error_summary = "\n".join(errors)
+            raise ValueError(
+                f"[DRAAD 220] Database schema validation FAILED:\n{error_summary}\n\n"
+                f"Required tables: {', '.join(required_tables)}"
+            )
+        
+        logger.info(f"   ✅ [DRAAD 220] All {len(required_tables)} required tables validated successfully")
 
     def _load_data(self) -> None:
         """Load all required data from Supabase."""
@@ -424,13 +484,54 @@ class GreedyRosteringEngine:
             self.requirements[key] = row.get('aantal', 0)
 
     def _load_employee_targets(self) -> None:
-        """Load max shifts per employee."""
-        response = self.supabase.table('period_employee_staffing').select('*').eq(
-            'roster_id', self.roster_id
-        ).execute()
+        """
+        DRAAD 220 FIX: Load employee service targets from roster_employee_services.
         
-        for row in response.data:
-            self.employee_targets[row['employee_id']] = row.get('target_shifts', 8)
+        This was previously querying non-existent table 'period_employee_staffing'.
+        Now uses correct table 'roster_employee_services' per actual database schema.
+        
+        Enhanced with detailed logging for debugging.
+        """
+        logger.info(f"\n📊 [DRAAD 220] Loading employee targets for roster_id={self.roster_id}")
+        logger.info(f"   Table: roster_employee_services")
+        
+        try:
+            # ✅ DRAAD 220 FIX: Use correct table name
+            response = self.supabase.table('roster_employee_services').select(
+                'employee_id, service_id, aantal, actief'
+            ).eq(
+                'roster_id', self.roster_id
+            ).eq(
+                'actief', True
+            ).execute()
+            
+            logger.info(f"   ✅ [DRAAD 220] Loaded {len(response.data)} employee service records")
+            
+            # Process targets
+            # Note: employee_targets stores per-employee total, but actual quota is per-service
+            # This is used as a baseline/reference
+            for row in response.data:
+                emp_id = row['employee_id']
+                aantal = row.get('aantal', 0)
+                
+                # Accumulate total for employee (across all services)
+                self.employee_targets[emp_id] = self.employee_targets.get(emp_id, 0) + aantal
+            
+            logger.info(f"   ✅ [DRAAD 220] Processed targets for {len(self.employee_targets)} employees")
+            
+            # Log summary
+            if self.employee_targets:
+                total_capacity = sum(self.employee_targets.values())
+                avg_capacity = total_capacity / len(self.employee_targets)
+                logger.info(f"   📊 Total capacity: {total_capacity} shifts")
+                logger.info(f"   📊 Average per employee: {avg_capacity:.1f} shifts")
+            else:
+                logger.warning(f"   ⚠️  No employee targets loaded - check roster_employee_services data")
+            
+        except Exception as e:
+            logger.error(f"   ❌ [DRAAD 220] Failed to load employee targets: {e}")
+            logger.error(f"   💡 Verify that roster_employee_services table exists and has data for roster_id={self.roster_id}")
+            raise
 
     def _initialize_quota(self) -> None:
         """
@@ -802,15 +903,16 @@ class GreedyRosteringEngine:
         logger.info(f"   ✅ Blocked slots updated: {len(self.blocked_slots)}")
 
     def solve(self) -> SolveResult:
-        """Execute GREEDY v2.0 + DRAAD 218C + DRAAD 219B algorithm."""
+        """Execute GREEDY v2.0 + DRAAD 218C + DRAAD 219B + DRAAD 220 algorithm."""
         start_time = time.time()
-        logger.info("\n🚀 [DRAAD 219B] Starting GREEDY v2.0 + DIO/DDA Pairing + Shortage Analysis...")
+        logger.info("\n🚀 [DRAAD 220] Starting GREEDY v2.0 + DIO/DDA Pairing + Shortage Analysis + Schema Validation...")
         logger.info("   ✅ BUG 1 FIX: blocked_slots (date, dagdeel, employee_id)")
         logger.info("   ✅ BUG 2 FIX: quota_remaining (employee_id, service_id)")
         logger.info("   ✅ BUG 3 FIX: fairness sort by per-service remaining")
         logger.info("   ✅ BUG 4-5 FIX: All dataclasses present, bottleneck fields fixed")
         logger.info("   ✨ DRAAD 218C: DIO/DIA + DDO/DDA auto-pairing with full validation")
         logger.info("   ✨ DRAAD 219B: Intelligent shortage reason/suggestion analysis")
+        logger.info("   ✨ DRAAD 220: Database schema validation + corrected _load_employee_targets()")
         
         try:
             bottlenecks = []
@@ -968,7 +1070,7 @@ class GreedyRosteringEngine:
                 coverage=round(coverage, 1),
                 bottlenecks=bottlenecks,
                 solve_time=round(elapsed, 2),
-                message=f"DRAAD 219B: {coverage:.1f}% coverage in {elapsed:.2f}s",
+                message=f"DRAAD 220: {coverage:.1f}% coverage in {elapsed:.2f}s",
                 pre_planned_count=self.pre_planned_count,
                 greedy_count=self.greedy_count
             )
