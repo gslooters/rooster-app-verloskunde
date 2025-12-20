@@ -24,12 +24,13 @@ DRAAD 218B: STAP 6 - SCORING ALGORITME (HC4-HC5) - COMPLEET
 DRAAD 218B: STAP 7 - BLOKKERINGSREGELS VERFIJND - COMPLEET
 DRAAD 218B: STAP 8 - BASELINE VERIFICATION - COMPLEET ✅
 DRAAD 218B: STAP 9 - DATABASE UPDATES VERIFIED ✅
-DRAAD 218B: STAP 10 - TESTING & IMPORTS VALIDATION ✅ READY FOR DEPLOYMENT
+DRAAD 218B: STAP 10 - TESTING & IMPORTS VALIDATED ✅ READY FOR DEPLOYMENT
+DRAAD 218C: DIA/DDA PAIRING bij DIO/DDO - AFWIJKING 2 GEFIXED ✅
 """
 
 import logging
 import os
-from datetime import datetime, timedelta  # ✅ STAP 10: timedelta aanwezig
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, field, asdict
 from enum import Enum
@@ -268,6 +269,7 @@ class GreedyRosteringEngine:
     DRAAD 218B STAP 8: BASELINE VERIFICATION - COMPLEET ✅
     DRAAD 218B STAP 9: DATABASE UPDATES VERIFIED ✅
     DRAAD 218B STAP 10: TESTING & IMPORTS VALIDATED ✅ READY FOR DEPLOYMENT
+    DRAAD 218C: DIA/DDA PAIRING bij DIO/DDO - AFWIJKING 2 GEFIXED ✅
     """
     
     def __init__(self, config: Dict[str, Any]):
@@ -309,6 +311,9 @@ class GreedyRosteringEngine:
         self.employee_shifts: Dict[str, int] = {}
         self.service_type_map: Dict[str, Dict[str, Any]] = {}  # Cache service info
         
+        # DRAAD 218C: Tracking voor companion service pairing
+        self.paired_services: Dict[str, str] = {}  # Track DIO→DIA, DDO→DDA pairs
+        
         logger.info(f"GreedyRosteringEngine initialized for roster {self.roster_id}")
     
     def solve(self) -> SolveResult:
@@ -347,13 +352,13 @@ class GreedyRosteringEngine:
             logger.info("[Phase 4] Analyzing bottlenecks...")
             self._find_bottlenecks()
             
-            # Phase 5: Save results (STAP 9 VERIFIED ✅)
+            # Phase 5: Save results
             logger.info("[Phase 5] Saving to database...")
             self._save_assignments()
-            self._update_invulling()  # ✅ STAP 9
-            self._update_roster_status()  # ✅ STAP 9
+            self._update_invulling()
+            self._update_roster_status()
             
-            # Phase 6: Comprehensive reporting (FASE 6 NIEUW)
+            # Phase 6: Comprehensive reporting
             logger.info("[Phase 6] Generating comprehensive statistics...")
             employee_stats = self._generate_employee_stats()
             service_stats = self._generate_service_stats()
@@ -377,15 +382,17 @@ class GreedyRosteringEngine:
                 status_msg = f"FAILED: {coverage:.1f}% coverage"
             
             message = (
-                f"DRAAD 218B STAP 10 COMPLETE ✅: {coverage:.1f}% coverage "
+                f"DRAAD 218C COMPLETE ✅: {coverage:.1f}% coverage "
                 f"({assigned_count}/{total_required}) in {solve_time:.2f}s | "
-                f"Pre-planned: {pre_planned_count}, GREEDY: {len(new_assignments)}"
+                f"Pre-planned: {pre_planned_count}, GREEDY: {len(new_assignments)}, "
+                f"Paired services: {len(self.paired_services)}"
             )
             
             logger.info(f"✅ {status_msg} in {solve_time:.2f}s")
             logger.info(f"📊 Employee stats: {len(employee_stats)} employees tracked")
             logger.info(f"📊 Service stats: {len(service_stats)} service types analyzed")
             logger.info(f"📊 Team breakdown: {len(team_breakdown)} teams")
+            logger.info(f"🔗 Paired services: {len(self.paired_services)} DIO/DDO→DIA/DDA pairs")
             
             bottleneck_dicts = [bn.to_dict() for bn in self.bottlenecks]
             
@@ -802,15 +809,6 @@ class GreedyRosteringEngine:
                 planning_db[middag_key].status = 2
                 logger.debug(f"✅ STAP 7: Blocked {middag_key} (middag after {service_code})")
             
-            # 3.7.1.3 / 3.7.2.3: Probeer evening service (DIA of DDA)
-            # DIT WORDT IN ALLOCATIE AFGEHANDELD (separate requirement)
-            avond_key = (date, 'A', emp_id)
-            if avond_key in planning_db and planning_db[avond_key].status == 0:
-                logger.debug(
-                    f"✅ STAP 7: Evening slot {avond_key} available for "
-                    f"{'DIA' if service_code == 'DIO' else 'DDA'}"
-                )
-            
         elif service_code in ['DIA', 'DDA']:  # Avond services
             # 3.7.1.4-5 / 3.7.2.4-5: Block volgende dag
             # MAAR: Niet als date == end_date!
@@ -916,12 +914,134 @@ class GreedyRosteringEngine:
         # Non-system services - altijd ok
         return True
     
+    def _try_pair_evening_service(self, emp_id: str, date: str, morning_service: str,
+                                  planning_db: Dict[Tuple[str, str, str], RosterAssignment],
+                                  employee_shifts: Dict[str, int],
+                                  employee_last_work: Dict[str, str]) -> Optional[RosterAssignment]:
+        """Probeer avonddienst (DIA/DDA) te paren met ochtend (DIO/DDO).
+        
+        DRAAD 218C: AFWIJKING 2 - DIA/DDA pairing bij DIO/DDO ✅
+        
+        Spec 3.7.1.3 / 3.7.2.3: Probeer DIA/DDA voor zelfde medewerker bij DIO/DDO.
+        
+        Args:
+            emp_id: Medewerker die DIO/DDO heeft gekregen
+            date: Datum van DIO/DDO
+            morning_service: 'DIO' of 'DDO'
+            planning_db: Planning database
+            employee_shifts: Shift counter per medewerker
+            employee_last_work: Laatste werkdatum per medewerker
+            
+        Returns:
+            RosterAssignment indien succesvol gepaard, anders None
+        """
+        # Bepaal companion service
+        companion_service_code = 'DIA' if morning_service == 'DIO' else 'DDA'
+        
+        # Zoek companion requirement
+        companion_req = None
+        for req in self.requirements:
+            if (req.date == date and 
+                req.dagdeel == 'A' and 
+                req.service_code == companion_service_code and
+                req.assigned < req.needed):
+                companion_req = req
+                break
+        
+        if not companion_req:
+            logger.debug(
+                f"🔗 DRAAD 218C: No unfilled {companion_service_code} requirement "
+                f"for {date}/A to pair with {morning_service}"
+            )
+            return None
+        
+        # Check of medewerker deze dienst kan doen
+        emp = self.employees[emp_id]
+        
+        # Check capability
+        if companion_req.service_id not in emp.service_quotas:
+            logger.debug(
+                f"🔗 DRAAD 218C: {emp.name} not qualified for {companion_service_code}"
+            )
+            return None
+        
+        # Check quota
+        if emp.service_quotas[companion_req.service_id] <= 0:
+            logger.debug(
+                f"🔗 DRAAD 218C: {emp.name} has no quota left for {companion_service_code}"
+            )
+            return None
+        
+        # Check max shifts
+        if employee_shifts[emp_id] >= self.max_shifts:
+            logger.debug(
+                f"🔗 DRAAD 218C: {emp.name} has reached max shifts"
+            )
+            return None
+        
+        # Check availability (slot moet beschikbaar zijn)
+        a_key = (date, 'A', emp_id)
+        if a_key not in planning_db or planning_db[a_key].status != 0:
+            logger.debug(
+                f"🔗 DRAAD 218C: {emp.name} A-slot not available for {companion_service_code}"
+            )
+            return None
+        
+        # Check blocking rules (voor DIA/DDA: volgende dag O en M)
+        if not self._can_allocate_with_blocks(emp_id, companion_req, planning_db):
+            logger.debug(
+                f"🔗 DRAAD 218C: Blocking rules prevent {companion_service_code} "
+                f"allocation for {emp.name}"
+            )
+            return None
+        
+        # ✅ ALLES OK - Maak assignment
+        assignment = RosterAssignment(
+            roster_id=self.roster_id,
+            employee_id=emp_id,
+            date=date,
+            dagdeel='A',
+            service_id=companion_req.service_id,
+            status=1,
+            source="greedy_paired",  # Special source to track pairing
+            notes=f"Paired with {morning_service}"
+        )
+        
+        # Update planning DB
+        planning_db[a_key].status = 1
+        planning_db[a_key].service_id = companion_req.service_id
+        
+        # Apply blocking rules
+        self._apply_system_service_blocks(emp_id, date, 'A', 
+                                         companion_service_code, planning_db)
+        
+        # Update tracking
+        companion_req.assigned += 1
+        companion_req.invulling = 1
+        employee_shifts[emp_id] += 1
+        self.employee_shifts[emp_id] = employee_shifts[emp_id]
+        employee_last_work[emp_id] = date
+        
+        # Decrease quota
+        emp.service_quotas[companion_req.service_id] -= 1
+        
+        # Track pairing
+        self.paired_services[f"{date}_{emp_id}"] = f"{morning_service}→{companion_service_code}"
+        
+        logger.info(
+            f"🔗 DRAAD 218C: Paired {companion_service_code} with {morning_service} "
+            f"for {emp.name} on {date} (quota left: {emp.service_quotas[companion_req.service_id]})"
+        )
+        
+        return assignment
+    
     def _allocate_greedy(self) -> List[RosterAssignment]:
         """Greedy allocation with HC1-HC6 constraints.
         
         DRAAD 218B FASE 4 STAP 8: Complete herschrijving - BASELINE VERIFIED ✅
         DRAAD 218B STAP 6: Gebruikt nieuwe _score_employee() methode ✅
         DRAAD 218B STAP 7: Gebruikt verfijnde blokkeringsregels ✅
+        DRAAD 218C: DIA/DDA pairing bij DIO/DDO - AFWIJKING 2 GEFIXED ✅
         
         Spec Section 3 & 4:
         - HC1: Respect unavailability (status > 0)
@@ -930,6 +1050,7 @@ class GreedyRosteringEngine:
         - HC4: Prefer employees with most quota remaining
         - HC5: Among equals, prefer longest without work
         - HC6: Alphabetical tiebreaker
+        - SPEC 3.7.1.3 / 3.7.2.3: Pair DIA/DDA with DIO/DDO
         """
         new_assignments = []
         employee_shifts = {emp_id: 0 for emp_id in self.employees}
@@ -1011,7 +1132,6 @@ class GreedyRosteringEngine:
                     break  # Move to next requirement
                 
                 # STAP 3: Score & select best (HC4, HC5, HC6)
-                # STAP 6 UPDATE: Gebruik _score_employee() methode
                 best_emp = max(
                     eligible,
                     key=lambda e_id: (
@@ -1063,8 +1183,24 @@ class GreedyRosteringEngine:
                     f"{req.date}/{req.dagdeel}/{req.service_code} "
                     f"(quota left: {self.employees[best_emp].service_quotas[req.service_id]})"
                 )
+                
+                # DRAAD 218C: AFWIJKING 2 - Probeer DIA/DDA pairing
+                if req.service_code in ['DIO', 'DDO']:
+                    paired_assignment = self._try_pair_evening_service(
+                        emp_id=best_emp,
+                        date=req.date,
+                        morning_service=req.service_code,
+                        planning_db=planning_db,
+                        employee_shifts=employee_shifts,
+                        employee_last_work=employee_last_work
+                    )
+                    
+                    if paired_assignment:
+                        new_assignments.append(paired_assignment)
+                        self.assignments[paired_assignment.id] = paired_assignment
         
-        logger.info(f"✅ STAP 8: Created {len(new_assignments)} greedy assignments")
+        logger.info(f"✅ DRAAD 218C: Created {len(new_assignments)} greedy assignments "
+                   f"(including {len(self.paired_services)} paired services)")
         return new_assignments
     
     def _find_bottlenecks(self) -> None:
