@@ -1,22 +1,16 @@
 /**
- * DRAAD118A Phase 3: planRooster Handler
+ * DRAAD224: planRooster Handler - PLACEHOLDER VERSION
  * 
  * Called when user clicks 'Roosterbewerking starten' in Dashboard Rooster Ontwerp.
- * Orchestrates the solver call and routes to appropriate screen based on outcome.
  * 
- * DRAAD-191: SOLVER SWITCH TO GREEDY
- * Changed from ORT (/api/roster/solve) to GREEDY (/api/roster/solve-greedy)
- * Smart Greedy Allocation with fair work distribution (DRAAD-190)
+ * CHANGE: Removed GREEDY/Solver2 completely
+ * NEW FLOW:
+ * 1. Call POST /api/roster/start-bewerking (sets status to in_progress)
+ * 2. Show placeholder screen with message
+ * 3. Route to /rooster/[id]/bewerking after OK
  * 
- * LOGIC:
- * 1. Call POST /api/roster/solve-greedy (GREEDY solver)
- * 2. Parse response.solver_result.status
- * 3. If SUCCESS/PARTIAL: store summary → route to /rooster/[id]/feasible-summary
- * 4. If FAILED: store bottleneck_report → route to /rooster/[id]/bottleneck-analysis
- * 5. If ERROR/TIMEOUT: show error message
+ * Previous GREEDY/Solver logic removed in DRAAD224
  */
-
-import type { SolverApiResponse } from '@/lib/types/solver';
 
 interface PlanRoosterHandlerConfig {
   rosterId: string;
@@ -29,86 +23,42 @@ export async function planRooster(config: PlanRoosterHandlerConfig): Promise<voi
   const { rosterId, onLoading, onError, router } = config;
   
   try {
-    console.log(`[DRAAD118A] planRooster: Starting for roster ${rosterId}`);
+    console.log(`[DRAAD224] planRooster: Starting for roster ${rosterId}`);
     onLoading?.(true);
     
-    // DRAAD-191: Call GREEDY solve endpoint (DRAAD-190 Smart Greedy Allocation)
-    const solveUrl = `/api/roster/solve-greedy`;
-    console.log(`[DRAAD-191] planRooster: Calling ${solveUrl} (GREEDY solver with DRAAD-190 fairness)`);
+    // DRAAD224: Call new placeholder endpoint (no solver, just status update)
+    const startUrl = `/api/roster/start-bewerking`;
+    console.log(`[DRAAD224] planRooster: Calling ${startUrl} (placeholder - no solver)`);
     
-    const solveResponse = await fetch(solveUrl, {
+    const response = await fetch(startUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ roster_id: rosterId })
     });
     
-    if (!solveResponse.ok) {
-      const errorData = await solveResponse.json().catch(() => ({}));
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
       throw new Error(
-        errorData.error || `Solver fout: HTTP ${solveResponse.status}`
+        errorData.error || `Fout: HTTP ${response.status}`
       );
     }
     
-    const apiResponse: SolverApiResponse = await solveResponse.json();
-    console.log(`[DRAAD-191] planRooster: Solver response status=${apiResponse.solver_result?.status}`);
+    const result = await response.json();
+    console.log(`[DRAAD224] planRooster: Success - roster set to in_progress`);
     
-    if (!apiResponse.success) {
-      throw new Error(apiResponse.solver_result?.status || 'Onbekende fout');
-    }
-    
-    const solverStatus = apiResponse.solver_result.status;
-    
-    // DRAAD-191: Route based on GREEDY solver status
-    // GREEDY returns: 'success' | 'partial' | 'failed'
-    if (solverStatus === 'success' || solverStatus === 'partial') {
-      // ✅ SUCCESS/PARTIAL PATH (GREEDY found a feasible solution)
-      console.log(`[DRAAD-191] planRooster: FEASIBLE outcome (${solverStatus}) - showing summary`);
-      
-      // Store summary in sessionStorage (transient data)
-      if (apiResponse.solver_result.summary) {
-        sessionStorage.setItem(
-          `feasible-summary-${rosterId}`,
-          JSON.stringify(apiResponse.solver_result.summary)
-        );
-      }
-      
-      // Route to summary screen
-      router.push(`/rooster/${rosterId}/feasible-summary`);
-      
-    } else if (solverStatus === 'failed') {
-      // ⛔ FAILED PATH (GREEDY could not satisfy constraints)
-      console.log(`[DRAAD-191] planRooster: INFEASIBLE outcome - showing bottleneck analysis`);
-      
-      // Store bottleneck report in sessionStorage (transient data)
-      if (apiResponse.solver_result.bottleneck_report) {
-        sessionStorage.setItem(
-          `bottleneck-report-${rosterId}`,
-          JSON.stringify(apiResponse.solver_result.bottleneck_report)
-        );
-      }
-      
-      // Route to bottleneck analysis screen
-      router.push(`/rooster/${rosterId}/bottleneck-analysis`);
-      
-    } else if (solverStatus === 'error' || solverStatus === 'timeout') {
-      throw new Error(
-        solverStatus === 'timeout' 
-          ? 'Solver timeout: de berekening duurde te lang. Probeer het later opnieuw of vereenvoudig het probleem.'
-          : 'Solver fout: er is een technische fout opgetreden.'
-      );
-      
-    } else {
-      throw new Error(`Onverwachte solver status: ${solverStatus}`);
-    }
+    // DRAAD224: Route to placeholder screen
+    // Placeholder screen will show message and OK button
+    // After OK, it will route to /rooster/[id]/bewerking
+    router.push(`/rooster/${rosterId}/placeholder-bewerking`);
     
   } catch (error: any) {
-    console.error(`[DRAAD-191] planRooster: Error:`, error);
+    console.error(`[DRAAD224] planRooster: Error:`, error);
     
     const errorMessage = error.message || 'Een onbekende fout is opgetreden.';
     onError?.(errorMessage);
     
     // Show user-friendly error
-    alert(`Fout bij roostering: ${errorMessage}`);
+    alert(`Fout bij starten roosterbewerking: ${errorMessage}`);
     
   } finally {
     onLoading?.(false);
@@ -116,7 +66,7 @@ export async function planRooster(config: PlanRoosterHandlerConfig): Promise<voi
 }
 
 /**
- * DRAAD118A: Alternative handler for UI integration
+ * DRAAD224: Alternative handler for UI integration
  * Use this in React components where you need a direct callback
  */
 export function createPlanRoosterHandler(
