@@ -1,0 +1,106 @@
+DRAAD-221: GREEDY Baseline Verification & Complete Algorithm Implementation
+================================================================================
+
+Timestamp: 2025-12-20T17:25:00Z
+Trigger ID: draad221_baseline_1734713100
+Priority: IMMEDIATE
+Service: greedy
+
+FIXES IMPLEMENTED:
+-----------------
+
+1. BASELINE VERIFICATION (_verify_baseline_blocked_slots)
+   - Verify blocked slots (status > 0) before assignment
+   - Count available, pre-planned, and blocked slots
+   - Comprehensive logging for each slot type
+   - Full statistics reporting
+
+2. LOAD BLOCKED SLOTS (_load_planning)
+   - Complete database field loading:
+     * status (0=available, 1=assigned, 2=blocked, 3=unavailable)
+     * service_id (assigned service)
+     * blocked_by_date (date causing block)
+     * blocked_by_dagdeel (dagdeel causing block)
+     * blocked_by_service_id (service causing block)
+     * source (assignment source)
+     * is_protected (protected flag)
+   - In-memory werkbestand_planning with all assignments
+   - Key-based lookup (employee_id, date, dagdeel)
+
+3. ASSIGN SHIFT (_assign_shift) WITH DEBUG LOGGING
+   - Step-by-step logging for each assignment attempt
+   - Candidate filtering and availability checks
+   - Special DIO/DDO duo availability verification
+   - Fair distribution employee selection
+   - Complete assignment execution tracking
+   - Capacity update confirmation
+
+4. FAIR DISTRIBUTION ALGORITHM (_select_best_employee)
+   - Two-level sorting:
+     * Primary: shifts_remaining DESC (most shifts first)
+     * Tie-breaker: shifts_in_run ASC (least done first)
+     * Final: alfabetisch (name ASC)
+   - Real-time capacity calculation
+   - Zero-capacity filtering (planregel 3.5.3)
+
+5. DIO/DIA AND DDO/DDA BLOCKING RULES
+   - _assign_dia_after_dio: Planregel 3.7.1 complete
+     * Assign DIA same day dagdeel A
+     * Block dagdeel M same day (status=2)
+     * Block dagdeel O+M next day (status=2)
+     * Set blocked_by fields correctly
+   - _assign_dda_after_ddo: Planregel 3.7.2 complete
+     * Assign DDA same day dagdeel A
+     * Block dagdeel M same day (status=2)
+     * Block dagdeel O+M next day (status=2)
+     * Set blocked_by fields correctly
+
+6. COMPREHENSIVE ERROR HANDLING
+   - Try-except blocks around main operations
+   - Detailed error logging with stack traces
+   - Graceful degradation on failures
+   - Validation at each step
+
+7. COMPLETE GREEDY ALGORITHM (GREEDYAlternatief.md)
+   - Load roster metadata (roosters table)
+   - Load demand (roster_period_staffing_dagdelen)
+   - Load planning state (roster_assignments)
+   - Load capacity (roster_employee_services)
+   - Load employee metadata (employees)
+   - Process pre-planning (status=1)
+   - Main assignment loop with planregels 3.1-3.7
+   - Database update (only GREEDY assignments)
+   - Final report generation
+
+QUALITY CONTROLS:
+----------------
+
+✅ Syntax: Python 3.11+ compliant
+✅ Type hints: Complete throughout
+✅ Docstrings: Comprehensive for all functions
+✅ Logging: DEBUG, INFO, WARNING, ERROR levels
+✅ Error handling: Try-except with detailed messages
+✅ Code structure: Clean, modular, maintainable
+✅ Performance: In-memory working datasets
+✅ Database: Batch updates, no redundant queries
+
+DEPLOYMENT:
+----------
+
+Expected Railway rebuild time: 2-3 minutes
+Expected log message: "[DRAAD221-BASELINE] GreedyRosteringEngine initialized"
+
+VERIFICATION:
+------------
+
+After deployment, check logs for:
+1. "[DRAAD221-BASELINE] === BASELINE VERIFICATION START ==="
+2. Blocked slots count and details
+3. "[DRAAD221-ASSIGN]" entries showing assignments
+4. Fair distribution selection logs
+5. DIO/DIA and DDO/DDA blocking confirmations
+6. "[DRAAD221] === FINAL REPORT ==="
+7. Coverage percentage >= 95%
+
+Build timestamp: 2025-12-20T17:25:00Z
+Commit SHA: Will be set by GitHub after push
