@@ -1,0 +1,27 @@
+DRAAD 217 STAP 2 - GITHUB ACTIONS WORKFLOW TRIGGER
+===================================================
+
+Workflow: .github/workflows/test-greedy-api.yml
+Status: TRIGGERED
+Timestamp: 2025-12-20T00:04:46Z
+
+Tests to Run:
+  ✅ Health Check: GET /api/greedy/health
+  ✅ Validation: POST /api/greedy/validate
+  ✅ Solve Test: POST /api/greedy/solve
+
+Service URL: https://greedy-production.up.railway.app
+
+Results will be:
+  1. Stored in test-results/ directory
+  2. Committed to repository
+  3. Available as GitHub Actions artifacts
+  4. Visible in GitHub Actions tab
+
+How to view results:
+  1. Go to: https://github.com/gslooters/rooster-app-verloskunde/actions
+  2. Click: "DRAAD 217 - Test GREEDY API Endpoint"
+  3. View: All test outputs and JSON responses
+  4. Download: Artifacts (test results)
+
+🎯 This is FULLY GITHUB-BASED testing - No terminal/curl needed!
