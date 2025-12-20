@@ -1,22 +1,18 @@
-"""OR-Tools + Sequential Solver Service (DRAAD208C-FIX)
+"""OR-Tools CP-SAT Solver Service (DRAAD224-SIMPLIFIED)
 
-FastAPI service voor rooster optimalisatie met twee solvers:
+FastAPI service voor rooster optimalisatie met RosterSolverV2:
 - RosterSolverV2: Google OR-Tools CP-SAT (optimization)
-- SequentialSolverV2: Priority queue greedy (fast + deterministic)
 
-FASE 1: RosterSolverV2 with 4 hard constraints (DRAAD170)
-FASE 2: SequentialSolverV2 with 3-layer priority (DRAAD174)
-FASE 3: SolverSelector routes between solvers (DRAAD174)
-
-DRAARD208C-FIX:
-- Enhanced database validation with graceful degradation
-- If database unavailable, solver still starts but reports errors
-- Better environment variable handling
-- Detailed logging for debugging Railway deployment
+DRAARD224-SIMPLIFICATION:
+- Removed SequentialSolverV2 (priority queue greedy solver)
+- Removed SolverSelector routing logic
+- Removed all Solver2-related patches and dependencies
+- Direct CP-SAT solving for all requests
+- Enhanced error reporting and database integration
 
 Authors: Rooster App Team
-Version: 2.0.0-DRAAD208C-FIX
-Date: 2025-12-18
+Version: 2.0.0-DRAAD224-SIMPLIFIED
+Date: 2025-12-20
 """
 
 import sys
@@ -38,17 +34,15 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 logger.info("[Main] ============================================================")
-logger.info("[Main] ROOSTER SOLVER SERVICE - FASE 2 + DRAAD208C-FIX")
+logger.info("[Main] ROOSTER SOLVER SERVICE - DRAAD224-SIMPLIFIED")
 logger.info(f"[Main] Python version: {sys.version}")
 logger.info(f"[Main] Start time: {datetime.now().isoformat()}")
-logger.info("[Main] Version: 2.0.0-DRAAD208C-FIX")
-logger.info("[Main] Solver 1: RosterSolverV2 (CP-SAT) - FASE 1 COMPLETE")
-logger.info("[Main] Solver 2: SequentialSolverV2 (Priority Queue) - FASE 2 COMPLETE")
-logger.info("[Main] Routing: SolverSelector (FASE 3) - PRIMARY: Sequential, FALLBACK: CP-SAT")
-logger.info("[Main] DRAAD208C-FIX: Enhanced database validation with graceful degradation")
+logger.info("[Main] Version: 2.0.0-DRAAD224-SIMPLIFIED")
+logger.info("[Main] Solver: RosterSolverV2 (CP-SAT) - DIRECT")
+logger.info("[Main] DRAAD224: All Solver2 code removed for simplicity")
 
 # ============================================================================
-# DRAAD208C-FIX: Environment Variable Validation (Non-blocking)
+# DRAAD224: Environment Variable Validation (Non-blocking)
 # ============================================================================
 
 class DatabaseConnectionStatus:
@@ -64,7 +58,7 @@ class DatabaseConnectionStatus:
 DB_STATUS = DatabaseConnectionStatus()
 
 def validate_database_connection_nonblocking():
-    """DRAAD208C-FIX: Non-blocking database validation.
+    """DRAAD224: Non-blocking database validation.
     
     This validation is NON-CRITICAL:
     - If database is unavailable, service still starts
@@ -72,7 +66,7 @@ def validate_database_connection_nonblocking():
     - Better feedback for deployment debugging
     """
     logger.info("[Boot] ================================================")
-    logger.info("[Boot] DRAAD208C-FIX: Database Connection Validation")
+    logger.info("[Boot] DRAAD224: Database Connection Validation")
     logger.info("[Boot] Mode: NON-BLOCKING (graceful degradation enabled)")
     
     try:
@@ -172,18 +166,12 @@ try:
     )
     logger.info("[Main] Models imported successfully")
     
-    logger.info("[Main] Step 4: Importing RosterSolverV2 (FASE 1)...")
+    logger.info("[Main] Step 4: Importing RosterSolverV2 (OR-Tools)...")
     from RosterSolverV2 import RosterSolverV2
     logger.info("[Main] RosterSolverV2 imported successfully")
     
-    logger.info("[Main] Step 5: Importing SequentialSolverV2 (FASE 2)...")
-    from sequential_solver_v2 import SequentialSolverV2
-    logger.info("[Main] SequentialSolverV2 imported successfully")
-    
-    logger.info("[Main] Step 6: Importing SolverSelectorV2 (FASE 3)...")
-    from solver_selector import SolverSelectorV2
-    logger.info("[Main] SolverSelectorV2 imported successfully")
-    logger.info("[Main] FASE 2+3 INTEGRATION COMPLETE - Both solvers available")
+    logger.info("[Main] DRAAD224: Solver2-specific imports removed")
+    logger.info("[Main] All imports complete - CP-SAT solver ready")
     
 except Exception as e:
     logger.error("[Main] CRITICAL IMPORT ERROR", exc_info=True)
@@ -195,8 +183,8 @@ logger.info("[Main] ALL IMPORTS SUCCESSFUL - Creating FastAPI app")
 # FastAPI app
 app = FastAPI(
     title="Rooster Solver Service",
-    description="V2: RosterSolverV2 (FASE 1) + SequentialSolverV2 (FASE 2) + SolverSelector (FASE 3) - DRAAD208C-FIX",
-    version="2.0.0-DRAAD208C-FIX"
+    description="V2: RosterSolverV2 (OR-Tools CP-SAT) - DRAAD224-SIMPLIFIED",
+    version="2.0.0-DRAAD224-SIMPLIFIED"
 )
 
 logger.info("[Main] FastAPI application created")
@@ -230,14 +218,14 @@ app.add_middleware(
 logger.info(f"[Main] CORS configured with {len(ALLOWED_ORIGINS)} allowed origins")
 
 # ============================================================================
-# GLOBAL EXCEPTION HANDLER - DRAAD208C-FIX: Better error responses
+# GLOBAL EXCEPTION HANDLER - DRAAD224: Better error responses
 # ============================================================================
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
     """Global exception handler - prevents 502 errors.
     
-    DRAAD208C-FIX: Return detailed error information instead of generic response
+    DRAAD224: Return detailed error information instead of generic response
     Includes database status for debugging
     """
     logger.error(f"[Main] GLOBAL EXCEPTION: {type(exc).__name__}", exc_info=True)
@@ -274,9 +262,8 @@ async def global_exception_handler(request, exc):
 async def startup_event():
     """Called when FastAPI starts."""
     logger.info("[Main] STARTUP COMPLETE - Server ready")
-    logger.info(f"[Main] Service: Rooster Solver V2 (DRAAD208C-FIX)")
-    logger.info(f"[Main] Primary solver: SequentialSolverV2 (Priority Queue)")
-    logger.info(f"[Main] Fallback solver: RosterSolverV2 (OR-Tools CP-SAT)")
+    logger.info(f"[Main] Service: Rooster Solver V2 (DRAAD224-SIMPLIFIED)")
+    logger.info(f"[Main] Solver: RosterSolverV2 (OR-Tools CP-SAT)")
     logger.info(f"[Main] Database: {'✓ CONNECTED' if DB_STATUS.is_available else '⚠ OFFLINE (graceful mode)'}")
     if DB_STATUS.validation_error:
         logger.warning(f"[Main] Database error: {DB_STATUS.validation_error}")
@@ -292,21 +279,23 @@ async def root():
     return {
         "service": "Rooster Solver V2",
         "status": "online",
-        "version": "2.0.0-DRAAD208C-FIX",
-        "fase1_rosterset2_solver": "RosterSolverV2 (OR-Tools CP-SAT)",
-        "fase2_sequential_solver": "SequentialSolverV2 (Priority Queue)",
-        "fase3_selector": "SolverSelectorV2 (Unified routing)",
-        "routing": "PRIMARY: Sequential, FALLBACK: CP-SAT",
+        "version": "2.0.0-DRAAD224-SIMPLIFIED",
+        "solver": "RosterSolverV2 (OR-Tools CP-SAT)",
         "database_status": "CONNECTED" if DB_STATUS.is_available else "OFFLINE",
         "features": [
-            "FASE 1: 4 hard constraints (bevoegdheden, one-per-slot, fixed, blocked)",
-            "FASE 2: 3-layer priority (dagdeel -> service -> team)",
-            "FASE 2: Real database integration (Supabase)",
-            "FASE 3: Unified SolverSelector with fallback",
+            "OR-Tools CP-SAT optimization",
+            "4 hard constraints (bevoegdheden, one-per-slot, fixed, blocked)",
+            "Database integration (Supabase)",
             "Async/await with ThreadPoolExecutor",
             "CORS security",
-            "DRAAD208C-FIX: Graceful database degradation",
-            "DRAAD208C-FIX: Enhanced error reporting"
+            "DRAAD224: Simplified architecture (Solver2 removed)",
+            "Graceful database degradation",
+            "Enhanced error reporting"
+        ],
+        "removed_components": [
+            "SequentialSolverV2 (priority queue greedy)",
+            "SolverSelector (routing logic)",
+            "Solver2-specific patches and utilities"
         ]
     }
 
@@ -317,7 +306,7 @@ async def health():
         status="healthy" if DB_STATUS.is_available else "degraded",
         timestamp=datetime.utcnow().isoformat(),
         service="rooster-solver",
-        version="2.0.0-DRAAD208C-FIX"
+        version="2.0.0-DRAAD224-SIMPLIFIED"
     )
 
 @app.get("/version", response_model=VersionResponse)
@@ -329,35 +318,32 @@ async def version():
         ortools_version = "unknown"
     
     return VersionResponse(
-        version="2.0.0-DRAAD208C-FIX",
+        version="2.0.0-DRAAD224-SIMPLIFIED",
         or_tools_version=ortools_version,
-        phase="FASE1+FASE2+FASE3",
+        phase="CP-SAT-ONLY",
         capabilities=[
-            "FASE_1_RosterSolverV2_4_constraints",
-            "FASE_2_SequentialSolverV2_priority_queue",
-            "FASE_3_SolverSelectorV2_unified_routing",
+            "rostersolver_v2_or_tools_cp_sat",
+            "4_hard_constraints",
             "async_executor",
             "supabase_integration",
             "graceful_database_degradation",
-            "fallback_strategy",
             "exception_handling",
             "cors_security",
-            "draad208c_enhanced_errors"
+            "draad224_simplified"
         ]
     )
 
 # ============================================================================
-# SOLVER LOGIC - DRAAD208C-FIX: Enhanced error context
+# SOLVER LOGIC - DRAAD224: Direct CP-SAT solving
 # ============================================================================
 
-def _do_solve(request: SolveRequest, strategy: str = None) -> SolveResponse:
-    """Execute solve in thread pool (runs synchronously but in separate thread).
+def _do_solve(request: SolveRequest) -> SolveResponse:
+    """Execute solve in thread pool - Direct RosterSolverV2 (CP-SAT).
     
-    DRAAD208C-FIX: Improved error reporting and logging
+    DRAAD224: Simplified - no solver selection or fallback logic
     
     Args:
         request: SolveRequest
-        strategy: Optional strategy override ('sequential' or 'cpsat')
     
     Returns:
         SolveResponse
@@ -365,14 +351,14 @@ def _do_solve(request: SolveRequest, strategy: str = None) -> SolveResponse:
     start_time = datetime.now()
     
     try:
-        logger.info("[Solver] Starting solve in thread pool...")
+        logger.info("[Solver] Starting CP-SAT solve in thread pool...")
         logger.info(f"[Solver] Roster: {request.roster_id}")
         logger.info(f"[Solver] Period: {request.start_date} to {request.end_date}")
         logger.info(f"[Solver] Database available: {DB_STATUS.is_available}")
         
-        # Use SolverSelector to route to appropriate solver
-        logger.info("[Solver] Calling SolverSelectorV2.solve()...")
-        response = SolverSelectorV2.solve(request, strategy=strategy)
+        # Direct CP-SAT solving
+        logger.info("[Solver] Calling RosterSolverV2.solve()...")
+        response = RosterSolverV2.solve(request)
         
         solve_time = (datetime.now() - start_time).total_seconds()
         logger.info(f"[Solver] Solve completed: status={response.status.value}, "
@@ -403,36 +389,24 @@ def _do_solve(request: SolveRequest, strategy: str = None) -> SolveResponse:
         )
 
 # ============================================================================
-# SOLVER ENDPOINT (FASE 2+DRAAD208C-FIX)
+# SOLVER ENDPOINT (DRAAD224-SIMPLIFIED)
 # ============================================================================
 
 @app.post("/api/v1/solve-schedule", response_model=SolveResponse)
 async def solve_schedule(request: SolveRequest):
-    """Solve rooster using FASE 2 complete system (DRAAD208C-FIX).
+    """Solve rooster using RosterSolverV2 (OR-Tools CP-SAT).
     
-    FASE 1 (RosterSolverV2):
-    - Constraint 1: Bevoegdheden (authorized services only)
-    - Constraint 2: One-per-slot (max 1 service/dagdeel)
-    - Constraint 3: Fixed assignments (status 1)
-    - Constraint 4: Blocked slots (status 2,3)
-    
-    FASE 2 (SequentialSolverV2):
-    - 3-layer priority sorting
-    - Real database integration
-    - Employee availability tracking
-    - Failure reporting
-    
-    FASE 3 (SolverSelectorV2):
-    - Routes to SequentialSolverV2 (default)
-    - Fallback to RosterSolverV2 on error
-    - Unified response format
-    - Environment variable override
-    
-    DRAAD208C-FIX IMPROVEMENTS:
+    DRAAD224-SIMPLIFIED:
+    - Direct CP-SAT optimization
+    - 4 hard constraints:
+      1. Bevoegdheden (authorized services only)
+      2. One-per-slot (max 1 service/dagdeel)
+      3. Fixed assignments (status 1)
+      4. Blocked slots (status 2,3)
+    - No Solver2 priority queue fallback
     - Graceful database degradation
-    - Better HTTP error responses with details
-    - Detailed violation reporting
-    - Comprehensive logging with database status
+    - Enhanced HTTP error responses
+    - Comprehensive logging
     """
     start_time = datetime.now()
     
@@ -447,8 +421,7 @@ async def solve_schedule(request: SolveRequest):
         response = await loop.run_in_executor(
             SOLVER_EXECUTOR,
             _do_solve,
-            request,
-            None  # strategy parameter (None = use default)
+            request
         )
         
         total_time = (datetime.now() - start_time).total_seconds()
