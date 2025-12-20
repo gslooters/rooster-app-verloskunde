@@ -14,6 +14,7 @@ DRAA 181: Initial implementation
 DRAA 190: Smart greedy allocation
 DRAA 214: Coverage calculation fixes
 DRAA 217: Restoration after corruption
+DRAA 218B: FASE 1 - Baseline fixes (service_types join, team logic, sorting)
 """
 
 import logging
@@ -48,11 +49,16 @@ class EmployeeCapability(str, Enum):
 class RosteringRequirement:
     """Single slot to fill in roster."""
     date: str  # YYYY-MM-DD
-    dagdeel: str  # ochtend, middag, nacht
+    dagdeel: str  # O, M, A
     service_id: str  # UUID
     needed: int = 1
     assigned: int = 0
     pre_planned_ids: List[str] = field(default_factory=list)
+    # DRAAD 218B additions:
+    team: str = "TOT"  # TOT, GRO, ORA
+    service_code: str = ""
+    is_system: bool = False
+    invulling: int = 0  # 0=open, 1=GREEDY, 2=handmatig
     
     def is_filled(self) -> bool:
         """Check if requirement is fully met."""
@@ -93,11 +99,11 @@ class RosterAssignment:
     roster_id: str = ""
     employee_id: str = ""
     date: str = ""  # YYYY-MM-DD
-    dagdeel: str = ""  # ochtend, middag, nacht
+    dagdeel: str = ""  # O, M, A
     service_id: str = ""
-    status: int = 0  # 0=active, 1=cancelled, 2=manual
+    status: int = 0  # 0=beschikbaar, 1=ingepland, 2=geblokkeerd, 3=afwezig
     notes: str = ""
-    source: str = "greedy"  # greedy, manual, pre-planned
+    source: str = "greedy"  # greedy, manual, pre_planned
     created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
     
     def to_dict(self) -> Dict[str, Any]:
@@ -151,6 +157,49 @@ class SolveResult:
 
 
 # ============================================================================
+# DRAAD 218B: NEW WORK FILE DATA CLASSES
+# ============================================================================
+
+@dataclass
+class WorkBestandOpdracht:
+    """Requirements werkbestand - gesorteerd."""
+    requirement_id: str
+    roster_id: str
+    service_id: str
+    service_code: str
+    is_system: bool
+    date: str
+    dagdeel: str  # O, M, A
+    team: str  # TOT, GRO, ORA
+    aantal_nodig: int
+    aantal_ingevuld: int = 0
+    invulling: int = 0  # 0=open, 1=GREEDY, 2=handmatig
+
+
+@dataclass
+class WorkBestandCapaciteit:
+    """Employee capacity werkbestand."""
+    employee_id: str
+    service_id: str
+    aantal_quota: int  # Hoeveel mag nog
+    aantal_gebruikt: int = 0  # Hoeveel is gebruikt
+
+
+@dataclass
+class WorkBestandPlanning:
+    """Planning state werkbestand."""
+    assignment_id: str
+    roster_id: str
+    employee_id: str
+    date: str
+    dagdeel: str
+    service_id: str
+    status: int  # 0=beschikbaar, 1=ingepland, 2=geblokkeerd, 3=afwezig
+    invulling: int  # 0=open, 1=GREEDY, 2=handmatig
+    source: str  # greedy, manual, pre_planned
+
+
+# ============================================================================
 # MAIN ENGINE
 # ============================================================================
 
@@ -160,6 +209,7 @@ class GreedyRosteringEngine:
     DRAAD 181: Smart greedy allocation
     DRAAD 190: HC1-HC6 constraint handling
     DRAAD 214: Coverage calculations fixed
+    DRAAD 218B FASE 1: Service_types join, team logic, sorting fixes
     """
     
     def __init__(self, config: Dict[str, Any]):
@@ -238,6 +288,8 @@ class GreedyRosteringEngine:
             # Phase 5: Save results
             logger.info("[Phase 5] Saving to database...")
             self._save_assignments()
+            self._update_invulling()
+            self._update_roster_status()
             
             # Calculate result
             assigned_count = sum(r.assigned for r in self.requirements)
@@ -256,7 +308,7 @@ class GreedyRosteringEngine:
                 status = "failed"
                 status_msg = f"FAILED: {coverage:.1f}% coverage"
             
-            message = f"DRAAD 190 SMART GREEDY: {coverage:.1f}% coverage ({assigned_count}/{total_required}) in {solve_time:.2f}s"
+            message = f"DRAAD 218B FASE 1 GREEDY: {coverage:.1f}% coverage ({assigned_count}/{total_required}) in {solve_time:.2f}s"
             
             logger.info(f"✅ {status_msg} in {solve_time:.2f}s")
             
@@ -293,20 +345,46 @@ class GreedyRosteringEngine:
     # Phase Implementations
     # ========================================================================
     
+    def _normalize_team(self, team: str) -> str:
+        """Normalize team string to standard values.
+        
+        DRAAD 218B STAP 3: Team normalization
+        """
+        if team is None:
+            return 'OVERIG'
+        
+        team = team.upper().strip()
+        
+        # Map database values to standard
+        mapping = {
+            'GROEN': 'GRO',
+            'GRO': 'GRO',
+            'ORANJE': 'ORA',
+            'ORA': 'ORA',
+            'OPROEP': 'OVERIG',
+            'ZZP': 'OVERIG',
+            'OVERIG': 'OVERIG'
+        }
+        
+        return mapping.get(team, 'OVERIG')
+    
     def _load_employees(self) -> None:
-        """Load employees from database."""
+        """Load employees from database.
+        
+        DRAAD 218B STAP 3: Added team loading and normalization
+        """
         if not self.supabase:
             logger.warning("Supabase not available, using empty employee list")
             return
         
         try:
-            # Load from roster_employee_services to get quotas
-            response = self.supabase.table('roster_employee_services').select(
+            # Load quotas
+            quota_response = self.supabase.table('roster_employee_services').select(
                 'employee_id, service_id, aantal'
-            ).eq('roster_id', self.roster_id).execute()
+            ).eq('roster_id', self.roster_id).eq('actief', True).gt('aantal', 0).execute()
             
             service_quotas: Dict[str, Dict[str, int]] = {}
-            for row in response.data:
+            for row in quota_response.data:
                 emp_id = row.get('employee_id')
                 svc_id = row.get('service_id')
                 aantal = row.get('aantal', 0)
@@ -315,15 +393,18 @@ class GreedyRosteringEngine:
                     service_quotas[emp_id] = {}
                 service_quotas[emp_id][svc_id] = aantal
             
-            # Load employee details
-            response = self.supabase.table('employees').select(
+            # Load employee details + TEAM
+            emp_response = self.supabase.table('employees').select(
                 'id, voornaam, achternaam, team'
             ).eq('actief', True).execute()
             
-            for row in response.data:
+            for row in emp_response.data:
                 emp_id = row.get('id')
                 name = f"{row.get('voornaam', '')} {row.get('achternaam', '')}".strip()
-                team = row.get('team', 'default')
+                team = row.get('team', 'OVERIG')
+                
+                # Normalize team
+                team = self._normalize_team(team)
                 
                 self.employees[emp_id] = Employee(
                     id=emp_id,
@@ -332,44 +413,97 @@ class GreedyRosteringEngine:
                     service_quotas=service_quotas.get(emp_id, {})
                 )
             
-            logger.info(f"Loaded {len(self.employees)} employees")
+            logger.info(f"Loaded {len(self.employees)} employees with team assignment")
             
         except Exception as e:
-            logger.error(f"Error loading employees: {e}")
+            logger.error(f"Error loading employees: {e}", exc_info=True)
+    
+    def _dagdeel_order(self, dagdeel: str) -> int:
+        """Map dagdeel to sort order.
+        
+        DRAAD 218B STAP 2: Sorting helper
+        """
+        order = {'O': 0, 'M': 1, 'A': 2}
+        return order.get(dagdeel, 99)
+    
+    def _team_order(self, team: str) -> int:
+        """Map team to sort order.
+        
+        DRAAD 218B STAP 2: Sorting helper
+        """
+        order = {'TOT': 0, 'GRO': 1, 'ORA': 2}
+        return order.get(team, 99)
     
     def _load_requirements(self) -> None:
-        """Load requirements from period staffing."""
+        """Load requirements + service info.
+        
+        DRAAD 218B STAP 2: Added service_types join and sorting
+        """
         if not self.supabase:
             logger.warning("Supabase not available, using empty requirements")
             return
         
         try:
-            response = self.supabase.table('roster_period_staffing_dagdelen').select(
-                'date, dagdeel, service_id, aantal'
-            ).eq('roster_id', self.roster_id).eq('status', 'active').execute()
+            # STAP 1: Laad service_types info
+            st_response = self.supabase.table('service_types').select(
+                'id, code, is_system'
+            ).execute()
+            
+            service_info = {}
+            for row in st_response.data:
+                service_info[row['id']] = {
+                    'code': row.get('code', ''),
+                    'is_system': row.get('is_system', False)
+                }
+            
+            # STAP 2: Laad requirements MET team
+            req_response = self.supabase.table('roster_period_staffing_dagdelen').select(
+                'id, date, dagdeel, team, service_id, aantal'
+            ).eq('roster_id', self.roster_id).gt('aantal', 0).execute()
             
             req_map: Dict[Tuple[str, str, str], RosteringRequirement] = {}
             
-            for row in response.data:
+            for row in req_response.data:
                 date = row.get('date')
                 dagdeel = row.get('dagdeel')
                 service_id = row.get('service_id')
+                team = row.get('team', 'TOT')
                 needed = row.get('aantal', 1)
+                
+                if service_id not in service_info:
+                    logger.warning(f"Unknown service_id: {service_id}")
+                    continue
                 
                 key = (date, dagdeel, service_id)
                 if key not in req_map:
-                    req_map[key] = RosteringRequirement(
+                    req = RosteringRequirement(
                         date=date,
                         dagdeel=dagdeel,
                         service_id=service_id,
                         needed=needed
                     )
+                    # TOEVOEGING: Team info
+                    req.team = team
+                    req.service_code = service_info[service_id]['code']
+                    req.is_system = service_info[service_id]['is_system']
+                    
+                    req_map[key] = req
             
             self.requirements = list(req_map.values())
-            logger.info(f"Loaded {len(self.requirements)} requirements")
+            
+            # ✅ STAP 3: SORTEREN OP SPEC
+            self.requirements.sort(key=lambda r: (
+                not r.is_system,  # is_system=TRUE eerst
+                r.date,  # oud naar nieuw
+                self._dagdeel_order(r.dagdeel),  # O=0, M=1, A=2
+                self._team_order(r.team),  # TOT=0, GRO=1, ORA=2
+                r.service_code  # alfabet
+            ))
+            
+            logger.info(f"Loaded {len(self.requirements)} requirements (sorted)")
             
         except Exception as e:
-            logger.error(f"Error loading requirements: {e}")
+            logger.error(f"Error loading requirements: {e}", exc_info=True)
     
     def _load_pre_planned(self) -> None:
         """Load pre-planned assignments."""
@@ -379,7 +513,7 @@ class GreedyRosteringEngine:
         try:
             response = self.supabase.table('roster_assignments').select(
                 'id, employee_id, date, dagdeel, service_id'
-            ).eq('roster_id', self.roster_id).eq('status', 0).eq('source', 'manual').execute()
+            ).eq('roster_id', self.roster_id).eq('status', 1).execute()
             
             for row in response.data:
                 assignment_id = row.get('id')
@@ -394,13 +528,27 @@ class GreedyRosteringEngine:
                         and req.service_id == service_id):
                         req.pre_planned_ids.append(emp_id)
                         req.assigned += 1
+                        req.invulling = 2  # Mark as manually filled
                         self.pre_planned_ids.add(assignment_id)
+                        
+                        # KRITIEK: Reduce quota for pre-planned
+                        if emp_id in self.employees:
+                            emp = self.employees[emp_id]
+                            if service_id in emp.service_quotas:
+                                emp.service_quotas[service_id] = max(
+                                    0,
+                                    emp.service_quotas[service_id] - 1
+                                )
+                                logger.debug(
+                                    f"Pre-planned: Quota reduced for {emp.name} "
+                                    f"/ service {service_id} → {emp.service_quotas[service_id]}"
+                                )
                         break
             
-            logger.info(f"Loaded {len(self.pre_planned_ids)} pre-planned assignments")
+            logger.info(f"Processed {len(self.pre_planned_ids)} pre-planned assignments")
             
         except Exception as e:
-            logger.error(f"Error loading pre-planned: {e}")
+            logger.error(f"Error loading pre-planned: {e}", exc_info=True)
     
     def _lock_pre_planned(self) -> None:
         """Lock pre-planned assignments (already counted)."""
@@ -466,12 +614,13 @@ class GreedyRosteringEngine:
                         date=req.date,
                         dagdeel=req.dagdeel,
                         service_id=req.service_id,
-                        status=0,
+                        status=1,  # ingepland
                         source="greedy"
                     )
                     new_assignments.append(assignment)
                     self.assignments[assignment.id] = assignment
                     req.assigned += 1
+                    req.invulling = 1  # Mark as GREEDY-filled
                     employee_shifts[best_emp] += 1
                     
                     # Decrease quota
@@ -533,10 +682,62 @@ class GreedyRosteringEngine:
             
             if rows:
                 self.supabase.table('roster_assignments').insert(rows).execute()
-                logger.info(f"Saved {len(rows)} assignments to database")
+                logger.info(f"Inserted {len(rows)} assignments to database")
         
         except Exception as e:
-            logger.error(f"Error saving assignments: {e}")
+            logger.error(f"Error saving assignments: {e}", exc_info=True)
+    
+    def _update_invulling(self) -> None:
+        """Update invulling field in roster_period_staffing_dagdelen.
+        
+        DRAAD 218B STAP 9: Update invulling per requirement
+        """
+        if not self.supabase:
+            return
+        
+        try:
+            update_count = 0
+            
+            for req in self.requirements:
+                if req.invulling != 0:  # Only update if changed
+                    # Find staffing record in DB
+                    response = self.supabase.table('roster_period_staffing_dagdelen').select(
+                        'id'
+                    ).eq('roster_id', self.roster_id).eq('date', req.date).eq(
+                        'dagdeel', req.dagdeel
+                    ).eq('service_id', req.service_id).eq('team', req.team).execute()
+                    
+                    if response.data:
+                        staffing_id = response.data[0]['id']
+                        
+                        self.supabase.table('roster_period_staffing_dagdelen').update({
+                            'invulling': req.invulling
+                        }).eq('id', staffing_id).execute()
+                        
+                        update_count += 1
+            
+            logger.info(f"Updated invulling field in {update_count} staffing records")
+        
+        except Exception as e:
+            logger.error(f"Error updating invulling: {e}", exc_info=True)
+    
+    def _update_roster_status(self) -> None:
+        """Update roster status to 'in_progress'.
+        
+        DRAAD 218B STAP 9: Roster status → in_progress after GREEDY runs
+        """
+        if not self.supabase:
+            return
+        
+        try:
+            self.supabase.table('roosters').update({
+                'status': 'in_progress'
+            }).eq('id', self.roster_id).execute()
+            
+            logger.info(f"Updated roster {self.roster_id} status to in_progress")
+        
+        except Exception as e:
+            logger.error(f"Error updating roster status: {e}", exc_info=True)
 
 
 # ============================================================================
@@ -550,5 +751,8 @@ __all__ = [
     'Bottleneck',
     'EmployeeCapability',
     'RosteringRequirement',
-    'SolveResult'
+    'SolveResult',
+    'WorkBestandOpdracht',
+    'WorkBestandCapaciteit',
+    'WorkBestandPlanning'
 ]
