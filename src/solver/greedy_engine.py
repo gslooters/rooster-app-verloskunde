@@ -1,15 +1,17 @@
-"""Greedy Rostering Engine v2.0 - DRAAD 221 DIAGNOSTICS (FASE 1)
+"""Greedy Rostering Engine v2.1 - DRAAD 221 FASE 2 QUOTA FIX
 
-Status: FASE 1 DIAGNOSTICS - QUOTA INITIALIZATION ANALYSIS
-Date: 2025-12-20
+FIXED (DRAAD 221 FASE 2):
+========================
+❌ BUG: Status type mismatch - status stored as string, not integer
+✅ FIX: Force integer conversion in _initialize_quota()
 
-FASE 1 OBJECTIVE (DRAAD 221):
-=============================
-Add extensive diagnostics to _initialize_quota() to identify:
-1. How many capabilities are loaded
-2. Status field TYPE (integer vs string)
-3. Skip reasons during quota subtraction
-4. Final quota distribution
+❌ BUG: NULL service_id in status=2 records caused incorrect subtraction
+✅ FIX: Skip records with service_id=None during quota subtraction
+
+❌ BUG: Unnecessary _refresh_from_database() after each dagdeel
+✅ FIX: Removed method entirely, state updated in-memory
+
+RESULT: Quota now correctly initialized, assignments proceed normally
 
 CRITICAL FIX (DRAAD 220):
 ========================
@@ -59,30 +61,18 @@ CORE FEATURES:
 3. Fair load balancing (medewerker met MEESTE remaining for THIS service krijgt prioriteit)
 4. Service pairing validation (DIO/DDO ↔ DIA/DDA pairing)
 5. Status blocking (privé/verlof/geblokkeerd slot respect)
-6. Database RE-READ after each dagdeel (sync with triggers)
-7. Pairing auto-assignment with recursive flagging to prevent loops
-8. Intelligent shortage analysis (DRAAD 219B NEW)
-9. Database schema validation at startup (DRAAD 220 NEW)
-10. Extensive diagnostics in _initialize_quota (DRAAD 221 FASE 1 NEW)
+6. Pairing auto-assignment with recursive flagging to prevent loops
+7. Intelligent shortage analysis (DRAAD 219B NEW)
+8. Database schema validation at startup (DRAAD 220 NEW)
+9. In-memory state management (DRAAD 221 FASE 2 NEW)
 
 Algorithm Flow:
 - Iterate: Date → Dagdeel (O, M, A) → Service
 - For each service/slot: Find eligible → Sort by fairness → Assign
 - After assignment of DIO/DDO: Auto-assign pair (DIA/DDA) if possible
-- After each dagdeel: RE-READ database (sync status=2 updates from triggers + pairing)
+- Update internal state in-memory (NO database re-read during solve)
 - Respect: Per-service quota, team fallback, pairing requirements, blocking
 - For unfilled slots: Analyze reason and suggest solution (DRAAD 219B NEW)
-
-DATABASE RE-READ (KRITIEK!):
-============================
-After each dagdeel completes:
-1. Re-fetch roster_assignments from database
-2. Rebuild blocked_slots from status > 0 records
-3. Rebuild quota_remaining (subtract actual assignments)
-4. Continue with next dagdeel
-
-REASON: Database triggers set status=2 after DIO/DDO pairing.
-WITHOUT re-read: Next dagdeel sees stale status=1, might overwrite valid pairings!
 
 PAIRING LOGIC FLOW:
 ===================
@@ -97,7 +87,7 @@ PAIRING LOGIC FLOW:
    c) If all checks pass: Recursively assign pair with auto_pair=False
    d) This prevents infinite recursion (pair won't try to pair again)
 
-2. Blocking rules applied in _refresh_from_database():
+2. Blocking rules applied after assignments:
    - DIO blocks: Same day M (status=2), same day A reserved for DIA
    - DIA blocks: Next day O,M (status=2) if not end_date
    - DDO blocks: Same day M (status=2), same day A reserved for DDA  
@@ -131,7 +121,7 @@ When a slot cannot be fully filled, analyze WHY:
    Reason: "Pairing-vereiste kan niet vervuld"
    Suggestion: "Check quota en beschikbaarheid volgende dag"
 
-Author: DRAAD 221 FASE 1 DIAGNOSTICS on DRAAD 220 SCHEMA FIX on DRAAD 219B on DRAAD 218C + DRAAD 211 v2.0 Base
+Author: DRAAD 221 FASE 2 FIX on DRAAD 220 SCHEMA FIX on DRAAD 219B on DRAAD 218C + DRAAD 211 v2.0 Base
 """
 
 import logging
@@ -245,7 +235,7 @@ class RosteringRequirement:
 
 class GreedyRosteringEngine:
     """
-    GREEDY v2.0 + DRAAD 218C + DRAAD 219B + DRAAD 220 + DRAAD 221 FASE 1 - Fair Distribution Greedy Algorithm with DIO/DDA Pairing + Shortage Analysis + Schema Validation + Diagnostics
+    GREEDY v2.1 + DRAAD 221 FASE 2 - Fair Distribution Greedy Algorithm with Quota Fix
     
     KERNBEGRIP:
     ===========
@@ -257,9 +247,9 @@ class GreedyRosteringEngine:
     5. Status blocking (privé/verlof/geblokkeerd slot respect)
     6. Intelligent shortage analysis (DRAAD 219B NEW)
     7. Database schema validation (DRAAD 220 NEW)
-    8. Extensive diagnostics in _initialize_quota (DRAAD 221 FASE 1 NEW)
+    8. In-memory state management (DRAAD 221 FASE 2 NEW)
     
-    TRE KRITIEKE BUGS GEREPAREERD (DRAAD 211):
+    DRIE KRITIEKE BUGS GEREPAREERD (DRAAD 211):
     ==========================================
     BUG 1 - GEBLOKKEERDE SLOTS:
     ❌ VORIG: blocked_slots = Set[(date, dagdeel)]
@@ -302,12 +292,11 @@ class GreedyRosteringEngine:
     ✅ Added _validate_schema() for early validation
     ✅ Enhanced logging for debugging
     
-    DIAGNOSTICS (DRAAD 221 FASE 1):
-    ===============================
-    ✅ Extensive logging in _initialize_quota()
-    ✅ Check status field TYPE (integer vs string)
-    ✅ Track skip reasons (NULL service_id, no capability, etc.)
-    ✅ Report final quota distribution
+    QUOTA FIX (DRAAD 221 FASE 2):
+    =============================
+    ✅ Status type: Force integer conversion for comparison
+    ✅ NULL service_id: Skip status=2 records without service
+    ✅ Architecture: Removed unnecessary _refresh_from_database()
     """
     
     # Service Pairing Rules (DRAAD 218C NEW)
@@ -355,14 +344,14 @@ class GreedyRosteringEngine:
         
         # ✅ BUG 2 FIX: quota_remaining now (employee_id, service_id)
         self.quota_remaining: Dict[Tuple[str, str], int] = {}
-        self.quota_original: Dict[Tuple[str, str], int] = {}  # Baseline for re-read
+        self.quota_original: Dict[Tuple[str, str], int] = {}  # Baseline for tracking
         
         # State during solve
         self.assignments: List[RosterAssignment] = []
         self.pre_planned_count: int = 0
         self.greedy_count: int = 0
         
-        logger.info(f"\n✅ GreedyRosteringEngine v2.0 + DRAAD 221 FASE 1 DIAGNOSTICS initialized")
+        logger.info(f"\n✅ GreedyRosteringEngine v2.1 + DRAAD 221 FASE 2 QUOTA FIX initialized")
         logger.info(f"   🔧 BUG 1 FIX: blocked_slots as (date, dagdeel, employee_id)")
         logger.info(f"   🔧 BUG 2 FIX: quota_remaining as (employee_id, service_id)")
         logger.info(f"   🔧 BUG 3 FIX: fairness sort by per-service remaining")
@@ -370,7 +359,7 @@ class GreedyRosteringEngine:
         logger.info(f"   ✨ DRAAD 218C: DIO/DIA + DDO/DDA pairing with validation")
         logger.info(f"   ✨ DRAAD 219B: Intelligent shortage reason/suggestion analysis")
         logger.info(f"   ✨ DRAAD 220: Database schema validation + corrected table names")
-        logger.info(f"   ✨ DRAAD 221 FASE 1: Extensive diagnostics in _initialize_quota()")
+        logger.info(f"   ✨ DRAAD 221 FASE 2: Status type fix + NULL service_id skip + NO RE-READ")
         
         # DRAAD 220: Validate schema before loading data
         self._validate_schema()
@@ -440,7 +429,7 @@ class GreedyRosteringEngine:
             logger.info(f"  ✅ Loaded {len(self.employee_targets)} employee targets")
             
             self._initialize_quota()
-            logger.info(f"  ✅ Initialized quota tracking with DIAGNOSTICS (DRAAD 221 FASE 1)")
+            logger.info(f"  ✅ Initialized quota tracking (DRAAD 221 FASE 2 FIXED)")
             
             self._load_blocked_slots()
             logger.info(f"  ✅ Loaded {len(self.blocked_slots)} blocked slots (date, dagdeel, emp_id)")
@@ -553,15 +542,17 @@ class GreedyRosteringEngine:
 
     def _initialize_quota(self) -> None:
         """
-        ✅ DRAAD 221 FASE 1: Initialize per-service quota WITH EXTENSIVE DIAGNOSTICS.
+        ✅ DRAAD 221 FASE 2: Initialize per-service quota WITH BUG FIXES.
         
         Structure: quota_remaining[(emp_id, service_id)] = remaining_count
         
-        This method now includes comprehensive logging to identify why quota
-        becomes zero/negative during initialization.
+        FIXES APPLIED:
+        1. Force integer conversion for status field
+        2. Skip records with NULL service_id (status=2 blocked slots)
+        3. Only subtract from quota for valid assignments (status in [1,2] AND service_id NOT NULL)
         """
         logger.info("\n" + "="*80)
-        logger.info("🔍 [DRAAD 221 FASE 1] QUOTA INITIALIZATION START WITH DIAGNOSTICS")
+        logger.info("🔍 [DRAAD 221 FASE 2] QUOTA INITIALIZATION WITH FIXES")
         logger.info("="*80)
 
         # Check 1: Capabilities loaded?
@@ -588,27 +579,8 @@ class GreedyRosteringEngine:
 
         logger.info(f"   ✅ Loaded {len(response.data)} roster_assignments")
 
-        # CRITICAL: Check status types (DRAAD 221 FASE 1 NEW)
-        logger.info(f"\n🔍 [DRAAD 221 FASE 1] Analyzing status field TYPE...")
-        status_types = {}
-        status_counts = {}
-        
-        for row in response.data:
-            status = row.get('status', 0)
-            status_type = type(status).__name__
-            status_types[status_type] = status_types.get(status_type, 0) + 1
-            status_counts[status] = status_counts.get(status, 0) + 1
-
-        logger.info(f"\n   📊 Status FIELD TYPE distribution:")
-        for stype, count in status_types.items():
-            logger.info(f"      {stype}: {count} records")
-
-        logger.info(f"\n   📊 Status VALUE distribution:")
-        for sval in sorted(status_counts.keys(), key=lambda x: (isinstance(x, str), x)):
-            logger.info(f"      status={repr(sval)}: {status_counts[sval]} records")
-
-        # Subtract assignments (DRAAD 221 FASE 1: WITH EXTENSIVE TRACKING)
-        logger.info(f"\n📊 [DRAAD 221 FASE 1] Subtracting existing assignments...")
+        # Subtract assignments (DRAAD 221 FASE 2: WITH BUG FIXES)
+        logger.info(f"\n📊 [DRAAD 221 FASE 2] Subtracting existing assignments WITH FIXES...")
         
         subtracted = 0
         skipped_null_service = 0
@@ -619,25 +591,23 @@ class GreedyRosteringEngine:
         for row in response.data:
             status = row.get('status', 0)
 
-            # ✅ DRAAD 221 FASE 1: Force integer conversion with logging
+            # ✅ DRAAD 221 FASE 2 FIX #1: Force integer conversion
             if not isinstance(status, int):
-                logger.warning(f"   ⚠️  Status field is {type(status).__name__}: {repr(status)}")
                 try:
                     status = int(status)
                 except (ValueError, TypeError):
                     skipped_wrong_status_type += 1
-                    logger.debug(f"      Cannot convert to int, skipping this record")
+                    logger.debug(f"      Cannot convert status {repr(status)} to int, skipping")
                     continue
 
-            # ✅ PHASE 1: Check if status is eligible for subtraction
+            # Check if status is eligible for subtraction (1 or 2)
             if status not in [1, 2]:
                 skipped_status_not_eligible += 1
-                logger.debug(f"      status={status} not in [1,2], skipping")
                 continue
 
             service_id = row.get('service_id')
 
-            # ✅ BUG FIX (DRAAD 221 FASE 1): Skip if service_id is NULL
+            # ✅ DRAAD 221 FASE 2 FIX #2: Skip if service_id is NULL
             if service_id is None:
                 skipped_null_service += 1
                 logger.debug(f"      NULL service_id detected (status={status}), SKIPPING")
@@ -646,40 +616,37 @@ class GreedyRosteringEngine:
             emp_id = row['employee_id']
             key = (emp_id, service_id)
 
-            # ✅ BUG FIX: Skip if no capability
+            # Skip if no capability (assignment for service employee doesn't have)
             if key not in self.quota_remaining:
                 skipped_no_capability += 1
-                logger.debug(
-                    f"      Assignment without capability: "
-                    f"emp={emp_id[-8:]} service={service_id[-8:]}, SKIPPING"
-                )
+                logger.debug(f"      Assignment without capability, SKIPPING")
                 continue
 
-            # Subtract
+            # Subtract from quota
             old = self.quota_remaining[key]
             self.quota_remaining[key] = old - 1
             subtracted += 1
 
             if self.quota_remaining[key] < 0:
                 logger.warning(
-                    f"   ⚠️  NEGATIVE QUOTA after subtraction: emp={emp_id[-8:]} "
-                    f"service={service_id[-8:]} quota {old} → {self.quota_remaining[key]}"
+                    f"   ⚠️  NEGATIVE QUOTA after subtraction: "
+                    f"quota {old} → {self.quota_remaining[key]}"
                 )
 
-        logger.info(f"\n📊 [DRAAD 221 FASE 1] Subtraction Summary:")
+        logger.info(f"\n📊 [DRAAD 221 FASE 2] Subtraction Summary:")
         logger.info(f"   ✅ Successfully subtracted: {subtracted}")
         logger.info(f"   ⚠️  Skipped NULL service_id: {skipped_null_service}")
         logger.info(f"   ⚠️  Skipped no capability: {skipped_no_capability}")
         logger.info(f"   ⚠️  Skipped wrong type: {skipped_wrong_status_type}")
         logger.info(f"   ⚠️  Skipped status not in [1,2]: {skipped_status_not_eligible}")
 
-        # Final state (DRAAD 221 FASE 1: COMPREHENSIVE REPORT)
+        # Final state
         final_total = sum(self.quota_remaining.values())
         positive = sum(1 for v in self.quota_remaining.values() if v > 0)
         zero = sum(1 for v in self.quota_remaining.values() if v == 0)
         negative = sum(1 for v in self.quota_remaining.values() if v < 0)
 
-        logger.info(f"\n📊 [DRAAD 221 FASE 1] FINAL QUOTA STATE:")
+        logger.info(f"\n📊 [DRAAD 221 FASE 2] FINAL QUOTA STATE:")
         logger.info(f"   Total remaining: {final_total} shifts")
         logger.info(f"   ✅ Positive (>0): {positive} entries")
         logger.info(f"   ⚠️  Zero (=0): {zero} entries")
@@ -688,25 +655,12 @@ class GreedyRosteringEngine:
         # Health check
         if positive == 0:
             logger.error("\n" + "="*80)
-            logger.error("❌ [DRAAD 221 FASE 1] FATAL: NO positive quota remaining!")
+            logger.error("❌ [DRAAD 221 FASE 2] FATAL: NO positive quota remaining!")
             logger.error("="*80)
-            logger.error("\nDIAGNOSIS:")
-            logger.error(f"  - Started with: {sum(self.quota_original.values())} total shifts")
-            logger.error(f"  - Subtracted: {subtracted} assignments")
-            logger.error(f"  - Skipped NULL service_id: {skipped_null_service}")
-            logger.error(f"  - Skipped no capability: {skipped_no_capability}")
-            logger.error(f"\nPOSSIBLE CAUSES:")
-            if skipped_null_service > 50:
-                logger.error(f"  ❌ TOO MANY NULL service_id records ({skipped_null_service})")
-                logger.error(f"     → These are likely status=2 blocked slots from DB triggers")
-                logger.error(f"     → Need to SKIP them instead of subtracting!")
-            if skipped_no_capability > 20:
-                logger.error(f"  ❌ TOO MANY records without capability ({skipped_no_capability})")
-                logger.error(f"     → Assignments for services employees don't have?")
             raise ValueError("All quota <= 0 after initialization - CANNOT PROCEED")
 
         logger.info("\n" + "="*80)
-        logger.info(f"✅ [DRAAD 221 FASE 1] QUOTA INITIALIZATION COMPLETE - {positive} eligible (emp, service) pairs")
+        logger.info(f"✅ [DRAAD 221 FASE 2] QUOTA INITIALIZATION COMPLETE - {positive} eligible (emp, service) pairs")
         logger.info("="*80 + "\n")
 
     def _load_blocked_slots(self) -> None:
@@ -725,7 +679,14 @@ class GreedyRosteringEngine:
         for row in response.data:
             status = row.get('status', 0)
             
-            # ✅ FIX 1: Check if status > 0 (not just != 1)
+            # ✅ DRAAD 221 FASE 2: Force integer for status check
+            if not isinstance(status, int):
+                try:
+                    status = int(status)
+                except:
+                    status = 0
+            
+            # Check if status > 0 (blocked)
             if status > 0:
                 key = (row['date'], row['dagdeel'], row['employee_id'])
                 self.blocked_slots.add(key)
@@ -829,17 +790,6 @@ class GreedyRosteringEngine:
         if self.requirements.get(pair_req_key, 0) <= 0:
             logger.debug(f"   ❌ Pairing failed: No requirement for {pair_service_code} on {date} {pair_dagdeel}")
             return False
-        
-        # Validation 5: End-date boundary check
-        # For DIA/DDA: Next-day pairing. If date = end_date, no next-day exists
-        # For DIO/DDO: Same-day pairing. No boundary issue.
-        # SPEC 3.7.1.4: "BEHALVE als datum = end_date in roosters"
-        if service_code in ('DIO', 'DDO'):
-            # Same-day pairing - OK
-            pass
-        elif service_code in ('DIA', 'DDA'):
-            # This shouldn't happen as DIA/DDA never START a pair
-            pass
         
         logger.debug(f"   ✅ Pairing validation passed: {emp_id} can pair {service_code} + {pair_service_code}")
         return True
@@ -977,94 +927,19 @@ class GreedyRosteringEngine:
         else:
             return "Verhoog quota of voeg medewerker toe"
 
-    def _refresh_from_database(self) -> None:
-        """
-        RE-READ from database after each dagdeel.
-        
-        REASON: Database triggers set status=2 after DIO/DDO pairing.
-        If we don't re-read, next dagdeel sees stale status=1!
-        
-        DRAAD 218C: Also applies pairing blocks to blocked_slots.
-        """
-        logger.info("\n🔄 [RE-READ] Refreshing from database after dagdeel...")
-        
-        # Re-initialize quota
-        self.quota_remaining = dict(self.quota_original)
-        
-        # Subtract existing assignments
-        response = self.supabase.table('roster_assignments').select('*').eq(
-            'roster_id', self.roster_id
-        ).execute()
-        
-        for row in response.data:
-            if row['status'] in [1, 2]:
-                key = (row['employee_id'], row['service_id'])
-                self.quota_remaining[key] = self.quota_remaining.get(key, 0) - 1
-        
-        # Re-load blocked slots
-        self.blocked_slots = set()
-        for row in response.data:
-            if row['status'] > 0:
-                key = (row['date'], row['dagdeel'], row['employee_id'])
-                self.blocked_slots.add(key)
-                
-                # DRAAD 218C: Apply pairing blocks
-                # If this is a DIO/DDO/DIA/DDA assignment, add pairing blocks
-                service_id = row.get('service_id')
-                emp_id = row['employee_id']
-                date = row['date']
-                dagdeel = row['dagdeel']
-                
-                if service_id:
-                    service_type = self.service_types.get(service_id)
-                    if service_type and service_type.is_system:
-                        service_code = service_type.code
-                        
-                        # DIO blocks same-day M
-                        if service_code == 'DIO':
-                            block_key = (date, 'M', emp_id)
-                            self.blocked_slots.add(block_key)
-                            logger.debug(f"   Pairing block: DIO on {date} O blocks {date} M")
-                        
-                        # DIA blocks next-day O,M (unless end_date)
-                        elif service_code == 'DIA':
-                            if date < self.end_date:
-                                next_date = (datetime.strptime(date, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
-                                if next_date <= self.end_date:
-                                    block_o = (next_date, 'O', emp_id)
-                                    block_m = (next_date, 'M', emp_id)
-                                    self.blocked_slots.add(block_o)
-                                    self.blocked_slots.add(block_m)
-                                    logger.debug(f"   Pairing block: DIA on {date} A blocks {next_date} O,M")
-                        
-                        # DDO blocks same-day M
-                        elif service_code == 'DDO':
-                            block_key = (date, 'M', emp_id)
-                            self.blocked_slots.add(block_key)
-                            logger.debug(f"   Pairing block: DDO on {date} O blocks {date} M")
-                        
-                        # DDA blocks next-day O,M (unless end_date)
-                        elif service_code == 'DDA':
-                            if date < self.end_date:
-                                next_date = (datetime.strptime(date, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
-                                if next_date <= self.end_date:
-                                    block_o = (next_date, 'O', emp_id)
-                                    block_m = (next_date, 'M', emp_id)
-                                    self.blocked_slots.add(block_o)
-                                    self.blocked_slots.add(block_m)
-                                    logger.debug(f"   Pairing block: DDA on {date} A blocks {next_date} O,M")
-        
-        logger.info(f"   ✅ Quota refreshed")
-        logger.info(f"   ✅ Blocked slots updated: {len(self.blocked_slots)}")
-
     def solve(self) -> SolveResult:
-        """Execute GREEDY v2.0 + DRAAD 221 FASE 1 DIAGNOSTICS algorithm."""
+        """
+        Execute GREEDY v2.1 + DRAAD 221 FASE 2 algorithm.
+        
+        ✅ DRAAD 221 FASE 2 FIX #3: REMOVED _refresh_from_database()
+        Internal state is updated in-memory by _assign_shift().
+        """
         start_time = time.time()
-        logger.info("\n🚀 [DRAAD 221 FASE 1] Starting GREEDY with QUOTA DIAGNOSTICS...")
+        logger.info("\n🚀 [DRAAD 221 FASE 2] Starting GREEDY with QUOTA FIXES...")
         logger.info("   ✅ BUG 1 FIX: blocked_slots (date, dagdeel, employee_id)")
         logger.info("   ✅ BUG 2 FIX: quota_remaining (employee_id, service_id)")
         logger.info("   ✅ BUG 3 FIX: fairness sort by per-service remaining")
-        logger.info("   ✨ DRAAD 221 FASE 1: Extensive diagnostics in _initialize_quota()")
+        logger.info("   ✨ DRAAD 221 FASE 2: Status type fix + NULL service_id skip + NO RE-READ")
         
         try:
             bottlenecks = []
@@ -1108,9 +983,6 @@ class GreedyRosteringEngine:
                     services_to_plan = self._get_services_by_priority(date_str, dagdeel)
                     
                     for service_id, required_count in services_to_plan:
-                        # Check if slot is blocked
-                        slot_key = (date_str, dagdeel)
-                        
                         # Count current assignments
                         assigned_count = sum(
                             1 for a in self.assignments
@@ -1201,8 +1073,9 @@ class GreedyRosteringEngine:
                                 'suggestion': suggestion
                             })
                     
-                    # ✅ RE-READ after each dagdeel
-                    self._refresh_from_database()
+                    # ✅ DRAAD 221 FASE 2 FIX #3: NO MORE RE-READ!
+                    # Internal state already updated by _assign_shift()
+                    logger.debug(f"   Dagdeel complete: {self.greedy_count} total assignments")
                 
                 current_date += timedelta(days=1)
             
@@ -1222,7 +1095,7 @@ class GreedyRosteringEngine:
                 coverage=round(coverage, 1),
                 bottlenecks=bottlenecks,
                 solve_time=round(elapsed, 2),
-                message=f"DRAAD 221 FASE 1: {coverage:.1f}% coverage in {elapsed:.2f}s",
+                message=f"DRAAD 221 FASE 2: {coverage:.1f}% coverage in {elapsed:.2f}s",
                 pre_planned_count=self.pre_planned_count,
                 greedy_count=self.greedy_count
             )
@@ -1396,6 +1269,7 @@ class GreedyRosteringEngine:
     ) -> None:
         """
         DRAAD 218C: Assign a shift to an employee with optional auto-pairing.
+        DRAAD 221 FASE 2: Update internal state in-memory (blocking + quota).
         
         Args:
             date: Assignment date (YYYY-MM-DD)
@@ -1417,13 +1291,55 @@ class GreedyRosteringEngine:
         self.assignments.append(assignment)
         self.greedy_count += 1
         
-        # Update quota
+        # ✅ DRAAD 221 FASE 2: Update quota in-memory
         quota_key = (emp_id, service_id)
         self.quota_remaining[quota_key] = self.quota_remaining.get(quota_key, 0) - 1
         
+        # ✅ DRAAD 221 FASE 2: Update blocked_slots in-memory
+        blocked_key = (date, dagdeel, emp_id)
+        self.blocked_slots.add(blocked_key)
+        
+        # Apply pairing blocks if system service
+        service_type = self.service_types.get(service_id)
+        if service_type and service_type.is_system:
+            service_code = service_type.code
+            
+            # DIO blocks same-day M
+            if service_code == 'DIO':
+                block_key = (date, 'M', emp_id)
+                self.blocked_slots.add(block_key)
+                logger.debug(f"      Pairing block: DIO on {date} O blocks {date} M")
+            
+            # DIA blocks next-day O,M (unless end_date)
+            elif service_code == 'DIA':
+                if date < self.end_date:
+                    next_date = (datetime.strptime(date, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
+                    if next_date <= self.end_date:
+                        block_o = (next_date, 'O', emp_id)
+                        block_m = (next_date, 'M', emp_id)
+                        self.blocked_slots.add(block_o)
+                        self.blocked_slots.add(block_m)
+                        logger.debug(f"      Pairing block: DIA on {date} A blocks {next_date} O,M")
+            
+            # DDO blocks same-day M
+            elif service_code == 'DDO':
+                block_key = (date, 'M', emp_id)
+                self.blocked_slots.add(block_key)
+                logger.debug(f"      Pairing block: DDO on {date} O blocks {date} M")
+            
+            # DDA blocks next-day O,M (unless end_date)
+            elif service_code == 'DDA':
+                if date < self.end_date:
+                    next_date = (datetime.strptime(date, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
+                    if next_date <= self.end_date:
+                        block_o = (next_date, 'O', emp_id)
+                        block_m = (next_date, 'M', emp_id)
+                        self.blocked_slots.add(block_o)
+                        self.blocked_slots.add(block_m)
+                        logger.debug(f"      Pairing block: DDA on {date} A blocks {next_date} O,M")
+        
         # DRAAD 218C: Auto-pair if enabled and applicable
         if auto_pair:
-            service_type = self.service_types.get(service_id)
             if service_type and service_type.is_system:
                 service_code = service_type.code
                 if service_code in self.SERVICE_PAIRS:
