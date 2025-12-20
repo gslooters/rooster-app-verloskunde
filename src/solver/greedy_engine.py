@@ -20,7 +20,7 @@ DRAA 218B: FASE 2 - Team-selectie helper methode
 DRAA 218B: FASE 3 - Pre-planned handling verbeterd
 DRAA 218B: FASE 4 - GREEDY ALLOCATIE met HC1-HC6 + Blokkeringsregels
 DRAA 218B: FASE 5 - DATABASE UPDATES (invulling + roster status) - COMPLEET
-DRAA 218B: FASE 6 - RAPPORTAGE met uitgebreide statistieken - COMPLEET
+DRAA 218B: STAP 6 - SCORING ALGORITME (HC4-HC5) - COMPLEET
 """
 
 import logging
@@ -259,7 +259,7 @@ class GreedyRosteringEngine:
     DRAAD 218B FASE 3: Pre-planned handling verbeterd
     DRAAD 218B FASE 4: GREEDY ALLOCATIE met HC1-HC6 + Blokkeringsregels
     DRAAD 218B FASE 5: DATABASE UPDATES (invulling + roster status) - COMPLEET
-    DRAAD 218B FASE 6: RAPPORTAGE met employee & service statistieken - COMPLEET
+    DRAAD 218B STAP 6: SCORING ALGORITME (HC4-HC5) - COMPLEET
     """
     
     def __init__(self, config: Dict[str, Any]):
@@ -369,7 +369,7 @@ class GreedyRosteringEngine:
                 status_msg = f"FAILED: {coverage:.1f}% coverage"
             
             message = (
-                f"DRAAD 218B FASE 6 COMPLEET: {coverage:.1f}% coverage "
+                f"DRAAD 218B STAP 6 COMPLEET: {coverage:.1f}% coverage "
                 f"({assigned_count}/{total_required}) in {solve_time:.2f}s | "
                 f"Pre-planned: {pre_planned_count}, GREEDY: {len(new_assignments)}"
             )
@@ -736,6 +736,43 @@ class GreedyRosteringEngine:
         
         return candidates
     
+    def _score_employee(self, emp: Employee, req: RosteringRequirement, 
+                       employee_last_work_date: Dict[str, str]) -> float:
+        """Score employee for allocation - HC4 & HC5.
+        
+        DRAAD 218B STAP 6: Scoring algoritme volgens spec
+        
+        Prioriteit:
+        1. Meest quota over (medewerker achterloopt het meest) - HC4
+        2. Langst niet gewerkt - HC5
+        3. Alfabet (tiebreaker) - HC6 (handled in allocatie)
+        
+        Note: Alfabetische naam wordt als tiebreaker gebruikt in allocatie, niet hier.
+        
+        Returns:
+            Score waarbij hoger = betere kandidaat
+        """
+        score = 0.0
+        
+        # Factor 1: QUOTA RESTANT (HC4 - medewerker die het meeste moet doen)
+        # Hoe meer quota over, hoe hoger de score
+        quota_for_service = emp.service_quotas.get(req.service_id, 0)
+        score += quota_for_service * 1000  # Heavy weight
+        
+        # Factor 2: LAST WORK DATE (HC5 - langst niet gewerkt krijgt voorkeur)
+        # Hoe ouder de laatste werkdag, hoe hoger de score
+        # We negeren de timestamp zodat oudere datums hogere score krijgen
+        last_date = employee_last_work_date.get(emp.id, '1900-01-01')
+        try:
+            timestamp = datetime.strptime(last_date, '%Y-%m-%d').timestamp()
+            # Negatieve timestamp zorgt dat oudere datums hogere score krijgen
+            score += -timestamp
+        except Exception as e:
+            logger.warning(f"Invalid date format for employee {emp.id}: {last_date}")
+            score += -datetime.strptime('1900-01-01', '%Y-%m-%d').timestamp()
+        
+        return score
+    
     def _apply_system_service_blocks(self, emp_id: str, date: str, 
                                       dagdeel: str, service_code: str,
                                       planning_db: Dict[Tuple[str, str, str], RosterAssignment]) -> None:
@@ -851,6 +888,7 @@ class GreedyRosteringEngine:
         """Greedy allocation with HC1-HC6 constraints.
         
         DRAAD 218B FASE 4 STAP 8: Complete herschrijving
+        DRAAD 218B STAP 6: Gebruikt nieuwe _score_employee() methode
         
         Spec Section 3 & 4:
         - HC1: Respect unavailability (status > 0)
@@ -940,13 +978,12 @@ class GreedyRosteringEngine:
                     break  # Move to next requirement
                 
                 # STAP 3: Score & select best (HC4, HC5, HC6)
+                # STAP 6 UPDATE: Gebruik _score_employee() methode
                 best_emp = max(
                     eligible,
                     key=lambda e_id: (
-                        # HC4: Quota remaining (descending)
-                        self.employees[e_id].service_quotas[req.service_id],
-                        # HC5: Last work date (ascending = oldest first)
-                        -datetime.strptime(employee_last_work[e_id], '%Y-%m-%d').timestamp(),
+                        # HC4 + HC5: Score via dedicated methode
+                        self._score_employee(self.employees[e_id], req, employee_last_work),
                         # HC6: Alphabetical name (tiebreaker)
                         self.employees[e_id].name
                     )
