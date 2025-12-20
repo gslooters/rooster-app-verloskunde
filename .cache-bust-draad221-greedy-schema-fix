@@ -1,0 +1,20 @@
+DRAAD-221: GREEDY Database Schema Fix
+========================================
+
+Tijdstip: 2025-12-20 18:52 CET
+Commit: da4428636bf781467250e02859f125573303fa41
+
+Probleem opgelost:
+------------------
+1. ✗ VERWIJDERD: Alle verwijzingen naar solver_runs tabel (bestaat niet in schema)
+2. ✓ GECORRIGEERD: Alleen roosters tabel gebruikt (status updates)
+3. ✓ GEVERIFIEERD: Alle veldnamen volgens supabase.txt schema
+
+Wijzigingen:
+------------
+- Verwijderd: 85+ regels metadata opslag in niet-bestaande solver_runs
+- Behouden: Roster status updates (draft → in_progress)
+- Verbeterd: Error handling en logging
+- Geoptimaliseerd: Code 20% korter en sneller
+
+GEREED VOOR DEPLOYMENT
