@@ -6,6 +6,7 @@
  * DRAAD123: Sluiten knop verwijderd uit resultaatscherm
  * DRAAD123FIX: Correctie: Bekijk Rooster link naar /planning/design/preplanning?id= 
  * DRAAD129: Fix infeasible routing - route naar bottleneck-analysis pagina bij infeasible status
+ * DRAAD223: GREEDY integration removed - placeholder voor auto-fill feature geïntroduceerd
 */
 'use client';
 import { useEffect, useState } from 'react';
@@ -16,6 +17,7 @@ import { loadRosterDesignData } from '@/lib/planning/rosterDesign';
 import { formatWeekRange, formatDateRangeNl } from '@/lib/planning/storage';
 import type { RosterDesignData } from '@/lib/types/roster';
 import RosterPlanningRulesModal from './components/RosterPlanningRulesModal';
+import RoosterBewerkingPlaceholder from './components/RoosterBewerkingPlaceholder';
 
 type CompletionStatus = {
   diensten_per_dag: boolean;
@@ -23,29 +25,6 @@ type CompletionStatus = {
   diensten_per_medewerker: boolean;
   preplanning: boolean;
   planregels: boolean;
-};
-
-type SolverResult = {
-  status: string;
-  total_assignments: number;
-  total_slots: number;
-  fill_percentage: number;
-  solve_time_seconds: number;
-  violations?: Array<{
-    type: string;
-    severity: string;
-    message: string;
-  }>;
-  suggestions?: string[];
-  summary?: any;
-  bottleneck_report?: any;
-};
-
-type ORTResult = {
-  success: boolean;
-  solver_result?: SolverResult;
-  error?: string;
-  message?: string;
 };
 
 function loadCompletionStatus(rosterId: string): CompletionStatus {
@@ -140,12 +119,10 @@ export default function DashboardClient() {
     endDate: null,
     periodTitle: 'Onbekende periode'
   });
-  // DRAAD95D: State voor planregels modal
   const [showPlanningRulesModal, setShowPlanningRulesModal] = useState(false);
   
-  // DRAAD98: ORT state
-  const [ortLoading, setOrtLoading] = useState(false);
-  const [ortResult, setOrtResult] = useState<ORTResult | null>(null);
+  // DRAAD223: State voor placeholder modal
+  const [showPlaceholder, setShowPlaceholder] = useState(false);
 
   useEffect(() => {
     if (!rosterId) { setError('Geen roster ID gevonden'); setLoading(false); return; }
@@ -186,121 +163,9 @@ export default function DashboardClient() {
   }
   const allesVoltooid = Object.values(completionStatus).every(Boolean);
   
-  // DRAAD129: Updated ORT handler with infeasible routing logic
-  async function handleStartORT() {
-    if (!rosterId || !allesVoltooid) return;
-    
-    setOrtLoading(true);
-    setOrtResult(null);
-    
-    try {
-      console.log('[Dashboard] Starten ORT solver voor roster:', rosterId);
-      
-      const response = await fetch('/api/roster/solve', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ roster_id: rosterId })
-      });
-      
-      const result: ORTResult = await response.json();
-      
-      console.log('[Dashboard] ORT resultaat:', result);
-      console.log('[DRAAD129] Solver status:', result.solver_result?.status);
-      
-      // DRAAD129: Check solver status and route accordingly
-      if (result.success && result.solver_result) {
-        const solverStatus = result.solver_result.status;
-        
-        if (solverStatus === 'feasible' || solverStatus === 'optimal') {
-          // ✅ FEASIBLE: Store summary and navigate to feasible-summary page
-          console.log('[DRAAD129] FEASIBLE outcome - routing to feasible-summary');
-          
-          if (result.solver_result.summary) {
-            if (typeof window !== 'undefined') {
-              sessionStorage.setItem(
-                `feasible-summary-${rosterId}`,
-                JSON.stringify(result.solver_result.summary)
-              );
-            }
-          }
-          
-          // Route to feasible summary
-          router.push(`/rooster/${rosterId}/feasible-summary`);
-          return;
-          
-        } else if (solverStatus === 'infeasible') {
-          // ⛔ INFEASIBLE: Store bottleneck report and navigate to analysis page
-          console.log('[DRAAD129] INFEASIBLE outcome - routing to bottleneck-analysis');
-          
-          if (result.solver_result.bottleneck_report) {
-            if (typeof window !== 'undefined') {
-              sessionStorage.setItem(
-                `bottleneck-report-${rosterId}`,
-                JSON.stringify(result.solver_result.bottleneck_report)
-              );
-            }
-          }
-          
-          // Route to bottleneck analysis
-          router.push(`/rooster/${rosterId}/bottleneck-analysis`);
-          return;
-          
-        } else if (solverStatus === 'timeout') {
-          // TIMEOUT error
-          console.error('[DRAAD129] TIMEOUT error');
-          setOrtResult({
-            success: false,
-            error: 'Solver Timeout',
-            message: 'De berekening duurde te lang. Probeer het later opnieuw of vereenvoudig het probleem.'
-          });
-          setOrtLoading(false);
-          return;
-        } else {
-          // Unknown status
-          console.error('[DRAAD129] Unknown solver status:', solverStatus);
-          setOrtResult({
-            success: false,
-            error: 'Onbekende solver status',
-            message: `Status: ${solverStatus}`
-          });
-          setOrtLoading(false);
-          return;
-        }
-      }
-      
-      // If we get here, something went wrong
-      if (!result.success) {
-        console.error('[Dashboard] API returned success=false');
-        setOrtResult(result);
-      } else {
-        console.error('[Dashboard] Missing solver_result in response');
-        setOrtResult({
-          success: false,
-          error: 'Onverwachte response',
-          message: 'Solver response bevat geen status informatie'
-        });
-      }
-      
-      if (result.success) {
-        // Refresh data
-        const refreshedData = await loadRosterDesignData(rosterId);
-        if (refreshedData) {
-          setDesignData(refreshedData);
-        }
-      }
-      
-    } catch (err: any) {
-      console.error('[Dashboard] ORT fout:', err);
-      setOrtResult({
-        success: false,
-        error: 'Netwerk fout',
-        message: err.message || 'Kon geen verbinding maken met de ORT service'
-      });
-    } finally {
-      setOrtLoading(false);
-    }
+  // DRAAD223: Placeholder handler - toont modal met tijdelijk scherm
+  function handleStartRoosterBewerking() {
+    setShowPlaceholder(true);
   }
   
   function handleDeleteRoster() {
@@ -442,116 +307,25 @@ export default function DashboardClient() {
             </div>
           </div>
           
-          {/* DRAAD98: ORT Knop met loading en resultaat feedback */}
+          {/* DRAAD223: Roosterbewerking starten knop met placeholder */}
           <div className="w-full flex flex-col items-center mt-6">
             <button 
-              disabled={!allesVoltooid || ortLoading} 
-              onClick={handleStartORT} 
+              disabled={!allesVoltooid} 
+              onClick={handleStartRoosterBewerking} 
               className={`rounded-xl px-8 py-4 font-bold text-lg shadow flex items-center gap-3 ${
-                ortLoading 
-                  ? 'bg-gray-400 text-white cursor-wait' 
-                  : allesVoltooid 
-                    ? 'bg-gradient-to-r from-green-500 to-blue-500 text-white hover:from-green-600 hover:to-blue-600 transition' 
-                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                allesVoltooid 
+                  ? 'bg-gradient-to-r from-green-500 to-blue-500 text-white hover:from-green-600 hover:to-blue-600 transition' 
+                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
               }`} 
               style={{minWidth:'250px'}} 
               tabIndex={allesVoltooid ? 0 : -1}
             >
-              {ortLoading && (
-                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-              )}
-              {ortLoading ? 'Rooster wordt berekend...' : 'Roosterbewerking starten'}
+              Roosterbewerking starten
             </button>
-            {!allesVoltooid && !ortLoading && (
+            {!allesVoltooid && (
               <p className="text-sm text-gray-500 mt-2">(Deze knop wordt actief als alle stappen hierboven op &apos;Ja&apos; staan)</p>
             )}
           </div>
-
-          {/* DRAAD98 + DRAAD129: ORT Resultaat feedback - alleen tonen bij errors na routing */}
-          {ortResult && (
-            <div className={`mt-6 p-6 rounded-xl border-2 ${
-              ortResult.success 
-                ? 'bg-green-50 border-green-300' 
-                : 'bg-red-50 border-red-300'
-            }`}>
-              <div className="flex items-start gap-4">
-                <div className="text-3xl">
-                  {ortResult.success ? '✅' : '❌'}
-                </div>
-                <div className="flex-1">
-                  <h3 className={`text-xl font-bold mb-2 ${
-                    ortResult.success ? 'text-green-900' : 'text-red-900'
-                  }`}>
-                    {ortResult.success ? 'Rooster Succesvol Gegenereerd!' : 'Fout bij Rooster Generatie'}
-                  </h3>
-                  
-                  {ortResult.success && ortResult.solver_result && (
-                    <div className="space-y-3">
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div className="bg-white p-3 rounded-lg border border-green-200">
-                          <p className="text-gray-600">Status</p>
-                          <p className="font-bold text-green-800 capitalize">{ortResult.solver_result.status}</p>
-                        </div>
-                        <div className="bg-white p-3 rounded-lg border border-green-200">
-                          <p className="text-gray-600">Oplostijd</p>
-                          <p className="font-bold text-green-800">{ortResult.solver_result.solve_time_seconds.toFixed(2)}s</p>
-                        </div>
-                        <div className="bg-white p-3 rounded-lg border border-green-200">
-                          <p className="text-gray-600">Assignments</p>
-                          <p className="font-bold text-green-800">{ortResult.solver_result.total_assignments} / {ortResult.solver_result.total_slots}</p>
-                        </div>
-                        <div className="bg-white p-3 rounded-lg border border-green-200">
-                          <p className="text-gray-600">Bezetting</p>
-                          <p className="font-bold text-green-800">{ortResult.solver_result.fill_percentage.toFixed(1)}%</p>
-                        </div>
-                      </div>
-
-                      {ortResult.solver_result.violations && ortResult.solver_result.violations.length > 0 && (
-                        <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-4">
-                          <h4 className="font-semibold text-yellow-900 mb-2">⚠️ Waarschuwingen ({ortResult.solver_result.violations.length})</h4>
-                          <ul className="text-sm text-yellow-800 space-y-1">
-                            {ortResult.solver_result.violations.slice(0, 5).map((v, i) => (
-                              <li key={i} className="flex items-start gap-2">
-                                <span className="text-yellow-600">•</span>
-                                <span>{v.message}</span>
-                              </li>
-                            ))}
-                            {ortResult.solver_result.violations.length > 5 && (
-                              <li className="text-yellow-600 italic">+ {ortResult.solver_result.violations.length - 5} meer...</li>
-                            )}
-                          </ul>
-                        </div>
-                      )}
-
-                      <div className="flex gap-3 mt-4">
-                        <button 
-                          onClick={() => router.push(`/planning/design/preplanning?id=${rosterId}`)}
-                          className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold flex items-center gap-2"
-                        >
-                          <span>📋</span>
-                          <span>Bekijk Rooster</span>
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {!ortResult.success && (
-                    <div className="space-y-2">
-                      <p className="text-red-800">
-                        <strong>Fout:</strong> {ortResult.error || 'Onbekende fout'}
-                      </p>
-                      {ortResult.message && (
-                        <p className="text-sm text-red-700">{ortResult.message}</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
           
           {isLastRoster && (
             <div className="border-t border-gray-200 pt-6 mt-6">
@@ -597,6 +371,14 @@ export default function DashboardClient() {
           periodTitle={periodInfo.periodTitle}
           isOpen={showPlanningRulesModal}
           onClose={()=>setShowPlanningRulesModal(false)}
+        />
+      )}
+      
+      {/* DRAAD223: Placeholder modal voor Roosterbewerking */}
+      {showPlaceholder && rosterId && (
+        <RoosterBewerkingPlaceholder
+          rosterId={rosterId}
+          onClose={()=>setShowPlaceholder(false)}
         />
       )}
     </div>
