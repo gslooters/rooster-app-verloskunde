@@ -23,6 +23,7 @@ DRAA 218B: FASE 5 - DATABASE UPDATES (invulling + roster status) - COMPLEET
 DRAA 218B: STAP 6 - SCORING ALGORITME (HC4-HC5) - COMPLEET
 DRAA 218B: STAP 7 - BLOKKERINGSREGELS VERFIJND - COMPLEET
 DRAA 218B: STAP 8 - BASELINE VERIFICATION - COMPLEET ✅
+DRAA 218B: STAP 9 - DATABASE UPDATES VERIFIED ✅
 """
 
 import logging
@@ -264,6 +265,7 @@ class GreedyRosteringEngine:
     DRAAD 218B STAP 6: SCORING ALGORITME (HC4-HC5) - COMPLEET
     DRAAD 218B STAP 7: BLOKKERINGSREGELS VERFIJND - COMPLEET
     DRAAD 218B STAP 8: BASELINE VERIFICATION - COMPLEET ✅
+    DRAAD 218B STAP 9: DATABASE UPDATES VERIFIED ✅
     """
     
     def __init__(self, config: Dict[str, Any]):
@@ -343,11 +345,11 @@ class GreedyRosteringEngine:
             logger.info("[Phase 4] Analyzing bottlenecks...")
             self._find_bottlenecks()
             
-            # Phase 5: Save results (FASE 5 COMPLEET)
+            # Phase 5: Save results (STAP 9 VERIFIED ✅)
             logger.info("[Phase 5] Saving to database...")
             self._save_assignments()
-            self._update_invulling()
-            self._update_roster_status()
+            self._update_invulling()  # ✅ STAP 9
+            self._update_roster_status()  # ✅ STAP 9
             
             # Phase 6: Comprehensive reporting (FASE 6 NIEUW)
             logger.info("[Phase 6] Generating comprehensive statistics...")
@@ -373,7 +375,7 @@ class GreedyRosteringEngine:
                 status_msg = f"FAILED: {coverage:.1f}% coverage"
             
             message = (
-                f"DRAAD 218B STAP 8 COMPLEET ✅: {coverage:.1f}% coverage "
+                f"DRAAD 218B STAP 9 VERIFIED ✅: {coverage:.1f}% coverage "
                 f"({assigned_count}/{total_required}) in {solve_time:.2f}s | "
                 f"Pre-planned: {pre_planned_count}, GREEDY: {len(new_assignments)}"
             )
@@ -1104,7 +1106,7 @@ class GreedyRosteringEngine:
     def _update_invulling(self) -> None:
         """Update invulling field in roster_period_staffing_dagdelen.
         
-        DRAAD 218B FASE 5: Update invulling per requirement
+        DRAAD 218B STAP 9: Update invulling per requirement ✅
         
         Spec 4.6: Update invulling per requirement:
         - invulling=1 for GREEDY-filled
@@ -1134,7 +1136,7 @@ class GreedyRosteringEngine:
                         
                         update_count += 1
             
-            logger.info(f"✅ FASE 5: Updated invulling field in {update_count} staffing records")
+            logger.info(f"✅ STAP 9: Updated invulling field in {update_count} staffing records")
         
         except Exception as e:
             logger.error(f"Error updating invulling: {e}", exc_info=True)
@@ -1142,7 +1144,7 @@ class GreedyRosteringEngine:
     def _update_roster_status(self) -> None:
         """Update roster status to 'in_progress'.
         
-        DRAAD 218B FASE 5: Roster status → in_progress after GREEDY runs
+        DRAAD 218B STAP 9: Roster status → in_progress after GREEDY runs ✅
         
         Spec 4.7: Rooster status → in_progress after GREEDY runs.
         """
@@ -1154,7 +1156,7 @@ class GreedyRosteringEngine:
                 'status': 'in_progress'
             }).eq('id', self.roster_id).execute()
             
-            logger.info(f"✅ FASE 5: Updated roster {self.roster_id} status to in_progress")
+            logger.info(f"✅ STAP 9: Updated roster {self.roster_id} status to in_progress")
         
         except Exception as e:
             logger.error(f"Error updating roster status: {e}", exc_info=True)
