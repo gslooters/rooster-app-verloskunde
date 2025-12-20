@@ -1,0 +1,26 @@
+DRAAD 218B FASE 3 DEPLOYMENT
+============================
+
+Timestamp: 2025-12-20T11:16:00+01:00
+Commit: 5f5a01bc027a9e2df77a1a206812fafe1b55bbae
+
+Wijzigingen:
+- _load_pre_planned() volledig herschreven
+- Status=1 query correct
+- Invulling=2 gezet in requirements
+- Quotas correct afgebouwd
+- Gedetailleerde logging toegevoegd
+
+Verwachte Impact:
+- Pre-planned assignments correct verwerkt
+- Geen dubbele toewijzingen
+- Quotas respecteren pre-planned
+- Coverage berekening accurater
+
+Validatie:
+Zie docs/DRAAD218B_FASE3_VALIDATIE.md
+
+Related:
+- DRAAD218BHERSTELPLAN.md STAP 4
+- Commit: 7b634bad (code)
+- Commit: 5f5a01bc (docs)
