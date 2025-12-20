@@ -9,6 +9,7 @@ Architecture:
 - Phase 3: Smart greedy allocation (HC1-HC6 constraints)
 - Phase 4: Analyze bottlenecks
 - Phase 5: Save results
+- Phase 6: Comprehensive reporting
 
 DRAA 181: Initial implementation
 DRAA 190: Smart greedy allocation
@@ -19,6 +20,7 @@ DRAA 218B: FASE 2 - Team-selectie helper methode
 DRAA 218B: FASE 3 - Pre-planned handling verbeterd
 DRAA 218B: FASE 4 - GREEDY ALLOCATIE met HC1-HC6 + Blokkeringsregels
 DRAA 218B: FASE 5 - DATABASE UPDATES (invulling + roster status) - COMPLEET
+DRAA 218B: FASE 6 - RAPPORTAGE met uitgebreide statistieken - COMPLEET
 """
 
 import logging
@@ -143,8 +145,42 @@ class Bottleneck:
 
 
 @dataclass
+class EmployeeStats:
+    """Employee statistics - FASE 6."""
+    employee_id: str
+    employee_name: str
+    team: str
+    shifts_assigned: int
+    quota_used: int
+    quota_total: int
+    quota_utilization: float  # Percentage
+    services: List[Dict[str, Any]] = field(default_factory=list)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to response dict."""
+        return asdict(self)
+
+
+@dataclass
+class ServiceStats:
+    """Service coverage statistics - FASE 6."""
+    service_id: str
+    service_code: str
+    is_system: bool
+    required_slots: int
+    filled_slots: int
+    coverage: float  # Percentage
+    greedy_filled: int
+    manual_filled: int
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to response dict."""
+        return asdict(self)
+
+
+@dataclass
 class SolveResult:
-    """Result from solver."""
+    """Result from solver - FASE 6 UITGEBREID."""
     status: str  # success, partial, failed
     assignments_created: int
     total_required: int
@@ -152,8 +188,13 @@ class SolveResult:
     pre_planned_count: int
     greedy_count: int
     solve_time: float
+    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
     bottlenecks: List[Dict[str, Any]] = field(default_factory=list)
     message: str = ""
+    # FASE 6: Enhanced statistics
+    employee_stats: List[Dict[str, Any]] = field(default_factory=list)
+    service_stats: List[Dict[str, Any]] = field(default_factory=list)
+    team_breakdown: Dict[str, Any] = field(default_factory=dict)
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dict."""
@@ -218,6 +259,7 @@ class GreedyRosteringEngine:
     DRAAD 218B FASE 3: Pre-planned handling verbeterd
     DRAAD 218B FASE 4: GREEDY ALLOCATIE met HC1-HC6 + Blokkeringsregels
     DRAAD 218B FASE 5: DATABASE UPDATES (invulling + roster status) - COMPLEET
+    DRAAD 218B FASE 6: RAPPORTAGE met employee & service statistieken - COMPLEET
     """
     
     def __init__(self, config: Dict[str, Any]):
@@ -254,6 +296,10 @@ class GreedyRosteringEngine:
         self.assignments: Dict[str, RosterAssignment] = {}
         self.pre_planned_ids: set = set()
         self.bottlenecks: List[Bottleneck] = []
+        
+        # FASE 6: Tracking voor statistieken
+        self.employee_shifts: Dict[str, int] = {}
+        self.service_type_map: Dict[str, Dict[str, Any]] = {}  # Cache service info
         
         logger.info(f"GreedyRosteringEngine initialized for roster {self.roster_id}")
     
@@ -296,8 +342,14 @@ class GreedyRosteringEngine:
             # Phase 5: Save results (FASE 5 COMPLEET)
             logger.info("[Phase 5] Saving to database...")
             self._save_assignments()
-            self._update_invulling()  # ✅ FASE 5
-            self._update_roster_status()  # ✅ FASE 5
+            self._update_invulling()
+            self._update_roster_status()
+            
+            # Phase 6: Comprehensive reporting (FASE 6 NIEUW)
+            logger.info("[Phase 6] Generating comprehensive statistics...")
+            employee_stats = self._generate_employee_stats()
+            service_stats = self._generate_service_stats()
+            team_breakdown = self._generate_team_breakdown()
             
             # Calculate result
             assigned_count = sum(r.assigned for r in self.requirements)
@@ -316,9 +368,16 @@ class GreedyRosteringEngine:
                 status = "failed"
                 status_msg = f"FAILED: {coverage:.1f}% coverage"
             
-            message = f"DRAAD 218B FASE 5 COMPLEET: {coverage:.1f}% coverage ({assigned_count}/{total_required}) in {solve_time:.2f}s"
+            message = (
+                f"DRAAD 218B FASE 6 COMPLEET: {coverage:.1f}% coverage "
+                f"({assigned_count}/{total_required}) in {solve_time:.2f}s | "
+                f"Pre-planned: {pre_planned_count}, GREEDY: {len(new_assignments)}"
+            )
             
             logger.info(f"✅ {status_msg} in {solve_time:.2f}s")
+            logger.info(f"📊 Employee stats: {len(employee_stats)} employees tracked")
+            logger.info(f"📊 Service stats: {len(service_stats)} service types analyzed")
+            logger.info(f"📊 Team breakdown: {len(team_breakdown)} teams")
             
             bottleneck_dicts = [bn.to_dict() for bn in self.bottlenecks]
             
@@ -330,8 +389,13 @@ class GreedyRosteringEngine:
                 pre_planned_count=pre_planned_count,
                 greedy_count=len(new_assignments),
                 solve_time=round(solve_time, 2),
+                timestamp=datetime.utcnow().isoformat(),
                 bottlenecks=bottleneck_dicts,
-                message=message
+                message=message,
+                # FASE 6: Enhanced statistics
+                employee_stats=employee_stats,
+                service_stats=service_stats,
+                team_breakdown=team_breakdown
             )
             
         except Exception as e:
@@ -345,6 +409,7 @@ class GreedyRosteringEngine:
                 pre_planned_count=0,
                 greedy_count=0,
                 solve_time=round(solve_time, 2),
+                timestamp=datetime.utcnow().isoformat(),
                 bottlenecks=[],
                 message=f"Error: {str(e)}"
             )
@@ -420,6 +485,9 @@ class GreedyRosteringEngine:
                     team=team,
                     service_quotas=service_quotas.get(emp_id, {})
                 )
+                
+                # FASE 6: Initialize shift counter
+                self.employee_shifts[emp_id] = 0
             
             logger.info(f"Loaded {len(self.employees)} employees with team assignment")
             
@@ -460,6 +528,11 @@ class GreedyRosteringEngine:
             service_info = {}
             for row in st_response.data:
                 service_info[row['id']] = {
+                    'code': row.get('code', ''),
+                    'is_system': row.get('is_system', False)
+                }
+                # FASE 6: Cache voor statistieken
+                self.service_type_map[row['id']] = {
                     'code': row.get('code', ''),
                     'is_system': row.get('is_system', False)
                 }
@@ -907,6 +980,7 @@ class GreedyRosteringEngine:
                 req.assigned += 1
                 req.invulling = 1  # Marked as GREEDY-filled
                 employee_shifts[best_emp] += 1
+                self.employee_shifts[best_emp] = employee_shifts[best_emp]  # FASE 6
                 employee_last_work[best_emp] = req.date
                 
                 # Decrease quota
@@ -1018,6 +1092,162 @@ class GreedyRosteringEngine:
         
         except Exception as e:
             logger.error(f"Error updating roster status: {e}", exc_info=True)
+    
+    # ========================================================================
+    # FASE 6: RAPPORTAGE METHODES
+    # ========================================================================
+    
+    def _generate_employee_stats(self) -> List[Dict[str, Any]]:
+        """Generate employee statistics.
+        
+        DRAAD 218B FASE 6: Employee workload and quota utilization
+        
+        Returns:
+            List of employee stat dicts
+        """
+        stats = []
+        
+        for emp_id, emp in self.employees.items():
+            # Calculate total quota (original)
+            total_quota = 0
+            quota_used = 0
+            service_breakdown = []
+            
+            # Count assignments per employee from assignments dict
+            emp_assignments = [a for a in self.assignments.values() if a.employee_id == emp_id]
+            shifts_assigned = len(emp_assignments)
+            
+            # Calculate quota usage per service
+            for service_id, original_quota in emp.service_quotas.items():
+                # Count how many times this service was assigned
+                service_assignments = [a for a in emp_assignments if a.service_id == service_id]
+                used = len(service_assignments)
+                
+                service_code = self.service_type_map.get(service_id, {}).get('code', service_id[:8])
+                
+                service_breakdown.append({
+                    'service_id': service_id,
+                    'service_code': service_code,
+                    'quota_original': original_quota,
+                    'quota_used': used,
+                    'quota_remaining': max(0, original_quota - used)
+                })
+                
+                total_quota += original_quota
+                quota_used += used
+            
+            # Calculate utilization
+            quota_utilization = (quota_used / total_quota * 100) if total_quota > 0 else 0
+            
+            emp_stat = EmployeeStats(
+                employee_id=emp_id,
+                employee_name=emp.name,
+                team=emp.team,
+                shifts_assigned=shifts_assigned,
+                quota_used=quota_used,
+                quota_total=total_quota,
+                quota_utilization=round(quota_utilization, 1),
+                services=service_breakdown
+            )
+            
+            stats.append(emp_stat.to_dict())
+        
+        # Sort by shifts assigned (descending)
+        stats.sort(key=lambda x: x['shifts_assigned'], reverse=True)
+        
+        logger.debug(f"Generated statistics for {len(stats)} employees")
+        return stats
+    
+    def _generate_service_stats(self) -> List[Dict[str, Any]]:
+        """Generate service coverage statistics.
+        
+        DRAAD 218B FASE 6: Service type coverage and fill rates
+        
+        Returns:
+            List of service stat dicts
+        """
+        stats = []
+        service_coverage = {}
+        
+        # Aggregate requirements by service
+        for req in self.requirements:
+            if req.service_id not in service_coverage:
+                service_coverage[req.service_id] = {
+                    'required': 0,
+                    'filled': 0,
+                    'greedy': 0,
+                    'manual': 0,
+                    'service_code': req.service_code,
+                    'is_system': req.is_system
+                }
+            
+            service_coverage[req.service_id]['required'] += req.needed
+            service_coverage[req.service_id]['filled'] += req.assigned
+            
+            # Count by invulling type
+            if req.invulling == 1:  # GREEDY
+                service_coverage[req.service_id]['greedy'] += req.assigned
+            elif req.invulling == 2:  # Manual
+                service_coverage[req.service_id]['manual'] += req.assigned
+        
+        # Convert to stats objects
+        for service_id, data in service_coverage.items():
+            coverage_pct = (data['filled'] / data['required'] * 100) if data['required'] > 0 else 0
+            
+            stat = ServiceStats(
+                service_id=service_id,
+                service_code=data['service_code'],
+                is_system=data['is_system'],
+                required_slots=data['required'],
+                filled_slots=data['filled'],
+                coverage=round(coverage_pct, 1),
+                greedy_filled=data['greedy'],
+                manual_filled=data['manual']
+            )
+            
+            stats.append(stat.to_dict())
+        
+        # Sort by coverage (ascending - show problems first)
+        stats.sort(key=lambda x: x['coverage'])
+        
+        logger.debug(f"Generated statistics for {len(stats)} service types")
+        return stats
+    
+    def _generate_team_breakdown(self) -> Dict[str, Any]:
+        """Generate team-level breakdown.
+        
+        DRAAD 218B FASE 6: Team utilization and coverage
+        
+        Returns:
+            Dict with team statistics
+        """
+        teams = {}
+        
+        # Count employees per team
+        for emp_id, emp in self.employees.items():
+            if emp.team not in teams:
+                teams[emp.team] = {
+                    'employee_count': 0,
+                    'shifts_assigned': 0,
+                    'employees': []
+                }
+            
+            teams[emp.team]['employee_count'] += 1
+            teams[emp.team]['shifts_assigned'] += self.employee_shifts.get(emp_id, 0)
+            teams[emp.team]['employees'].append({
+                'id': emp_id,
+                'name': emp.name,
+                'shifts': self.employee_shifts.get(emp_id, 0)
+            })
+        
+        # Calculate averages
+        for team, data in teams.items():
+            data['avg_shifts_per_employee'] = round(
+                data['shifts_assigned'] / data['employee_count'], 1
+            ) if data['employee_count'] > 0 else 0
+        
+        logger.debug(f"Generated breakdown for {len(teams)} teams")
+        return teams
 
 
 # ============================================================================
@@ -1032,6 +1262,8 @@ __all__ = [
     'EmployeeCapability',
     'RosteringRequirement',
     'SolveResult',
+    'EmployeeStats',
+    'ServiceStats',
     'WorkBestandOpdracht',
     'WorkBestandCapaciteit',
     'WorkBestandPlanning'
