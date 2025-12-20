@@ -16,6 +16,7 @@ DRAA 214: Coverage calculation fixes
 DRAA 217: Restoration after corruption
 DRAA 218B: FASE 1 - Baseline fixes (service_types join, team logic, sorting)
 DRAA 218B: FASE 2 - Team-selectie helper methode
+DRAA 218B: FASE 3 - Pre-planned handling verbeterd
 """
 
 import logging
@@ -212,6 +213,7 @@ class GreedyRosteringEngine:
     DRAAD 214: Coverage calculations fixed
     DRAAD 218B FASE 1: Service_types join, team logic, sorting fixes
     DRAAD 218B FASE 2: Team-selectie helper methode
+    DRAAD 218B FASE 3: Pre-planned handling verbeterd
     """
     
     def __init__(self, config: Dict[str, Any]):
@@ -310,7 +312,7 @@ class GreedyRosteringEngine:
                 status = "failed"
                 status_msg = f"FAILED: {coverage:.1f}% coverage"
             
-            message = f"DRAAD 218B FASE 2 GREEDY: {coverage:.1f}% coverage ({assigned_count}/{total_required}) in {solve_time:.2f}s"
+            message = f"DRAAD 218B FASE 3 GREEDY: {coverage:.1f}% coverage ({assigned_count}/{total_required}) in {solve_time:.2f}s"
             
             logger.info(f"✅ {status_msg} in {solve_time:.2f}s")
             
@@ -508,14 +510,28 @@ class GreedyRosteringEngine:
             logger.error(f"Error loading requirements: {e}", exc_info=True)
     
     def _load_pre_planned(self) -> None:
-        """Load pre-planned assignments."""
+        """Load pre-planned assignments (status=1, handmatig ingevoerd).
+        
+        DRAAD 218B FASE 3 (STAP 4): Complete herschrijving volgens spec
+        
+        Deze methode:
+        1. Laadt alle bestaande assignments (status=1 = ingepland)
+        2. Markeert invulling=2 in Requirements
+        3. Vermindert quotas in Employee capaciteit
+        4. Houdt bij welke slots al gevuld zijn
+        """
         if not self.supabase:
+            logger.warning("Supabase not available, skipping pre-planned loading")
             return
         
         try:
+            # STAP 1: Laad alle bestaande assignments (status=1 = ingepland)
+            logger.debug("Loading pre-planned assignments with status=1...")
             response = self.supabase.table('roster_assignments').select(
-                'id, employee_id, date, dagdeel, service_id'
+                'id, employee_id, date, dagdeel, service_id, status'
             ).eq('roster_id', self.roster_id).eq('status', 1).execute()
+            
+            pre_planned_assignments = []
             
             for row in response.data:
                 assignment_id = row.get('id')
@@ -524,30 +540,74 @@ class GreedyRosteringEngine:
                 dagdeel = row.get('dagdeel')
                 service_id = row.get('service_id')
                 
-                # Find matching requirement and mark assigned
+                pre_planned_assignments.append({
+                    'id': assignment_id,
+                    'employee_id': emp_id,
+                    'date': date,
+                    'dagdeel': dagdeel,
+                    'service_id': service_id
+                })
+                
+                # Mark in planning
+                self.pre_planned_ids.add(assignment_id)
+            
+            logger.debug(f"Found {len(pre_planned_assignments)} pre-planned assignments")
+            
+            # STAP 2: Zet invulling=2 in requirements EN verhoog assigned count
+            matched_count = 0
+            for pre_plan in pre_planned_assignments:
                 for req in self.requirements:
-                    if (req.date == date and req.dagdeel == dagdeel 
-                        and req.service_id == service_id):
-                        req.pre_planned_ids.append(emp_id)
+                    if (req.date == pre_plan['date'] and 
+                        req.dagdeel == pre_plan['dagdeel'] and 
+                        req.service_id == pre_plan['service_id']):
+                        
+                        req.pre_planned_ids.append(pre_plan['employee_id'])
                         req.assigned += 1
                         req.invulling = 2  # Mark as manually filled
-                        self.pre_planned_ids.add(assignment_id)
+                        matched_count += 1
                         
-                        # KRITIEK: Reduce quota for pre-planned
-                        if emp_id in self.employees:
-                            emp = self.employees[emp_id]
-                            if service_id in emp.service_quotas:
-                                emp.service_quotas[service_id] = max(
-                                    0,
-                                    emp.service_quotas[service_id] - 1
-                                )
-                                logger.debug(
-                                    f"Pre-planned: Quota reduced for {emp.name} "
-                                    f"/ service {service_id} → {emp.service_quotas[service_id]}"
-                                )
+                        logger.debug(
+                            f"Pre-planned: {pre_plan['date']}/{pre_plan['dagdeel']}/"
+                            f"{pre_plan['service_id'][:8]}... → invulling=2, assigned={req.assigned}"
+                        )
                         break
             
-            logger.info(f"Processed {len(self.pre_planned_ids)} pre-planned assignments")
+            logger.info(f"Matched {matched_count} pre-planned assignments to requirements")
+            
+            # STAP 3: KRITIEK - Verminder quotas voor pre-planned!
+            quota_reduced = 0
+            for pre_plan in pre_planned_assignments:
+                emp_id = pre_plan['employee_id']
+                service_id = pre_plan['service_id']
+                
+                if emp_id in self.employees:
+                    emp = self.employees[emp_id]
+                    if service_id in emp.service_quotas:
+                        old_quota = emp.service_quotas[service_id]
+                        emp.service_quotas[service_id] = max(
+                            0,
+                            emp.service_quotas[service_id] - 1
+                        )
+                        new_quota = emp.service_quotas[service_id]
+                        quota_reduced += 1
+                        
+                        logger.debug(
+                            f"Quota reduced: {emp.name} / service {service_id[:8]}... "
+                            f"({old_quota} → {new_quota})"
+                        )
+                    else:
+                        logger.warning(
+                            f"Pre-planned service {service_id[:8]}... not in quota for {emp.name}"
+                        )
+                else:
+                    logger.warning(
+                        f"Pre-planned employee {emp_id} not found in employee list"
+                    )
+            
+            logger.info(
+                f"✅ Processed {len(pre_planned_assignments)} pre-planned assignments: "
+                f"{matched_count} matched to requirements, {quota_reduced} quotas reduced"
+            )
             
         except Exception as e:
             logger.error(f"Error loading pre-planned: {e}", exc_info=True)
