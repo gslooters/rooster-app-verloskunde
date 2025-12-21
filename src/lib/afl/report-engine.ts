@@ -879,16 +879,246 @@ function generatePdfHtml(report: AflReport): string {
 }
 
 /**
- * Export report to Excel (placeholder - would use xlsx in production)
+ * Export report to Excel using XLSX library
+ * Generates professional Excel workbook with:
+ * - Summary sheet with key metrics
+ * - Services breakdown with performance per service
+ * - Bottleneck services analysis
+ * - Teams capacity and assignments
+ * - Employee capacity and service distribution
+ * - Open slots detail
+ * - Daily summary with coverage per day
  */
 export async function exportReportToExcel(
   report: AflReport,
-  _options?: { filename?: string }
+  options?: { filename?: string }
 ): Promise<Buffer> {
-  // In production, use xlsx library
-  // For now, return CSV
-  const csv = convertReportToCsv(report);
-  return Buffer.from(csv, 'utf-8');
+  try {
+    const XLSX = (await import('xlsx')).default;
+
+    // ===== CREATE WORKBOOK =====
+    const workbook = XLSX.utils.book_new();
+
+    // ===== SHEET 1: SUMMARY =====
+    const summaryData = [
+      ['AFL Execution Report - Summary'],
+      [],
+      ['Metric', 'Value'],
+      ['Roster ID', report.rosterId],
+      ['AFL Run ID', report.afl_run_id],
+      ['Generated At', new Date(report.generated_at).toLocaleString('nl-NL')],
+      ['Execution Time (ms)', report.execution_time_ms],
+      [],
+      ['Coverage Metrics', ''],
+      ['Total Required Slots', report.summary.total_required],
+      ['Total Planned Slots', report.summary.total_planned],
+      ['Total Open Slots', report.summary.total_open],
+      ['Coverage Percentage', `${report.summary.coverage_percent.toFixed(2)}%`],
+      ['Coverage Rating', report.summary.coverage_rating.toUpperCase()],
+      [],
+      ['Performance Breakdown (ms)', ''],
+      ['Load Data', report.phase_breakdown.load_ms],
+      ['Solve Planning', report.phase_breakdown.solve_ms],
+      ['DIO/DDO Chains', report.phase_breakdown.dio_chains_ms],
+      ['Database Write', report.phase_breakdown.database_write_ms],
+      ['Report Generation', report.phase_breakdown.report_generation_ms],
+    ];
+    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+    summarySheet['!cols'] = [{ wch: 30 }, { wch: 20 }];
+    XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
+
+    // ===== SHEET 2: SERVICES =====
+    const servicesData = [
+      ['Service Breakdown'],
+      [],
+      ['Service Code', 'Service Name', 'Required', 'Planned', 'Open', 'Completion %', 'Status'],
+      ...report.by_service.map(s => [
+        s.service_code,
+        s.service_name,
+        s.required,
+        s.planned,
+        s.open,
+        s.completion_percent.toFixed(2),
+        s.status.toUpperCase()
+      ])
+    ];
+    const servicesSheet = XLSX.utils.aoa_to_sheet(servicesData);
+    servicesSheet['!cols'] = [
+      { wch: 12 },
+      { wch: 25 },
+      { wch: 10 },
+      { wch: 10 },
+      { wch: 10 },
+      { wch: 15 },
+      { wch: 12 }
+    ];
+    XLSX.utils.book_append_sheet(workbook, servicesSheet, 'Services');
+
+    // ===== SHEET 3: BOTTLENECKS =====
+    const bottlenecksData = [
+      ['Bottleneck Services (>10% Open)'],
+      [],
+      ['Service Code', 'Required', 'Planned', 'Open', 'Open %', 'Reason', 'Affected Teams'],
+      ...report.bottleneck_services.map(b => [
+        b.service_code,
+        b.required,
+        b.planned,
+        b.open,
+        b.open_percent.toFixed(2),
+        b.reason,
+        b.affected_teams.join(', ')
+      ])
+    ];
+    const bottlenecksSheet = XLSX.utils.aoa_to_sheet(bottlenecksData);
+    bottlenecksSheet['!cols'] = [
+      { wch: 12 },
+      { wch: 10 },
+      { wch: 10 },
+      { wch: 10 },
+      { wch: 10 },
+      { wch: 30 },
+      { wch: 25 }
+    ];
+    XLSX.utils.book_append_sheet(workbook, bottlenecksSheet, 'Bottlenecks');
+
+    // ===== SHEET 4: TEAMS =====
+    const teamsData = [
+      ['Team Breakdown'],
+      [],
+      ['Team Code', 'Team Name', 'Required', 'Planned', 'Open', 'Completion %'],
+      ...report.by_team.map(t => [
+        t.team_code,
+        t.team_name,
+        t.required,
+        t.planned,
+        t.open,
+        t.completion_percent.toFixed(2)
+      ])
+    ];
+    const teamsSheet = XLSX.utils.aoa_to_sheet(teamsData);
+    teamsSheet['!cols'] = [
+      { wch: 12 },
+      { wch: 20 },
+      { wch: 10 },
+      { wch: 10 },
+      { wch: 10 },
+      { wch: 15 }
+    ];
+    XLSX.utils.book_append_sheet(workbook, teamsSheet, 'Teams');
+
+    // ===== SHEET 5: EMPLOYEE CAPACITY =====
+    const employeeData = [
+      ['Employee Capacity Report'],
+      [],
+      ['Employee ID', 'Employee Name', 'Team', 'Service', 'Initial Capacity', 'Assigned', 'Remaining']
+    ];
+    
+    report.employee_capacity.forEach(emp => {
+      employeeData.push([emp.employee_id, emp.employee_name, emp.team, '', '', '', '']);
+      emp.by_service.forEach(svc => {
+        employeeData.push([
+          '',
+          '',
+          '',
+          svc.service_code,
+          svc.initial_capacity,
+          svc.assigned,
+          svc.remaining
+        ]);
+      });
+    });
+
+    const employeeSheet = XLSX.utils.aoa_to_sheet(employeeData);
+    employeeSheet['!cols'] = [
+      { wch: 15 },
+      { wch: 20 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 15 },
+      { wch: 12 },
+      { wch: 12 }
+    ];
+    XLSX.utils.book_append_sheet(workbook, employeeSheet, 'Employees');
+
+    // ===== SHEET 6: OPEN SLOTS =====
+    const openSlotsData = [
+      ['Open Slots Detail'],
+      [],
+      ['Date', 'Dagdeel', 'Team', 'Service Code', 'Service Name', 'Required', 'Open', 'Reason']
+    ];
+    
+    report.open_slots.forEach(slot => {
+      openSlotsData.push([
+        slot.date,
+        slot.dagdeel,
+        slot.team,
+        slot.service_code,
+        slot.service_name,
+        slot.required,
+        slot.open,
+        slot.reason
+      ]);
+    });
+
+    const openSlotsSheet = XLSX.utils.aoa_to_sheet(openSlotsData);
+    openSlotsSheet['!cols'] = [
+      { wch: 12 },
+      { wch: 10 },
+      { wch: 10 },
+      { wch: 12 },
+      { wch: 20 },
+      { wch: 10 },
+      { wch: 10 },
+      { wch: 25 }
+    ];
+    XLSX.utils.book_append_sheet(workbook, openSlotsSheet, 'OpenSlots');
+
+    // ===== SHEET 7: DAILY SUMMARY =====
+    const dailySummaryData = [
+      ['Daily Coverage Summary'],
+      [],
+      ['Date', 'Week Number', 'Total Slots', 'Filled Slots', 'Open Slots', 'Coverage %']
+    ];
+    
+    report.daily_summary.forEach(day => {
+      dailySummaryData.push([
+        day.date,
+        day.week_number,
+        day.total_slots,
+        day.filled_slots,
+        day.open_slots,
+        day.coverage_percent.toFixed(2)
+      ]);
+    });
+
+    const dailySummarySheet = XLSX.utils.aoa_to_sheet(dailySummaryData);
+    dailySummarySheet['!cols'] = [
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 12 }
+    ];
+    XLSX.utils.book_append_sheet(workbook, dailySummarySheet, 'DailySummary');
+
+    // ===== GENERATE FILENAME =====
+    const timestamp = new Date().toISOString().split('T')[0];
+    const filename = options?.filename || 
+      `afl-report-${report.rosterId.substring(0, 8)}-${timestamp}.xlsx`;
+
+    // ===== WRITE TO BUFFER =====
+    const excelBuffer = XLSX.write(workbook, {
+      bookType: 'xlsx',
+      type: 'buffer'
+    }) as Buffer;
+
+    return excelBuffer;
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error('[Report Engine] Excel export failed:', errorMsg);
+    throw new Error(`Excel export failed: ${errorMsg}`);
+  }
 }
 
 /**
