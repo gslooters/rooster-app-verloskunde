@@ -15,7 +15,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { exportReportToPdf, exportReportToExcel } from '@/lib/afl';
+import { exportReportToPdf, exportReportToExcel } from '@/lib/afl/report-engine';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
