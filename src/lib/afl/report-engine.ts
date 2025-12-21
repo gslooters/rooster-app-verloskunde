@@ -966,7 +966,7 @@ export async function exportReportToExcel(
         b.open,
         b.open_percent.toFixed(2),
         b.reason,
-        b.affected_teams.join(', ')
+        (b.affected_teams ?? []).join(', ')  // ✅ FIX: Use nullish coalescing for type safety
       ])
     ];
     const bottlenecksSheet = XLSX.utils.aoa_to_sheet(bottlenecksData);
