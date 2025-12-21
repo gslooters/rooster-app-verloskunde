@@ -1,5 +1,5 @@
 {
-  "//": "DRAAD63B Cache Bust: 2025-11-27T16:32:00Z - Incremental cache DISABLED",
+  "//": "DRAAD230 Cache Bust: 2025-12-21T14:11:34Z - Railway build cache invalidation",
   "compilerOptions": {
     "target": "ES2020",
     "lib": [
@@ -21,6 +21,12 @@
     "paths": {
       "@/*": [
         "*"
+      ],
+      "@/lib/afl": [
+        "src/lib/afl/index.ts"
+      ],
+      "@/lib/afl/*": [
+        "src/lib/afl/*"
       ]
     },
     "incremental": false,
