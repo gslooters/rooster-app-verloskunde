@@ -1021,9 +1021,9 @@ export async function exportReportToExcel(
           '',
           '',
           svc.service_code,
-          svc.initial_capacity,
-          svc.assigned,
-          svc.remaining
+          svc.initial_capacity.toString(),  // ✅ FIX: Convert to string
+          svc.assigned.toString(),          // ✅ FIX: Convert to string
+          svc.remaining.toString()          // ✅ FIX: Convert to string
         ]);
       });
     });
