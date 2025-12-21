@@ -1,0 +1,293 @@
+/**
+ * AFL (Autofill) - Phase 1: Load Data Engine
+ * 
+ * Loads all required data from database into 4 workbenches:
+ * - Workbestand_Opdracht (tasks to schedule)
+ * - Workbestand_Planning (assignment slots)
+ * - Workbestand_Capaciteit (employee capacity)
+ * - Workbestand_Services_Metadata (service definitions)
+ * 
+ * Performance target: <500ms
+ */
+
+import { createClient } from '@supabase/supabase-js';
+import {
+  WorkbestandOpdracht,
+  WorkbestandPlanning,
+  WorkbestandCapaciteit,
+  WorkbestandServicesMetadata,
+  AflLoadResult,
+} from './types';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+);
+
+/**
+ * FASE 1: Load all data from database
+ * Builds 4 workbenches in memory
+ */
+export class AflEngine {
+  /**
+   * Load all data for a specific rooster
+   * Returns 4 workbenches + timing
+   */
+  async loadData(rosterId: string): Promise<AflLoadResult> {
+    const startTime = performance.now();
+
+    try {
+      // Query 1: Load tasks (roster_period_staffing_dagdelen)
+      const { data: tasksRaw, error: tasksError } = await supabase
+        .from('roster_period_staffing_dagdelen')
+        .select(
+          `
+          id,
+          roster_id,
+          date,
+          dagdeel,
+          team,
+          service_id,
+          aantal,
+          invulling,
+          service_types(code, is_system)
+        `
+        )
+        .eq('roster_id', rosterId)
+        .gt('aantal', 0)
+        .order('is_system', { ascending: false })
+        .order('date', { ascending: true })
+        .order('dagdeel', { ascending: true })
+        .order('team', { ascending: false })
+        .order('service_types.code', { ascending: true });
+
+      if (tasksError) throw new Error(`Tasks query failed: ${tasksError.message}`);
+
+      // Query 2: Load planning slots (roster_assignments)
+      const { data: planningRaw, error: planningError } = await supabase
+        .from('roster_assignments')
+        .select('*')
+        .eq('roster_id', rosterId);
+
+      if (planningError) throw new Error(`Planning query failed: ${planningError.message}`);
+
+      // Query 3: Load capacity (roster_employee_services)
+      const { data: capacityRaw, error: capacityError } = await supabase
+        .from('roster_employee_services')
+        .select(
+          `
+          roster_id,
+          employee_id,
+          service_id,
+          aantal,
+          actief,
+          service_types(code)
+        `
+        )
+        .eq('roster_id', rosterId)
+        .eq('actief', true);
+
+      if (capacityError) throw new Error(`Capacity query failed: ${capacityError.message}`);
+
+      // Query 4: Load service metadata (service_types)
+      const { data: servicesRaw, error: servicesError } = await supabase
+        .from('service_types')
+        .select('*');
+
+      if (servicesError) throw new Error(`Services query failed: ${servicesError.message}`);
+
+      // Query 5: Load rooster period (roosters)
+      const { data: rosterRaw, error: rosterError } = await supabase
+        .from('roosters')
+        .select('id, start_date, end_date, status')
+        .eq('id', rosterId)
+        .single();
+
+      if (rosterError) throw new Error(`Rooster query failed: ${rosterError.message}`);
+
+      // Transform: Build workbenches
+      const workbestand_opdracht = this.buildOpdracht(tasksRaw || []);
+      const workbestand_planning = this.buildPlanning(planningRaw || []);
+      const workbestand_capaciteit = this.buildCapaciteit(capacityRaw || []);
+      const workbestand_services_metadata = this.buildServicesMetadata(servicesRaw || []);
+
+      // Pre-planning adjustment: Decrement capacity for protected assignments
+      this.adjustCapacityForPrePlanning(workbestand_planning, workbestand_capaciteit);
+
+      const load_duration_ms = performance.now() - startTime;
+
+      return {
+        workbestand_opdracht,
+        workbestand_planning,
+        workbestand_capaciteit,
+        workbestand_services_metadata,
+        rooster_period: {
+          id: rosterRaw!.id,
+          start_date: new Date(rosterRaw!.start_date),
+          end_date: new Date(rosterRaw!.end_date),
+          status: rosterRaw!.status,
+        },
+        load_duration_ms,
+      };
+    } catch (error) {
+      throw new Error(`Phase 1 Load failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * Build Workbestand_Opdracht from raw task data
+   */
+  private buildOpdracht(tasksRaw: any[]): WorkbestandOpdracht[] {
+    return tasksRaw.map((row) => ({
+      id: row.id,
+      roster_id: row.roster_id,
+      date: new Date(row.date),
+      dagdeel: row.dagdeel,
+      team: row.team,
+      service_id: row.service_id,
+      service_code: row.service_types?.code || '',
+      is_system: row.service_types?.is_system || false,
+      aantal: row.aantal,
+      aantal_nog: row.aantal,
+      invulling: row.invulling || 0,
+    }));
+  }
+
+  /**
+   * Build Workbestand_Planning from raw assignment data
+   */
+  private buildPlanning(planningRaw: any[]): WorkbestandPlanning[] {
+    return planningRaw.map((row) => ({
+      id: row.id,
+      roster_id: row.roster_id,
+      employee_id: row.employee_id,
+      date: new Date(row.date),
+      dagdeel: row.dagdeel,
+      status: row.status,
+      service_id: row.service_id || null,
+      is_protected: row.is_protected || false,
+      source: row.source || null,
+      blocked_by_date: row.blocked_by_date ? new Date(row.blocked_by_date) : null,
+      blocked_by_dagdeel: row.blocked_by_dagdeel || null,
+      blocked_by_service_id: row.blocked_by_service_id || null,
+      constraint_reason: row.constraint_reason || null,
+      ort_confidence: row.ort_confidence || null,
+      ort_run_id: row.ort_run_id || null,
+      previous_service_id: row.previous_service_id || null,
+      notes: row.notes || null,
+      created_at: new Date(row.created_at),
+      updated_at: new Date(row.updated_at),
+      is_modified: false,
+    }));
+  }
+
+  /**
+   * Build Workbestand_Capaciteit from raw capacity data
+   */
+  private buildCapaciteit(capacityRaw: any[]): WorkbestandCapaciteit[] {
+    return capacityRaw.map((row) => ({
+      roster_id: row.roster_id,
+      employee_id: row.employee_id,
+      service_id: row.service_id,
+      service_code: row.service_types?.code || '',
+      aantal: row.aantal,
+      actief: row.actief,
+      aantal_beschikbaar: row.aantal, // Initialize for tracking
+    }));
+  }
+
+  /**
+   * Build Workbestand_Services_Metadata from raw service data
+   */
+  private buildServicesMetadata(servicesRaw: any[]): WorkbestandServicesMetadata[] {
+    return servicesRaw.map((row) => ({
+      id: row.id,
+      code: row.code,
+      naam: row.naam,
+      beschrijving: row.beschrijving || null,
+      is_system: row.is_system || false,
+      blokkeert_volgdag: row.blokkeert_volgdag || false,
+      team_groen_regels: row.team_groen_regels || null,
+      team_oranje_regels: row.team_oranje_regels || null,
+      team_totaal_regels: row.team_totaal_regels || null,
+      actief: row.actief,
+    }));
+  }
+
+  /**
+   * Adjust capacity for pre-planned assignments
+   * For each protected assignment (status=1, is_protected=TRUE),
+   * decrement the corresponding capacity
+   */
+  private adjustCapacityForPrePlanning(
+    planning: WorkbestandPlanning[],
+    capaciteit: WorkbestandCapaciteit[]
+  ): void {
+    // Find all protected assignments
+    const protectedAssignments = planning.filter(
+      (p) => p.status === 1 && p.is_protected && p.service_id
+    );
+
+    // Decrement capacity for each
+    for (const assignment of protectedAssignments) {
+      const capacityKey = `${assignment.employee_id}:${assignment.service_id}`;
+      const capacity = capaciteit.find(
+        (c) => `${c.employee_id}:${c.service_id}` === capacityKey
+      );
+
+      if (capacity && capacity.aantal_beschikbaar !== undefined) {
+        capacity.aantal_beschikbaar = Math.max(0, capacity.aantal_beschikbaar - 1);
+      }
+    }
+  }
+
+  /**
+   * Validate loaded data
+   * Checks for common issues
+   */
+  validateLoadResult(result: AflLoadResult): { valid: boolean; errors: string[] } {
+    const errors: string[] = [];
+
+    // Check: Must have rooster
+    if (!result.rooster_period) {
+      errors.push('No rooster period found');
+    }
+
+    // Check: Must have tasks
+    if (result.workbestand_opdracht.length === 0) {
+      errors.push('No tasks found (roster_period_staffing_dagdelen with aantal > 0)');
+    }
+
+    // Check: Must have planning slots
+    if (result.workbestand_planning.length === 0) {
+      errors.push('No planning slots found (roster_assignments)');
+    }
+
+    // Check: Must have capacity data
+    if (result.workbestand_capaciteit.length === 0) {
+      errors.push('No capacity data found (roster_employee_services)');
+    }
+
+    // Check: Must have service metadata
+    if (result.workbestand_services_metadata.length === 0) {
+      errors.push('No service metadata found (service_types)');
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors,
+    };
+  }
+}
+
+/**
+ * Helper: Create singleton instance
+ */
+let aflEngine: AflEngine | null = null;
+
+export function getAflEngine(): AflEngine {
+  if (!aflEngine) {
+    aflEngine = new AflEngine();
+  }
+  return aflEngine;
+}
