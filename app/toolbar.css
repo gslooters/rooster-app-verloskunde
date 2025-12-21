@@ -1,6 +1,0 @@
-/* Toolbar styles for export buttons */
-.toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
-.btn { border: 1px solid #d1d5db; background: white; padding: 6px 10px; border-radius: 6px; font-size: 12px; }
-.btn.primary { background: #111827; color: white; border-color: #111827; }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.select { border: 1px solid #d1d5db; border-radius: 6px; padding: 4px 8px; font-size: 12px; }
