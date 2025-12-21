@@ -12,11 +12,15 @@
 export * from './types';
 export { AflEngine, getAflEngine } from './afl-engine';
 export { SolveEngine, runSolveEngine } from './solve-engine';
-export {
-  ChainEngine,
+
+// Chain Engine: Separate type and runtime exports
+// Types must use 'export type' when isolatedModules is enabled
+export type {
   DIOChain,
   ValidationError,
   ChainReport,
   ChainDetail,
-  runChainEngine,
 } from './chain-engine';
+
+// Runtime values (class and function)
+export { ChainEngine, runChainEngine } from './chain-engine';
