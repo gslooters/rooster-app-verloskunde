@@ -273,43 +273,50 @@ export class ChainEngine {
     }
 
     // Step 4: Find and verify next-day recovery blocks (if not beyond period)
-    let next_day_ochtend_block = null;
-    let next_day_middag_block = null;
+    // IMPORTANT: Use explicit null assignment to avoid undefined in type
+    let next_day_ochtend_block: WorkbestandPlanning | null = null;
+    let next_day_middag_block: WorkbestandPlanning | null = null;
 
     const next_date = this.addDays(assign_date, 1);
     if (this.isSameDateOrBefore(next_date, this.rooster_end_date)) {
-      next_day_ochtend_block = this.workbestand_planning.find(
+      const found_ochtend = this.workbestand_planning.find(
         (p) =>
           p.employee_id === employee_id &&
           this.isSameDay(p.date, next_date) &&
           p.dagdeel === 'O'
       );
 
-      if (next_day_ochtend_block && next_day_ochtend_block.status !== 2) {
-        errors.push({
-          chain_id,
-          error_type: 'WRONG_STATUS',
-          message: `Next-day Ochtend block has status=${next_day_ochtend_block.status}, expected 2 (blocked)`,
-          severity: 'error',
-          affected_slots: [next_day_ochtend_block.id],
-        });
+      if (found_ochtend) {
+        next_day_ochtend_block = found_ochtend;
+        if (next_day_ochtend_block.status !== 2) {
+          errors.push({
+            chain_id,
+            error_type: 'WRONG_STATUS',
+            message: `Next-day Ochtend block has status=${next_day_ochtend_block.status}, expected 2 (blocked)`,
+            severity: 'error',
+            affected_slots: [next_day_ochtend_block.id],
+          });
+        }
       }
 
-      next_day_middag_block = this.workbestand_planning.find(
+      const found_middag = this.workbestand_planning.find(
         (p) =>
           p.employee_id === employee_id &&
           this.isSameDay(p.date, next_date) &&
           p.dagdeel === 'M'
       );
 
-      if (next_day_middag_block && next_day_middag_block.status !== 2) {
-        errors.push({
-          chain_id,
-          error_type: 'WRONG_STATUS',
-          message: `Next-day Middag block has status=${next_day_middag_block.status}, expected 2 (blocked)`,
-          severity: 'error',
-          affected_slots: [next_day_middag_block.id],
-        });
+      if (found_middag) {
+        next_day_middag_block = found_middag;
+        if (next_day_middag_block.status !== 2) {
+          errors.push({
+            chain_id,
+            error_type: 'WRONG_STATUS',
+            message: `Next-day Middag block has status=${next_day_middag_block.status}, expected 2 (blocked)`,
+            severity: 'error',
+            affected_slots: [next_day_middag_block.id],
+          });
+        }
       }
     }
 
@@ -322,8 +329,8 @@ export class ChainEngine {
         assignment,
         midday_block: midday_block || null,
         dia_assignment: dia_assignment || null,
-        next_day_ochtend_block,
-        next_day_middag_block,
+        next_day_ochtend_block: next_day_ochtend_block,
+        next_day_middag_block: next_day_middag_block,
       },
       valid: errors.length === 0,
       errors,
