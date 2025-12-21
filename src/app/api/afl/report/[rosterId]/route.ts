@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateAflReport, exportReportToPdf, exportReportToExcel } from '../../../../lib/afl/report-engine';
-import type { AflReport } from '../../../../lib/afl/types';
+import { generateAflReport, exportReportToPdf, exportReportToExcel } from '@/lib/afl';
+import type { AflReport } from '@/lib/afl';
 
 /**
  * GET /api/afl/report/[rosterId]
