@@ -7,10 +7,11 @@
  * - Bottleneck detection
  * - Employee capacity tracking
  * - Open slots analysis
+ * - PDF/Excel export
  */
 
 import { describe, test, expect } from 'vitest';
-import { generateAflReport } from './report-engine';
+import { generateAflReport, exportReportToExcel, exportReportToPdf } from './report-engine';
 import {
   WorkbestandOpdracht,
   WorkbestandPlanning,
@@ -420,4 +421,183 @@ test('PHASE 5.5: Phase breakdown - includes all phase timings', async () => {
   expect(report.phase_breakdown.dio_chains_ms).toBe(1200);
   expect(report.phase_breakdown.database_write_ms).toBe(650);
   expect(report.phase_breakdown.report_generation_ms).toBeGreaterThan(0);
+});
+
+/**
+ * Test 6: Excel Export - Valid Buffer
+ */
+test('PHASE 5.6: Excel export - returns valid Excel Buffer', async () => {
+  const report = await generateAflReport({
+    rosterId: 'test-excel-123',
+    afl_run_id: 'run-excel',
+    workbestand_planning: [
+      {
+        id: 'slot-1',
+        roster_id: 'test-excel-123',
+        employee_id: 'emp1',
+        date: new Date('2025-11-24'),
+        dagdeel: 'O',
+        status: 1,
+        service_id: 'svc-1',
+        is_protected: false,
+        source: 'autofill',
+        blocked_by_date: null,
+        blocked_by_dagdeel: null,
+        blocked_by_service_id: null,
+        constraint_reason: null,
+        ort_confidence: null,
+        ort_run_id: null,
+        previous_service_id: null,
+        notes: null,
+        created_at: new Date(),
+        updated_at: new Date(),
+      },
+    ],
+    workbestand_opdracht: [
+      {
+        id: 'task-1',
+        roster_id: 'test-excel-123',
+        date: new Date('2025-11-24'),
+        dagdeel: 'O',
+        team: 'GRO',
+        service_id: 'svc-1',
+        service_code: 'DIO',
+        is_system: true,
+        aantal: 2,
+        aantal_nog: 2,
+        invulling: 0,
+      },
+    ],
+    workbestand_capaciteit: [],
+    workbestand_services_metadata: [
+      {
+        id: 'svc-1',
+        code: 'DIO',
+        naam: 'Dienst Interne',
+        beschrijving: null,
+        is_system: true,
+        blokkeert_volgdag: true,
+        team_groen_regels: null,
+        team_oranje_regels: null,
+        team_totaal_regels: null,
+        actief: true,
+      },
+    ],
+    phase_timings: { load_ms: 100, solve_ms: 200, dio_chains_ms: 50, database_write_ms: 30 },
+  });
+
+  const buffer = await exportReportToExcel(report);
+
+  // XLSX files start with PK (zip file magic bytes)
+  expect(buffer).toBeInstanceOf(Buffer);
+  expect(buffer.length).toBeGreaterThan(1000); // Real Excel, not CSV text
+  expect(buffer.toString('ascii', 0, 2)).toBe('PK');
+});
+
+/**
+ * Test 7: Excel Export - Workbook Structure
+ */
+test('PHASE 5.7: Excel export - creates workbook with 7 sheets', async () => {
+  const report = await generateAflReport({
+    rosterId: 'test',
+    afl_run_id: 'run',
+    workbestand_planning: [],
+    workbestand_opdracht: [],
+    workbestand_capaciteit: [],
+    workbestand_services_metadata: [],
+    phase_timings: { load_ms: 1, solve_ms: 1, dio_chains_ms: 1, database_write_ms: 1 },
+  });
+
+  const buffer = await exportReportToExcel(report);
+
+  // Parse back to verify structure
+  const XLSX = (await import('xlsx')).default;
+  const workbook = XLSX.read(buffer, { type: 'buffer' });
+
+  expect(workbook.SheetNames).toContain('Summary');
+  expect(workbook.SheetNames).toContain('Services');
+  expect(workbook.SheetNames).toContain('Bottlenecks');
+  expect(workbook.SheetNames).toContain('Teams');
+  expect(workbook.SheetNames).toContain('Employees');
+  expect(workbook.SheetNames).toContain('OpenSlots');
+  expect(workbook.SheetNames).toContain('DailySummary');
+  expect(workbook.SheetNames.length).toBe(7);
+});
+
+/**
+ * Test 8: Excel Export - Custom Filename Support
+ */
+test('PHASE 5.8: Excel export - supports custom filename', async () => {
+  const report = await generateAflReport({
+    rosterId: 'test',
+    afl_run_id: 'run',
+    workbestand_planning: [],
+    workbestand_opdracht: [],
+    workbestand_capaciteit: [],
+    workbestand_services_metadata: [],
+    phase_timings: { load_ms: 1, solve_ms: 1, dio_chains_ms: 1, database_write_ms: 1 },
+  });
+
+  const buffer = await exportReportToExcel(report, {
+    filename: 'custom-report.xlsx'
+  });
+
+  expect(buffer).toBeDefined();
+  expect(buffer.toString('ascii', 0, 2)).toBe('PK');
+});
+
+/**
+ * Test 9: Excel Export - Empty Bottleneck Services
+ */
+test('PHASE 5.9: Excel export - handles empty bottleneck services gracefully', async () => {
+  const report = await generateAflReport({
+    rosterId: 'test',
+    afl_run_id: 'run',
+    workbestand_planning: [
+      {
+        id: 'slot-1',
+        roster_id: 'test',
+        employee_id: 'emp1',
+        date: new Date(),
+        dagdeel: 'O',
+        status: 1,
+        service_id: 'svc',
+        is_protected: false,
+        source: 'autofill',
+        blocked_by_date: null,
+        blocked_by_dagdeel: null,
+        blocked_by_service_id: null,
+        constraint_reason: null,
+        ort_confidence: null,
+        ort_run_id: null,
+        previous_service_id: null,
+        notes: null,
+        created_at: new Date(),
+        updated_at: new Date(),
+      },
+    ],
+    workbestand_opdracht: [
+      {
+        id: 'task-1',
+        roster_id: 'test',
+        date: new Date(),
+        dagdeel: 'O',
+        team: 'GRO',
+        service_id: 'svc',
+        service_code: 'RO',
+        is_system: false,
+        aantal: 1,
+        aantal_nog: 1,
+        invulling: 0,
+      },
+    ],
+    workbestand_capaciteit: [],
+    workbestand_services_metadata: [],
+    phase_timings: { load_ms: 1, solve_ms: 1, dio_chains_ms: 1, database_write_ms: 1 },
+  });
+
+  const buffer = await exportReportToExcel(report);
+
+  expect(buffer.toString('ascii', 0, 2)).toBe('PK');
+  expect(buffer.length).toBeGreaterThan(1000);
 });
