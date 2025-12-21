@@ -961,9 +961,9 @@ export async function exportReportToExcel(
       ['Service Code', 'Required', 'Planned', 'Open', 'Open %', 'Reason', 'Affected Teams'],
       ...report.bottleneck_services.map(b => [
         b.service_code,
-        b.required.toString(),  // ✅ FIXED: Convert number to string
-        b.planned.toString(),   // ✅ FIXED: Convert number to string
-        b.open.toString(),      // ✅ FIXED: Convert number to string
+        b.required.toString(),
+        b.planned.toString(),
+        b.open.toString(),
         b.open_percent.toFixed(2),
         b.reason,
         (b.affected_teams ?? []).join(', ')
@@ -1021,9 +1021,9 @@ export async function exportReportToExcel(
           '',
           '',
           svc.service_code,
-          svc.initial_capacity.toString(),  // ✅ FIXED: Convert number to string
-          svc.assigned.toString(),          // ✅ FIXED: Convert number to string
-          svc.remaining.toString()          // ✅ FIXED: Convert number to string
+          svc.initial_capacity.toString(),
+          svc.assigned.toString(),
+          svc.remaining.toString()
         ]);
       });
     });
@@ -1054,8 +1054,8 @@ export async function exportReportToExcel(
         slot.team,
         slot.service_code,
         slot.service_name,
-        slot.required.toString(),  // ✅ FIXED: Convert number to string
-        slot.open.toString(),      // ✅ FIXED: Convert number to string
+        slot.required.toString(),
+        slot.open.toString(),
         slot.reason
       ]);
     });
@@ -1074,7 +1074,7 @@ export async function exportReportToExcel(
     XLSX.utils.book_append_sheet(workbook, openSlotsSheet, 'OpenSlots');
 
     // ===== SHEET 7: DAILY SUMMARY =====
-    const dailySummaryData = [
+    const dailySummaryData: (string | number)[][] = [
       ['Daily Coverage Summary'],
       [],
       ['Date', 'Week Number', 'Total Slots', 'Filled Slots', 'Open Slots', 'Coverage %']
@@ -1083,10 +1083,10 @@ export async function exportReportToExcel(
     report.daily_summary.forEach(day => {
       dailySummaryData.push([
         day.date,
-        day.week_number,
-        day.total_slots,
-        day.filled_slots,
-        day.open_slots,
+        day.week_number.toString(),
+        day.total_slots.toString(),
+        day.filled_slots.toString(),
+        day.open_slots.toString(),
         day.coverage_percent.toFixed(2)
       ]);
     });
