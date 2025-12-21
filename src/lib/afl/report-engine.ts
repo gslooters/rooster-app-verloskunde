@@ -955,18 +955,18 @@ export async function exportReportToExcel(
     XLSX.utils.book_append_sheet(workbook, servicesSheet, 'Services');
 
     // ===== SHEET 3: BOTTLENECKS =====
-    const bottlenecksData = [
+    const bottlenecksData: (string | number)[][] = [
       ['Bottleneck Services (>10% Open)'],
       [],
       ['Service Code', 'Required', 'Planned', 'Open', 'Open %', 'Reason', 'Affected Teams'],
       ...report.bottleneck_services.map(b => [
         b.service_code,
-        b.required,
-        b.planned,
-        b.open,
+        b.required.toString(),  // ✅ FIXED: Convert number to string
+        b.planned.toString(),   // ✅ FIXED: Convert number to string
+        b.open.toString(),      // ✅ FIXED: Convert number to string
         b.open_percent.toFixed(2),
         b.reason,
-        (b.affected_teams ?? []).join(', ')  // ✅ FIX: Use nullish coalescing for type safety
+        (b.affected_teams ?? []).join(', ')
       ])
     ];
     const bottlenecksSheet = XLSX.utils.aoa_to_sheet(bottlenecksData);
@@ -1007,7 +1007,7 @@ export async function exportReportToExcel(
     XLSX.utils.book_append_sheet(workbook, teamsSheet, 'Teams');
 
     // ===== SHEET 5: EMPLOYEE CAPACITY =====
-    const employeeData = [
+    const employeeData: (string | number)[][] = [
       ['Employee Capacity Report'],
       [],
       ['Employee ID', 'Employee Name', 'Team', 'Service', 'Initial Capacity', 'Assigned', 'Remaining']
@@ -1021,9 +1021,9 @@ export async function exportReportToExcel(
           '',
           '',
           svc.service_code,
-          svc.initial_capacity.toString(),  // ✅ FIX: Convert to string
-          svc.assigned.toString(),          // ✅ FIX: Convert to string
-          svc.remaining.toString()          // ✅ FIX: Convert to string
+          svc.initial_capacity.toString(),  // ✅ FIXED: Convert number to string
+          svc.assigned.toString(),          // ✅ FIXED: Convert number to string
+          svc.remaining.toString()          // ✅ FIXED: Convert number to string
         ]);
       });
     });
@@ -1041,7 +1041,7 @@ export async function exportReportToExcel(
     XLSX.utils.book_append_sheet(workbook, employeeSheet, 'Employees');
 
     // ===== SHEET 6: OPEN SLOTS =====
-    const openSlotsData = [
+    const openSlotsData: (string | number)[][] = [
       ['Open Slots Detail'],
       [],
       ['Date', 'Dagdeel', 'Team', 'Service Code', 'Service Name', 'Required', 'Open', 'Reason']
@@ -1054,8 +1054,8 @@ export async function exportReportToExcel(
         slot.team,
         slot.service_code,
         slot.service_name,
-        slot.required,
-        slot.open,
+        slot.required.toString(),  // ✅ FIXED: Convert number to string
+        slot.open.toString(),      // ✅ FIXED: Convert number to string
         slot.reason
       ]);
     });
