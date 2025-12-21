@@ -125,7 +125,7 @@ export interface AflLoadResult {
 
 /**
  * AFL Execution Result
- * After complete solve
+ * After complete pipeline (FASE 1-5)
  */
 export interface AflExecutionResult {
   success: boolean;
@@ -133,6 +133,7 @@ export interface AflExecutionResult {
   rosterId: string;
   execution_time_ms: number;
   error?: string | null;
+  report?: AflReport; // Phase 5 report
   
   // Phase-specific timings
   phase_timings?: {
@@ -145,14 +146,122 @@ export interface AflExecutionResult {
 }
 
 /**
+ * Service Coverage Report
+ */
+export interface ServiceReport {
+  service_code: string;
+  service_name: string;
+  required: number;
+  planned: number;
+  open: number;
+  completion_percent: number;
+  status: 'complete' | 'good' | 'fair' | 'bottleneck';
+}
+
+/**
+ * Bottleneck Service
+ */
+export interface BottleneckService {
+  service_code: string;
+  required: number;
+  planned: number;
+  open: number;
+  open_percent: number;
+  reason: string;
+  affected_teams?: string[];
+}
+
+/**
+ * Team Coverage Report
+ */
+export interface TeamReport {
+  team_code: string;
+  team_name: string;
+  required: number;
+  planned: number;
+  open: number;
+  completion_percent: number;
+}
+
+/**
+ * Employee Capacity Report
+ */
+export interface EmployeeCapacityReport {
+  employee_id: string;
+  employee_name: string;
+  team: string;
+  total_assignments: number;
+  by_service: CapacityByService[];
+}
+
+/**
+ * Capacity By Service
+ */
+export interface CapacityByService {
+  service_code: string;
+  initial_capacity: number;
+  assigned: number;
+  remaining: number;
+}
+
+/**
+ * Open Slot
+ */
+export interface OpenSlot {
+  date: string;
+  dagdeel: 'O' | 'M' | 'A';
+  team: string;
+  service_code: string;
+  service_name: string;
+  required: number;
+  open: number;
+  reason: string;
+}
+
+/**
+ * Daily Summary
+ */
+export interface DailySummary {
+  date: string;
+  week_number: number;
+  total_slots: number;
+  filled_slots: number;
+  open_slots: number;
+  coverage_percent: number;
+}
+
+/**
+ * Phase Breakdown
+ */
+export interface PhaseBreakdown {
+  load_ms: number;
+  solve_ms: number;
+  dio_chains_ms: number;
+  database_write_ms: number;
+  report_generation_ms: number;
+}
+
+/**
+ * Audit Info
+ */
+export interface AuditInfo {
+  afl_run_id: string;
+  rosterId: string;
+  generated_at: string;
+  generated_by_user: string;
+  duration_seconds: number;
+}
+
+/**
  * AFL Report
- * Comprehensive statistics and bottleneck analysis
+ * Comprehensive statistics and bottleneck analysis (Phase 5)
  */
 export interface AflReport {
   success: boolean;
   afl_run_id: string;
   rosterId: string;
   execution_time_ms: number;
+  generated_at: string;
   
   summary: {
     total_required: number;
@@ -160,50 +269,16 @@ export interface AflReport {
     total_open: number;
     coverage_percent: number;
     coverage_rating: 'excellent' | 'good' | 'fair' | 'poor';
+    coverage_color: string;
   };
   
-  planned_by_service: Array<{
-    service_code: string;
-    required: number;
-    planned: number;
-    open: number;
-    completion_percent: number;
-  }>;
+  by_service: ServiceReport[];
+  bottleneck_services: BottleneckService[];
+  by_team: TeamReport[];
+  employee_capacity: EmployeeCapacityReport[];
+  open_slots: OpenSlot[];
+  daily_summary: DailySummary[];
   
-  bottleneck_services: Array<{
-    service_code: string;
-    required: number;
-    planned: number;
-    open: number;
-    reason: string;
-  }>;
-  
-  employee_capacity_remaining: Array<{
-    employee_id: string;
-    employee_name: string;
-    assignments_total: number;
-    capacity_by_service: Array<{
-      service_code: string;
-      planned: number;
-      capacity_was: number;
-      capacity_remaining: number;
-    }>;
-  }>;
-  
-  open_services: Array<{
-    date: Date;
-    dagdeel: 'O' | 'M' | 'A';
-    team: string;
-    service_code: string;
-    aantal: number;
-    reason: string;
-  }>;
-  
-  phase_breakdown: {
-    load_ms: number;
-    solve_ms: number;
-    dio_chains_ms: number;
-    database_write_ms: number;
-    report_generation_ms: number;
-  };
+  phase_breakdown: PhaseBreakdown;
+  audit: AuditInfo;
 }
