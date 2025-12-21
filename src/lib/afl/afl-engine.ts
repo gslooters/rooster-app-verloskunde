@@ -1,6 +1,6 @@
 /**
  * AFL (Autofill) - Phase 1: Load Data Engine
- * Plus ORCHESTRATOR for complete Fase 1→2→3→4 pipeline
+ * Plus ORCHESTRATOR for complete Fase 1→2→3→4→5 pipeline
  * 
  * Loads all required data from database into 4 workbenches:
  * - Workbestand_Opdracht (tasks to schedule)
@@ -8,7 +8,13 @@
  * - Workbestand_Capaciteit (employee capacity)
  * - Workbestand_Services_Metadata (service definitions)
  * 
- * Performance target: <500ms for load, 4-7s total pipeline
+ * Then runs Fase 2-5:
+ * - Phase 2: Solve Engine (assign services)
+ * - Phase 3: Chain Engine (DIO/DDO blocking)
+ * - Phase 4: Write Engine (persist to database)
+ * - Phase 5: Report Engine (generate report)
+ * 
+ * Performance target: <7s total pipeline (6-7s for Fase 2-5)
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -24,6 +30,7 @@ import {
 import { runSolveEngine } from './solve-engine';
 import { runChainEngine } from './chain-engine';
 import { writeAflResultToDatabase } from './write-engine';
+import { generateAflReport } from './report-engine';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
@@ -287,7 +294,7 @@ export class AflEngine {
 }
 
 /**
- * ORCHESTRATOR: Run complete AFL Pipeline (Fase 1→2→3→4)
+ * ORCHESTRATOR: Run complete AFL Pipeline (Fase 1→2→3→4→5)
  * 
  * Main entry point for frontend to run full AFL execution
  */
@@ -359,18 +366,20 @@ export async function runAflPipeline(rosterId: string): Promise<AflExecutionResu
 
     // ===== FASE 5: GENERATE REPORT =====
     const reportStart = performance.now();
-    const report = generateAflReport(
+    const report = await generateAflReport({
       rosterId,
-      writeResult.afl_run_id,
-      loadResult,
-      solveResult,
-      chainResult,
-      writeResult,
-      load_ms,
-      solve_ms,
-      dio_chains_ms,
-      database_write_ms
-    );
+      afl_run_id: writeResult.afl_run_id,
+      workbestand_planning: loadResult.workbestand_planning,
+      workbestand_opdracht: loadResult.workbestand_opdracht,
+      workbestand_capaciteit: loadResult.workbestand_capaciteit,
+      workbestand_services_metadata: loadResult.workbestand_services_metadata,
+      phase_timings: {
+        load_ms,
+        solve_ms,
+        dio_chains_ms,
+        database_write_ms,
+      },
+    });
     const report_generation_ms = performance.now() - reportStart;
 
     const execution_time_ms = performance.now() - pipelineStartTime;
@@ -381,6 +390,7 @@ export async function runAflPipeline(rosterId: string): Promise<AflExecutionResu
       rosterId,
       execution_time_ms,
       error: null,
+      report,
       phase_timings: {
         load_ms,
         solve_ms,
@@ -403,87 +413,6 @@ export async function runAflPipeline(rosterId: string): Promise<AflExecutionResu
       error: error_message,
     };
   }
-}
-
-/**
- * Generate comprehensive AFL execution report
- */
-function generateAflReport(
-  rosterId: string,
-  afl_run_id: string,
-  loadResult: AflLoadResult,
-  solveResult: any,
-  chainResult: any,
-  writeResult: any,
-  load_ms: number,
-  solve_ms: number,
-  dio_chains_ms: number,
-  database_write_ms: number
-): AflReport {
-  // Calculate statistics
-  const total_required = loadResult.workbestand_opdracht.reduce((sum, t) => sum + t.aantal, 0);
-  const total_assigned = loadResult.workbestand_planning.filter(
-    (p) => p.status === 1 && p.service_id
-  ).length;
-  const total_open = total_required - total_assigned;
-  const coverage_percent = total_required > 0 ? (total_assigned / total_required) * 100 : 0;
-
-  // Determine coverage rating
-  let coverage_rating: 'excellent' | 'good' | 'fair' | 'poor' = 'poor';
-  if (coverage_percent >= 95) coverage_rating = 'excellent';
-  else if (coverage_percent >= 85) coverage_rating = 'good';
-  else if (coverage_percent >= 70) coverage_rating = 'fair';
-
-  // Planned by service
-  const planned_by_service = loadResult.workbestand_opdracht.map((task) => {
-    const assigned = loadResult.workbestand_planning.filter(
-      (p) => p.service_id === task.service_id && p.status === 1
-    ).length;
-    return {
-      service_code: task.service_code,
-      required: task.aantal,
-      planned: assigned,
-      open: Math.max(0, task.aantal - assigned),
-      completion_percent: task.aantal > 0 ? (assigned / task.aantal) * 100 : 0,
-    };
-  });
-
-  // Bottleneck services
-  const bottleneck_services = planned_by_service
-    .filter((s) => s.open > 0)
-    .map((s) => ({
-      service_code: s.service_code,
-      required: s.required,
-      planned: s.planned,
-      open: s.open,
-      reason: 'Insufficient capacity or no available employees',
-    }));
-
-  return {
-    success: writeResult.success,
-    afl_run_id,
-    rosterId,
-    execution_time_ms:
-      load_ms + solve_ms + dio_chains_ms + database_write_ms,
-    summary: {
-      total_required,
-      total_planned: total_assigned,
-      total_open,
-      coverage_percent,
-      coverage_rating,
-    },
-    planned_by_service,
-    bottleneck_services,
-    employee_capacity_remaining: [],
-    open_services: [],
-    phase_breakdown: {
-      load_ms,
-      solve_ms,
-      dio_chains_ms,
-      database_write_ms,
-      report_generation_ms: 0,
-    },
-  };
 }
 
 /**
