@@ -1,5 +1,6 @@
 /**
  * AFL (Autofill) - Phase 1: Load Data Engine
+ * Plus ORCHESTRATOR for complete Fase 1→2→3→4 pipeline
  * 
  * Loads all required data from database into 4 workbenches:
  * - Workbestand_Opdracht (tasks to schedule)
@@ -7,7 +8,7 @@
  * - Workbestand_Capaciteit (employee capacity)
  * - Workbestand_Services_Metadata (service definitions)
  * 
- * Performance target: <500ms
+ * Performance target: <500ms for load, 4-7s total pipeline
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -17,7 +18,12 @@ import {
   WorkbestandCapaciteit,
   WorkbestandServicesMetadata,
   AflLoadResult,
+  AflExecutionResult,
+  AflReport,
 } from './types';
+import { runSolveEngine } from './solve-engine';
+import { runChainEngine } from './chain-engine';
+import { writeAflResultToDatabase } from './write-engine';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
@@ -278,6 +284,206 @@ export class AflEngine {
       errors,
     };
   }
+}
+
+/**
+ * ORCHESTRATOR: Run complete AFL Pipeline (Fase 1→2→3→4)
+ * 
+ * Main entry point for frontend to run full AFL execution
+ */
+export async function runAflPipeline(rosterId: string): Promise<AflExecutionResult> {
+  const pipelineStartTime = performance.now();
+
+  try {
+    const engine = getAflEngine();
+
+    // ===== FASE 1: LOAD DATA =====
+    const loadResult = await engine.loadData(rosterId);
+    const load_ms = loadResult.load_duration_ms;
+
+    // Validate loaded data
+    const validation = engine.validateLoadResult(loadResult);
+    if (!validation.valid) {
+      throw new Error(`Data validation failed: ${validation.errors.join(', ')}`);
+    }
+
+    // ===== FASE 2: SOLVE =====
+    const solveStart = performance.now();
+    const solveResult = await runSolveEngine(
+      loadResult.workbestand_opdracht,
+      loadResult.workbestand_planning,
+      loadResult.workbestand_capaciteit,
+      loadResult.workbestand_services_metadata,
+      loadResult.rooster_period.start_date,
+      loadResult.rooster_period.end_date
+    );
+    const solve_ms = solveResult.solve_duration_ms;
+
+    // Update planning with solve results
+    for (const modified_slot of solveResult.modified_slots) {
+      const original = loadResult.workbestand_planning.find((p) => p.id === modified_slot.id);
+      if (original) {
+        Object.assign(original, modified_slot);
+      }
+    }
+
+    // ===== FASE 3: DIO/DDO CHAIN VALIDATION & BLOCKING =====
+    const chainStart = performance.now();
+    const chainResult = await runChainEngine(
+      loadResult.workbestand_planning,
+      loadResult.workbestand_services_metadata,
+      loadResult.rooster_period.start_date,
+      loadResult.rooster_period.end_date
+    );
+    const dio_chains_ms = chainResult.processing_duration_ms;
+
+    // Log chain validation errors if any
+    if (chainResult.validation_errors.length > 0) {
+      console.warn(
+        `[AFL Pipeline] Chain validation found ${chainResult.validation_errors.length} errors/warnings`,
+        chainResult.validation_errors
+      );
+    }
+
+    // ===== FASE 4: WRITE TO DATABASE =====
+    const writeStart = performance.now();
+    const writeResult = await writeAflResultToDatabase(
+      rosterId,
+      loadResult.workbestand_planning
+    );
+    const database_write_ms = writeResult.database_write_ms;
+
+    if (!writeResult.success) {
+      throw new Error(`Database write failed: ${writeResult.error}`);
+    }
+
+    // ===== FASE 5: GENERATE REPORT =====
+    const reportStart = performance.now();
+    const report = generateAflReport(
+      rosterId,
+      writeResult.afl_run_id,
+      loadResult,
+      solveResult,
+      chainResult,
+      writeResult,
+      load_ms,
+      solve_ms,
+      dio_chains_ms,
+      database_write_ms
+    );
+    const report_generation_ms = performance.now() - reportStart;
+
+    const execution_time_ms = performance.now() - pipelineStartTime;
+
+    return {
+      success: true,
+      afl_run_id: writeResult.afl_run_id,
+      rosterId,
+      execution_time_ms,
+      error: null,
+      phase_timings: {
+        load_ms,
+        solve_ms,
+        dio_chains_ms,
+        database_write_ms,
+        report_generation_ms,
+      },
+    };
+  } catch (error) {
+    const execution_time_ms = performance.now() - pipelineStartTime;
+    const error_message = error instanceof Error ? error.message : String(error);
+
+    console.error('[AFL Pipeline] Execution failed:', error_message);
+
+    return {
+      success: false,
+      afl_run_id: '',
+      rosterId,
+      execution_time_ms,
+      error: error_message,
+    };
+  }
+}
+
+/**
+ * Generate comprehensive AFL execution report
+ */
+function generateAflReport(
+  rosterId: string,
+  afl_run_id: string,
+  loadResult: AflLoadResult,
+  solveResult: any,
+  chainResult: any,
+  writeResult: any,
+  load_ms: number,
+  solve_ms: number,
+  dio_chains_ms: number,
+  database_write_ms: number
+): AflReport {
+  // Calculate statistics
+  const total_required = loadResult.workbestand_opdracht.reduce((sum, t) => sum + t.aantal, 0);
+  const total_assigned = loadResult.workbestand_planning.filter(
+    (p) => p.status === 1 && p.service_id
+  ).length;
+  const total_open = total_required - total_assigned;
+  const coverage_percent = total_required > 0 ? (total_assigned / total_required) * 100 : 0;
+
+  // Determine coverage rating
+  let coverage_rating: 'excellent' | 'good' | 'fair' | 'poor' = 'poor';
+  if (coverage_percent >= 95) coverage_rating = 'excellent';
+  else if (coverage_percent >= 85) coverage_rating = 'good';
+  else if (coverage_percent >= 70) coverage_rating = 'fair';
+
+  // Planned by service
+  const planned_by_service = loadResult.workbestand_opdracht.map((task) => {
+    const assigned = loadResult.workbestand_planning.filter(
+      (p) => p.service_id === task.service_id && p.status === 1
+    ).length;
+    return {
+      service_code: task.service_code,
+      required: task.aantal,
+      planned: assigned,
+      open: Math.max(0, task.aantal - assigned),
+      completion_percent: task.aantal > 0 ? (assigned / task.aantal) * 100 : 0,
+    };
+  });
+
+  // Bottleneck services
+  const bottleneck_services = planned_by_service
+    .filter((s) => s.open > 0)
+    .map((s) => ({
+      service_code: s.service_code,
+      required: s.required,
+      planned: s.planned,
+      open: s.open,
+      reason: 'Insufficient capacity or no available employees',
+    }));
+
+  return {
+    success: writeResult.success,
+    afl_run_id,
+    rosterId,
+    execution_time_ms:
+      load_ms + solve_ms + dio_chains_ms + database_write_ms,
+    summary: {
+      total_required,
+      total_planned: total_assigned,
+      total_open,
+      coverage_percent,
+      coverage_rating,
+    },
+    planned_by_service,
+    bottleneck_services,
+    employee_capacity_remaining: [],
+    open_services: [],
+    phase_breakdown: {
+      load_ms,
+      solve_ms,
+      dio_chains_ms,
+      database_write_ms,
+      report_generation_ms: 0,
+    },
+  };
 }
 
 /**
