@@ -6,9 +6,9 @@
  * Phase 2: Solve Engine (solve-engine.ts) ✅
  * Phase 3: DIO/DDO Chain Engine (chain-engine.ts) ✅
  * Phase 4: Database Writer (write-engine.ts) ✅
- * Phase 5: Report Generator (integrated in orchestrator) ✅
+ * Phase 5: Report Generator (report-engine.ts) ✅
  * 
- * MAIN ENTRY: runAflPipeline(rosterId) - Complete AFL pipeline
+ * MAIN ENTRY: runAflPipeline(rosterId) - Complete AFL pipeline (1-5)
  */
 
 export * from './types';
@@ -30,3 +30,11 @@ export { ChainEngine, runChainEngine } from './chain-engine';
 // Write Engine: Database Writer
 export type { WriteEngineResult } from './write-engine';
 export { WriteEngine, getWriteEngine, writeAflResultToDatabase } from './write-engine';
+
+// Report Engine: Phase 5 Report Generation
+export {
+  generateAflReport,
+  exportReportToPdf,
+  exportReportToExcel,
+  sendReportEmail,
+} from './report-engine';
