@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateAflReport } from '@/lib/afl';
-import {
-  exportReportToPdf,
-  exportReportToExcel,
-} from '@/lib/afl/report-engine';
-import { AflReport } from '@/lib/afl/types';
+import { generateAflReport, exportReportToPdf, exportReportToExcel } from '../../../../lib/afl/report-engine';
+import type { AflReport } from '../../../../lib/afl/types';
 
 /**
  * GET /api/afl/report/[rosterId]
@@ -21,6 +17,8 @@ import { AflReport } from '@/lib/afl/types';
  *   GET /api/afl/report/abc123?format=json
  *   GET /api/afl/report/abc123?format=pdf
  *   GET /api/afl/report/abc123?format=excel
+ *
+ * Build timestamp: ${Date.now()}
  */
 export async function GET(
   request: NextRequest,
