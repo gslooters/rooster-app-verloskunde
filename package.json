@@ -1,10 +1,10 @@
 {
   "name": "rooster-app-final",
-  "version": "0.1.4-draad230-fix",
+  "version": "0.1.3-stap3-complete",
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "rm -rf .next && next build --no-lint && node scripts/postbuild.js",
+    "build": "next build --no-lint && node scripts/postbuild.js",
     "start": "HOSTNAME=0.0.0.0 PORT=${PORT:-3000} node .next/standalone/server.js",
     "lint": "next lint"
   },
