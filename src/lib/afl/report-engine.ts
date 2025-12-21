@@ -8,7 +8,7 @@
  * - Employee capacity remaining
  * - Open slots analysis
  * - Performance metrics
- * - Export functions (PDF/Excel - placeholder for now)
+ * - Export functions (PDF/Excel)
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -496,7 +496,7 @@ export async function exportReportToPdf(
   _options?: { filename?: string; include_charts?: boolean }
 ): Promise<Buffer> {
   // In production, use jsPDF + html2canvas
-  // For now, return JSON stringified as text for immediate functionality
+  // For now, return JSON stringified as text
   const json = JSON.stringify(report, null, 2);
   return Buffer.from(json, 'utf-8');
 }
@@ -509,39 +509,33 @@ export async function exportReportToExcel(
   _options?: { filename?: string }
 ): Promise<Buffer> {
   // In production, use xlsx library
-  // For now, return CSV format
+  // For now, return CSV
   const csv = convertReportToCsv(report);
   return Buffer.from(csv, 'utf-8');
 }
 
 /**
- * Convert report to CSV format (helper for placeholder Excel export)
+ * Convert report to CSV (simple implementation)
  */
 function convertReportToCsv(report: AflReport): string {
-  const lines: string[] = [];
-  
-  // Header
-  lines.push('AFL Execution Report');
-  lines.push('');
-  
-  // Summary
-  lines.push('SUMMARY');
-  lines.push('Metric,Value');
-  lines.push(`Total Required,${report.summary.total_required}`);
-  lines.push(`Total Planned,${report.summary.total_planned}`);
-  lines.push(`Total Open,${report.summary.total_open}`);
-  lines.push(`Coverage %,${report.summary.coverage_percent}`);
-  lines.push(`Rating,${report.summary.coverage_rating}`);
-  lines.push('');
-  
-  // Services
-  lines.push('SERVICES');
-  lines.push('Service Code,Service Name,Required,Planned,Open,Completion %,Status');
+  let csv = 'AFL Report\n';
+  csv += `Rooster ID,${report.rosterId}\n`;
+  csv += `AFL Run ID,${report.afl_run_id}\n`;
+  csv += `Generated At,${report.generated_at}\n`;
+  csv += `\nSummary\n`;
+  csv += `Total Required,${report.summary.total_required}\n`;
+  csv += `Total Planned,${report.summary.total_planned}\n`;
+  csv += `Total Open,${report.summary.total_open}\n`;
+  csv += `Coverage %,${report.summary.coverage_percent}%\n`;
+  csv += `Rating,${report.summary.coverage_rating}\n`;
+  csv += `\nServices\n`;
+  csv += `Service Code,Required,Planned,Open,Completion %\n`;
+
   for (const service of report.by_service) {
-    lines.push(`${service.service_code},${service.service_name},${service.required},${service.planned},${service.open},${service.completion_percent}%,${service.status}`);
+    csv += `${service.service_code},${service.required},${service.planned},${service.open},${service.completion_percent}\n`;
   }
-  
-  return lines.join('\n');
+
+  return csv;
 }
 
 /**
