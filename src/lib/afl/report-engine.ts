@@ -12,6 +12,9 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 import {
   WorkbestandOpdracht,
   WorkbestandPlanning,
@@ -489,53 +492,226 @@ async function storeReportInDatabase(report: AflReport): Promise<void> {
 }
 
 /**
- * Export report to PDF (placeholder - would use jsPDF in production)
+ * Export report to PDF using jsPDF
  */
 export async function exportReportToPdf(
   report: AflReport,
   _options?: { filename?: string; include_charts?: boolean }
 ): Promise<Buffer> {
-  // In production, use jsPDF + html2canvas
-  // For now, return JSON stringified as text
-  const json = JSON.stringify(report, null, 2);
-  return Buffer.from(json, 'utf-8');
+  // Use jsPDF for server-side PDF generation
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'A4',
+  });
+
+  // Set font and colors
+  doc.setFont('Helvetica');
+
+  // Title
+  doc.setFontSize(18);
+  doc.setTextColor(33, 128, 141); // Teal color
+  doc.text('AFL Execution Report', 20, 20);
+
+  // Meta information
+  doc.setFontSize(10);
+  doc.setTextColor(0, 0, 0);
+  let yPosition = 35;
+
+  const metaInfo = [
+    { label: 'Rooster ID:', value: report.rosterId },
+    { label: 'AFL Run ID:', value: report.afl_run_id },
+    { label: 'Generated:', value: new Date(report.generated_at).toLocaleString('nl-NL') },
+    { label: 'Execution Time:', value: `${Math.round(report.execution_time_ms)}ms` },
+  ];
+
+  for (const meta of metaInfo) {
+    doc.text(`${meta.label} ${meta.value}`, 20, yPosition);
+    yPosition += 6;
+  }
+
+  // Summary Section
+  yPosition += 5;
+  doc.setFontSize(12);
+  doc.setFont('Helvetica', 'bold');
+  doc.text('Summary', 20, yPosition);
+  
+  yPosition += 8;
+  doc.setFontSize(10);
+  doc.setFont('Helvetica', 'normal');
+
+  const summaryData = [
+    ['Metric', 'Value'],
+    ['Total Required', String(report.summary.total_required)],
+    ['Total Planned', String(report.summary.total_planned)],
+    ['Total Open', String(report.summary.total_open)],
+    ['Coverage %', `${report.summary.coverage_percent}%`],
+    ['Rating', report.summary.coverage_rating],
+  ];
+
+  autoTable(doc, {
+    head: [summaryData[0]],
+    body: summaryData.slice(1),
+    startY: yPosition,
+    margin: { left: 20, right: 20 },
+    headStyles: {
+      fillColor: [33, 128, 141],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+    },
+    bodyStyles: {
+      fillColor: [252, 252, 249],
+      textColor: [31, 33, 33],
+    },
+  });
+
+  // Services Section
+  yPosition = (doc as any).lastAutoTable.finalY + 10;
+
+  doc.setFontSize(12);
+  doc.setFont('Helvetica', 'bold');
+  doc.text('Services Breakdown', 20, yPosition);
+
+  yPosition += 8;
+  doc.setFontSize(10);
+  doc.setFont('Helvetica', 'normal');
+
+  const servicesData = [
+    ['Service', 'Required', 'Planned', 'Open', 'Completion %'],
+    ...report.by_service.map((s) => [
+      s.service_code,
+      String(s.required),
+      String(s.planned),
+      String(s.open),
+      `${s.completion_percent}%`,
+    ]),
+  ];
+
+  autoTable(doc, {
+    head: [servicesData[0]],
+    body: servicesData.slice(1),
+    startY: yPosition,
+    margin: { left: 20, right: 20 },
+    headStyles: {
+      fillColor: [33, 128, 141],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+    },
+    bodyStyles: {
+      fillColor: [252, 252, 249],
+      textColor: [31, 33, 33],
+    },
+    alternateRowStyles: {
+      fillColor: [245, 245, 245],
+    },
+  });
+
+  // Return as Buffer
+  return Buffer.from(doc.output('arraybuffer'));
 }
 
 /**
- * Export report to Excel (placeholder - would use xlsx in production)
+ * Export report to Excel using XLSX
  */
 export async function exportReportToExcel(
   report: AflReport,
   _options?: { filename?: string }
 ): Promise<Buffer> {
-  // In production, use xlsx library
-  // For now, return CSV
-  const csv = convertReportToCsv(report);
-  return Buffer.from(csv, 'utf-8');
-}
+  // Use XLSX to create Excel workbook with multiple sheets
+  const workbook = XLSX.utils.book_new();
 
-/**
- * Convert report to CSV (simple implementation)
- */
-function convertReportToCsv(report: AflReport): string {
-  let csv = 'AFL Report\n';
-  csv += `Rooster ID,${report.rosterId}\n`;
-  csv += `AFL Run ID,${report.afl_run_id}\n`;
-  csv += `Generated At,${report.generated_at}\n`;
-  csv += `\nSummary\n`;
-  csv += `Total Required,${report.summary.total_required}\n`;
-  csv += `Total Planned,${report.summary.total_planned}\n`;
-  csv += `Total Open,${report.summary.total_open}\n`;
-  csv += `Coverage %,${report.summary.coverage_percent}%\n`;
-  csv += `Rating,${report.summary.coverage_rating}\n`;
-  csv += `\nServices\n`;
-  csv += `Service Code,Required,Planned,Open,Completion %\n`;
+  // Sheet 1: Summary
+  const summaryData = [
+    { Metric: 'Rooster ID', Value: report.rosterId },
+    { Metric: 'AFL Run ID', Value: report.afl_run_id },
+    { Metric: 'Generated', Value: new Date(report.generated_at).toLocaleString('nl-NL') },
+    { Metric: 'Execution Time (ms)', Value: Math.round(report.execution_time_ms) },
+    {},
+    { Metric: 'Total Required', Value: report.summary.total_required },
+    { Metric: 'Total Planned', Value: report.summary.total_planned },
+    { Metric: 'Total Open', Value: report.summary.total_open },
+    { Metric: 'Coverage %', Value: report.summary.coverage_percent },
+    { Metric: 'Coverage Rating', Value: report.summary.coverage_rating },
+  ];
 
-  for (const service of report.by_service) {
-    csv += `${service.service_code},${service.required},${service.planned},${service.open},${service.completion_percent}\n`;
+  const summarySheet = XLSX.utils.json_to_sheet(summaryData);
+  summarySheet['!cols'] = [{ wch: 25 }, { wch: 30 }];
+  XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
+
+  // Sheet 2: Services Breakdown
+  const servicesData = report.by_service.map((service) => ({
+    'Service Code': service.service_code,
+    'Service Name': service.service_name,
+    'Required': service.required,
+    'Planned': service.planned,
+    'Open': service.open,
+    'Completion %': service.completion_percent,
+    'Status': service.status,
+  }));
+
+  const servicesSheet = XLSX.utils.json_to_sheet(servicesData);
+  servicesSheet['!cols'] = [
+    { wch: 15 },
+    { wch: 20 },
+    { wch: 10 },
+    { wch: 10 },
+    { wch: 10 },
+    { wch: 15 },
+    { wch: 15 },
+  ];
+  XLSX.utils.book_append_sheet(workbook, servicesSheet, 'Services');
+
+  // Sheet 3: Daily Summary
+  const dailyData = report.daily_summary.map((day) => ({
+    'Date': day.date,
+    'Week Number': day.week_number,
+    'Total Slots': day.total_slots,
+    'Filled Slots': day.filled_slots,
+    'Open Slots': day.open_slots,
+    'Coverage %': day.coverage_percent,
+  }));
+
+  if (dailyData.length > 0) {
+    const dailySheet = XLSX.utils.json_to_sheet(dailyData);
+    dailySheet['!cols'] = [
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 12 },
+    ];
+    XLSX.utils.book_append_sheet(workbook, dailySheet, 'Daily Summary');
   }
 
-  return csv;
+  // Sheet 4: Open Slots
+  const openSlotsData = report.open_slots.map((slot) => ({
+    'Date': slot.date,
+    'Dagdeel': slot.dagdeel,
+    'Team': slot.team,
+    'Service': slot.service_code,
+    'Required': slot.required,
+    'Open': slot.open,
+    'Reason': slot.reason,
+  }));
+
+  if (openSlotsData.length > 0) {
+    const openSlotsSheet = XLSX.utils.json_to_sheet(openSlotsData);
+    openSlotsSheet['!cols'] = [
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 10 },
+      { wch: 12 },
+      { wch: 10 },
+      { wch: 10 },
+      { wch: 30 },
+    ];
+    XLSX.utils.book_append_sheet(workbook, openSlotsSheet, 'Open Slots');
+  }
+
+  // Generate buffer
+  const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' });
+  return excelBuffer as Buffer;
 }
 
 /**
