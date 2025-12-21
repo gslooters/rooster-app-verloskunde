@@ -15,7 +15,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { WorkbestandPlanning } from './types';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
@@ -71,7 +71,7 @@ export class WriteEngine {
     workbestand_planning: WorkbestandPlanning[]
   ): Promise<WriteEngineResult> {
     const startTime = performance.now();
-    const afl_run_id = uuidv4();
+    const afl_run_id = randomUUID();
 
     try {
       // Step 1: Collect modified records
