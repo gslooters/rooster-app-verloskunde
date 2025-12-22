@@ -51,6 +51,8 @@ export class AflEngine {
 
     try {
       // Query 1: Load tasks (roster_period_staffing_dagdelen)
+      // NOTE: Removed .order('service_types.code') because Supabase .order() doesn't support
+      // dot notation for nested relations. Sorting happens post-fetch in buildOpdracht().
       const { data: tasksRaw, error: tasksError } = await supabase
         .from('roster_period_staffing_dagdelen')
         .select(
@@ -71,8 +73,7 @@ export class AflEngine {
         .order('is_system', { ascending: false })
         .order('date', { ascending: true })
         .order('dagdeel', { ascending: true })
-        .order('team', { ascending: false })
-        .order('service_types.code', { ascending: true });
+        .order('team', { ascending: false });
 
       if (tasksError) throw new Error(`Tasks query failed: ${tasksError.message}`);
 
@@ -149,9 +150,11 @@ export class AflEngine {
 
   /**
    * Build Workbestand_Opdracht from raw task data
+   * Includes client-side sorting by service_types.code (post-fetch)
    */
   private buildOpdracht(tasksRaw: any[]): WorkbestandOpdracht[] {
-    return tasksRaw.map((row) => ({
+    // Map raw data to WorkbestandOpdracht objects
+    const opdrachten = tasksRaw.map((row) => ({
       id: row.id,
       roster_id: row.roster_id,
       date: new Date(row.date),
@@ -164,6 +167,22 @@ export class AflEngine {
       aantal_nog: row.aantal,
       invulling: row.invulling || 0,
     }));
+
+    // Client-side sorting by service_code (last priority after Supabase order)
+    // This maintains the intended sort order:
+    // 1. is_system DESC (Supabase)
+    // 2. date ASC (Supabase)
+    // 3. dagdeel ASC (Supabase)
+    // 4. team DESC (Supabase)
+    // 5. service_code ASC (JavaScript - post-fetch)
+    opdrachten.sort((a, b) => {
+      // Compare service codes alphabetically
+      const codeA = a.service_code || '';
+      const codeB = b.service_code || '';
+      return codeA.localeCompare(codeB, 'nl', { sensitivity: 'base' });
+    });
+
+    return opdrachten;
   }
 
   /**
