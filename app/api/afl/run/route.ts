@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { runAflPipeline } from '@/src/lib/afl';
 
 /**
  * 🤖 AFL (AutoFill) API Endpoint
@@ -75,6 +74,9 @@ export async function POST(request: NextRequest) {
     console.log(`🤖 [AFL API] Starting AFL pipeline for roster: ${rosterId}`);
 
     // STAP 2: Run AFL Pipeline (complete FASE 1-5)
+    // Dynamic import to avoid Supabase env requirement during build
+    const { runAflPipeline } = await import('@/src/lib/afl');
+
     const result = await runAflPipeline(rosterId);
 
     // STAP 3: Check pipeline result
@@ -114,7 +116,8 @@ export async function POST(request: NextRequest) {
         headers: {
           'Cache-Control': 'no-store, no-cache, must-revalidate',
           'X-AFL-Run-ID': result.afl_run_id,
-          'X-Execution-Time': `${result.execution_time_ms}ms`
+          'X-Execution-Time': `${result.execution_time_ms}ms`,
+          'X-Cache-Bust': `${Date.now()}-${Math.floor(Math.random() * 10000)}`
         }
       }
     );
@@ -123,8 +126,8 @@ export async function POST(request: NextRequest) {
     const totalTime = Date.now() - startTime;
 
     console.error('❌ [AFL API] Unexpected error:', {
-      error: error.message,
-      stack: error.stack,
+      error: error?.message ?? String(error),
+      stack: error?.stack,
       duration: `${totalTime}ms`
     });
 
@@ -132,7 +135,7 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred',
-        details: error.stack
+        details: error?.stack ?? null
       },
       { status: 500 }
     );
