@@ -1,5 +1,5 @@
 {
-  "//": "DRAAD63B Cache Bust: 2025-11-27T16:32:00Z - Incremental cache DISABLED",
+  "//": "DRAAD DEPLOY FIX: 2025-12-22T12:03:00Z - Path alias gecorrigeerd",
   "compilerOptions": {
     "target": "ES2020",
     "lib": [
@@ -20,7 +20,7 @@
     "baseUrl": ".",
     "paths": {
       "@/*": [
-        "*"
+        "./src/*"
       ]
     },
     "incremental": false,
