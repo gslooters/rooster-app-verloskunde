@@ -59,6 +59,14 @@ export class AflEngine {
   async loadData(rosterId: string): Promise<AflLoadResult> {
     const startTime = performance.now();
 
+    // ✅ DRAAD339: CACHE-BUST VERIFICATION MARKERS
+    // These markers appear in Railway build logs to verify correct code version is deployed
+    console.log('[AFL-ENGINE] DRAAD337 loaded at', new Date().toISOString());
+    console.log('[AFL-ENGINE] DRAAD337 fix: Client-side sorting (no chained .order() calls)');
+    console.log('[AFL-ENGINE] DRAAD338 loaded at', new Date().toISOString());
+    console.log('[AFL-ENGINE] DRAAD338 fix: Service-code population via metadata lookup');
+    console.log('[AFL-ENGINE] Phase 1 Load starting for roster:', rosterId);
+
     try {
       // Query 1: Load tasks (roster_period_staffing_dagdelen)
       // DRAAD337: Removed chained .order() calls that cause parse errors in Supabase
