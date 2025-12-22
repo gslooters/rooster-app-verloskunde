@@ -14,8 +14,10 @@
  * - Phase 4: Write Engine (persist to database)
  * - Phase 5: Report Engine (generate report)
  * 
- * DRAAD335A: STAP 3 - Vereenvoudigd: is_system nu database-side (no client sort)
- * Performance target: <7s total pipeline (6-7s for Fase 2-5)
+ * DRAAD336: PHASE 1 LOAD FIX - is_system now pure database column
+ * - Removed servicetypes() join (no longer needed)
+ * - is_system is direct column in roster_period_staffing_dagdelen (position 13)
+ * - Performance target: <7s total pipeline (6-7s for Fase 2-5)
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -52,7 +54,8 @@ export class AflEngine {
 
     try {
       // Query 1: Load tasks (roster_period_staffing_dagdelen)
-      // DRAAD335A: is_system is NOW denormalized in database!
+      // DRAAD336: is_system is NOW a direct column in the table (position 13)
+      // No join needed! Remove servicetypes() completely
       // Sorting: is_system DESC → date ASC → dagdeel ASC → team DESC (all database-side)
       const { data: tasksRaw, error: tasksError } = await supabase
         .from('roster_period_staffing_dagdelen')
@@ -66,18 +69,20 @@ export class AflEngine {
           service_id,
           aantal,
           invulling,
-          is_system,
-          service_types(code)
+          is_system
         `
         )
         .eq('roster_id', rosterId)
         .gt('aantal', 0)
-        .order('is_system', { ascending: false })      // ✅ DRAAD335A: veld bestaat nu!
-        .order('date', { ascending: true })
-        .order('dagdeel', { ascending: true })
-        .order('team', { ascending: false });
+        .order('is_system', { ascending: false })      // ✅ DRAAD336: is_system DESC
+        .order('date', { ascending: true })            // ✅ date ASC
+        .order('dagdeel', { ascending: true })         // ✅ dagdeel ASC
+        .order('team', { ascending: false });          // ✅ team DESC
 
       if (tasksError) throw new Error(`Tasks query failed: ${tasksError.message}`);
+      if (!tasksRaw || tasksRaw.length === 0) {
+        throw new Error('Phase 1 Load failed: No tasks found with aantal > 0');
+      }
 
       // Query 2: Load planning slots (roster_assignments)
       const { data: planningRaw, error: planningError } = await supabase
@@ -152,7 +157,7 @@ export class AflEngine {
 
   /**
    * Build Workbestand_Opdracht from raw task data
-   * DRAAD335A: NO client-side sorting needed!
+   * DRAAD336: NO client-side sorting needed!
    * Database already returns sorted by: is_system DESC → date ASC → dagdeel ASC → team DESC
    * Only service_code sorting remains (for same is_system|date|dagdeel|team combo)
    */
@@ -165,14 +170,14 @@ export class AflEngine {
       dagdeel: row.dagdeel,
       team: row.team,
       service_id: row.service_id,
-      service_code: row.service_types?.code || '',
-      is_system: row.is_system || false,  // ✅ DRAAD335A: Direct from database
+      service_code: '', // ✅ DRAAD336: will be populated from service metadata
+      is_system: row.is_system || false,  // ✅ DRAAD336: Direct from database column
       aantal: row.aantal,
       aantal_nog: row.aantal,
       invulling: row.invulling || 0,
     }));
 
-    // ✅ DRAAD335A: SIMPLIFIED - Database already sorted by is_system DESC!
+    // ✅ DRAAD336: SIMPLIFIED - Database already sorted by is_system DESC!
     // Only sort by service_code (last priority) if needed
     // This is MINIMAL - just for secondary ordering within same date/dagdeel/team combo
     opdrachten.sort((a, b) => {
