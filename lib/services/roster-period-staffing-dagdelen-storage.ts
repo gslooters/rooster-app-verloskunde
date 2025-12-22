@@ -3,6 +3,7 @@
 // DRAAD176: Roster Period Staffing Dagdelen Storage (DENORMALISERING)
 // Datum: 2025-12-14
 // FASE 2: ADD FUNCTIONS voor denormalized data retrieval (DRAAD178A)
+// DRAAD335A: STAP 2 - Voeg is_system in bij INSERT (optie 2)
 // ============================================================================
 
 import { supabase } from '@/lib/supabase';
@@ -27,6 +28,7 @@ import {
 
 /**
  * Maak één dagdeel regel aan (DRAAD176: Denormalisering)
+ * DRAAD335A: Voegt is_system in via service_types lookup
  */
 export async function createDagdeelRegel(
   regel: CreateDagdeelRegel
@@ -57,6 +59,17 @@ export async function createDagdeelRegel(
       throw new Error(`Ongeldig aantal: ${regel.aantal}`);
     }
     
+    // DRAAD335A: Haal is_system op van service_types
+    const { data: serviceData, error: serviceError } = await supabase
+      .from('service_types')
+      .select('is_system')
+      .eq('id', regel.service_id)
+      .single();
+    
+    if (serviceError && serviceError.code !== 'PGRST116') {
+      throw new Error(`Kan service_types niet ophalen: ${serviceError.message}`);
+    }
+    
     const insertPayload = {
       roster_id: regel.roster_id,
       service_id: regel.service_id,
@@ -65,7 +78,8 @@ export async function createDagdeelRegel(
       team: regel.team,
       status: regel.status,
       aantal: regel.aantal,
-      invulling: regel.invulling ?? 0
+      invulling: regel.invulling ?? 0,
+      is_system: serviceData?.is_system || false  // ✅ DRAAD335A
     };
     
     const { data, error } = await supabase
@@ -89,6 +103,7 @@ export async function createDagdeelRegel(
 
 /**
  * DRAAD176: Bulk create dagdeel regels (DENORMALISERING)
+ * DRAAD335A: STAP 2 - Batch-optimized: 1 service lookup + map voor alle records
  * Gebruikt directe inserts (geen parent tabel meer)
  */
 export async function bulkCreateDagdeelRegels(
@@ -100,7 +115,7 @@ export async function bulkCreateDagdeelRegels(
   }
   
   try {
-    console.log('[bulkCreateDagdeelRegels] Aanmaken van', regels.length, 'regels (DRAAD176)');
+    console.log('[bulkCreateDagdeelRegels] Aanmaken van', regels.length, 'regels (DRAAD176 + DRAAD335A)');
     
     // Valideer alle regels
     for (let i = 0; i < regels.length; i++) {
@@ -128,7 +143,22 @@ export async function bulkCreateDagdeelRegels(
       }
     }
     
-    // Batch insert in chunks van 100 (Supabase limit)
+    // DRAAD335A: BATCH OPTIMIZATION
+    // 1. Haal ALLE service_types op (eenmalig)
+    console.log('[bulkCreateDagdeelRegels] Ophalen service_types voor is_system mapping...');
+    const { data: allServices, error: servicesError } = await supabase
+      .from('service_types')
+      .select('id, is_system');
+    
+    if (servicesError) {
+      throw new Error(`Kan service_types niet ophalen: ${servicesError.message}`);
+    }
+    
+    // 2. Maak serviceMap: id → is_system
+    const serviceMap = new Map((allServices || []).map(s => [s.id, s.is_system]));
+    console.log('[bulkCreateDagdeelRegels] Service map gebouwd met', serviceMap.size, 'services');
+    
+    // 3. Prepareer insert payloads met is_system
     const chunkSize = 100;
     const insertPayloads = regels.map(r => ({
       roster_id: r.roster_id,
@@ -138,9 +168,13 @@ export async function bulkCreateDagdeelRegels(
       team: r.team,
       status: r.status,
       aantal: r.aantal,
-      invulling: r.invulling ?? 0
+      invulling: r.invulling ?? 0,
+      is_system: serviceMap.get(r.service_id) || false  // ✅ DRAAD335A: Map lookup
     }));
     
+    console.log('[bulkCreateDagdeelRegels] Insert payloads voorbereid met is_system values');
+    
+    // 4. Batch insert in chunks van 100 (Supabase limit)
     for (let i = 0; i < insertPayloads.length; i += chunkSize) {
       const chunk = insertPayloads.slice(i, i + chunkSize);
       
@@ -158,7 +192,7 @@ export async function bulkCreateDagdeelRegels(
       console.log(`[bulkCreateDagdeelRegels] ✅ Chunk ${chunkNum}/${totalChunks} aangemaakt (${chunk.length} records)`);
     }
     
-    console.log('[bulkCreateDagdeelRegels] ✅ Alle', regels.length, 'regels succesvol aangemaakt');
+    console.log('[bulkCreateDagdeelRegels] ✅ Alle', regels.length, 'regels succesvol aangemaakt (DRAAD335A)');
     return true;
   } catch (err) {
     console.error('[bulkCreateDagdeelRegels] ❌ Fout:', err);
