@@ -39,10 +39,14 @@ export class SolveEngine {
   private workbestand_services_metadata: WorkbestandServicesMetadata[];
   private rooster_start_date: Date;
   private rooster_end_date: Date;
+  private employees_by_team: Map<string, any[]> = new Map();
 
   // Tracking
   private modified_slots: WorkbestandPlanning[] = [];
   private employee_cache: Map<string, any> = new Map();
+  private task_processed_count: number = 0;
+  private task_open_count: number = 0;
+  private debug_enabled: boolean = true;
 
   constructor(
     opdracht: WorkbestandOpdracht[],
@@ -58,10 +62,40 @@ export class SolveEngine {
     this.workbestand_services_metadata = services;
     this.rooster_start_date = rooster_start_date;
     this.rooster_end_date = rooster_end_date;
+    this.preloadEmployeesByTeam();
   }
 
   /**
-   * MAIN SOLVE LOOP
+   * Preload employees by team for faster lookup
+   */
+  private preloadEmployeesByTeam(): void {
+    const unique_employees = new Map<string, any>();
+
+    // Extract from planning data
+    for (const slot of this.workbestand_planning) {
+      if (!unique_employees.has(slot.employee_id)) {
+        const emp_info = this.getEmployeeInfo(slot.employee_id);
+        if (emp_info) {
+          const team = emp_info.team || 'Overig';
+          if (!this.employees_by_team.has(team)) {
+            this.employees_by_team.set(team, []);
+          }
+          this.employees_by_team.get(team)!.push(emp_info);
+          unique_employees.set(slot.employee_id, emp_info);
+        }
+      }
+    }
+
+    if (this.debug_enabled) {
+      console.log(`✅ SOLVE: Preloaded employees by team:`, {
+        teams: Array.from(this.employees_by_team.keys()),
+        total_employees: unique_employees.size,
+      });
+    }
+  }
+
+  /**
+   * MAIN SOLVE LOOP - FIX 1: CRITICAL LOOP CONDITION CORRECTED
    * Iterate through tasks and assign services
    */
   solve(): {
@@ -69,15 +103,30 @@ export class SolveEngine {
     solve_duration_ms: number;
     assigned_count: number;
     open_count: number;
+    task_stats: { processed: number; open: number; total: number };
   } {
     const startTime = performance.now();
     this.modified_slots = [];
+    this.task_processed_count = 0;
+    this.task_open_count = 0;
+
+    if (this.debug_enabled) {
+      console.log(`🚀 SOLVE: Starting main loop with ${this.workbestand_opdracht.length} tasks`);
+    }
 
     // Main loop: for each task
     for (const task of this.workbestand_opdracht) {
-      // How many still need assignment?
-      const still_needed = task.aantal - task.aantal_nog;
-      if (still_needed > 0) continue; // Skip if already processed
+      // ✅ FIX 1: CORRECT CONDITION
+      // OLD (WRONG): const still_needed = task.aantal - task.aantal_nog;
+      //               if (still_needed > 0) continue;  ← SKIPS task when work is DONE
+      // NEW (CORRECT): if (task.aantal_nog === 0) continue;  ← SKIPS task only when FULLY assigned
+
+      // Check: How many still need assignment?
+      if (task.aantal_nog === 0) {
+        // ✅ Task fully assigned - skip
+        this.task_processed_count++;
+        continue;
+      }
 
       // Inner loop: assign one at a time until aantal_nog = 0
       while (task.aantal_nog > 0) {
@@ -86,6 +135,16 @@ export class SolveEngine {
 
         if (candidates.length === 0) {
           // ❌ No available employees - task remains OPEN
+          this.task_open_count++;
+          if (this.debug_enabled) {
+            console.log(`⚠️  SOLVE: No candidates for task:`, {
+              date: task.date,
+              dagdeel: task.dagdeel,
+              team: task.team,
+              service_code: task.service_code,
+              still_needed: task.aantal_nog,
+            });
+          }
           break;
         }
 
@@ -117,17 +176,43 @@ export class SolveEngine {
           this.prepareForChaining(task, slot);
         }
       }
+
+      // After task fully processed or opened
+      if (task.aantal_nog === 0) {
+        this.task_processed_count++;
+      } else {
+        this.task_open_count++;
+      }
     }
 
     const solve_duration_ms = performance.now() - startTime;
     const assigned_count = this.countAssignedServices();
     const open_count = this.countOpenServices();
 
+    if (this.debug_enabled) {
+      console.log(`✅ SOLVE: Complete`, {
+        duration_ms: solve_duration_ms.toFixed(0),
+        assigned: assigned_count,
+        open: open_count,
+        modified_slots: this.modified_slots.length,
+        task_stats: {
+          processed: this.task_processed_count,
+          open: this.task_open_count,
+          total: this.workbestand_opdracht.length,
+        },
+      });
+    }
+
     return {
       modified_slots: this.modified_slots,
       solve_duration_ms,
       assigned_count,
       open_count,
+      task_stats: {
+        processed: this.task_processed_count,
+        open: this.task_open_count,
+        total: this.workbestand_opdracht.length,
+      },
     };
   }
 
@@ -149,7 +234,7 @@ export class SolveEngine {
     // Step 2: Search by team
     for (const team of teams_to_try) {
       // Find all employees in this team
-      const employees_in_team = this.getEmployeesByTeam(team);
+      const employees_in_team = this.employees_by_team.get(team) || [];
 
       // For each employee
       for (const emp of employees_in_team) {
@@ -200,13 +285,15 @@ export class SolveEngine {
 
   /**
    * Determine team search order (primary team first, then fallbacks)
+   * FIX 2: CORRECTED TEAM NAME MAPPING
    */
   private getTeamSearchOrder(team: string): string[] {
+    // ✅ FIX 2: Use correct database team names
     switch (team) {
       case 'GRO':
-        return ['GRO', 'Overig']; // Groen first, then Overig fallback
+        return ['Groen', 'Overig']; // Changed from 'GRO'
       case 'ORA':
-        return ['ORA', 'Overig']; // Oranje first, then Overig fallback
+        return ['Oranje', 'Overig']; // Changed from 'ORA'
       case 'TOT':
         return ['Groen', 'Oranje', 'Overig']; // All teams
       default:
@@ -216,29 +303,15 @@ export class SolveEngine {
 
   /**
    * Get all employees in a specific team
-   * Build from planning data (extract unique employee_id + team)
+   * Use preloaded cache
    */
   private getEmployeesByTeam(team: string): any[] {
-    // Get unique employees from roster_design or planning data
-    const unique_employees = new Map<string, any>();
-
-    // Extract from planning data (all employees that have slots)
-    for (const slot of this.workbestand_planning) {
-      if (!unique_employees.has(slot.employee_id)) {
-        // Try to fetch employee info (simplified: use cache or defaults)
-        const emp_info = this.getEmployeeInfo(slot.employee_id);
-        if (emp_info && (team === 'TOT' || emp_info.team === team)) {
-          unique_employees.set(slot.employee_id, emp_info);
-        }
-      }
-    }
-
-    return Array.from(unique_employees.values());
+    return this.employees_by_team.get(team) || [];
   }
 
   /**
    * Get employee info by ID
-   * Simplified: extract from workbenches
+   * Build from capacity data + planning data
    */
   private getEmployeeInfo(employee_id: string): any {
     // Check cache first
@@ -252,7 +325,7 @@ export class SolveEngine {
       return null; // Unknown employee
     }
 
-    // Get last worked date (simplified: check planning data)
+    // Get last worked date
     const last_slot = this.workbestand_planning
       .filter((p) => p.employee_id === employee_id && p.status === 1 && p.service_id)
       .sort((a, b) => b.date.getTime() - a.date.getTime())[0];
@@ -260,7 +333,7 @@ export class SolveEngine {
     const emp_info = {
       employee_id,
       employee_name: employee_id, // Simplified: use ID as name (can be enhanced)
-      team: this.extractTeamFromEmployeeId(employee_id), // Simple heuristic
+      team: this.extractTeamFromEmployeeId(employee_id),
       dienstverband: 'Maat', // Simplified: default
       last_worked: last_slot?.date || null,
       fair_score: this.calculateFairnessScore(employee_id),
@@ -271,13 +344,34 @@ export class SolveEngine {
   }
 
   /**
-   * Extract team from employee ID (simple heuristic)
-   * This would normally come from employees table
+   * Extract team from employee ID or capacity data
+   * FIX 3: Use real team data instead of hardcoded
    */
   private extractTeamFromEmployeeId(employee_id: string): string {
-    // Simplified: assume team info is embedded or use default
-    // In production, this would fetch from employees table
-    return 'Groen'; // Default
+    // ✅ FIX 3: Try to get from capacity data
+    const capacity_rows = this.workbestand_capaciteit.filter(
+      (c) => c.employee_id === employee_id
+    );
+    
+    if (capacity_rows.length > 0) {
+      // Get most common team or fallback
+      const teams = capacity_rows.map((c) => c.team).filter(Boolean);
+      if (teams.length > 0) {
+        return teams[0];
+      }
+    }
+
+    // Fallback: infer from planning data
+    const planning_records = this.workbestand_planning.filter(
+      (p) => p.employee_id === employee_id
+    );
+    
+    if (planning_records.length > 0 && planning_records[0].team) {
+      return planning_records[0].team;
+    }
+
+    // Last resort: default
+    return 'Overig';
   }
 
   /**
@@ -418,7 +512,10 @@ export class SolveEngine {
         next_ochtend.blocked_by_date = assign_date;
         next_ochtend.blocked_by_dagdeel = 'O';
         next_ochtend.blocked_by_service_id = task.service_id;
-        next_ochtend.constraint_reason = { reason: 'DIO_recovery', by_service_code: service_code };
+        next_ochtend.constraint_reason = {
+          reason: 'DIO_recovery',
+          by_service_code: service_code,
+        };
         next_ochtend.is_modified = true;
         this.modified_slots.push(next_ochtend);
       }
@@ -437,7 +534,10 @@ export class SolveEngine {
         next_middag.blocked_by_date = assign_date;
         next_middag.blocked_by_dagdeel = 'O';
         next_middag.blocked_by_service_id = task.service_id;
-        next_middag.constraint_reason = { reason: 'DIO_recovery', by_service_code: service_code };
+        next_middag.constraint_reason = {
+          reason: 'DIO_recovery',
+          by_service_code: service_code,
+        };
         next_middag.is_modified = true;
         this.modified_slots.push(next_middag);
       }
@@ -474,6 +574,7 @@ export async function runSolveEngine(
   solve_duration_ms: number;
   assigned_count: number;
   open_count: number;
+  task_stats: { processed: number; open: number; total: number };
 }> {
   const engine = new SolveEngine(
     workbestand_opdracht,
