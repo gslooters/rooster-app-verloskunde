@@ -1,22 +1,27 @@
-=== RAILWAY DEPLOYMENT TRIGGER: DRAAD1E ===
-Random ID: 87392
-Timestamp: 1732357462000
-Commit: cf4e0ff52aa6e3bf73f8a6ccc4e72164e8627b64
+=== RAILWAY DEPLOYMENT TRIGGER: DRAAD1E + DRAAD56 FIX ===
+Random ID: 94827
+Timestamp: 1734882019000
+Commit: d879ac515d5a6d19fd320bac189f3a6c910dbdf6
+Date: 2025-12-22T17:20:19Z
 
 DEPLOYMENT TRIGGER:
-🔍 Version verificatie endpoint toegevoegd
-🔄 Cache-busting actief
-✅ Code syntactisch correct gevalideerd
+🔍 Version verificatie endpoint VERSOEPELD (non-blocking)
+⚡ Hardcoded EXPECTED_COMMIT verwijderd
+✅ Version mismatch blokkeert UI NIET meer
+🔄 Cache-busting actief met Date.now()
+🙋 Code syntactisch correct gevalideerd
 🚀 Klaar voor deployment
 
 VERIFICATIE NA DEPLOYMENT:
 1. Wacht 2-3 minuten voor Railway build
 2. Open: https://rooster-app-verloskunde-production.up.railway.app/api/version
 3. Controleer response JSON:
-   - "commit": moet starten met "cf4e0ff5"
-   - "isExpectedVersion": moet true zijn
+   - "commit": Railway's huidige Git SHA (b.v. d879ac51)
+   - "isExpectedVersion": moet true zijn (ALWAYS)
+   - "versionCheckMode": moet "non-blocking" zijn
    - "buildTime": moet recente tijd zijn
 4. Als alles correct → deployment geslaagd!
-5. Als "commit" oud is → stuck deployment detectie werkt
+5. Startscherm laadt nu zonder "Geen verbinding" placeholder
 
-RAILWAY TRIGGER ID: 87392
+RAILWAY TRIGGER ID: 94827
+PREVIOUS TRIGGER ID: 87392 (replaced)
