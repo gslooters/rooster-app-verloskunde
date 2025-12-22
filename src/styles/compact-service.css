@@ -1,0 +1,206 @@
+/**
+ * Compact Service Cell Styles
+ * Minimal, color-coded badges for service codes in planning grid
+ */
+
+.service-code {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  min-height: 24px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  line-height: 1;
+  transition: all 0.15s ease-in-out;
+}
+
+/* Service type colors */
+
+/* DG - Dag dienst (Day shift) */
+.service-code.dag,
+.service-code.dg {
+  background-color: #dbeafe;
+  color: #0c4a6e;
+  border: 1px solid #7dd3fc;
+}
+
+.service-code.dag:hover,
+.service-code.dg:hover {
+  background-color: #bfdbfe;
+  border-color: #38bdf8;
+}
+
+/* NB - Nacht bereik (Night availability) */
+.service-code.nacht,
+.service-code.nb {
+  background-color: #e9d5ff;
+  color: #6b21a8;
+  border: 1px solid #d8b4fe;
+}
+
+.service-code.nacht:hover,
+.service-code.nb:hover {
+  background-color: #ddd6fe;
+  border-color: #c084fc;
+}
+
+/* S - Standby */
+.service-code.standby,
+.service-code.s {
+  background-color: #fed7aa;
+  color: #92400e;
+  border: 1px solid #fdba74;
+}
+
+.service-code.standby:hover,
+.service-code.s:hover {
+  background-color: #fecb81;
+  border-color: #fbbf24;
+}
+
+/* ZW - Zwanger (Pregnant) */
+.service-code.zwanger,
+.service-code.zw {
+  background-color: #e5e7eb;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.service-code.zwanger:hover,
+.service-code.zw:hover {
+  background-color: #d1d5db;
+  border-color: #9ca3af;
+}
+
+/* Variant: filled (darker background) */
+.service-code.filled.dag,
+.service-code.filled.dg {
+  background-color: #0284c7;
+  color: #f0f9ff;
+  border-color: #0284c7;
+}
+
+.service-code.filled.nacht,
+.service-code.filled.nb {
+  background-color: #a855f7;
+  color: #faf5ff;
+  border-color: #a855f7;
+}
+
+.service-code.filled.standby,
+.service-code.filled.s {
+  background-color: #ea580c;
+  color: #fffbeb;
+  border-color: #ea580c;
+}
+
+.service-code.filled.zwanger,
+.service-code.filled.zw {
+  background-color: #6b7280;
+  color: #f3f4f6;
+  border-color: #6b7280;
+}
+
+/* Variant: outline (borderonly) */
+.service-code.outline {
+  background-color: transparent;
+}
+
+.service-code.outline.dag,
+.service-code.outline.dg {
+  color: #0c4a6e;
+  border: 2px solid #0284c7;
+}
+
+.service-code.outline.nacht,
+.service-code.outline.nb {
+  color: #6b21a8;
+  border: 2px solid #a855f7;
+}
+
+.service-code.outline.standby,
+.service-code.outline.s {
+  color: #92400e;
+  border: 2px solid #ea580c;
+}
+
+.service-code.outline.zwanger,
+.service-code.outline.zw {
+  color: #374151;
+  border: 2px solid #6b7280;
+}
+
+/* Size variants */
+.service-code.sm {
+  min-width: 28px;
+  min-height: 20px;
+  padding: 1px 4px;
+  font-size: 10px;
+}
+
+.service-code.lg {
+  min-width: 48px;
+  min-height: 32px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+/* Disabled state */
+.service-code:disabled,
+.service-code.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Print styles */
+@media print {
+  .service-code {
+    border: 1px solid #000;
+  }
+
+  .service-code.dag,
+  .service-code.dg {
+    background-color: #c7d2e8;
+    color: #000;
+  }
+
+  .service-code.nacht,
+  .service-code.nb {
+    background-color: #d9c9e6;
+    color: #000;
+  }
+
+  .service-code.standby,
+  .service-code.s {
+    background-color: #f0d9bb;
+    color: #000;
+  }
+
+  .service-code.zwanger,
+  .service-code.zw {
+    background-color: #d9d9d9;
+    color: #000;
+  }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .service-code {
+    min-width: 32px;
+    min-height: 22px;
+    padding: 1px 4px;
+    font-size: 10px;
+  }
+
+  .service-code.sm {
+    min-width: 24px;
+    min-height: 18px;
+    padding: 0.5px 2px;
+    font-size: 9px;
+  }
+}
