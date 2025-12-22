@@ -1,0 +1,214 @@
+/**
+ * Planning Grid Styles
+ * Styles for the 5-week rooster planning grid display
+ */
+
+.planning-grid-container {
+  width: 100%;
+  overflow-x: auto;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Table styling */
+.planning-grid-container table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  font-size: 13px;
+}
+
+/* Header row */
+.planning-grid-container thead tr {
+  background-color: #f3f4f6;
+  border-bottom: 2px solid #d1d5db;
+}
+
+.planning-grid-container th {
+  padding: 12px 8px;
+  text-align: center;
+  font-weight: 600;
+  color: #374151;
+  background-color: #f3f4f6;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+/* First column (employee names) */
+.planning-grid-container th:first-child {
+  position: sticky;
+  left: 0;
+  background-color: #f3f4f6;
+  z-index: 30;
+  text-align: left;
+  min-width: 150px;
+  padding: 12px 12px;
+}
+
+/* Body cells */
+.planning-grid-container td {
+  padding: 8px 6px;
+  border: 1px solid #e5e7eb;
+  text-align: center;
+  height: 48px;
+  vertical-align: middle;
+  min-width: 60px;
+}
+
+/* First column cells (employee names) */
+.planning-grid-container tbody td:first-child {
+  position: sticky;
+  left: 0;
+  background-color: #f9fafb;
+  font-weight: 600;
+  color: #111827;
+  padding: 8px 12px;
+  border-right: 2px solid #d1d5db;
+  text-align: left;
+  z-index: 10;
+}
+
+/* Alternating row colors */
+.planning-grid-container tbody tr:nth-child(odd) td:not(:first-child) {
+  background-color: white;
+}
+
+.planning-grid-container tbody tr:nth-child(even) td:not(:first-child) {
+  background-color: #f9fafb;
+}
+
+/* Weekend columns */
+.planning-grid-container th.weekend,
+.planning-grid-container td.weekend {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.planning-grid-container tbody tr:nth-child(odd) td.weekend {
+  background-color: #fecaca;
+}
+
+.planning-grid-container tbody tr:nth-child(even) td.weekend {
+  background-color: #fca5a5;
+}
+
+/* Week separator columns */
+.planning-grid-container th.week-separator,
+.planning-grid-container td.week-separator {
+  width: 2px;
+  background-color: #6b7280;
+  padding: 0;
+  border: none;
+}
+
+/* Service cell badges */
+.service-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1f2937;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  line-height: 1.2;
+}
+
+.service-badge.DG {
+  background-color: #dbeafe;
+}
+
+.service-badge.NB {
+  background-color: #e9d5ff;
+}
+
+.service-badge.S {
+  background-color: #fed7aa;
+}
+
+.service-badge.ZW {
+  background-color: #e5e7eb;
+}
+
+/* Hoverable cells */
+.planning-grid-container td:not(:first-child):hover {
+  background-color: #dbeafe !important;
+  cursor: pointer;
+}
+
+/* Focus on input */
+.planning-grid-container td:not(:first-child):focus-within {
+  outline: 2px solid #3b82f6;
+  outline-offset: -1px;
+}
+
+/* Print styles */
+@media print {
+  .planning-grid-container {
+    box-shadow: none;
+    border: 1px solid #d1d5db;
+  }
+
+  .planning-grid-container table {
+    font-size: 11px;
+  }
+
+  .planning-grid-container th,
+  .planning-grid-container td {
+    padding: 6px 4px;
+    height: 32px;
+  }
+
+  .planning-grid-container th:first-child {
+    min-width: 120px;
+  }
+
+  .planning-grid-container tbody td:first-child {
+    background-color: white;
+    border-right: 1px solid #e5e7eb;
+  }
+
+  .planning-grid-container tbody tr:nth-child(even) td {
+    background-color: white;
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 1024px) {
+  .planning-grid-container table {
+    font-size: 12px;
+  }
+
+  .planning-grid-container th,
+  .planning-grid-container td {
+    padding: 6px 4px;
+  }
+
+  .planning-grid-container th:first-child {
+    min-width: 100px;
+  }
+}
+
+@media (max-width: 768px) {
+  .planning-grid-container {
+    border-radius: 4px;
+  }
+
+  .planning-grid-container table {
+    font-size: 11px;
+  }
+
+  .planning-grid-container th,
+  .planning-grid-container td {
+    padding: 4px 2px;
+    height: 40px;
+    min-width: 50px;
+  }
+
+  .service-badge {
+    padding: 2px 4px;
+    font-size: 10px;
+  }
+}
