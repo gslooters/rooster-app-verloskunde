@@ -1,0 +1,28 @@
+=== RAILWAY DEPLOYMENT READY ===
+
+FIX APPLIED: DRAAD56 Version Check Non-Blocking
+Timestamp: 1734882019000 (2025-12-22 17:20:19 UTC)
+Random Trigger: 94827
+
+STATUS: ✅ READY FOR DEPLOY
+
+CHANGES:
+1. ❌ Removed hardcoded EXPECTED_COMMIT ('44044047')
+2. ✅ Version check now non-blocking (always allows UI)
+3. 🔄 Cache busting: Date.now() in version endpoint
+4. 🙅 Version mismatch no longer blocks startup
+5. 📝 Logs now show 'non-blocking' mode
+
+EXPECTED BEHAVIOR AFTER DEPLOY:
+- Startscherm laadt ALTIJD
+- API /api/version geeft huidige commit
+- Geen meer "Geen verbinding" blocker
+- Version info is informatief alleen
+
+VERIFICATION:
+Check /api/version endpoint returns:
+  isExpectedVersion: true
+  versionCheckMode: "non-blocking"
+  buildTime: recent timestamp
+
+READY TO COMMIT TO PRODUCTION 🚀
