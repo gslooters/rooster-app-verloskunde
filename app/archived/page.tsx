@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { readRosters, type Roster, formatWeekRange, formatDateRangeNl } from '@/lib/planning/storage';
+import { readRosters, type Roster, formatWeekRange, formatDateRangeNl } from 'lib/planning/storage';
 
 function ArchivedRosterCard({ roster }: { roster: Roster }) {
   const router = useRouter();
