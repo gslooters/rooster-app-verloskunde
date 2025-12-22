@@ -1,0 +1,5 @@
+Cache buster for DRAAD56 non-blocking version check fix
+Timestamp: 1734882019000
+Date: 2025-12-22T17:20:19Z
+Commit: d879ac515d5a6d19fd320bac189f3a6c910dbdf6
+Purpose: Force browser cache invalidation after version check fix
