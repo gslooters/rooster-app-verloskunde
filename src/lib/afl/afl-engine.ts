@@ -25,6 +25,13 @@
  * - All tasks now have proper service_code (no empty strings)
  * - Fallback to 'UNKNOWN' if service not found (defensive)
  * - Performance: O(n) single-pass lookup, <1ms for 11 services
+ *
+ * DRAAD339: FIX 3 - Enhanced Debug Logging
+ * - Workbestand size validation
+ * - Service code map completeness check
+ * - Team distribution stats
+ * - Pre-planning adjustment tracking
+ * - Cache-bust markers for Railway deployment verification
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -47,6 +54,10 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 );
 
+// 🔧 DRAAD339: CACHE-BUST MARKER
+// Change this value to force Railway rebuild (ensures latest code deployed)
+const CACHE_BUST_NONCE = '2025-12-22T23:33:00Z-FIX-3-DEBUG-LOGGING';
+
 /**
  * FASE 1: Load all data from database
  * Builds 4 workbenches in memory
@@ -61,17 +72,20 @@ export class AflEngine {
 
     // ✅ DRAAD339: CACHE-BUST VERIFICATION MARKERS
     // These markers appear in Railway build logs to verify correct code version is deployed
-    console.log('[AFL-ENGINE] DRAAD337 loaded at', new Date().toISOString());
-    console.log('[AFL-ENGINE] DRAAD337 fix: Client-side sorting (no chained .order() calls)');
-    console.log('[AFL-ENGINE] DRAAD338 loaded at', new Date().toISOString());
-    console.log('[AFL-ENGINE] DRAAD338 fix: Service-code population via metadata lookup');
-    console.log('[AFL-ENGINE] Phase 1 Load starting for roster:', rosterId);
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('[AFL-ENGINE] 🚀 DRAAD339 CACHE-BUST NONCE:', CACHE_BUST_NONCE);
+    console.log('[AFL-ENGINE] ✅ DRAAD337 FIX: Client-side sorting (no chained .order() calls)');
+    console.log('[AFL-ENGINE] ✅ DRAAD338 FIX: Service-code population via metadata lookup');
+    console.log('[AFL-ENGINE] ✅ DRAAD339 FIX: Enhanced debug logging + cache-bust markers');
+    console.log('[AFL-ENGINE] 📊 Phase 1 Load starting for roster:', rosterId);
+    console.log('═══════════════════════════════════════════════════════');
 
     try {
       // Query 1: Load tasks (roster_period_staffing_dagdelen)
       // DRAAD337: Removed chained .order() calls that cause parse errors in Supabase
       // Instead: fetch all data and sort client-side (much faster anyway)
       // Database has is_system column (position 13) - include in SELECT
+      console.log('[AFL-ENGINE] Phase 1.1: Fetching tasks...');
       const { data: tasksRaw, error: tasksError } = await supabase
         .from('roster_period_staffing_dagdelen')
         .select(
@@ -95,16 +109,20 @@ export class AflEngine {
       if (!tasksRaw || tasksRaw.length === 0) {
         throw new Error('Phase 1 Load failed: No tasks found with aantal > 0');
       }
+      console.log(`  ✅ Tasks: ${tasksRaw.length} rows loaded`);
 
       // Query 2: Load planning slots (roster_assignments)
+      console.log('[AFL-ENGINE] Phase 1.2: Fetching planning slots...');
       const { data: planningRaw, error: planningError } = await supabase
         .from('roster_assignments')
         .select('*')
         .eq('roster_id', rosterId);
 
       if (planningError) throw new Error(`Planning query failed: ${planningError.message}`);
+      console.log(`  ✅ Planning: ${planningRaw?.length || 0} rows loaded`);
 
       // Query 3: Load capacity (roster_employee_services)
+      console.log('[AFL-ENGINE] Phase 1.3: Fetching capacity data...');
       const { data: capacityRaw, error: capacityError } = await supabase
         .from('roster_employee_services')
         .select(
@@ -121,15 +139,19 @@ export class AflEngine {
         .eq('actief', true);
 
       if (capacityError) throw new Error(`Capacity query failed: ${capacityError.message}`);
+      console.log(`  ✅ Capacity: ${capacityRaw?.length || 0} rows loaded`);
 
       // Query 4: Load service metadata (service_types)
+      console.log('[AFL-ENGINE] Phase 1.4: Fetching service metadata...');
       const { data: servicesRaw, error: servicesError } = await supabase
         .from('service_types')
         .select('*');
 
       if (servicesError) throw new Error(`Services query failed: ${servicesError.message}`);
+      console.log(`  ✅ Services: ${servicesRaw?.length || 0} rows loaded`);
 
       // Query 5: Load rooster period (roosters)
+      console.log('[AFL-ENGINE] Phase 1.5: Fetching rooster period...');
       const { data: rosterRaw, error: rosterError } = await supabase
         .from('roosters')
         .select('id, start_date, end_date, status')
@@ -137,8 +159,10 @@ export class AflEngine {
         .single();
 
       if (rosterError) throw new Error(`Rooster query failed: ${rosterError.message}`);
+      console.log(`  ✅ Rooster: Period ${rosterRaw?.start_date} to ${rosterRaw?.end_date}`);
 
       // Transform: Build workbenches
+      console.log('[AFL-ENGINE] Phase 1.6: Building workbenches...');
       // ✅ DRAAD338: Pass servicesRaw to buildOpdracht for service_code lookup
       const workbestand_services_metadata = this.buildServicesMetadata(servicesRaw || []);
       const workbestand_opdracht = this.buildOpdracht(tasksRaw || [], servicesRaw || []);
@@ -146,9 +170,65 @@ export class AflEngine {
       const workbestand_capaciteit = this.buildCapaciteit(capacityRaw || []);
 
       // Pre-planning adjustment: Decrement capacity for protected assignments
-      this.adjustCapacityForPrePlanning(workbestand_planning, workbestand_capaciteit);
+      console.log('[AFL-ENGINE] Phase 1.7: Adjusting capacity for pre-planning...');
+      const preplanAdjustmentStats = this.adjustCapacityForPrePlanning(
+        workbestand_planning,
+        workbestand_capaciteit
+      );
+      console.log(`  ✅ Pre-planning adjustment: ${preplanAdjustmentStats.decremented} capacity entries decremented`);
+
+      // ✅ DRAAD339: VALIDATION & STATS
+      console.log('[AFL-ENGINE] Phase 1.8: Data validation & statistics...');
+      const validation = this.validateLoadResult({
+        workbestand_opdracht,
+        workbestand_planning,
+        workbestand_capaciteit,
+        workbestand_services_metadata,
+        rooster_period: {
+          id: rosterRaw!.id,
+          start_date: new Date(rosterRaw!.start_date),
+          end_date: new Date(rosterRaw!.end_date),
+          status: rosterRaw!.status,
+        },
+        load_duration_ms: 0,
+      });
+
+      if (!validation.valid) {
+        console.error('❌ VALIDATION FAILED:', validation.errors);
+        throw new Error(`Data validation failed: ${validation.errors.join(', ')}`);
+      } else {
+        console.log('✅ All validation checks passed');
+      }
+
+      // Log workbestand statistics
+      const opdracht_stats = this.analyzeOpdracht(workbestand_opdracht);
+      console.log('[AFL-ENGINE] 📊 Workbestand_Opdracht stats:');
+      console.log('  - Total tasks:', workbestand_opdracht.length);
+      console.log('  - Total required diensten:', opdracht_stats.total_diensten);
+      console.log('  - System services (DIO/DIA/DDO/DDA):', opdracht_stats.system_count);
+      console.log('  - Regular services:', opdracht_stats.regular_count);
+      console.log('  - Teams:', opdracht_stats.teams);
+
+      console.log('[AFL-ENGINE] 📊 Workbestand_Planning stats:');
+      console.log('  - Total slots:', workbestand_planning.length);
+      console.log('  - Status 0 (available):', workbestand_planning.filter(p => p.status === 0).length);
+      console.log('  - Status 1 (assigned):', workbestand_planning.filter(p => p.status === 1).length);
+      console.log('  - Status 2 (blocked):', workbestand_planning.filter(p => p.status === 2).length);
+      console.log('  - Status 3 (unavailable):', workbestand_planning.filter(p => p.status === 3).length);
+      console.log('  - Protected:', workbestand_planning.filter(p => p.is_protected).length);
+
+      console.log('[AFL-ENGINE] 📊 Workbestand_Capaciteit stats:');
+      const team_distrib = this.analyzeCapaciteit(workbestand_capaciteit);
+      console.log('  - Total capacity records:', workbestand_capaciteit.length);
+      console.log('  - By team:', team_distrib.by_team);
+      console.log('  - Total capacity slots:', team_distrib.total_capacity);
+      console.log('  - Total beschikbaar:', team_distrib.total_beschikbaar);
 
       const load_duration_ms = performance.now() - startTime;
+
+      console.log('═══════════════════════════════════════════════════════');
+      console.log('[AFL-ENGINE] ✅ Phase 1 COMPLETE in', load_duration_ms.toFixed(2), 'ms');
+      console.log('═══════════════════════════════════════════════════════');
 
       return {
         workbestand_opdracht,
@@ -287,6 +367,7 @@ export class AflEngine {
       aantal: row.aantal,
       actief: row.actief,
       aantal_beschikbaar: row.aantal, // Initialize for tracking
+      team: row.team || 'Overig', // Add team info if available
     }));
   }
 
@@ -316,11 +397,13 @@ export class AflEngine {
   private adjustCapacityForPrePlanning(
     planning: WorkbestandPlanning[],
     capaciteit: WorkbestandCapaciteit[]
-  ): void {
+  ): { decremented: number; assignments_checked: number } {
     // Find all protected assignments
     const protectedAssignments = planning.filter(
       (p) => p.status === 1 && p.is_protected && p.service_id
     );
+
+    let decremented_count = 0;
 
     // Decrement capacity for each
     for (const assignment of protectedAssignments) {
@@ -331,8 +414,71 @@ export class AflEngine {
 
       if (capacity && capacity.aantal_beschikbaar !== undefined) {
         capacity.aantal_beschikbaar = Math.max(0, capacity.aantal_beschikbaar - 1);
+        decremented_count++;
       }
     }
+
+    return {
+      decremented: decremented_count,
+      assignments_checked: protectedAssignments.length,
+    };
+  }
+
+  /**
+   * Analyze opdracht for statistics
+   */
+  private analyzeOpdracht(opdrachten: WorkbestandOpdracht[]): {
+    total_diensten: number;
+    system_count: number;
+    regular_count: number;
+    teams: Record<string, number>;
+  } {
+    const teams: Record<string, number> = {};
+    let system_count = 0;
+    let regular_count = 0;
+    let total = 0;
+
+    for (const op of opdrachten) {
+      teams[op.team] = (teams[op.team] || 0) + 1;
+      total += op.aantal;
+      if (op.is_system) {
+        system_count += op.aantal;
+      } else {
+        regular_count += op.aantal;
+      }
+    }
+
+    return {
+      total_diensten: total,
+      system_count,
+      regular_count,
+      teams,
+    };
+  }
+
+  /**
+   * Analyze capaciteit for statistics
+   */
+  private analyzeCapaciteit(capaciteit: WorkbestandCapaciteit[]): {
+    by_team: Record<string, number>;
+    total_capacity: number;
+    total_beschikbaar: number;
+  } {
+    const by_team: Record<string, number> = {};
+    let total_capacity = 0;
+    let total_beschikbaar = 0;
+
+    for (const cap of capaciteit) {
+      by_team[cap.team || 'Overig'] = (by_team[cap.team || 'Overig'] || 0) + 1;
+      total_capacity += cap.aantal || 0;
+      total_beschikbaar += cap.aantal_beschikbaar || 0;
+    }
+
+    return {
+      by_team,
+      total_capacity,
+      total_beschikbaar,
+    };
   }
 
   /**
