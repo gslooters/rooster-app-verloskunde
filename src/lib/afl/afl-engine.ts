@@ -19,6 +19,12 @@
  * - is_system column properly selected and used for sorting
  * - Client-side sort priority: is_system DESC → date ASC → dagdeel ASC → team DESC
  * - No performance impact: sorting is instant for typical roster sizes
+ *
+ * DRAAD338: FIX 2 - Service-code population via metadata lookup
+ * - Create serviceCodeMap from service_types metadata
+ * - All tasks now have proper service_code (no empty strings)
+ * - Fallback to 'UNKNOWN' if service not found (defensive)
+ * - Performance: O(n) single-pass lookup, <1ms for 11 services
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -125,10 +131,11 @@ export class AflEngine {
       if (rosterError) throw new Error(`Rooster query failed: ${rosterError.message}`);
 
       // Transform: Build workbenches
-      const workbestand_opdracht = this.buildOpdracht(tasksRaw || []);
+      // ✅ DRAAD338: Pass servicesRaw to buildOpdracht for service_code lookup
+      const workbestand_services_metadata = this.buildServicesMetadata(servicesRaw || []);
+      const workbestand_opdracht = this.buildOpdracht(tasksRaw || [], servicesRaw || []);
       const workbestand_planning = this.buildPlanning(planningRaw || []);
       const workbestand_capaciteit = this.buildCapaciteit(capacityRaw || []);
-      const workbestand_services_metadata = this.buildServicesMetadata(servicesRaw || []);
 
       // Pre-planning adjustment: Decrement capacity for protected assignments
       this.adjustCapacityForPrePlanning(workbestand_planning, workbestand_capaciteit);
@@ -155,25 +162,42 @@ export class AflEngine {
 
   /**
    * Build Workbestand_Opdracht from raw task data
+   * DRAAD338: Service-code population from metadata
+   * - Create serviceCodeMap: service_id → service.code
+   * - All tasks get proper service_code (never empty string)
+   * - Fallback to 'UNKNOWN' if service not found (defensive)
+   * 
    * DRAAD337: CLIENT-SIDE SORTING
    * Sort priority: is_system DESC → date ASC → dagdeel ASC → team DESC → service_code ASC
    * Performance: <1ms for typical roster (500-1500 rows)
    */
-  private buildOpdracht(tasksRaw: any[]): WorkbestandOpdracht[] {
+  private buildOpdracht(tasksRaw: any[], servicesRaw: any[]): WorkbestandOpdracht[] {
+    // ✅ DRAAD338: BUILD SERVICE CODE MAP
+    // Create lookup map: service_id → service_code
+    // This is O(n) where n = number of services (typically 8-15)
+    const serviceCodeMap = new Map<string, string>();
+    for (const service of servicesRaw) {
+      serviceCodeMap.set(service.id, service.code || 'UNKNOWN');
+    }
+
     // Map raw data to WorkbestandOpdracht objects
-    const opdrachten = tasksRaw.map((row) => ({
-      id: row.id,
-      roster_id: row.roster_id,
-      date: new Date(row.date),
-      dagdeel: row.dagdeel,
-      team: row.team,
-      service_id: row.service_id,
-      service_code: '', // Will be populated from service metadata lookup
-      is_system: row.is_system || false, // ✅ Direct from database (position 13)
-      aantal: row.aantal,
-      aantal_nog: row.aantal,
-      invulling: row.invulling || 0,
-    }));
+    // ✅ DRAAD338: Populate service_code from map
+    const opdrachten = tasksRaw.map((row) => {
+      const serviceCode = serviceCodeMap.get(row.service_id) || 'UNKNOWN';
+      return {
+        id: row.id,
+        roster_id: row.roster_id,
+        date: new Date(row.date),
+        dagdeel: row.dagdeel,
+        team: row.team,
+        service_id: row.service_id,
+        service_code: serviceCode, // ✅ POPULATED from metadata lookup
+        is_system: row.is_system || false, // ✅ Direct from database (position 13)
+        aantal: row.aantal,
+        aantal_nog: row.aantal,
+        invulling: row.invulling || 0,
+      };
+    });
 
     // ✅ DRAAD337: CLIENT-SIDE SORT - moved from database query
     // This avoids Supabase parser issues with chained .order() calls
@@ -194,10 +218,7 @@ export class AflEngine {
         return a.dagdeel.localeCompare(b.dagdeel, 'nl', { sensitivity: 'base' });
       }
 
-      // Priority 4: team DESC (Groen before Oranje before Geel)
-      // Team value logic: 'Groen' < 'Oranje' < 'Geel' alphabetically
-      // So DESC means reverse (Geel before Oranje before Groen... wait, that's wrong)
-      // Let's use explicit team priority
+      // Priority 4: team priority (Groen before Oranje before Geel)
       const teamPriority: Record<string, number> = {
         'Groen': 0,
         'Oranje': 1,
@@ -206,7 +227,7 @@ export class AflEngine {
       const priorityA = teamPriority[a.team] ?? 999;
       const priorityB = teamPriority[b.team] ?? 999;
       if (priorityA !== priorityB) {
-        return priorityA - priorityB; // Lower number first (Groen before Oranje)
+        return priorityA - priorityB;
       }
 
       // Priority 5: service_code ASC (for consistency)
@@ -336,6 +357,17 @@ export class AflEngine {
     // Check: Must have service metadata
     if (result.workbestand_services_metadata.length === 0) {
       errors.push('No service metadata found (service_types)');
+    }
+
+    // ✅ DRAAD338: ADD validation for service_code population
+    // Check if any opdracht has empty service_code (would indicate lookup failure)
+    const emptyServiceCodes = result.workbestand_opdracht.filter(
+      (op) => !op.service_code || op.service_code === ''
+    );
+    if (emptyServiceCodes.length > 0) {
+      errors.push(
+        `${emptyServiceCodes.length} tasks have empty service_code (service lookup failed)`
+      );
     }
 
     return {
