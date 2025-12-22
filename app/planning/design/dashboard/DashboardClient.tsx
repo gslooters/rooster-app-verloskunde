@@ -7,7 +7,8 @@
  * DRAAD123FIX: Correctie: Bekijk Rooster link naar /planning/design/preplanning?id= 
  * DRAAD129: Fix infeasible routing - route naar bottleneck-analysis pagina bij infeasible status
  * DRAAD223: GREEDY integration removed - placeholder voor auto-fill feature geïntroduceerd
-*/
+ * DRAAD-OPTIE-B: Direct AFL navigatie - Skip placeholder, direct naar AFL functionaliteit
+ */
 'use client';
 import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -121,8 +122,9 @@ export default function DashboardClient() {
   });
   const [showPlanningRulesModal, setShowPlanningRulesModal] = useState(false);
   
-  // DRAAD223: State voor placeholder modal
+  // DRAAD223: State voor placeholder modal (VERVANGEN DOOR OPTIE B)
   const [showPlaceholder, setShowPlaceholder] = useState(false);
+  const [isNavigating, setIsNavigating] = useState(false);
 
   useEffect(() => {
     if (!rosterId) { setError('Geen roster ID gevonden'); setLoading(false); return; }
@@ -163,9 +165,36 @@ export default function DashboardClient() {
   }
   const allesVoltooid = Object.values(completionStatus).every(Boolean);
   
-  // DRAAD223: Placeholder handler - toont modal met tijdelijk scherm
-  function handleStartRoosterBewerking() {
-    setShowPlaceholder(true);
+  // DRAAD-OPTIE-B: Direct AFL navigatie - geen placeholder tussenscreen
+  async function handleStartRoosterBewerking() {
+    if (!rosterId) return;
+    
+    setIsNavigating(true);
+    try {
+      // Zet rooster status naar 'in_progress' voor tracking
+      const statusResponse = await fetch('/api/roster/update-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roster_id: rosterId,
+          status: 'in_progress'
+        })
+      });
+
+      if (!statusResponse.ok) {
+        console.warn('Status update mislukt, gaan toch door naar AFL');
+      }
+
+      // Direct navigeren naar AFL functionaliteit (preplanning scherm)
+      // Dit is de beveiligde pagina die AFL aanroept
+      router.push(`/planning/design/preplanning?id=${rosterId}`);
+    } catch (err) {
+      console.error('Error in handleStartRoosterBewerking:', err);
+      // Navigeer toch door, zelfs als er een fout optreedt
+      router.push(`/planning/design/preplanning?id=${rosterId}`);
+    } finally {
+      setIsNavigating(false);
+    }
   }
   
   function handleDeleteRoster() {
@@ -307,20 +336,26 @@ export default function DashboardClient() {
             </div>
           </div>
           
-          {/* DRAAD223: Roosterbewerking starten knop met placeholder */}
+          {/* DRAAD-OPTIE-B: Direct AFL navigatie button */}
           <div className="w-full flex flex-col items-center mt-6">
             <button 
-              disabled={!allesVoltooid} 
+              disabled={!allesVoltooid || isNavigating} 
               onClick={handleStartRoosterBewerking} 
               className={`rounded-xl px-8 py-4 font-bold text-lg shadow flex items-center gap-3 ${
-                allesVoltooid 
+                allesVoltooid && !isNavigating
                   ? 'bg-gradient-to-r from-green-500 to-blue-500 text-white hover:from-green-600 hover:to-blue-600 transition' 
                   : 'bg-gray-200 text-gray-400 cursor-not-allowed'
               }`} 
               style={{minWidth:'250px'}} 
-              tabIndex={allesVoltooid ? 0 : -1}
+              tabIndex={allesVoltooid && !isNavigating ? 0 : -1}
             >
-              Roosterbewerking starten
+              {isNavigating && (
+                <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              )}
+              {isNavigating ? 'Bezig met laden...' : 'Roosterbewerking starten'}
             </button>
             {!allesVoltooid && (
               <p className="text-sm text-gray-500 mt-2">(Deze knop wordt actief als alle stappen hierboven op &apos;Ja&apos; staan)</p>
@@ -374,7 +409,7 @@ export default function DashboardClient() {
         />
       )}
       
-      {/* DRAAD223: Placeholder modal voor Roosterbewerking */}
+      {/* DRAAD223: Placeholder modal (NIET MEER GEBRUIKT - vervangen door OPTIE B) */}
       {showPlaceholder && rosterId && (
         <RoosterBewerkingPlaceholder
           rosterId={rosterId}
