@@ -1,0 +1,6 @@
+DRAAD-OPTIE-B Cache Bust Trigger
+Timestamp: 2025-12-22T17:41:00Z
+Commit: 9428a4bb45293fe007ca7da156490ad14ecf0a2f
+Change: Direct AFL navigatie implementatie in DashboardClient.tsx
+Status: Ready for Railway deployment
+Random Seed: 1734883260127
