@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 /**
  * 🤖 AFL (AutoFill) API Endpoint
  * 
+ * DRAAD337: AFL Pipeline API with cache-busting
  * DRAAD335: AFL Pipeline API Integration
  * 
  * DOEL:
@@ -12,6 +13,7 @@ import { NextRequest, NextResponse } from 'next/server';
  * 
  * PIPELINE FLOW:
  * 1. FASE 1: Load data (roster + employees + services)
+ *    - Client-side sorting (DRAAD337 fix)
  * 2. FASE 2: Solve planning (assign services to slots)
  * 3. FASE 3: Chain validation (DIO/DDO checks)
  * 4. FASE 4: Write to database (roster_assignments)
@@ -40,9 +42,12 @@ export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
+  const deploymentTimestamp = '2025-12-22T21:14:00Z'; // DRAAD337 deployment marker
 
   try {
     console.log('🤖 [AFL API] AFL execution requested');
+    console.log(`📍 [DRAAD337] Deployment version: ${deploymentTimestamp}`);
+    console.log(`⏱️ [Request Start] ${new Date(startTime).toISOString()}`);
 
     // STAP 1: Parse request body
     let rosterId: string;
@@ -72,16 +77,22 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`🤖 [AFL API] Starting AFL pipeline for roster: ${rosterId}`);
+    console.log(`📊 [Phase 1] Loading data from database...`);
 
     // STAP 2: Run AFL Pipeline (complete FASE 1-5)
     // Dynamic import to avoid Supabase env requirement during build
     const { runAflPipeline } = await import('@/src/lib/afl');
 
+    const phase2Start = Date.now();
     const result = await runAflPipeline(rosterId);
+    const phase2Duration = Date.now() - phase2Start;
 
     // STAP 3: Check pipeline result
     if (!result.success) {
-      console.error(`❌ [AFL API] Pipeline failed for roster ${rosterId}:`, result.error);
+      console.error(`❌ [AFL API] Pipeline failed for roster ${rosterId}:`);
+      console.error(`   Error: ${result.error}`);
+      console.error(`   Duration: ${result.execution_time_ms}ms`);
+      
       return NextResponse.json(
         {
           success: false,
@@ -97,10 +108,18 @@ export async function POST(request: NextRequest) {
     const totalTime = Date.now() - startTime;
 
     console.log(`✅ [AFL API] Pipeline completed successfully for roster ${rosterId}`);
-    console.log(`   - Execution time: ${result.execution_time_ms}ms`);
-    console.log(`   - AFL Run ID: ${result.afl_run_id}`);
-    console.log(`   - Coverage: ${result.report?.summary.coverage_percent.toFixed(1)}%`);
-    console.log(`   - Assigned: ${result.report?.summary.total_planned} / ${result.report?.summary.total_required}`);
+    console.log(`   📈 Total execution time: ${result.execution_time_ms}ms`);
+    console.log(`   🎯 AFL Run ID: ${result.afl_run_id}`);
+    console.log(`   📊 Phase Timings:`);
+    console.log(`      - Load: ${result.phase_timings?.load_ms}ms`);
+    console.log(`      - Solve: ${result.phase_timings?.solve_ms}ms`);
+    console.log(`      - Chains: ${result.phase_timings?.dio_chains_ms}ms`);
+    console.log(`      - Write: ${result.phase_timings?.database_write_ms}ms`);
+    console.log(`      - Report: ${result.phase_timings?.report_generation_ms}ms`);
+    console.log(`   📈 Coverage: ${result.report?.summary.coverage_percent.toFixed(1)}%`);
+    console.log(`   👥 Assigned: ${result.report?.summary.total_planned} / ${result.report?.summary.total_required}`);
+
+    const cacheToken = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
     return NextResponse.json(
       {
@@ -109,15 +128,20 @@ export async function POST(request: NextRequest) {
         rosterId: result.rosterId,
         execution_time_ms: result.execution_time_ms,
         report: result.report,
-        message: 'AFL execution completed successfully'
+        message: 'AFL execution completed successfully',
+        deployment_version: deploymentTimestamp
       },
       { 
         status: 200,
         headers: {
-          'Cache-Control': 'no-store, no-cache, must-revalidate',
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '0',
           'X-AFL-Run-ID': result.afl_run_id,
           'X-Execution-Time': `${result.execution_time_ms}ms`,
-          'X-Cache-Bust': `${Date.now()}-${Math.floor(Math.random() * 10000)}`
+          'X-Cache-Bust': cacheToken,
+          'X-Deployment': deploymentTimestamp,
+          'X-DRAAD': '337'
         }
       }
     );
@@ -128,16 +152,24 @@ export async function POST(request: NextRequest) {
     console.error('❌ [AFL API] Unexpected error:', {
       error: error?.message ?? String(error),
       stack: error?.stack,
-      duration: `${totalTime}ms`
+      duration: `${totalTime}ms`,
+      draad: 'DRAAD337'
     });
 
     return NextResponse.json(
       {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred',
-        details: error?.stack ?? null
+        details: error?.stack ?? null,
+        deployment_version: '2025-12-22T21:14:00Z'
       },
-      { status: 500 }
+      { 
+        status: 500,
+        headers: {
+          'X-Cache-Bust': `${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+          'X-DRAAD': '337'
+        }
+      }
     );
   }
 }
@@ -151,7 +183,8 @@ export async function OPTIONS() {
     {
       headers: {
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type'
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'X-DRAAD': '337'
       }
     }
   );
