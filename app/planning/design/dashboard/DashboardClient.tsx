@@ -7,7 +7,7 @@
  * DRAAD123FIX: Correctie: Bekijk Rooster link naar /planning/design/preplanning?id= 
  * DRAAD129: Fix infeasible routing - route naar bottleneck-analysis pagina bij infeasible status
  * DRAAD223: GREEDY integration removed - placeholder voor auto-fill feature geïntroduceerd
- * DRAAD-OPTIE-B: Direct AFL navigatie - Skip placeholder, direct naar AFL functionaliteit
+ * DRAAD335A2: FIX AFL Modal Integratie - AFL optimalisatie VOOR roosterbewerking, niet erna
  */
 'use client';
 import { useEffect, useState } from 'react';
@@ -18,7 +18,7 @@ import { loadRosterDesignData } from '@/lib/planning/rosterDesign';
 import { formatWeekRange, formatDateRangeNl } from '@/lib/planning/storage';
 import type { RosterDesignData } from '@/lib/types/roster';
 import RosterPlanningRulesModal from './components/RosterPlanningRulesModal';
-import RoosterBewerkingPlaceholder from './components/RoosterBewerkingPlaceholder';
+import { AflProgressModal } from '@/components/afl/AflProgressModal';
 
 type CompletionStatus = {
   diensten_per_dag: boolean;
@@ -122,8 +122,8 @@ export default function DashboardClient() {
   });
   const [showPlanningRulesModal, setShowPlanningRulesModal] = useState(false);
   
-  // DRAAD223: State voor placeholder modal (VERVANGEN DOOR OPTIE B)
-  const [showPlaceholder, setShowPlaceholder] = useState(false);
+  // DRAAD335A2: AFL modal state
+  const [showAflModal, setShowAflModal] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
 
   useEffect(() => {
@@ -165,13 +165,50 @@ export default function DashboardClient() {
   }
   const allesVoltooid = Object.values(completionStatus).every(Boolean);
   
-  // DRAAD-OPTIE-B: Direct AFL navigatie - geen placeholder tussenscreen
-  async function handleStartRoosterBewerking() {
+  /**
+   * DRAAD335A2: Start Roosterbewerking met AFL modal
+   * Opent de AFL optimalisatie modal
+   * Status update en navigatie gebeuren in onAflSuccess callback
+   */
+  function handleStartRoosterBewerking() {
     if (!rosterId) return;
     
+    console.log('[DRAAD335A2] Opening AFL modal for roster:', rosterId);
+    
+    // Open de AFL modal
+    // AFL modal handelt optimalisatie intern af
+    setShowAflModal(true);
+    
+    // Status update en navigatie gebeuren in onAflSuccess callback
+  }
+  
+  /**
+   * DRAAD335A2: Callback na AFL optimalisatie succes
+   * Alleen aangeroepen als AFL feasible is
+   * Update status naar 'in_progress' en navigeer naar rooster bewerking
+   */
+  async function onAflSuccess(result?: any) {
+    if (!rosterId) return;
+    
+    console.log('[DRAAD335A2] AFL success callback, result:', result);
+    
+    // Controleer of rooster feasible is
+    // AFL geeft result.success = true voor feasible
+    const isFeasible = result?.success === true;
+    
+    if (!isFeasible) {
+      console.log('[DRAAD335A2] AFL niet feasible - blijf op dashboard');
+      // Modal blijft open met foutbericht
+      // User kan "Annuleren" klikken om terug te gaan
+      return;
+    }
+    
+    // Alleen bij FEASIBLE: status updaten en navigeren
+    console.log('[DRAAD335A2] AFL feasible - updating status en navigating');
     setIsNavigating(true);
+    
     try {
-      // Zet rooster status naar 'in_progress' voor tracking
+      // Update roster status naar 'in_progress'
       const statusResponse = await fetch('/api/roster/update-status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -180,21 +217,37 @@ export default function DashboardClient() {
           status: 'in_progress'
         })
       });
-
+      
       if (!statusResponse.ok) {
-        console.warn('Status update mislukt, gaan toch door naar AFL');
+        console.warn('[DRAAD335A2] Status update failed, navigating anyway');
       }
-
-      // Direct navigeren naar AFL functionaliteit (preplanning scherm)
-      // Dit is de beveiligde pagina die AFL aanroept
+      
+      // Sluit AFL modal
+      setShowAflModal(false);
+      
+      // Navigeer naar rooster bewerking scherm
+      console.log('[DRAAD335A2] Navigating to rooster bewerking');
       router.push(`/planning/design/preplanning?id=${rosterId}`);
+      
     } catch (err) {
-      console.error('Error in handleStartRoosterBewerking:', err);
-      // Navigeer toch door, zelfs als er een fout optreedt
+      console.error('[DRAAD335A2] Error in onAflSuccess:', err);
+      // Navigeer toch
+      setShowAflModal(false);
       router.push(`/planning/design/preplanning?id=${rosterId}`);
     } finally {
       setIsNavigating(false);
     }
+  }
+  
+  /**
+   * DRAAD335A2: Callback voor sluiten AFL modal
+   * Wordt aangeroepen bij annuleren of fout
+   * Blijf op dashboard - geen navigatie
+   */
+  function onAflClose() {
+    console.log('[DRAAD335A2] AFL modal closed');
+    setShowAflModal(false);
+    // Blijf op dashboard - geen navigatie
   }
   
   function handleDeleteRoster() {
@@ -336,7 +389,7 @@ export default function DashboardClient() {
             </div>
           </div>
           
-          {/* DRAAD-OPTIE-B: Direct AFL navigatie button */}
+          {/* DRAAD335A2: AFL Optimalisatie button */}
           <div className="w-full flex flex-col items-center mt-6">
             <button 
               disabled={!allesVoltooid || isNavigating} 
@@ -409,11 +462,13 @@ export default function DashboardClient() {
         />
       )}
       
-      {/* DRAAD223: Placeholder modal (NIET MEER GEBRUIKT - vervangen door OPTIE B) */}
-      {showPlaceholder && rosterId && (
-        <RoosterBewerkingPlaceholder
+      {/* DRAAD335A2: AFL Progress Modal */}
+      {showAflModal && rosterId && (
+        <AflProgressModal
+          isOpen={showAflModal}
           rosterId={rosterId}
-          onClose={()=>setShowPlaceholder(false)}
+          onClose={onAflClose}
+          onSuccess={onAflSuccess}
         />
       )}
     </div>
