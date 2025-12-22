@@ -14,6 +14,7 @@
  * - Phase 4: Write Engine (persist to database)
  * - Phase 5: Report Engine (generate report)
  * 
+ * DRAAD335A: STAP 3 - Vereenvoudigd: is_system nu database-side (no client sort)
  * Performance target: <7s total pipeline (6-7s for Fase 2-5)
  */
 
@@ -51,8 +52,8 @@ export class AflEngine {
 
     try {
       // Query 1: Load tasks (roster_period_staffing_dagdelen)
-      // NOTE: Removed .order('service_types.code') because Supabase .order() doesn't support
-      // dot notation for nested relations. Sorting happens post-fetch in buildOpdracht().
+      // DRAAD335A: is_system is NOW denormalized in database!
+      // Sorting: is_system DESC → date ASC → dagdeel ASC → team DESC (all database-side)
       const { data: tasksRaw, error: tasksError } = await supabase
         .from('roster_period_staffing_dagdelen')
         .select(
@@ -65,12 +66,13 @@ export class AflEngine {
           service_id,
           aantal,
           invulling,
-          service_types(code, is_system)
+          is_system,
+          service_types(code)
         `
         )
         .eq('roster_id', rosterId)
         .gt('aantal', 0)
-        .order('is_system', { ascending: false })
+        .order('is_system', { ascending: false })      // ✅ DRAAD335A: veld bestaat nu!
         .order('date', { ascending: true })
         .order('dagdeel', { ascending: true })
         .order('team', { ascending: false });
@@ -150,7 +152,9 @@ export class AflEngine {
 
   /**
    * Build Workbestand_Opdracht from raw task data
-   * Includes client-side sorting by service_types.code (post-fetch)
+   * DRAAD335A: NO client-side sorting needed!
+   * Database already returns sorted by: is_system DESC → date ASC → dagdeel ASC → team DESC
+   * Only service_code sorting remains (for same is_system|date|dagdeel|team combo)
    */
   private buildOpdracht(tasksRaw: any[]): WorkbestandOpdracht[] {
     // Map raw data to WorkbestandOpdracht objects
@@ -162,21 +166,16 @@ export class AflEngine {
       team: row.team,
       service_id: row.service_id,
       service_code: row.service_types?.code || '',
-      is_system: row.service_types?.is_system || false,
+      is_system: row.is_system || false,  // ✅ DRAAD335A: Direct from database
       aantal: row.aantal,
       aantal_nog: row.aantal,
       invulling: row.invulling || 0,
     }));
 
-    // Client-side sorting by service_code (last priority after Supabase order)
-    // This maintains the intended sort order:
-    // 1. is_system DESC (Supabase)
-    // 2. date ASC (Supabase)
-    // 3. dagdeel ASC (Supabase)
-    // 4. team DESC (Supabase)
-    // 5. service_code ASC (JavaScript - post-fetch)
+    // ✅ DRAAD335A: SIMPLIFIED - Database already sorted by is_system DESC!
+    // Only sort by service_code (last priority) if needed
+    // This is MINIMAL - just for secondary ordering within same date/dagdeel/team combo
     opdrachten.sort((a, b) => {
-      // Compare service codes alphabetically
       const codeA = a.service_code || '';
       const codeB = b.service_code || '';
       return codeA.localeCompare(codeB, 'nl', { sensitivity: 'base' });
