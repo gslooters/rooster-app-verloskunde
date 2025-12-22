@@ -12,6 +12,7 @@ import { TeamType, DienstverbandType } from '@/lib/types/employee';
 import { getContrastColor, darkenColor } from '@/lib/services/service-types-loader';
 import findAssignmentForCell from '@/lib/planning/assignment-matcher';
 import type { ServiceTypeWithColor } from '@/lib/services/service-types-loader';
+import { AflProgressModal } from '@/components/afl';
 
 function extractTeamRaw(team: unknown): string {
   if (team && typeof team === 'object') {
@@ -135,6 +136,7 @@ export default function DesignPageClient() {
   const [error, setError] = useState<string | null>(null);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [holidaysLoading, setHolidaysLoading] = useState(false);
+  const [aflModalOpen, setAflModalOpen] = useState(false);
   const holidaySet = useMemo(() => createHolidaySet(holidays), [holidays]);
   const serviceTypesMap = useMemo(() => {
     const map: Record<string, ServiceTypeWithColor> = {};
@@ -322,89 +324,113 @@ export default function DesignPageClient() {
   }
   const { weeks, periodTitle, dateSubtitle } = computedValues;
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-4">
-      <div className="max-w-full mx-auto">
-        <nav className="text-sm text-gray-500 mb-3">Dashboard &gt; Rooster Planning &gt; Medewerkers per periode</nav>
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-1">{periodTitle}</h1>
-            <p className="text-xs text-gray-500">{dateSubtitle}</p>
+    <>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-4">
+        <div className="max-w-full mx-auto">
+          <nav className="text-sm text-gray-500 mb-3">Dashboard &gt; Rooster Planning &gt; Medewerkers per periode</nav>
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 mb-1">{periodTitle}</h1>
+              <p className="text-xs text-gray-500">{dateSubtitle}</p>
+            </div>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setAflModalOpen(true)}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-colors"
+              >
+                🤖 Roosterbewerking starten
+              </button>
+              <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium" onClick={() => router.push(`/planning/design/dashboard?rosterId=${rosterId}`)}>Terug naar dashboard</button>
+            </div>
           </div>
-          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium" onClick={() => router.push(`/planning/design/dashboard?rosterId=${rosterId}`)}>Terug naar dashboard</button>
-        </div>
-        <div className="bg-blue-50 p-4 rounded-lg mb-6">
-          <p className="text-blue-800"><strong>Informatief overzicht:</strong> Dit scherm toont alle toegewezen diensten per medewerker voor deze periode. Wijzig de Dst (doelstelling shifts) per medewerker indien nodig.</p>
-        </div>
-        <div className="bg-white rounded-lg shadow-sm border overflow-x-auto">
-          <table className="min-w-full">
-            <thead className="sticky top-0 bg-white z-10">
-              <tr>
-                <th className="sticky left-0 bg-white border-b px-3 py-2 text-left font-semibold text-gray-900 w-40">Medewerker</th>
-                <th className="border-b px-3 py-2 text-center font-semibold text-gray-900 w-16">Dst</th>
-                {weeks.map(week => (<th key={week.number} colSpan={7} className="border-b px-2 py-2 text-center font-semibold text-gray-900 bg-yellow-50">Week {week.number}</th>))}
-              </tr>
-              {['day','date','month'].map((rowType, rowIndex) => (
-                <tr key={rowType}>
-                  <th className="sticky left-0 bg-white border-b"></th>
-                  {rowIndex === 0 && (
-                    <th rowSpan={3} className="border-b px-3 py-2 bg-gradient-to-br from-green-50 to-blue-50">
-                      <div className="flex flex-col items-center justify-center h-full">
-                        <span className="text-[10px] text-gray-600 font-normal">Totaal</span>
-                        <span className="text-xl font-bold text-green-700 tabular-nums" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                          {totalMaxShifts}
-                        </span>
-                      </div>
-                    </th>
-                  )}
-                  {weeks.map(week => week.dates.map(date => {
-                    const { day, date: dd, month, isWeekend, isHoliday, holidayName } = formatDateCell(date, holidaySet, holidays);
-                    return (<th key={`${rowType}-${date}`} className={`border-b px-1 py-1 text-xs ${rowType==='day'?'font-medium text-gray-700':rowType==='date'?'text-gray-600':'text-gray-500'} min-w-[50px] ${rowType==='day'?'relative':''}`} title={rowType==='date' ? (holidayName || undefined) : undefined}>{rowType==='day'? day : rowType==='date'? dd : month}{rowType==='day' && isHoliday && (<span className="absolute top-0 right-0 bg-amber-600 text-white text-xs px-1 rounded-bl text-[10px] font-bold leading-none" style={{ fontSize: '8px', padding: '1px 2px' }}>FD</span>)}</th>);
-                  }))}
+          <div className="bg-blue-50 p-4 rounded-lg mb-6">
+            <p className="text-blue-800"><strong>Informatief overzicht:</strong> Dit scherm toont alle toegewezen diensten per medewerker voor deze periode. Wijzig de Dst (doelstelling shifts) per medewerker indien nodig.</p>
+          </div>
+          <div className="bg-white rounded-lg shadow-sm border overflow-x-auto">
+            <table className="min-w-full">
+              <thead className="sticky top-0 bg-white z-10">
+                <tr>
+                  <th className="sticky left-0 bg-white border-b px-3 py-2 text-left font-semibold text-gray-900 w-40">Medewerker</th>
+                  <th className="border-b px-3 py-2 text-center font-semibold text-gray-900 w-16">Dst</th>
+                  {weeks.map(week => (<th key={week.number} colSpan={7} className="border-b px-2 py-2 text-center font-semibold text-gray-900 bg-yellow-50">Week {week.number}</th>))}
                 </tr>
-              ))}
-            </thead>
-            <tbody>
-              {sortedEmployees.map((emp, empIndex) => {
-                const team = (emp as any).team as any;
-                const firstName = (emp as any).voornaam || getFirstName((emp as any).name || '');
-                return (
-                  <tr key={(emp as any).id} className={`${empIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'} h-8`}>
-                    <td className="sticky left-0 bg-inherit border-b px-3 py-1 font-medium text-gray-900 h-8" style={{ minWidth: '160px', maxWidth: '160px' }}>
-                      <div className="flex items-center gap-2">
-                        <TeamBadge team={team} />
-                        <span className="max-w-[12ch] truncate inline-block" title={`${firstName} (${normalizeTeam(team)})`}>
-                          {firstName}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="border-b px-3 py-1 text-center h-8">
-                      <input 
-                        type="number" 
-                        min="0" 
-                        max="35" 
-                        value={(emp as any).maxShifts} 
-                        onChange={(e) => updateMaxShiftsHandler((emp as any).id, parseInt(e.target.value) || 0)} 
-                        className="w-12 px-1 py-0.5 border border-gray-300 rounded text-center text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
-                      />
-                    </td>
+                {['day','date','month'].map((rowType, rowIndex) => (
+                  <tr key={rowType}>
+                    <th className="sticky left-0 bg-white border-b"></th>
+                    {rowIndex === 0 && (
+                      <th rowSpan={3} className="border-b px-3 py-2 bg-gradient-to-br from-green-50 to-blue-50">
+                        <div className="flex flex-col items-center justify-center h-full">
+                          <span className="text-[10px] text-gray-600 font-normal">Totaal</span>
+                          <span className="text-xl font-bold text-green-700 tabular-nums" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                            {totalMaxShifts}
+                          </span>
+                        </div>
+                      </th>
+                    )}
                     {weeks.map(week => week.dates.map(date => {
-                      const assignment = findAssignmentForCell((designData as any).assignments || [], emp, date);
-                      return (
-                        <td key={date} className={`border-b p-0.5 text-center h-8 ${columnClasses(date, holidaySet)}`}>
-                          <ServiceCell assignment={assignment} serviceTypesMap={serviceTypesMap} />
-                        </td>
-                      );
-                    }))}
+                      const { day, date: dd, month, isWeekend, isHoliday, holidayName } = formatDateCell(date, holidaySet, holidays);
+                      return (<th key={`${rowType}-${date}`} className={`border-b px-1 py-1 text-xs ${rowType==='day'?'font-medium text-gray-700':rowType==='date'?'text-gray-600':'text-gray-500'} min-w-[50px] ${rowType==='day'?'relative':''}`} title={rowType==='date' ? (holidayName || undefined) : undefined}>{rowType==='day'? day : rowType==='date'? dd : month}{rowType==='day' && isHoliday && (<span className="absolute top-0 right-0 bg-amber-600 text-white text-xs px-1 rounded-bl text-[10px] font-bold leading-none" style={{ fontSize: '8px', padding: '1px 2px' }}>FD</span>)}</th>);
+                    }))}    
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <div className="mt-6 flex items-center justify-end">
-          <div className="text-sm text-gray-600">Wijzigingen worden automatisch opgeslagen{holidays.length > 0 && (<span className="ml-2 text-amber-600">• {holidays.length} feestdagen geladen</span>)}</div>
+                ))}
+              </thead>
+              <tbody>
+                {sortedEmployees.map((emp, empIndex) => {
+                  const team = (emp as any).team as any;
+                  const firstName = (emp as any).voornaam || getFirstName((emp as any).name || '');
+                  return (
+                    <tr key={(emp as any).id} className={`${empIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'} h-8`}>
+                      <td className="sticky left-0 bg-inherit border-b px-3 py-1 font-medium text-gray-900 h-8" style={{ minWidth: '160px', maxWidth: '160px' }}>
+                        <div className="flex items-center gap-2">
+                          <TeamBadge team={team} />
+                          <span className="max-w-[12ch] truncate inline-block" title={`${firstName} (${normalizeTeam(team)})`}>
+                            {firstName}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="border-b px-3 py-1 text-center h-8">
+                        <input 
+                          type="number" 
+                          min="0" 
+                          max="35" 
+                          value={(emp as any).maxShifts} 
+                          onChange={(e) => updateMaxShiftsHandler((emp as any).id, parseInt(e.target.value) || 0)} 
+                          className="w-12 px-1 py-0.5 border border-gray-300 rounded text-center text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                        />
+                      </td>
+                      {weeks.map(week => week.dates.map(date => {
+                        const assignment = findAssignmentForCell((designData as any).assignments || [], emp, date);
+                        return (
+                          <td key={date} className={`border-b p-0.5 text-center h-8 ${columnClasses(date, holidaySet)}`}>
+                            <ServiceCell assignment={assignment} serviceTypesMap={serviceTypesMap} />
+                          </td>
+                        );
+                      }))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-6 flex items-center justify-end">
+            <div className="text-sm text-gray-600">Wijzigingen worden automatisch opgeslagen{holidays.length > 0 && (<span className="ml-2 text-amber-600">• {holidays.length} feestdagen geladen</span>)}</div>
+          </div>
         </div>
       </div>
-    </div>
+      
+      {/* AFL Progress Modal */}
+      <AflProgressModal
+        isOpen={aflModalOpen}
+        rosterId={typeof rosterId === 'string' ? rosterId : undefined}
+        onClose={() => setAflModalOpen(false)}
+        onSuccess={(result) => {
+          console.log('✅ AFL execution successful:', result);
+          // Optional: reload data na succesvolle AFL run
+          setTimeout(() => {
+            window.location.reload();
+          }, 2000);
+        }}
+      />
+    </>
   );
 }
