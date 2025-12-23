@@ -10,17 +10,13 @@
  * ✅ Add detailed logging for Railway logs
  * ✅ Cache-bust with Date.now() + random
  * ✅ Proper error response handling
- * 
- * INPUT:
- * - Request body: { afl_run_id: string }
- * - OR query param: ?afl_run_id=<uuid>
- * 
- * OUTPUT:
- * - 200: PDF blob (Content-Type: application/pdf)
- * - 400: Missing afl_run_id
- * - 404: Report not found
- * - 500: Database or generation error
+ * ✅ FORCE DYNAMIC - Next.js registration guarantee (DRAAD345)
  */
+
+// 🔥 DRAAD345: FORCE DYNAMIC - Prevent Next.js optimizer from skipping this route
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+export const revalidate = 0;
 
 import { NextResponse, NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
