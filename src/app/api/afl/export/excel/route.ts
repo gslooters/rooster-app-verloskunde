@@ -14,17 +14,13 @@
  * ✅ Add detailed logging for Railway logs
  * ✅ Cache-bust with Date.now() + random
  * ✅ CSV content validation - proper escaping
- * 
- * INPUT:
- * - Request body: { rosterId: string }
- * - OR query param: ?rosterId=<uuid>
- * 
- * OUTPUT:
- * - 200: CSV blob (Content-Type: text/csv; charset=utf-8)
- * - 400: Missing rosterId (CSV error format)
- * - 404: Roster not found (CSV error format)
- * - 500: Database or generation error (CSV error format)
+ * ✅ FORCE DYNAMIC - Next.js registration guarantee (DRAAD345)
  */
+
+// 🔥 DRAAD345: FORCE DYNAMIC - Prevent Next.js optimizer from skipping this route
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+export const revalidate = 0;
 
 import { NextResponse, NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
