@@ -2,7 +2,8 @@
 """
 GREEDY API Service - Separate Railway Service
 DRAAD-194: FASE 3 - NEW RAILWAY SERVICE SETUP
-Datum: 16 December 2025
+DRAAD-FIX: Cache-busting + Enhanced reporting
+Datum: 23 December 2025
 
 This is a standalone FastAPI service that exposes the GREEDY engine
 as a separate service on Railway. It communicates with Supabase for
@@ -12,6 +13,11 @@ Architecture:
 - Frontend → /api/greedy/solve → GREEDY API Service (port 8001)
 - GREEDY API ← → Supabase (shared database)
 - Returns: assignments with high coverage (95-98%+ in 2-5 seconds)
+
+DRAAD-FIX Changes:
+- Cache-busting timestamp in alle responses
+- Per-service coverage en bezetting detail in metadata
+- Random trigger voor Railway redeploy
 """
 
 import os
@@ -21,6 +27,8 @@ import json
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 from enum import Enum
+import time
+import random
 
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from fastapi.responses import JSONResponse
@@ -42,6 +50,14 @@ logging.basicConfig(
     format='%(asctime)s - GREEDY-API - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# ============================================================================
+# CACHE BUSTING TRIGGER
+# ============================================================================
+
+# Random trigger voor Railway deployment cache-busting
+CACHE_BUST_TRIGGER = random.randint(10000, 99999)
+logger.info(f"[CACHE-BUST] Service started with trigger: {CACHE_BUST_TRIGGER}")
 
 # ============================================================================
 # PYDANTIC MODELS
@@ -78,14 +94,16 @@ class SolveResponse(BaseModel):
     constraint_violations: Optional[List[Dict]] = None
     error_message: Optional[str] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
+    timestamp: int = Field(default_factory=lambda: int(time.time() * 1000))  # Cache-busting timestamp
 
 
 class HealthResponse(BaseModel):
     """Response model for /health"""
     status: str
     timestamp: str
+    cache_bust_trigger: int = CACHE_BUST_TRIGGER
     service_name: str = "GREEDY Engine API"
-    version: str = "1.0.0"
+    version: str = "1.0.0-DRAAD-FIX"
 
 
 # ============================================================================
@@ -95,7 +113,7 @@ class HealthResponse(BaseModel):
 app = FastAPI(
     title="GREEDY Solver API",
     description="Fast GREEDY rostering engine as separate Railway service",
-    version="1.0.0",
+    version="1.0.0-DRAAD-FIX",
 )
 
 
@@ -107,6 +125,7 @@ app = FastAPI(
 async def startup_event():
     """Initialize on startup"""
     logger.info("🚀 GREEDY API Service starting...")
+    logger.info(f"[CACHE-BUST] Trigger: {CACHE_BUST_TRIGGER}")
     logger.info(f"Environment: {os.getenv('ENVIRONMENT', 'production')}")
     logger.info(f"Supabase URL configured: {bool(os.getenv('SUPABASE_URL'))}")
     logger.info(f"Supabase Key configured: {bool(os.getenv('SUPABASE_KEY'))}")
@@ -143,6 +162,7 @@ async def health_check():
     return HealthResponse(
         status="healthy",
         timestamp=datetime.utcnow().isoformat(),
+        cache_bust_trigger=CACHE_BUST_TRIGGER,
     )
 
 
@@ -161,6 +181,8 @@ async def solve_greedy(request: SolveRequest) -> SolveResponse:
     3. Runs GREEDY algorithm
     4. Returns assignments and metrics
     
+    DRAAD-FIX: Now includes per-service coverage and bezetting detail
+    
     Args:
         request: SolveRequest with roster_id and parameters
         
@@ -168,6 +190,9 @@ async def solve_greedy(request: SolveRequest) -> SolveResponse:
         SolveResponse with assignments and metrics
     """
     logger.info(f"📋 Processing solve request for roster: {request.roster_id}")
+    
+    # Generate cache-busting timestamp
+    cache_bust_timestamp = int(time.time() * 1000)
     
     try:
         # Validate request
@@ -203,6 +228,7 @@ async def solve_greedy(request: SolveRequest) -> SolveResponse:
                 assignments=[],
                 error_message=result.get('error_message'),
                 constraint_violations=result.get('constraint_violations'),
+                timestamp=cache_bust_timestamp,
             )
         
         # Format assignments
@@ -228,6 +254,17 @@ async def solve_greedy(request: SolveRequest) -> SolveResponse:
             f"coverage={result.get('coverage_rate', 0.0):.1%}"
         )
         
+        # DRAAD-FIX: Enhanced metadata met per-service coverage
+        metadata = {
+            "solver_engine": "greedy",
+            "algorithm_phases": result.get('algorithm_phases'),
+            "bottleneck_analysis": result.get('bottleneck_analysis'),
+            "per_service_coverage": result.get('per_service_coverage', {}),  # NEW!
+            "bezetting_detail": result.get('bezetting_detail', {}),  # NEW!
+            "cache_bust_trigger": CACHE_BUST_TRIGGER,
+            "timestamp": cache_bust_timestamp,
+        }
+        
         return SolveResponse(
             success=True,
             solve_time_seconds=result.get('solve_time_seconds', 0),
@@ -235,11 +272,8 @@ async def solve_greedy(request: SolveRequest) -> SolveResponse:
             coverage_rate=result.get('coverage_rate', 0.0),
             assignments=assignments,
             constraint_violations=result.get('constraint_violations'),
-            metadata={
-                "solver_engine": "greedy",
-                "algorithm_phases": result.get('algorithm_phases'),
-                "bottleneck_analysis": result.get('bottleneck_analysis'),
-            },
+            metadata=metadata,
+            timestamp=cache_bust_timestamp,
         )
     
     except ValueError as e:
@@ -251,6 +285,7 @@ async def solve_greedy(request: SolveRequest) -> SolveResponse:
             coverage_rate=0.0,
             assignments=[],
             error_message=f"Validation error: {str(e)}",
+            timestamp=cache_bust_timestamp,
         )
     
     except Exception as e:
@@ -262,6 +297,7 @@ async def solve_greedy(request: SolveRequest) -> SolveResponse:
             coverage_rate=0.0,
             assignments=[],
             error_message=f"Internal error: {str(e)}",
+            timestamp=cache_bust_timestamp,
         )
 
 
@@ -276,8 +312,9 @@ async def root():
     """
     return {
         "service": "GREEDY Solver API",
-        "version": "1.0.0",
+        "version": "1.0.0-DRAAD-FIX",
         "status": "operational",
+        "cache_bust_trigger": CACHE_BUST_TRIGGER,
         "endpoints": {
             "health": "/health",
             "solve": "/api/greedy/solve",
@@ -323,6 +360,7 @@ if __name__ == "__main__":
     host = os.getenv("HOST", "0.0.0.0")
     
     logger.info(f"🚀 Starting GREEDY API Service on {host}:{port}")
+    logger.info(f"[CACHE-BUST] Trigger: {CACHE_BUST_TRIGGER}")
     
     uvicorn.run(
         app,
