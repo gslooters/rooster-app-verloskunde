@@ -16,15 +16,61 @@ export const revalidate = 0;
 
 import { NextResponse, NextRequest } from 'next/server';
 
+// ==================== TYPE DEFINITIONS ====================
+
+/**
+ * Type for individual route test result
+ */
+interface RouteTestResult {
+  path: string;
+  status_code: number;
+  reachable: boolean;
+  response_type?: string;
+  response_time_ms: number;
+  timestamp: string;
+  error?: string;
+}
+
+/**
+ * Type for verification results summary
+ */
+interface VerificationSummary {
+  total: number;
+  reachable: number;
+  unreachable: number;
+  status: string;
+}
+
+/**
+ * Type for interpretation guidance
+ */
+interface InterpretationGuidance {
+  [key: string]: {
+    meaning: string;
+    next_step: string;
+  };
+}
+
+/**
+ * Type for complete response payload
+ */
+interface VerificationResponse {
+  timestamp: string;
+  routes_checked: RouteTestResult[];
+  summary: VerificationSummary;
+  interpretation: InterpretationGuidance;
+  diagnostic_hints: string[];
+}
+
 // Log initialization
 console.log('[EXPORT-VERIFY] ✅ Export verification route loaded at:', new Date().toISOString());
 
 /**
  * GET handler - Verify export routes
  */
-export async function GET(request: NextRequest) {
+export async function GET(request: NextRequest): Promise<NextResponse<VerificationResponse>> {
   const timestamp = new Date().toISOString();
-  const results = {
+  const results: VerificationResponse = {
     timestamp: timestamp,
     routes_checked: [],
     summary: {
@@ -32,7 +78,9 @@ export async function GET(request: NextRequest) {
       reachable: 0,
       unreachable: 0,
       status: 'UNKNOWN'
-    }
+    },
+    interpretation: {},
+    diagnostic_hints: []
   };
 
   console.log(`\n${'='.repeat(80)}`);
@@ -107,10 +155,12 @@ export async function GET(request: NextRequest) {
 
 /**
  * Test if a route is reachable
+ * @param path - API route path to test
+ * @returns Promise<RouteTestResult> - Test result with status and timing
  */
-async function testRoute(path: string): Promise<any> {
+async function testRoute(path: string): Promise<RouteTestResult> {
   const startTime = Date.now();
-  const fullUrl = `${process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'}${path}?_test=1`;
+  const fullUrl = `${process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'}${path}?_test=1&_t=${Date.now()}`;
 
   console.log(`[EXPORT-VERIFY]   Testing ${path}...`);
   console.log(`[EXPORT-VERIFY]   URL: ${fullUrl}`);
@@ -123,7 +173,7 @@ async function testRoute(path: string): Promise<any> {
       // Don't follow redirects to 404
       redirect: 'manual'
     }).catch(err => {
-      console.log(`[EXPORT-VERIFY]   Fetch error (trying GET): ${err.message}`);
+      console.log(`[EXPORT-VERIFY]   Fetch error (trying GET): ${(err as Error).message}`);
       // Try GET instead
       return fetch(fullUrl, {
         method: 'GET',
@@ -136,7 +186,7 @@ async function testRoute(path: string): Promise<any> {
     const reachable = response.status !== 404 && response.status < 500;
     const responseType = response.headers.get('content-type') || 'unknown';
 
-    const result = {
+    const result: RouteTestResult = {
       path: path,
       status_code: response.status,
       reachable: reachable,
@@ -172,7 +222,7 @@ async function testRoute(path: string): Promise<any> {
 /**
  * POST handler
  */
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<NextResponse<VerificationResponse>> {
   console.log('[EXPORT-VERIFY] ℹ️ POST request received - forwarding to GET');
   return GET(request);
 }
