@@ -1,6 +1,6 @@
 {
   "name": "rooster-app-final",
-  "version": "0.1.3-stap3-complete",
+  "version": "0.1.4-force-rebuild",
   "private": true,
   "scripts": {
     "dev": "next dev",
