@@ -4,6 +4,7 @@ import DRAAD121_CACHEBUST from "@/lib/cache-bust-draad121";
 import DRAAD122_CACHEBUST from "@/lib/cache-bust-draad122";
 import DRAAD130_CACHEBUST from "@/lib/cache-bust-draad130";
 import DRAAD194_CACHEBUST from "@/lib/cache-bust-draad194";
+import { DRAAD194_FIX_CACHEBUST } from "@/lib/cache-bust-draad194-fix";
 
 export const metadata: Metadata = {
   title: "RoosterApp - Verloskundigen Praktijk",
@@ -40,6 +41,14 @@ if (DRAAD194_CACHEBUST) {
   console.log('[CACHE-BUST] DRAAD194 screens:', DRAAD194_CACHEBUST.screens);
   console.log('[CACHE-BUST] DRAAD194 fix:', DRAAD194_CACHEBUST.fix);
   console.log('[CACHE-BUST] DRAAD194 impact:', DRAAD194_CACHEBUST.impact);
+}
+
+// DRAAD194-FIX: Cache-bust - Badge component creation fix
+if (DRAAD194_FIX_CACHEBUST) {
+  console.log('[CACHE-BUST] DRAAD194-FIX loaded at', DRAAD194_FIX_CACHEBUST.timestamp);
+  console.log('[CACHE-BUST] DRAAD194-FIX version:', DRAAD194_FIX_CACHEBUST.version);
+  console.log('[CACHE-BUST] DRAAD194-FIX reason:', DRAAD194_FIX_CACHEBUST.reason);
+  console.log('[CACHE-BUST] DRAAD194-FIX fixes:', DRAAD194_FIX_CACHEBUST.metadata.fixes);
 }
 
 export default function RootLayout({
