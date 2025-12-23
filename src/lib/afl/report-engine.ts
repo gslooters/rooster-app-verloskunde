@@ -4,6 +4,7 @@
  * Generates comprehensive coverage reports with:
  * - Summary metrics (coverage %, rating, color)
  * - Per-service breakdown
+ * - Per-service/team breakdown (✅ OPTIE A)
  * - Bottleneck detection
  * - Employee capacity remaining
  * - Open slots analysis
@@ -19,6 +20,7 @@ import {
   WorkbestandServicesMetadata,
   AflLoadResult,
   AflReport,
+  ServiceTeamStats,
 } from './types';
 
 const supabase = createClient(
@@ -63,6 +65,14 @@ export async function generateAflReport(params: {
       params.workbestand_opdracht,
       params.workbestand_planning,
       params.workbestand_services_metadata
+    );
+
+    // ✅ OPTIE A: PLANNED BY SERVICE/TEAM BREAKDOWN
+    const by_service_team = calculateServiceTeamBreakdown(
+      params.workbestand_opdracht,
+      params.workbestand_planning,
+      params.workbestand_services_metadata,
+      params.workbestand_capaciteit
     );
 
     // ===== BOTTLENECK DETECTION =====
@@ -118,6 +128,7 @@ export async function generateAflReport(params: {
         coverage_color: color,
       },
       by_service: planned_by_service,
+      by_service_team, // ✅ OPTIE A
       bottleneck_services,
       by_team,
       employee_capacity,
@@ -228,6 +239,112 @@ function calculateServiceBreakdown(
 }
 
 /**
+ * ✅ OPTIE A: Calculate breakdown by service AND team
+ * Per dienst/team combinatie: hoeveel gepland, hoeveel bezet, coverage %
+ */
+function calculateServiceTeamBreakdown(
+  tasks: WorkbestandOpdracht[],
+  planning: WorkbestandPlanning[],
+  services: WorkbestandServicesMetadata[],
+  capacity: WorkbestandCapaciteit[]
+): ServiceTeamStats[] {
+  const serviceMap = new Map(services.map((s) => [s.id, s]));
+  const breakdownMap = new Map<string, ServiceTeamStats>();
+
+  // Step 1: For each task, identify service/team combination
+  for (const task of tasks) {
+    const service = serviceMap.get(task.service_id);
+    if (!service) continue;
+
+    // Map task team code to team name
+    const teamSearchOrder = getTeamSearchOrder(task.team);
+    
+    // Create entry for each possible team in search order
+    for (const teamName of teamSearchOrder) {
+      const key = `${task.service_code}|${teamName}`;
+      
+      if (!breakdownMap.has(key)) {
+        breakdownMap.set(key, {
+          service_code: task.service_code,
+          service_name: service.naam,
+          team_code: task.team, // Use original task team code
+          team_name: teamName,
+          planned: 0,
+          assigned: 0,
+          coverage_pct: 0,
+          overstaffing: false,
+        });
+      }
+    }
+  }
+
+  // Step 2: Count assignments per service/team
+  for (const slot of planning) {
+    if (slot.status === 1 && slot.service_id) {
+      const service = serviceMap.get(slot.service_id);
+      if (!service) continue;
+
+      // Get employee team from capacity data
+      const empCapacity = capacity.find(
+        (c) => c.employee_id === slot.employee_id && c.service_id === slot.service_id
+      );
+      const empTeam = empCapacity?.team || 'Overig';
+
+      const key = `${service.code}|${empTeam}`;
+      const entry = breakdownMap.get(key);
+      if (entry) {
+        entry.assigned += 1;
+      }
+    }
+  }
+
+  // Step 3: Calculate coverage and overstaffing
+  for (const entry of breakdownMap.values()) {
+    // planned = required assignments for this service/team combo
+    // Get all tasks for this service/team combo
+    const tasksForThisCombination = tasks.filter(
+      (t) =>
+        t.service_code === entry.service_code &&
+        (entry.team_code === t.team || t.team === 'TOT')
+    );
+    
+    entry.planned = tasksForThisCombination.reduce((sum, t) => sum + t.aantal, 0);
+    
+    if (entry.planned > 0) {
+      entry.coverage_pct = Math.round((entry.assigned / entry.planned) * 100 * 10) / 10;
+      entry.overstaffing = entry.assigned > entry.planned;
+    } else {
+      entry.coverage_pct = 0;
+      entry.overstaffing = false;
+    }
+  }
+
+  // Return sorted by service code then team
+  return Array.from(breakdownMap.values()).sort((a, b) => {
+    if (a.service_code !== b.service_code) {
+      return a.service_code.localeCompare(b.service_code);
+    }
+    return a.team_name.localeCompare(b.team_name);
+  });
+}
+
+/**
+ * Team search order mapping
+ */
+function getTeamSearchOrder(team: string): string[] {
+  switch (team) {
+    case 'GRO':
+      return ['Groen', 'Overig'];
+    case 'ORA':
+      return ['Oranje', 'Overig'];
+    case 'TOT':
+      return ['Groen', 'Oranje', 'Overig'];
+    default:
+      return ['Groen', 'Oranje', 'Overig'];
+  }
+}
+
+/**
  * Detect bottleneck services (>10% open)
  */
 function detectBottlenecks(
@@ -325,7 +442,7 @@ function calculateEmployeeCapacity(
       employeeMap.set(key, {
         employee_id: cap.employee_id,
         employee_name: getEmployeeName(cap.employee_id), // Could fetch from DB
-        team: 'Unknown',
+        team: cap.team || 'Unknown',
         total_assignments: 0,
         by_service: [],
       });
@@ -494,6 +611,7 @@ async function storeReportInDatabase(report: AflReport): Promise<void> {
  * - Report header with timestamps
  * - Summary metrics with color coding
  * - Service breakdown table
+ * - Service/Team breakdown (✅ OPTIE A)
  * - Bottleneck analysis
  * - Employee capacity heatmap
  * - Open slots detail
@@ -741,6 +859,38 @@ function generatePdfHtml(report: AflReport): string {
         </tbody>
       </table>
 
+      <!-- SERVICE/TEAM BREAKDOWN (✅ OPTIE A) -->
+      ${report.by_service_team && report.by_service_team.length > 0 ? `
+        <div class="page-break"></div>
+        <div class="section-title">✅ Service/Team Coverage Details</div>
+        <table>
+          <thead>
+            <tr>
+              <th>Service</th>
+              <th>Team</th>
+              <th>Planned</th>
+              <th>Assigned</th>
+              <th>Coverage %</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${report.by_service_team.map(st => `
+              <tr>
+                <td>${st.service_code}</td>
+                <td>${st.team_name}</td>
+                <td>${st.planned}</td>
+                <td>${st.assigned}</td>
+                <td>${st.coverage_pct.toFixed(1)}%</td>
+                <td>
+                  ${st.overstaffing ? '⚠️ OVERSTAFFING' : st.coverage_pct >= 95 ? '✅ COMPLETE' : st.coverage_pct >= 80 ? '⚠️ PARTIAL' : '❌ LOW'}
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      ` : ''}
+
       <!-- BOTTLENECK SERVICES -->
       ${report.bottleneck_services.length > 0 ? `
         <div class="page-break"></div>
@@ -880,14 +1030,6 @@ function generatePdfHtml(report: AflReport): string {
 
 /**
  * Export report to Excel using XLSX library
- * Generates professional Excel workbook with:
- * - Summary sheet with key metrics
- * - Services breakdown with performance per service
- * - Bottleneck services analysis
- * - Teams capacity and assignments
- * - Employee capacity and service distribution
- * - Open slots detail
- * - Daily summary with coverage per day
  */
 export async function exportReportToExcel(
   report: AflReport,
@@ -953,6 +1095,41 @@ export async function exportReportToExcel(
       { wch: 12 }
     ];
     XLSX.utils.book_append_sheet(workbook, servicesSheet, 'Services');
+
+    // ===== SHEET 2B: SERVICE/TEAM (✅ OPTIE A) =====
+    if (report.by_service_team && report.by_service_team.length > 0) {
+      const serviceTeamData: (string | number)[][] = [
+        ['Service/Team Coverage Details'],
+        [],
+        ['Service Code', 'Service Name', 'Team Code', 'Team Name', 'Planned', 'Assigned', 'Coverage %', 'Overstaffing']
+      ];
+      
+      for (const st of report.by_service_team) {
+        serviceTeamData.push([
+          st.service_code,
+          st.service_name,
+          st.team_code,
+          st.team_name,
+          st.planned.toString(),
+          st.assigned.toString(),
+          st.coverage_pct.toFixed(2),
+          st.overstaffing ? 'YES' : 'NO'
+        ]);
+      }
+
+      const serviceTeamSheet = XLSX.utils.aoa_to_sheet(serviceTeamData);
+      serviceTeamSheet['!cols'] = [
+        { wch: 12 },
+        { wch: 20 },
+        { wch: 12 },
+        { wch: 20 },
+        { wch: 10 },
+        { wch: 10 },
+        { wch: 15 },
+        { wch: 12 }
+      ];
+      XLSX.utils.book_append_sheet(workbook, serviceTeamSheet, 'ServiceTeam');
+    }
 
     // ===== SHEET 3: BOTTLENECKS =====
     const bottlenecksData: (string | number)[][] = [
