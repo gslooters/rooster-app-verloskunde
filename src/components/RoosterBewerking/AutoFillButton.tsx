@@ -2,6 +2,7 @@
  * AUTO-FILL BUTTON COMPONENT - GREEDY INTEGRATION
  * 
  * DRAAD 201: STAP 4 Frontend Integration - GREEDY ONLY
+ * DRAAD 221: FIX - Verwijder auto-reload voor rapport display
  * 
  * Integration Point: RoosterBewerking > Preplanning view
  * Endpoint: POST https://greedy-production.up.railway.app/api/greedy/solve
@@ -16,7 +17,7 @@
  *   2. Call GREEDY endpoint POST /api/greedy/solve
  *   3. Display results with coverage
  *   4. Show bottleneck summary
- *   5. Auto-refresh rooster after success
+ *   5. Gebruiker kiest zelf wanneer te vernieuwen (GEEN auto-reload!)
  *   6. Error classification: network/server/timeout with Dutch messages
  */
 
@@ -211,10 +212,9 @@ const AutoFillButton: React.FC<AutoFillButtonProps> = ({
         onSolveComplete(solveResult);
       }
 
-      // Auto-refresh after success
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
+      // DRAAD 221 FIX: Auto-reload VERWIJDERD!
+      // Gebruiker kan nu rapport lezen en zelf beslissen wanneer te vernieuwen
+      // via de "🔄 Vernieuwen" knop hieronder
 
     } catch (err) {
       const statusCode = (err as any)?.status;
