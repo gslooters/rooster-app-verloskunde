@@ -1,0 +1,12 @@
+{
+  "trigger": "DRAAD346-modal-fix",
+  "timestamp": 1735054514000,
+  "changes": [
+    "Fixed modal close button (X) - only visible on ERROR/TIMEOUT",
+    "Disabled export buttons (PDF/Excel) with gray styling",
+    "Enforces workflow: user MUST click 'Naar rooster' from SUCCESS"
+  ],
+  "file": "components/afl/AflProgressModal.tsx",
+  "commit": "f19d16c02903dedb8d77686de7616f1881ced61d",
+  "deployed_at": "2025-12-23T16:15:14Z"
+}
