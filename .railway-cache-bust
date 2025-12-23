@@ -1,8 +1,17 @@
-# Railway Cache-Bust Trigger
-# Generated: 2025-12-23T00:20:30Z
-# Random: 8374926
-# Purpose: Force Railway rebuild after TypeScript interface updates
+# Cache-bust trigger for Railway deployment
+# DRAAD 342: AFL Team Fixes (Prioriteit 1, 2 en 3)
+# Timestamp: 2025-12-23T08:31:45Z
+# Nonce: DRAAD-342-TEAM-FIX
 
-DRAD_341_TIMESTAMP=2025-12-23T00:20:30Z
-DRAD_341_RANDOM=8374926
-DRAD_341_BUILD_TRIGGER=1735014030
+This file is updated to force Railway to rebuild and redeploy.
+The timestamp and nonce ensure a fresh build of the entire Next.js application.
+
+Fixes implemented:
+1. ✅ TypeScript interface: WorkbestandPlanning.team? property added
+2. ✅ Solve-engine cleanup: extractTeamFromEmployeeId uses ONLY workbestand_capaciteit.team
+3. ✅ Dataflow verification: Query 3 includes team field, buildCapaciteit maps it correctly
+
+Expected result:
+- Build passes without TypeScript errors
+- AFL solve-engine correctly resolves team information
+- Complete dataflow from Supabase -> workbenches -> solve logic
