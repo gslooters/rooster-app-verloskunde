@@ -344,33 +344,31 @@ export class SolveEngine {
   }
 
   /**
-   * Extract team from employee ID or capacity data
-   * FIX 3: Use real team data instead of hardcoded
+   * Extract team from employee capacity data ONLY
+   * ✅ DRAAD 342 PRIORITEIT 2: Cleaned up to use ONLY workbestand_capaciteit.team
+   * 
+   * REASON:
+   * - roster_assignments (planning source) has NO team column
+   * - The authoritative team source is roster_employee_services.team
+   * - Which gets mapped into workbestand_capaciteit.team
+   * 
+   * This method now uses ONE clear source, not multiple fallbacks
    */
   private extractTeamFromEmployeeId(employee_id: string): string {
-    // ✅ FIX 3: Try to get from capacity data
+    // ✅ ONLY source: workbestand_capaciteit (which comes from roster_employee_services)
     const capacity_rows = this.workbestand_capaciteit.filter(
       (c) => c.employee_id === employee_id
     );
-    
+
     if (capacity_rows.length > 0) {
-      // Get most common team or fallback
+      // Get first non-empty team or fallback
       const teams = capacity_rows.map((c) => c.team).filter(Boolean);
       if (teams.length > 0) {
         return teams[0];
       }
     }
 
-    // Fallback: infer from planning data
-    const planning_records = this.workbestand_planning.filter(
-      (p) => p.employee_id === employee_id
-    );
-    
-    if (planning_records.length > 0 && planning_records[0].team) {
-      return planning_records[0].team;
-    }
-
-    // Last resort: default
+    // Safe default if no capacity found
     return 'Overig';
   }
 
