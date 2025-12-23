@@ -12,6 +12,7 @@ export interface RosterEmployeeServiceRow {
   id: string;
   roster_id: string;
   employee_id: string;
+  team: string;           // ✅ NIEUW - na employee_id (DRAAD 341)
   service_id: string;
   actief: boolean; // Database column naam
   aantal: number;
