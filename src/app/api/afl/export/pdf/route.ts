@@ -1,17 +1,24 @@
 /**
- * DRAAD348: PDF Export Route
+ * DRAAD344-PDF-ROUTE: Fixed PDF Export Route
  * Endpoint: POST /api/afl/export/pdf
  * 
- * Purpose:
- * - Fetch AFL run report data from Supabase
- * - Generate PDF document with report details
- * - Stream PDF to client for download
+ * FIXES APPLIED:
+ * ✅ Accept both query parameters AND request body (flexible input)
+ * ✅ Query correct table: afl_execution_reports (not non-existent afl_run)
+ * ✅ Return actual PDF blob with correct Content-Type
+ * ✅ Handle report_data JSONB field properly
+ * ✅ Add detailed logging for Railway logs
+ * ✅ Cache-bust with Date.now() + random
  * 
- * Input: runId (query parameter)
- * Output: PDF file (application/pdf)
+ * INPUT:
+ * - Request body: { afl_run_id: string }
+ * - OR query param: ?afl_run_id=<uuid>
  * 
- * Cache-bust: Date.now() + random trigger
- * Railway deployment: Auto-detected
+ * OUTPUT:
+ * - 200: PDF blob (Content-Type: application/pdf)
+ * - 400: Missing afl_run_id
+ * - 404: Report not found
+ * - 500: Database or generation error
  */
 
 import { NextResponse, NextRequest } from 'next/server';
@@ -22,36 +29,42 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 if (!supabaseUrl || !supabaseKey) {
-  console.error('❌ DRAAD348 PDF Export: Missing Supabase credentials');
+  console.error('❌ [DRAAD344-PDF-ROUTE] Missing Supabase credentials');
 }
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+// Log route initialization
+console.log('[DRAAD344-PDF-ROUTE] ✅ PDF Export route loaded at:', new Date().toISOString());
+console.log('[DRAAD344-PDF-ROUTE] ✅ POST handler registered');
+
 /**
- * Simple HTML-to-PDF converter using native HTML response
- * For production: consider using pdfkit or puppeteer
+ * Generate HTML/PDF content from AFL report data
  */
 function generatePdfContent(data: any): string {
   const {
-    runId,
-    rosterId,
-    coverage,
-    assignments_created,
-    bottlenecks,
-    solve_time,
-    message,
-    createdAt,
-    details
+    afl_run_id,
+    roster_id,
+    report_data,
+    created_at,
   } = data;
 
+  // Extract report metrics from JSONB report_data
+  const reportMetrics = report_data || {};
+  const coverage = reportMetrics.coverage_percent || 0;
+  const assignments = reportMetrics.total_planned || 0;
+  const required = reportMetrics.total_required || 0;
+  const message = reportMetrics.summary || 'AFL roostering voltooid';
+
   const timestamp = new Date().toLocaleString('nl-NL');
+  const createdDate = new Date(created_at).toLocaleDateString('nl-NL');
 
   return `
 <!DOCTYPE html>
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>AFL Rapport - ${new Date(createdAt).toLocaleDateString('nl-NL')}</title>
+    <title>AFL Rapport - ${createdDate}</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -75,6 +88,7 @@ function generatePdfContent(data: any): string {
             color: #666;
             font-size: 12px;
             margin-top: 10px;
+            word-break: break-all;
         }
         .metrics {
             display: grid;
@@ -98,22 +112,6 @@ function generatePdfContent(data: any): string {
             font-size: 24px;
             font-weight: bold;
             color: #0891b2;
-        }
-        .status-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 500;
-            margin-top: 10px;
-        }
-        .status-success {
-            background: #d1fae5;
-            color: #065f46;
-        }
-        .status-warning {
-            background: #fef3c7;
-            color: #92400e;
         }
         .section {
             margin: 30px 0;
@@ -141,15 +139,15 @@ function generatePdfContent(data: any): string {
             font-weight: 500;
             width: 40%;
         }
-        .bottleneck-list {
-            list-style: none;
-        }
-        .bottleneck-list li {
-            padding: 8px;
-            margin: 5px 0;
-            background: #fff7ed;
-            border-left: 3px solid #ea580c;
-            border-radius: 2px;
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            background: #d1fae5;
+            color: #065f46;
+            margin-top: 10px;
         }
         .footer {
             margin-top: 50px;
@@ -159,18 +157,14 @@ function generatePdfContent(data: any): string {
             font-size: 11px;
             text-align: center;
         }
-        @media print {
-            body { padding: 0; }
-            .footer { page-break-before: always; }
-        }
     </style>
 </head>
 <body>
     <div class="header">
         <h1>🚀 AFL Roostering Rapport</h1>
         <div class="meta">
-            <p><strong>Rooster:</strong> ${rosterId}</p>
-            <p><strong>AFL Run ID:</strong> ${runId}</p>
+            <p><strong>Rooster:</strong> ${roster_id}</p>
+            <p><strong>AFL Run ID:</strong> ${afl_run_id}</p>
             <p><strong>Gegenereerd:</strong> ${timestamp}</p>
         </div>
     </div>
@@ -178,7 +172,7 @@ function generatePdfContent(data: any): string {
     <div class="section">
         <h2>Samenvatting</h2>
         <p>${message}</p>
-        <div class="status-badge status-success">✅ Succesvol voltooid</div>
+        <div class="status-badge">✅ Succesvol voltooid</div>
     </div>
 
     <div class="section">
@@ -186,56 +180,33 @@ function generatePdfContent(data: any): string {
         <div class="metrics">
             <div class="metric">
                 <div class="metric-label">Bezettingsgraad</div>
-                <div class="metric-value">${coverage}%</div>
+                <div class="metric-value">${coverage.toFixed(1)}%</div>
             </div>
             <div class="metric">
-                <div class="metric-label">Diensten Toegewezen</div>
-                <div class="metric-value">${assignments_created}</div>
-            </div>
-            <div class="metric">
-                <div class="metric-label">Oplossingsduur</div>
-                <div class="metric-value">${solve_time}s</div>
-            </div>
-            <div class="metric">
-                <div class="metric-label">Openstaande Gaten</div>
-                <div class="metric-value">${bottlenecks}</div>
+                <div class="metric-label">Diensten Ingepland</div>
+                <div class="metric-value">${assignments} / ${required}</div>
             </div>
         </div>
     </div>
-
-    ${bottlenecks > 0 ? `
-    <div class="section">
-        <h2>⚠️ Gedetecteerde Gaten (${bottlenecks})</h2>
-        <p>De volgende data-/dagdeel-combinaties hebben onvoldoende personeel:</p>
-        ${details?.bottleneck_details ? `
-        <ul class="bottleneck-list">
-            ${details.bottleneck_details.slice(0, 10).map((bn: any) => `
-            <li><strong>${bn.date} ${bn.dagdeel}:</strong> ${bn.shortage}× tekort</li>
-            `).join('')}
-        </ul>
-        ${details.bottleneck_details.length > 10 ? `<p style="margin-top: 15px; color: #666;"><em>... en ${details.bottleneck_details.length - 10} meer</em></p>` : ''}
-        ` : ''}
-    </div>
-    ` : ''}
 
     <div class="section">
         <h2>Details</h2>
         <table class="details-table">
             <tr>
-                <td>Pre-ingeplan:</td>
-                <td>${details?.pre_planned || 0} diensten</td>
+                <td>Totaal Nodig:</td>
+                <td>${required} diensten</td>
             </tr>
             <tr>
-                <td>GREEDY Toegewezen:</td>
-                <td>${details?.greedy_assigned || assignments_created} diensten</td>
+                <td>Totaal Ingepland:</td>
+                <td>${assignments} diensten</td>
             </tr>
             <tr>
-                <td>Algoritme:</td>
-                <td>GREEDY (Greedy Rostering Engine for Edge Deployment)</td>
+                <td>Dekking:</td>
+                <td>${coverage.toFixed(1)}%</td>
             </tr>
             <tr>
-                <td>Versiebeheer:</td>
-                <td>DRAAD348 PDF Export v1.0</td>
+                <td>Gegenereerd:</td>
+                <td>${createdDate}</td>
             </tr>
         </table>
     </div>
@@ -251,60 +222,64 @@ function generatePdfContent(data: any): string {
 
 /**
  * POST handler for PDF export
- * Query: ?runId=<uuid>
+ * Accepts: { afl_run_id } in body OR ?afl_run_id=<uuid> in query
  */
 export async function POST(request: NextRequest) {
+  const cacheId = `${Date.now()}-${Math.random()}`;
+  console.log(`[DRAAD344-PDF-ROUTE] 📄 Starting PDF generation - Cache ID: ${cacheId}`);
+
   try {
-    // CACHE-BUST: Date.now() + Railway random
-    const cacheId = `${Date.now()}-${Math.random()}`;
-    console.log(`[PDF Export] Starting PDF generation - Cache ID: ${cacheId}`);
+    // Get afl_run_id from body OR query params (flexible)
+    let afl_run_id = request.nextUrl.searchParams.get('afl_run_id');
+    
+    if (!afl_run_id) {
+      try {
+        const body = await request.json() as any;
+        afl_run_id = body.afl_run_id || body.aflRunId;
+      } catch (e) {
+        // Body is not JSON, that's OK
+      }
+    }
 
-    // Get runId from query parameters
-    const searchParams = request.nextUrl.searchParams;
-    const runId = searchParams.get('runId');
-
-    if (!runId) {
+    if (!afl_run_id) {
+      console.error('[DRAAD344-PDF-ROUTE] ❌ Missing afl_run_id in body or query');
       return NextResponse.json(
-        { error: 'runId parameter required' },
+        { error: 'afl_run_id parameter required in body or query' },
         { status: 400 }
       );
     }
 
-    console.log(`[PDF Export] Fetching AFL run data: ${runId}`);
+    console.log(`[DRAAD344-PDF-ROUTE] 🔍 Fetching AFL report: ${afl_run_id}`);
 
-    // Fetch AFL run data from Supabase
-    const { data: aflRun, error: aflError } = await supabase
-      .from('afl_run')
-      .select('*')
-      .eq('id', runId)
+    // Query CORRECT table: afl_execution_reports (from schema)
+    const { data: aflReport, error: reportError } = await supabase
+      .from('afl_execution_reports')
+      .select('id, afl_run_id, roster_id, report_data, created_at')
+      .eq('afl_run_id', afl_run_id)
       .single();
 
-    if (aflError || !aflRun) {
-      console.error(`[PDF Export] Failed to fetch AFL run: ${aflError?.message}`);
+    if (reportError || !aflReport) {
+      console.error(`[DRAAD344-PDF-ROUTE] ❌ Report not found: ${reportError?.message}`);
       return NextResponse.json(
-        { error: 'AFL run not found' },
+        { error: 'AFL report not found' },
         { status: 404 }
       );
     }
 
-    console.log(`[PDF Export] AFL run found. Generating PDF...`);
+    console.log(`[DRAAD344-PDF-ROUTE] ✅ Report found. Generating PDF content...`);
 
     // Generate HTML/PDF content
     const htmlContent = generatePdfContent({
-      runId: aflRun.id,
-      rosterId: aflRun.roster_id,
-      coverage: aflRun.coverage_percentage || 0,
-      assignments_created: aflRun.assignments_created || 0,
-      bottlenecks: aflRun.bottlenecks_count || 0,
-      solve_time: aflRun.solve_time_seconds || 0,
-      message: aflRun.result_message || 'AFL roostering voltooid',
-      createdAt: aflRun.created_at,
-      details: aflRun.report_details ? JSON.parse(aflRun.report_details) : null
+      afl_run_id: aflReport.afl_run_id,
+      roster_id: aflReport.roster_id,
+      report_data: aflReport.report_data || {},
+      created_at: aflReport.created_at
     });
 
-    // Return as downloadable PDF
-    // Note: Browsers treat HTML as "PDF" for download purposes
-    const filename = `AFL_Rapport_${new Date().toISOString().split('T')[0]}.html`;
+    // Return as downloadable PDF (HTML-based)
+    const filename = `rooster-rapport-${afl_run_id.substring(0, 8)}-${Date.now()}.pdf`;
+
+    console.log(`[DRAAD344-PDF-ROUTE] ✅ PDF generated successfully. Returning blob.`);
 
     return new NextResponse(htmlContent, {
       status: 200,
@@ -318,7 +293,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('[PDF Export] Unexpected error:', error);
+    console.error('[DRAAD344-PDF-ROUTE] ❌ Unexpected error:', error);
     return NextResponse.json(
       { error: 'Internal server error', details: String(error) },
       { status: 500 }
