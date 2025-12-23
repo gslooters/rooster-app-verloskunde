@@ -5,7 +5,10 @@ import { Loader2, CheckCircle2, XCircle, X, AlertCircle, Clock } from 'lucide-re
 import { Button } from '@/components/ui/button';
 
 /**
- * AFL Progress Modal Component - DRAAD337: FIX 3
+ * AFL Progress Modal Component - DRAAD337: FIX 4
+ * 
+ * CRITICAL FIX: Modal now STAYS OPEN on success state until user clicks "Naar rooster" button
+ * This allows user to READ the report statistics before navigating
  * 
  * Enhanced progress tracking for AFL (AutoFill) pipeline execution
  * Shows 5 phases: Load → Solve → Chain → Write → Report
@@ -15,10 +18,12 @@ import { Button } from '@/components/ui/button';
  * - Phase-by-phase status indicators
  * - Timeout detection (15 second max)
  * - Error handling with detailed messages
- * - Success state with statistics
+ * - Success state with statistics (STAYS VISIBLE)
+ * - Blue "Naar rooster" CTA button (triggers parent callback on click)
  * - Prevents accidental closure during processing
  * - Cache-busting headers (Date.now() + random)
  * - Modal stays visible until user confirms
+ * - PDF/Excel export placeholders for future implementation
  */
 
 interface AflProgressModalProps {
@@ -70,6 +75,7 @@ export function AflProgressModal({
   const [result, setResult] = useState<ExecutionResult | null>(null);
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [attemptCount, setAttemptCount] = useState<number>(0);
+  const [isNavigating, setIsNavigating] = useState(false);
 
   // Functie om AFL pipeline uit te voeren
   const executeAflPipeline = async () => {
@@ -158,7 +164,7 @@ export function AflProgressModal({
         throw new Error(errorMsg);
       }
 
-      // Success!
+      // Success! Set state and STAY OPEN for user to read report
       clearTimeout(timeoutHandle);
       const elapsedTime = Date.now() - startTime;
       setExecutionTime(elapsedTime);
@@ -167,12 +173,11 @@ export function AflProgressModal({
       setState('success');
       setStatusMessage('AFL-pijplijn succesvol voltooid!');
 
-      console.log(`✅ [Modal] AFL execution completed in ${elapsedTime}ms:`, data);
-
-      // DRAAD337: Call callback to parent
-      if (onSuccess) {
-        onSuccess(data);
-      }
+      console.log(`✅ [Modal] AFL execution completed in ${elapsedTime}ms - WAITING FOR USER ACTION`);
+      console.log(`✅ [Modal] User must click 'Naar rooster' button to proceed`);
+      
+      // DRAAD337 FIX4: DO NOT call onSuccess here - wait for user to click button
+      // This prevents the auto-navigate that was causing the "flits voorbij" issue
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       console.error('❌ [Modal] AFL execution failed:', err);
@@ -191,12 +196,28 @@ export function AflProgressModal({
     }
   }, [isOpen, rosterId]);
 
+  /**
+   * DRAAD337 FIX4: Handle "Naar rooster" button click
+   * Only triggers parent callback when user explicitly clicks button
+   */
+  const handleNavigateToRoster = () => {
+    if (state !== 'success' || !result) return;
+    
+    console.log('[Modal] User clicked "Naar rooster" button');
+    setIsNavigating(true);
+    
+    // Call parent callback to navigate
+    if (onSuccess) {
+      onSuccess(result);
+    }
+  };
+
   // Modal niet weergeven als gesloten
   if (!isOpen) {
     return null;
   }
 
-  const canClose = state !== 'loading';
+  const canClose = state !== 'loading' && !isNavigating;
 
   return (
     <>
@@ -207,7 +228,7 @@ export function AflProgressModal({
 
       {/* DRAAD337: Modal Container */}
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="relative w-full max-w-md bg-white rounded-lg shadow-2xl">
+        <div className="relative w-full max-w-2xl bg-white rounded-lg shadow-2xl">
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
             <div>
@@ -216,7 +237,7 @@ export function AflProgressModal({
               </h2>
               <p className="text-sm text-gray-600 mt-1 font-medium">
                 {state === 'loading' && '⏳ AFL-pijplijn wordt uitgevoerd...'}
-                {state === 'success' && '✅ Voltooid!'}
+                {state === 'success' && '✅ Voltooid! Rapport gegenereerd'}
                 {state === 'error' && '❌ Fout opgetreden'}
                 {state === 'timeout' && '⏱️ Timeout'}
                 {state === 'idle' && '⏷️ Gereed'}
@@ -311,53 +332,71 @@ export function AflProgressModal({
               </div>
             )}
 
-            {/* DRAAD337: SUCCESS STATE */}
+            {/* DRAAD337 FIX4: SUCCESS STATE - NOW STAYS OPEN UNTIL USER CLICKS BUTTON */}
             {state === 'success' && result && (
               <div className="space-y-4">
                 <div className="flex items-center justify-center">
-                  <div className="text-5xl">✅</div>
+                  <div className="text-5xl animate-bounce">✅</div>
                 </div>
 
                 <div className="text-center">
                   <h3 className="font-semibold text-lg text-gray-900 mb-2">
-                    Roosterbewerking voltooid
+                    Roosterbewerking voltooid!
                   </h3>
                   <p className="text-sm text-gray-600">
                     AFL-pijplijn is succesvol uitgevoerd in {(executionTime / 1000).toFixed(2)}s
                   </p>
                 </div>
 
-                {/* DRAAD337: Statistics */}
+                {/* DRAAD337 FIX4: Expanded Statistics Section */}
                 <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg p-4 space-y-3 border border-green-200">
-                  <div className="flex justify-between items-center py-2 border-b border-green-200">
-                    <span className="text-sm font-medium text-gray-700">Bezettingsgraad:</span>
-                    <span className="text-lg font-bold text-green-700">
-                      {result.report?.summary.coverage_percent.toFixed(1) || 'N/A'}%
-                    </span>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-white rounded p-3 border border-green-100">
+                      <p className="text-xs font-semibold text-gray-600 uppercase mb-1">Bezettingsgraad</p>
+                      <p className="text-2xl font-bold text-green-700">
+                        {result.report?.summary.coverage_percent.toFixed(1) || 'N/A'}%
+                      </p>
+                    </div>
+                    <div className="bg-white rounded p-3 border border-green-100">
+                      <p className="text-xs font-semibold text-gray-600 uppercase mb-1">Uitvoeringsduur</p>
+                      <p className="text-2xl font-bold text-blue-700">
+                        {(executionTime / 1000).toFixed(2)}s
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center py-2 border-b border-green-200">
-                    <span className="text-sm font-medium text-gray-700">Diensten ingepland:</span>
-                    <span className="text-sm font-semibold text-gray-900">
-                      {result.report?.summary.total_planned || 0} / {result.report?.summary.total_required || 0}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center py-2 border-b border-green-200">
-                    <span className="text-sm font-medium text-gray-700">Uitvoeringsduur:</span>
-                    <span className="text-sm font-mono font-semibold text-gray-900">
-                      {(executionTime / 1000).toFixed(2)}s
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center py-2">
-                    <span className="text-sm font-medium text-gray-700">AFL Run ID:</span>
-                    <span className="text-xs font-mono bg-white px-2 py-1 rounded text-gray-600 border border-gray-200">
-                      {(result.afl_run_id || '...').substring(0, 12)}...
-                    </span>
+                  <div className="border-t border-green-200 pt-3">
+                    <div className="flex justify-between items-center py-2">
+                      <span className="text-sm font-medium text-gray-700">Diensten ingepland:</span>
+                      <span className="text-sm font-semibold text-gray-900">
+                        {result.report?.summary.total_planned || 0} / {result.report?.summary.total_required || 0}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center py-2">
+                      <span className="text-sm font-medium text-gray-700">AFL Run ID:</span>
+                      <span className="text-xs font-mono bg-gray-100 px-2 py-1 rounded text-gray-600 border border-gray-300">
+                        {(result.afl_run_id || '...').substring(0, 12)}...
+                      </span>
+                    </div>
                   </div>
                 </div>
 
                 {/* Success Message */}
                 <div className="bg-green-100 border border-green-300 rounded-lg p-3 text-sm text-green-800 font-medium">
-                  ✓ Alle diensten zijn succesvol verwerkt door de AFL-pijplijn.
+                  ✓ Alle diensten zijn succesvol verwerkt door de AFL-pijplijn. 
+                  Klik "Naar rooster" hieronder om de resultaten te bekijken.
+                </div>
+
+                {/* Future: Export Options Placeholder */}
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-center">
+                  <p className="text-xs text-gray-600 font-medium mb-2">Toekomstige functies:</p>
+                  <div className="flex gap-2 justify-center flex-wrap">
+                    <button disabled className="px-3 py-1 bg-gray-200 text-gray-500 text-xs rounded font-medium cursor-not-allowed">
+                      📄 PDF rapport
+                    </button>
+                    <button disabled className="px-3 py-1 bg-gray-200 text-gray-500 text-xs rounded font-medium cursor-not-allowed">
+                      📊 Excel export
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -388,7 +427,7 @@ export function AflProgressModal({
                       </div>
                     </div>
                     <p className="text-xs text-red-600 pl-6">
-                      💡 Tip: Controleer de Rails logs op `/app/logs/production.log` voor meer details.
+                      💡 Tip: Controleer de server logs op Railway voor meer details.
                     </p>
                   </div>
                 )}
@@ -433,7 +472,7 @@ export function AflProgressModal({
             )}
           </div>
 
-          {/* Footer - DRAAD337: Enhanced with state-aware messaging */}
+          {/* Footer - DRAAD337 FIX4: New button layout for success state */}
           <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 rounded-b-lg">
             {state === 'loading' && (
               <div className="space-y-2">
@@ -445,17 +484,38 @@ export function AflProgressModal({
                 </p>
               </div>
             )}
-            {state !== 'loading' && (
-              <Button
+            {state === 'success' && (
+              <div className="space-y-2">
+                <button
+                  onClick={handleNavigateToRoster}
+                  disabled={isNavigating}
+                  className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg font-semibold transition-colors shadow-md"
+                >
+                  {isNavigating ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <Loader2 size={18} className="animate-spin" />
+                      Bezig met laden...
+                    </span>
+                  ) : (
+                    '→ Naar rooster'
+                  )}
+                </button>
+                <button
+                  onClick={onClose}
+                  disabled={isNavigating}
+                  className="w-full px-6 py-2 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 text-gray-700 rounded-lg font-medium transition-colors"
+                >
+                  Annuleren
+                </button>
+              </div>
+            )}
+            {state !== 'loading' && state !== 'success' && (
+              <button
                 onClick={onClose}
-                className={`w-full font-medium ${
-                  state === 'success'
-                    ? 'bg-green-600 hover:bg-green-700 text-white'
-                    : 'bg-blue-600 hover:bg-blue-700 text-white'
-                }`}
+                className="w-full font-medium px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
               >
-                {state === 'success' ? '✓ Sluiten en verder' : '✓ Annuleren'}
-              </Button>
+                ✓ Sluiten
+              </button>
             )}
           </div>
         </div>
