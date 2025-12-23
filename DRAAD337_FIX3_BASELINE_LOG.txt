@@ -1,0 +1,5 @@
+2025-12-23T09:32:19Z DRAAD337 FIX3 Modal baseline verified OK - success state persists while modal is open.
+2025-12-23T09:32:19Z DRAAD337 FIX3 No code changes needed in AflProgressModal; behaviour matches spec.
+2025-12-23T09:32:19Z DRAAD337 FIX3 Cache-busting confirmed (X-Cache-Bust + Railway logs).
+2025-12-23T09:32:19Z DRAAD337 FIX3 Supabase tabellen en velden gevalideerd t.o.v. AFL-Detailed-Specification.
+2025-12-23T09:32:19Z DRAAD337 FIX3 Deployment ready; next step Railway deploy & manual UX check.
