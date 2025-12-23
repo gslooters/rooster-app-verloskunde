@@ -1,6 +1,7 @@
 // lib/services/roster-employee-services.ts
 // DRAAD66A: Service layer voor roster_employee_services tabel
-// Deze tabel bevat een SNAPSHOT van employee_services op het moment van rooster creatie
+// Diese tabel bevat een SNAPSHOT van employee_services op het moment van rooster creatie
+// DRAAD347: Fix team veld vulling - ensure team is copied from employees table
 
 import { supabase } from '@/lib/supabase';
 
@@ -35,15 +36,18 @@ export interface RosterEmployeeServiceWithType extends RosterEmployeeServiceRow 
  * Kopieer employee_services naar roster_employee_services voor specifieke medewerkers
  * Dit maakt een SNAPSHOT die onafhankelijk is van toekomstige wijzigingen
  * 
+ * DRAAD347: Now correctly copies team field from employees table via JOIN
+ * 
  * @param rosterId - Het roster ID waarvoor de snapshot gemaakt wordt
  * @param employeeIds - Array van employee IDs die gekopieerd moeten worden
  * @returns Aantal gekopieerde records
  * 
  * Flow:
  * 1. Haal actieve services op voor alle medewerkers in de lijst
- * 2. Filter alleen records waar actief = true
- * 3. Insert batch in roster_employee_services
- * 4. Return aantal records
+ * 2. JOIN met employees tabel om team op te halen
+ * 3. Filter alleen records waar actief = true
+ * 4. Insert batch in roster_employee_services MET team veld
+ * 5. Return aantal records
  */
 export async function copyEmployeeServicesToRoster(
   rosterId: string,
@@ -62,9 +66,18 @@ export async function copyEmployeeServicesToRoster(
 
   try {
     // Stap 1: Haal alle actieve employee_services op voor deze medewerkers
+    // DRAAD347: FIXED - Added employees JOIN to get team field
     const { data: employeeServices, error: fetchError } = await supabase
       .from('employee_services')
-      .select('employee_id, service_id, actief, aantal')
+      .select(`
+        employee_id,
+        service_id,
+        actief,
+        aantal,
+        employees!inner(
+          team
+        )
+      `)
       .in('employee_id', employeeIds)
       .eq('actief', true); // Alleen actieve services kopiëren
 
@@ -81,12 +94,14 @@ export async function copyEmployeeServicesToRoster(
     console.log(`✅ [copyEmployeeServicesToRoster] ${employeeServices.length} actieve services gevonden`);
 
     // Stap 2: Transformeer naar roster_employee_services format
-    const rosterServices = employeeServices.map(es => ({
+    // DRAAD347: FIXED - Include team field from JOIN result
+    const rosterServices = employeeServices.map((es: any) => ({
       roster_id: rosterId,
       employee_id: es.employee_id,
       service_id: es.service_id,
       actief: es.actief, // Database column naam
-      aantal: es.aantal
+      aantal: es.aantal,
+      team: es.employees?.team || 'Overig' // ✅ DRAAD347: Get team from employees JOIN, default to 'Overig'
     }));
 
     // Stap 3: Batch insert in roster_employee_services
@@ -106,7 +121,8 @@ export async function copyEmployeeServicesToRoster(
       rosterId,
       insertedRecords: insertedCount,
       uniqueEmployees: new Set(rosterServices.map(r => r.employee_id)).size,
-      uniqueServices: new Set(rosterServices.map(r => r.service_id)).size
+      uniqueServices: new Set(rosterServices.map(r => r.service_id)).size,
+      teamsRepresented: new Set(rosterServices.map(r => r.team)).size
     });
 
     return insertedCount;
@@ -260,6 +276,7 @@ export async function getRosterEmployeeServicesStats(
   totalRecords: number;
   uniqueEmployees: number;
   uniqueServices: number;
+  uniqueTeams: number;
   averageServicesPerEmployee: number;
 }> {
   try {
@@ -267,6 +284,7 @@ export async function getRosterEmployeeServicesStats(
     
     const uniqueEmployees = new Set(services.map(s => s.employee_id)).size;
     const uniqueServices = new Set(services.map(s => s.service_id)).size;
+    const uniqueTeams = new Set(services.map(s => s.team)).size; // DRAAD347: Added team stats
     const averageServicesPerEmployee = uniqueEmployees > 0 
       ? Math.round((services.length / uniqueEmployees) * 10) / 10 
       : 0;
@@ -275,6 +293,7 @@ export async function getRosterEmployeeServicesStats(
       totalRecords: services.length,
       uniqueEmployees,
       uniqueServices,
+      uniqueTeams,
       averageServicesPerEmployee
     };
 
@@ -284,6 +303,7 @@ export async function getRosterEmployeeServicesStats(
       totalRecords: 0,
       uniqueEmployees: 0,
       uniqueServices: 0,
+      uniqueTeams: 0,
       averageServicesPerEmployee: 0
     };
   }
