@@ -63,6 +63,7 @@ export interface WorkbestandPlanning {
 export interface WorkbestandCapaciteit {
   roster_id: string;
   employee_id: string;
+  team: string;                    // ✅ NIEUW - na employee_id (DRAAD 341)
   service_id: string;
   service_code: string;
   aantal: number; // MUTABLE: decrements as assigned
