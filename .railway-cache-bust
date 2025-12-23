@@ -1,0 +1,8 @@
+# Railway Cache-Bust Trigger
+# Generated: 2025-12-23T00:20:30Z
+# Random: 8374926
+# Purpose: Force Railway rebuild after TypeScript interface updates
+
+DRAD_341_TIMESTAMP=2025-12-23T00:20:30Z
+DRAD_341_RANDOM=8374926
+DRAD_341_BUILD_TRIGGER=1735014030
