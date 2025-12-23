@@ -32,6 +32,12 @@
  * - Team distribution stats
  * - Pre-planning adjustment tracking
  * - Cache-bust markers for Railway deployment verification
+ *
+ * DRAAD342: FIX 4 - Team field in buildCapaciteit
+ * - Query 3 (capacity) now explicitly includes team field from roster_employee_services
+ * - buildCapaciteit properly maps row.team into WorkbestandCapaciteit.team
+ * - Ensures dataflow: roster_employee_services.team → WorkbestandCapaciteit.team → solve-engine
+ * - No more undefined team values
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -54,9 +60,9 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 );
 
-// 🔧 DRAAD339: CACHE-BUST MARKER
+// 🔧 DRAAD342: CACHE-BUST MARKER
 // Change this value to force Railway rebuild (ensures latest code deployed)
-const CACHE_BUST_NONCE = '2025-12-22T23:33:00Z-FIX-3-DEBUG-LOGGING';
+const CACHE_BUST_NONCE = '2025-12-23T08:30:00Z-DRAAD-342-TEAM-FIX';
 
 /**
  * FASE 1: Load all data from database
@@ -73,10 +79,11 @@ export class AflEngine {
     // ✅ DRAAD339: CACHE-BUST VERIFICATION MARKERS
     // These markers appear in Railway build logs to verify correct code version is deployed
     console.log('═══════════════════════════════════════════════════════');
-    console.log('[AFL-ENGINE] 🚀 DRAAD339 CACHE-BUST NONCE:', CACHE_BUST_NONCE);
+    console.log('[AFL-ENGINE] 🚀 DRAAD342 CACHE-BUST NONCE:', CACHE_BUST_NONCE);
     console.log('[AFL-ENGINE] ✅ DRAAD337 FIX: Client-side sorting (no chained .order() calls)');
     console.log('[AFL-ENGINE] ✅ DRAAD338 FIX: Service-code population via metadata lookup');
     console.log('[AFL-ENGINE] ✅ DRAAD339 FIX: Enhanced debug logging + cache-bust markers');
+    console.log('[AFL-ENGINE] ✅ DRAAD342 FIX: Team field in buildCapaciteit (dataflow verification)');
     console.log('[AFL-ENGINE] 📊 Phase 1 Load starting for roster:', rosterId);
     console.log('═══════════════════════════════════════════════════════');
 
@@ -122,6 +129,7 @@ export class AflEngine {
       console.log(`  ✅ Planning: ${planningRaw?.length || 0} rows loaded`);
 
       // Query 3: Load capacity (roster_employee_services)
+      // ✅ DRAAD342: EXPLICITLY include team field
       console.log('[AFL-ENGINE] Phase 1.3: Fetching capacity data...');
       const { data: capacityRaw, error: capacityError } = await supabase
         .from('roster_employee_services')
@@ -132,6 +140,7 @@ export class AflEngine {
           service_id,
           aantal,
           actief,
+          team,
           service_types(code)
         `
         )
@@ -223,6 +232,11 @@ export class AflEngine {
       console.log('  - By team:', team_distrib.by_team);
       console.log('  - Total capacity slots:', team_distrib.total_capacity);
       console.log('  - Total beschikbaar:', team_distrib.total_beschikbaar);
+      console.log('  - Teams with team field populated:');
+      const teams_with_data = workbestand_capaciteit.filter(c => c.team && c.team.trim().length > 0).length;
+      const teams_with_overig = workbestand_capaciteit.filter(c => c.team === 'Overig').length;
+      console.log(`    ✅ With data: ${teams_with_data}/${workbestand_capaciteit.length}`);
+      console.log(`    ⚠️  Defaulted to 'Overig': ${teams_with_overig}/${workbestand_capaciteit.length}`);
 
       const load_duration_ms = performance.now() - startTime;
 
@@ -357,17 +371,22 @@ export class AflEngine {
 
   /**
    * Build Workbestand_Capaciteit from raw capacity data
+   * ✅ DRAAD342 PRIORITEIT 3: Properly map team field from row.team
+   * 
+   * IMPORTANT: The team field comes from roster_employee_services.team
+   * which is populated from the employees.team field
+   * This is the authoritative source for employee team assignments
    */
   private buildCapaciteit(capacityRaw: any[]): WorkbestandCapaciteit[] {
     return capacityRaw.map((row) => ({
       roster_id: row.roster_id,
       employee_id: row.employee_id,
+      team: row.team || 'Overig', // ✅ Map from roster_employee_services.team
       service_id: row.service_id,
       service_code: row.service_types?.code || '',
       aantal: row.aantal,
       actief: row.actief,
       aantal_beschikbaar: row.aantal, // Initialize for tracking
-      team: row.team || 'Overig', // Add team info if available
     }));
   }
 
