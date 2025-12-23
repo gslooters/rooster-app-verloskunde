@@ -47,6 +47,9 @@ export class SolveEngine {
   private task_processed_count: number = 0;
   private task_open_count: number = 0;
   private debug_enabled: boolean = true;
+  
+  // ✅ OPTIE A: Team filtering verification tracking
+  private team_filter_stats: Map<string, { searched_teams: string[]; found_teams: Set<string>; count: number }> = new Map();
 
   constructor(
     opdracht: WorkbestandOpdracht[],
@@ -104,11 +107,13 @@ export class SolveEngine {
     assigned_count: number;
     open_count: number;
     task_stats: { processed: number; open: number; total: number };
+    team_filter_stats?: Map<string, { searched_teams: string[]; found_teams: string[]; count: number }>; // ✅ OPTIE A
   } {
     const startTime = performance.now();
     this.modified_slots = [];
     this.task_processed_count = 0;
     this.task_open_count = 0;
+    this.team_filter_stats.clear(); // ✅ OPTIE A: Reset stats
 
     if (this.debug_enabled) {
       console.log(`🚀 SOLVE: Starting main loop with ${this.workbestand_opdracht.length} tasks`);
@@ -189,6 +194,19 @@ export class SolveEngine {
     const assigned_count = this.countAssignedServices();
     const open_count = this.countOpenServices();
 
+    // ✅ OPTIE A: Log team filter statistics
+    if (this.debug_enabled) {
+      const stats_for_log: Record<string, { searched_teams: string[]; found_teams: string[]; count: number }> = {};
+      for (const [key, value] of this.team_filter_stats.entries()) {
+        stats_for_log[key] = {
+          searched_teams: value.searched_teams,
+          found_teams: Array.from(value.found_teams),
+          count: value.count
+        };
+      }
+      console.log(`✅ SOLVE: Team Filter Statistics:`, stats_for_log);
+    }
+
     if (this.debug_enabled) {
       console.log(`✅ SOLVE: Complete`, {
         duration_ms: solve_duration_ms.toFixed(0),
@@ -203,6 +221,16 @@ export class SolveEngine {
       });
     }
 
+    // ✅ OPTIE A: Return stats for reporting
+    const stats_for_return: Map<string, { searched_teams: string[]; found_teams: string[]; count: number }> = new Map();
+    for (const [key, value] of this.team_filter_stats.entries()) {
+      stats_for_return.set(key, {
+        searched_teams: value.searched_teams,
+        found_teams: Array.from(value.found_teams),
+        count: value.count
+      });
+    }
+
     return {
       modified_slots: this.modified_slots,
       solve_duration_ms,
@@ -213,12 +241,14 @@ export class SolveEngine {
         open: this.task_open_count,
         total: this.workbestand_opdracht.length,
       },
+      team_filter_stats: stats_for_return,
     };
   }
 
   /**
    * Find all available candidates for a task
    * 
+   * ✅ OPTIE A: Strict team filtering
    * Criteria:
    * - In correct team (or fallback)
    * - Has available slot on date/dagdeel with status=0
@@ -230,6 +260,20 @@ export class SolveEngine {
 
     // Step 1: Determine team search order
     const teams_to_try = this.getTeamSearchOrder(task.team);
+
+    // ✅ OPTIE A: Track team search for this task
+    const task_key = `${task.date.toISOString().split('T')[0]}_${task.dagdeel}_${task.team}_${task.service_code}`;
+    if (!this.team_filter_stats.has(task_key)) {
+      this.team_filter_stats.set(task_key, {
+        searched_teams: teams_to_try,
+        found_teams: new Set<string>(),
+        count: 0
+      });
+    }
+
+    if (this.debug_enabled) {
+      console.log(`🔍 TEAM FILTER: Task team=${task.team}, searching in:`, teams_to_try);
+    }
 
     // Step 2: Search by team
     for (const team of teams_to_try) {
@@ -272,12 +316,27 @@ export class SolveEngine {
           fair_score: emp.fair_score,
           slot: available_slot,
         });
+
+        // ✅ OPTIE A: Track team of found candidate
+        if (this.team_filter_stats.has(task_key)) {
+          const stats = this.team_filter_stats.get(task_key)!;
+          stats.found_teams.add(emp.team);
+          stats.count += 1;
+        }
       }
 
       // If candidates found, don't try next team (fallback only if empty)
       if (candidates.length > 0) {
+        if (this.debug_enabled) {
+          const stats = this.team_filter_stats.get(task_key);
+          console.log(`✅ FOUND: ${candidates.length} candidates in teams:`, Array.from(stats?.found_teams || []));
+        }
         break;
       }
+    }
+
+    if (candidates.length === 0 && this.debug_enabled) {
+      console.log(`❌ NO CANDIDATES: No employees available in teams:`, teams_to_try);
     }
 
     return candidates;
@@ -286,16 +345,18 @@ export class SolveEngine {
   /**
    * Determine team search order (primary team first, then fallbacks)
    * FIX 2: CORRECTED TEAM NAME MAPPING
+   * ✅ OPTIE A: Strict team isolation
    */
   private getTeamSearchOrder(team: string): string[] {
     // ✅ FIX 2: Use correct database team names
+    // ✅ OPTIE A: Strict search order - GRO NEVER looks in ORA, ORA NEVER in GRO
     switch (team) {
       case 'GRO':
-        return ['Groen', 'Overig']; // Changed from 'GRO'
+        return ['Groen', 'Overig']; // GRO: First Groen, then Overig (NEVER Oranje)
       case 'ORA':
-        return ['Oranje', 'Overig']; // Changed from 'ORA'
+        return ['Oranje', 'Overig']; // ORA: First Oranje, then Overig (NEVER Groen)
       case 'TOT':
-        return ['Groen', 'Oranje', 'Overig']; // All teams
+        return ['Groen', 'Oranje', 'Overig']; // TOT: All teams
       default:
         return ['Groen', 'Oranje', 'Overig'];
     }
@@ -573,6 +634,7 @@ export async function runSolveEngine(
   assigned_count: number;
   open_count: number;
   task_stats: { processed: number; open: number; total: number };
+  team_filter_stats?: Map<string, { searched_teams: string[]; found_teams: string[]; count: number }>; // ✅ OPTIE A
 }> {
   const engine = new SolveEngine(
     workbestand_opdracht,
