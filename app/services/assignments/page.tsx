@@ -5,35 +5,38 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, RefreshCw, Download, BarChart3 } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Download, BarChart3, CheckCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 // CRITICAL: Force dynamic rendering - no caching whatsoever
 export const dynamic = 'force-dynamic';
 
 // LAZY IMPORT: Delay Supabase import until client-side rendering
-let getRosterEmployeeServices: any;
+// HERSTELD OPTIE A: Use getEmployeeServicesOverview (employee_services macro)
+let getEmployeeServicesOverview: any;
+let upsertEmployeeService: any;
 let supabase: any;
 
 const loadSupabaseModules = async () => {
-  if (!getRosterEmployeeServices) {
-    const mod1 = await import('@/lib/services/roster-employee-services');
-    getRosterEmployeeServices = mod1.getRosterEmployeeServices;
-    
-    const mod2 = await import('@/lib/services/medewerker-diensten-supabase');
-    supabase = mod2.supabase;
+  if (!getEmployeeServicesOverview) {
+    const mod1 = await import('@/lib/services/medewerker-diensten-supabase');
+    getEmployeeServicesOverview = mod1.getEmployeeServicesOverview;
+    upsertEmployeeService = mod1.upsertEmployeeService;
+    const mod2 = await import('@supabase/supabase-js');
+    supabase = mod2.createClient;
   }
 };
 
 interface ServiceAssignment {
   id: string;
   employee_id: string;
+  employee_name: string;
   service_code: string;
+  service_naam?: string;
   aantal: number;
   team?: string;
-  employee_name?: string;
-  service_name?: string;
   dienstwaarde?: number;
+  enabled: boolean;
 }
 
 interface ServiceSummary {
@@ -45,24 +48,27 @@ interface ServiceSummary {
   totalValue: number;
 }
 
+interface EmployeeData {
+  employeeId: string;
+  employeeName: string;
+  team?: string;
+  aantal_werkdagen?: number;
+  services?: Record<string, any>;
+}
+
 export default function ServiceAssignmentsPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<ServiceAssignment[]>([]);
   const [summary, setSummary] = useState<Record<string, ServiceSummary>>({});
   const [error, setError] = useState<string | null>(null);
-  const [rosterId, setRosterId] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>('all');
+  const [saving, setSaving] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
 
   useEffect(() => {
-    // REFACTOR DRAAD-194-FASE1: Get rosterId from URL or context
-    const stored = typeof window !== 'undefined' ? sessionStorage.getItem('currentRosterId') : null;
-    if (stored) {
-      setRosterId(stored);
-      loadData(stored);
-    } else {
-      loadData(null);
-    }
+    // HERSTELD: Always macro-config (no rosterId parameter)
+    loadData(null);
   }, []);
 
   async function loadData(rId: string | null) {
@@ -72,80 +78,100 @@ export default function ServiceAssignmentsPage() {
       
       await loadSupabaseModules();
       
-      let assignments: ServiceAssignment[] = [];
+      // HERSTELD OPTIE A: Altijd getEmployeeServicesOverview (macro-config)
+      const overview = await getEmployeeServicesOverview();
       
-      if (rId) {
-        // REFACTOR DRAAD-194-FASE1: Use getRosterEmployeeServices instead of getEmployeeServicesOverview
-        console.log('🔄 [REFACTOR] Loading assignments for rosterId:', rId);
-        const rosterServices = await getRosterEmployeeServices(rId);
-        console.log('✅ [REFACTOR] Roster services loaded:', rosterServices.length);
-        
-        // Transform roster_employee_services into assignments format
-        assignments = rosterServices
-          .filter((rs: any) => rs.actief && rs.aantal > 0)
-          .map((rs: any) => ({
-            id: `${rs.employee_id}_${rs.service_id}`,
-            employee_id: rs.employee_id,
-            service_code: rs.service_types?.code || 'UNKNOWN',
-            aantal: rs.aantal,
-            team: rs.team, // ✅ DIRECT from roster_employee_services.team
-            employee_name: rs.employee_id,
-            service_name: rs.service_types?.naam || rs.service_types?.code,
-            dienstwaarde: rs.service_types?.dienstwaarde || 1.0
-          }));
-      } else {
-        // Fallback: Load from old service (backward compat)
-        const mod = await import('@/lib/services/medewerker-diensten-supabase');
-        const getEmployeeServicesOverview = mod.getEmployeeServicesOverview;
-        const overview = await getEmployeeServicesOverview();
-        
-        // Transform to assignments format
-        overview.forEach((emp: any) => {
-          Object.entries(emp.services || {}).forEach(([code, srvData]: any) => {
-            if (srvData.enabled && srvData.count > 0) {
-              assignments.push({
-                id: `${emp.employeeId}_${code}`,
-                employee_id: emp.employeeId,
-                service_code: code,
-                aantal: srvData.count,
-                team: emp.team,
-                employee_name: emp.employeeName,
-                dienstwaarde: srvData.dienstwaarde || 1.0
-              });
-            }
-          });
-        });
+      if (!overview || overview.length === 0) {
+        console.warn('⚠️ No employee services overview data');
+        setData([]);
+        setSummary({});
+        setLoading(false);
+        return;
       }
       
-      setData(assignments);
-      
-      // Calculate summary per service
+      const assignments: ServiceAssignment[] = [];
       const summaryMap: Record<string, ServiceSummary> = {};
       
-      assignments.forEach(assignment => {
-        if (!summaryMap[assignment.service_code]) {
-          summaryMap[assignment.service_code] = {
-            code: assignment.service_code,
-            name: assignment.service_name,
-            totalAssigned: 0,
-            employeeCount: 0,
-            totalValue: 0
-          };
-        }
+      // Transform employee_services data to assignments format
+      overview.forEach((emp: EmployeeData) => {
+        if (!emp.employeeId) return;
         
-        summaryMap[assignment.service_code].totalAssigned += assignment.aantal;
-        summaryMap[assignment.service_code].employeeCount += 1;
-        summaryMap[assignment.service_code].totalValue += 
-          (assignment.aantal * (assignment.dienstwaarde || 1.0));
+        // Process each service for this employee
+        Object.entries(emp.services || {}).forEach(([serviceCode, srvData]: any) => {
+          // Register service type in summary
+          if (!summaryMap[serviceCode]) {
+            summaryMap[serviceCode] = {
+              code: serviceCode,
+              name: srvData.naam || serviceCode,
+              kleur: srvData.kleur || '#cccccc',
+              totalAssigned: 0,
+              employeeCount: 0,
+              totalValue: 0
+            };
+          }
+          
+          // Add assignment if active
+          if (srvData.enabled && srvData.count > 0) {
+            const assignment: ServiceAssignment = {
+              id: `${emp.employeeId}_${serviceCode}`,
+              employee_id: emp.employeeId,
+              employee_name: emp.employeeName,
+              service_code: serviceCode,
+              service_naam: srvData.naam || serviceCode,
+              aantal: srvData.count,
+              team: emp.team,
+              dienstwaarde: srvData.dienstwaarde || 1.0,
+              enabled: true
+            };
+            
+            assignments.push(assignment);
+            
+            // Update summary
+            summaryMap[serviceCode].totalAssigned += assignment.aantal;
+            summaryMap[serviceCode].employeeCount += 1;
+            summaryMap[serviceCode].totalValue += 
+              (assignment.aantal * (assignment.dienstwaarde || 1.0));
+          }
+        });
       });
       
+      setData(assignments);
       setSummary(summaryMap);
     } catch (err: any) {
+      console.error('❌ Error loading data:', err);
       setError(err.message || 'Fout bij laden van gegevens');
     } finally {
       setLoading(false);
     }
   }
+
+  const handleSaveAssignment = async (assignmentId: string, enabled: boolean, aantal: number) => {
+    try {
+      setSaving(assignmentId);
+      setSaveSuccess(null);
+      setError(null);
+      
+      const [employeeId, serviceCode] = assignmentId.split('_');
+      
+      // Call upsertEmployeeService to save to employee_services table
+      await upsertEmployeeService(employeeId, serviceCode, {
+        aantal: aantal,
+        enabled: enabled
+      });
+      
+      setSaveSuccess(assignmentId);
+      
+      // Reload data after save
+      setTimeout(() => {
+        loadData(null);
+      }, 500);
+    } catch (err: any) {
+      console.error('❌ Error saving assignment:', err);
+      setError(`Fout bij opslaan: ${err.message}`);
+    } finally {
+      setSaving(null);
+    }
+  };
 
   const filteredData = filter === 'all' 
     ? data 
@@ -218,12 +244,11 @@ export default function ServiceAssignmentsPage() {
               <ArrowLeft className="w-4 h-4 mr-2" />
               Terug
             </Button>
-            <h1 className="text-3xl font-bold text-gray-900">📋 Diensten Overzicht</h1>
-            {rosterId && <span className="text-sm text-gray-500">[Rooster: {rosterId.slice(0, 8)}...]</span>}
+            <h1 className="text-3xl font-bold text-gray-900">🎯 Diensten Medewerkers</h1>
           </div>
           <div className="flex gap-3">
             <Button
-              onClick={() => loadData(rosterId)}
+              onClick={() => loadData(null)}
               variant="outline"
               size="sm"
               disabled={loading}
@@ -243,12 +268,23 @@ export default function ServiceAssignmentsPage() {
           </div>
         </div>
 
+        {/* Subtitle */}
+        <p className="text-gray-600 mb-6">Beheer macro-config: welke diensten zijn actief voor welke medewerkers</p>
+
         {/* Error Alert */}
         {error && (
           <Alert variant="destructive" className="mb-4">
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
+
+        {/* Mode Indicator */}
+        {/* HERSTELD: No rooster-scoped view in macro-config */}
+        <div className="bg-amber-50 border border-amber-200 rounded p-4 mb-4">
+          <p className="text-sm text-amber-800">
+            <strong>Mode:</strong> Macro-configuratie (global) - geldt voor alle roosters
+          </p>
+        </div>
 
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -356,47 +392,60 @@ export default function ServiceAssignmentsPage() {
                   <th className="p-3 text-center font-semibold text-white">Dienst</th>
                   <th className="p-3 text-center font-semibold text-white">Aantal</th>
                   <th className="p-3 text-center font-semibold text-white">Waarde</th>
+                  <th className="p-3 text-center font-semibold text-white">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {filteredData.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="p-8 text-center text-gray-500">
+                    <td colSpan={6} className="p-8 text-center text-gray-500">
                       Geen diensten toegewezen
                     </td>
                   </tr>
                 ) : (
-                  filteredData.map((assignment) => (
-                    <tr 
-                      key={assignment.id} 
-                      className="hover:bg-purple-50 transition-colors duration-150"
-                    >
-                      <td className="p-3 font-medium text-gray-900">{assignment.employee_name}</td>
-                      <td className="p-3 text-center">
-                        <Badge 
-                          variant="secondary"
-                          className={`${
-                            assignment.team === 'Groen' 
-                              ? 'bg-green-100 text-green-800 border border-green-400' 
-                              : assignment.team === 'Oranje' 
-                              ? 'bg-orange-100 text-orange-800 border border-orange-400' 
-                              : 'bg-blue-100 text-blue-800 border border-blue-400'
-                          }`}
-                        >
-                          {assignment.team || 'Overig'}
-                        </Badge>
-                      </td>
-                      <td className="p-3 text-center font-mono font-semibold text-gray-900 bg-gray-50">
-                        {assignment.service_code}
-                      </td>
-                      <td className="p-3 text-center font-bold text-purple-600 bg-purple-50">
-                        {assignment.aantal}
-                      </td>
-                      <td className="p-3 text-center font-semibold text-gray-900">
-                        {(assignment.aantal * (assignment.dienstwaarde || 1.0)).toFixed(2)}
-                      </td>
-                    </tr>
-                  ))
+                  filteredData.map((assignment) => {
+                    const isSaving = saving === assignment.id;
+                    const wasSaved = saveSuccess === assignment.id;
+                    
+                    return (
+                      <tr 
+                        key={assignment.id} 
+                        className="hover:bg-purple-50 transition-colors duration-150"
+                      >
+                        <td className="p-3 font-medium text-gray-900">{assignment.employee_name}</td>
+                        <td className="p-3 text-center">
+                          <Badge 
+                            variant="secondary"
+                            className={`${
+                              assignment.team === 'Groen' 
+                                ? 'bg-green-100 text-green-800 border border-green-400' 
+                                : assignment.team === 'Oranje' 
+                                ? 'bg-orange-100 text-orange-800 border border-orange-400' 
+                                : 'bg-blue-100 text-blue-800 border border-blue-400'
+                            }`}
+                          >
+                            {assignment.team || 'Overig'}
+                          </Badge>
+                        </td>
+                        <td className="p-3 text-center font-mono font-semibold text-gray-900 bg-gray-50">
+                          {assignment.service_code}
+                        </td>
+                        <td className="p-3 text-center font-bold text-purple-600 bg-purple-50">
+                          {assignment.aantal}
+                        </td>
+                        <td className="p-3 text-center font-semibold text-gray-900">
+                          {(assignment.aantal * (assignment.dienstwaarde || 1.0)).toFixed(2)}
+                        </td>
+                        <td className="p-3 text-center">
+                          {isSaving ? (
+                            <RefreshCw className="w-4 h-4 animate-spin text-blue-600 mx-auto" />
+                          ) : wasSaved ? (
+                            <CheckCircle className="w-4 h-4 text-green-600 mx-auto" />
+                          ) : null}
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -404,12 +453,13 @@ export default function ServiceAssignmentsPage() {
         </Card>
 
         {/* Info Box */}
-        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
           <p className="flex items-start gap-2 text-sm text-gray-700">
             <span className="text-lg">ℹ️</span>
             <span>
-              <strong>REFACTOR DRAAD-194-FASE1:</strong> Dit overzicht gebruikt nu roster_employee_services (team direct beschikbaar). 
-              Gegevens worden real-time geladen op basis van de geselecteerde rooster-context.
+              <strong>HERSTELD OPTIE A:</strong> Dit scherm is nu een macro-configuratie scherm. 
+              Het beheert de employee_services tabel (globale diensten-configuratie). 
+              Wijzigingen hier beïnvloeden ALLE roosters die na dit moment worden aangemaakt.
             </span>
           </p>
         </div>
