@@ -1,408 +1,194 @@
 'use client';
 
-// CRITICAL: Force dynamic rendering - no caching whatsoever
-// Reason: This page uses Supabase client to fetch real-time data
-// Static generation would fail because Supabase env vars aren't available at build time
-export const dynamic = 'force-dynamic';
-
-import { useEffect, useState, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ArrowLeft, RefreshCw, Check, FileDown } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { ArrowLeft, RefreshCw, Download, BarChart3 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
-// FIX #1 DRAAD186: Direct type import (TypeScript compile-time resolution)
-// Reason: Lazy-import of types causes TypeScript build failure
-// Safe because: export const dynamic = 'force-dynamic' prevents static generation
-import type { EmployeeServiceRow } from '@/lib/types/employee-services';
+// CRITICAL: Force dynamic rendering - no caching whatsoever
+export const dynamic = 'force-dynamic';
 
 // LAZY IMPORT: Delay Supabase import until client-side rendering
-// This prevents "supabaseUrl is required" error during static generation
-let getEmployeeServicesOverview: any;
-let upsertEmployeeService: any;
-let getServiceIdByCode: any;
+let getRosterEmployeeServices: any;
 let supabase: any;
 
 const loadSupabaseModules = async () => {
-  if (!getEmployeeServicesOverview) {
-    const mod = await import('@/lib/services/medewerker-diensten-supabase');
-    getEmployeeServicesOverview = mod.getEmployeeServicesOverview;
-    upsertEmployeeService = mod.upsertEmployeeService;
-    getServiceIdByCode = mod.getServiceIdByCode;
-    supabase = mod.supabase;
+  if (!getRosterEmployeeServices) {
+    const mod1 = await import('@/lib/services/roster-employee-services');
+    getRosterEmployeeServices = mod1.getRosterEmployeeServices;
+    
+    const mod2 = await import('@/lib/services/medewerker-diensten-supabase');
+    supabase = mod2.supabase;
   }
 };
 
-export default function DienstenToewijzingPage() {
+interface ServiceAssignment {
+  id: string;
+  employee_id: string;
+  service_code: string;
+  aantal: number;
+  team?: string;
+  employee_name?: string;
+  service_name?: string;
+  dienstwaarde?: number;
+}
+
+interface ServiceSummary {
+  code: string;
+  name?: string;
+  kleur?: string;
+  totalAssigned: number;
+  employeeCount: number;
+  totalValue: number;
+}
+
+export default function ServiceAssignmentsPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [exportingPDF, setExportingPDF] = useState(false);
-  const [data, setData] = useState<EmployeeServiceRow[]>([]);
-  const [serviceTypes, setServiceTypes] = useState<string[]>([]);
+  const [data, setData] = useState<ServiceAssignment[]>([]);
+  const [summary, setSummary] = useState<Record<string, ServiceSummary>>({});
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
-  const tableRef = useRef<HTMLDivElement>(null);
+  const [rosterId, setRosterId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<string>('all');
 
   useEffect(() => {
-    loadData();
+    // REFACTOR DRAAD-194-FASE1: Get rosterId from URL or context
+    const stored = typeof window !== 'undefined' ? sessionStorage.getItem('currentRosterId') : null;
+    if (stored) {
+      setRosterId(stored);
+      loadData(stored);
+    } else {
+      loadData(null);
+    }
   }, []);
 
-  async function loadData() {
+  async function loadData(rId: string | null) {
     try {
       setLoading(true);
       setError(null);
       
-      // Load Supabase modules FIRST, client-side only
       await loadSupabaseModules();
       
-      console.log('🔄 Starting loadData...');
+      let assignments: ServiceAssignment[] = [];
       
-      // Haal diensten op
-      const { data: services, error: servError } = await supabase
-        .from('service_types')
-        .select('code')
-        .eq('actief', true)
-        .order('code', { ascending: true });
-      
-      if (servError) {
-        console.error('❌ Service error:', servError);
-        throw servError;
+      if (rId) {
+        // REFACTOR DRAAD-194-FASE1: Use getRosterEmployeeServices instead of getEmployeeServicesOverview
+        console.log('🔄 [REFACTOR] Loading assignments for rosterId:', rId);
+        const rosterServices = await getRosterEmployeeServices(rId);
+        console.log('✅ [REFACTOR] Roster services loaded:', rosterServices.length);
+        
+        // Transform roster_employee_services into assignments format
+        assignments = rosterServices
+          .filter((rs: any) => rs.actief && rs.aantal > 0)
+          .map((rs: any) => ({
+            id: `${rs.employee_id}_${rs.service_id}`,
+            employee_id: rs.employee_id,
+            service_code: rs.service_types?.code || 'UNKNOWN',
+            aantal: rs.aantal,
+            team: rs.team, // ✅ DIRECT from roster_employee_services.team
+            employee_name: rs.employee_id,
+            service_name: rs.service_types?.naam || rs.service_types?.code,
+            dienstwaarde: rs.service_types?.dienstwaarde || 1.0
+          }));
+      } else {
+        // Fallback: Load from old service (backward compat)
+        const mod = await import('@/lib/services/medewerker-diensten-supabase');
+        const getEmployeeServicesOverview = mod.getEmployeeServicesOverview;
+        const overview = await getEmployeeServicesOverview();
+        
+        // Transform to assignments format
+        overview.forEach((emp: any) => {
+          Object.entries(emp.services || {}).forEach(([code, srvData]: any) => {
+            if (srvData.enabled && srvData.count > 0) {
+              assignments.push({
+                id: `${emp.employeeId}_${code}`,
+                employee_id: emp.employeeId,
+                service_code: code,
+                aantal: srvData.count,
+                team: emp.team,
+                employee_name: emp.employeeName,
+                dienstwaarde: srvData.dienstwaarde || 1.0
+              });
+            }
+          });
+        });
       }
       
-      const serviceCodes = services?.map((s: any) => s.code) || [];
-      console.log('✅ Service types loaded:', serviceCodes);
-      setServiceTypes(serviceCodes);
-
-      // Haal employee overview op
-      const overview = await getEmployeeServicesOverview();
-      console.log('✅ Employee overview loaded:', overview.length, 'employees');
-      console.log('📊 First employee sample:', overview[0]);
-      setData(overview);
+      setData(assignments);
+      
+      // Calculate summary per service
+      const summaryMap: Record<string, ServiceSummary> = {};
+      
+      assignments.forEach(assignment => {
+        if (!summaryMap[assignment.service_code]) {
+          summaryMap[assignment.service_code] = {
+            code: assignment.service_code,
+            name: assignment.service_name,
+            totalAssigned: 0,
+            employeeCount: 0,
+            totalValue: 0
+          };
+        }
+        
+        summaryMap[assignment.service_code].totalAssigned += assignment.aantal;
+        summaryMap[assignment.service_code].employeeCount += 1;
+        summaryMap[assignment.service_code].totalValue += 
+          (assignment.aantal * (assignment.dienstwaarde || 1.0));
+      });
+      
+      setSummary(summaryMap);
     } catch (err: any) {
-      console.error('❌ Error loading data:', err);
       setError(err.message || 'Fout bij laden van gegevens');
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleToggle(employeeId: string, serviceCode: string, currentEnabled: boolean) {
-    try {
-      await loadSupabaseModules();
-      const serviceId = await getServiceIdByCode(serviceCode);
-      if (!serviceId) {
-        throw new Error(`Dienst ${serviceCode} niet gevonden`);
+  const filteredData = filter === 'all' 
+    ? data 
+    : data.filter(d => d.service_code === filter);
+
+  const teamStats = (() => {
+    const stats: Record<string, { count: number; services: number }> = {};
+    filteredData.forEach(d => {
+      if (!stats[d.team || 'Overig']) {
+        stats[d.team || 'Overig'] = { count: 0, services: 0 };
       }
+      stats[d.team || 'Overig'].count += d.aantal;
+      stats[d.team || 'Overig'].services += 1;
+    });
+    return stats;
+  })();
 
-      // Vind huidge count
-      const employee = data.find(e => e.employeeId === employeeId);
-      const currentCount = employee?.services[serviceCode]?.count || 0;
-
-      await upsertEmployeeService({
-        employee_id: employeeId,
-        service_id: serviceId,
-        actief: !currentEnabled,
-        aantal: currentEnabled ? 0 : (currentCount || 1)
-      });
-
-      // Update local state
-      setData(prev => prev.map(emp => {
-        if (emp.employeeId === employeeId) {
-          const newServices = { ...emp.services };
-          const service = newServices[serviceCode];
-          newServices[serviceCode] = {
-            ...service,
-            enabled: !currentEnabled,
-            count: currentEnabled ? 0 : (currentCount || 1)
-          };
-          
-          // Herbereken totaal
-          let newTotal = 0;
-          Object.values(newServices).forEach((s: any) => {
-            if (s.enabled && s.count > 0) {
-              newTotal += s.count * s.dienstwaarde;
-            }
-          });
-
-          return {
-            ...emp,
-            services: newServices,
-            totalDiensten: Math.round(newTotal * 10) / 10,
-            isOnTarget: Math.abs(newTotal - emp.dienstenperiode) < 0.1
-          };
-        }
-        return emp;
-      }));
+  const handleExport = async () => {
+    try {
+      // Simple CSV export
+      const headers = ['Medewerker', 'Team', 'Dienst', 'Aantal', 'Waarde'];
+      const rows = filteredData.map(d => [
+        d.employee_name,
+        d.team || 'Overig',
+        d.service_code,
+        d.aantal,
+        (d.aantal * (d.dienstwaarde || 1.0)).toFixed(2)
+      ]);
       
-      // Toon klein groen vinkje
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 1500);
+      const csv = [
+        headers.join(','),
+        ...rows.map(r => r.join(','))
+      ].join('\n');
+      
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `diensten-toewijzingen-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.click();
     } catch (err: any) {
-      console.error('Error toggling service:', err);
       setError(err.message);
     }
-  }
-
-  async function handleCountChange(employeeId: string, serviceCode: string, newCount: number) {
-    try {
-      await loadSupabaseModules();
-      const serviceId = await getServiceIdByCode(serviceCode);
-      if (!serviceId) throw new Error(`Dienst ${serviceCode} niet gevonden`);
-
-      await upsertEmployeeService({
-        employee_id: employeeId,
-        service_id: serviceId,
-        actief: true,
-        aantal: newCount
-      });
-
-      // Update local state
-      setData(prev => prev.map(emp => {
-        if (emp.employeeId === employeeId) {
-          const newServices = { ...emp.services };
-          const service = newServices[serviceCode];
-          newServices[serviceCode] = {
-            ...service,
-            count: newCount,
-            enabled: true
-          };
-          
-          // Herbereken totaal
-          let newTotal = 0;
-          Object.values(newServices).forEach((s: any) => {
-            if (s.enabled && s.count > 0) {
-              newTotal += s.count * s.dienstwaarde;
-            }
-          });
-
-          return {
-            ...emp,
-            services: newServices,
-            totalDiensten: Math.round(newTotal * 10) / 10,
-            isOnTarget: Math.abs(newTotal - emp.dienstenperiode) < 0.1
-          };
-        }
-        return emp;
-      }));
-
-      // Toon klein groen vinkje
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 1500);
-    } catch (err: any) {
-      console.error('Error updating count:', err);
-      setError(err.message);
-    }
-  }
-
-  // PDF Export functie - VERSIE 2 MET KLEUR & FORMAT FIXES
-  async function exportToPDF() {
-    try {
-      setExportingPDF(true);
-      
-      // Dynamische import van jsPDF en autoTable plugin
-      const { jsPDF } = await import('jspdf');
-      const autoTable = (await import('jspdf-autotable')).default;
-      
-      // Initialiseer jsPDF met compressie
-      const doc = new jsPDF({
-        orientation: 'landscape',
-        unit: 'mm',
-        format: 'a4',
-        compress: true
-      });
-      
-      // Gebruik Helvetica font voor correcte text encoding
-      doc.setFont('helvetica', 'normal');
-      
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const margin = 10;
-      
-      // Header
-      doc.setFontSize(16);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Diensten Toewijzing', margin, margin + 5);
-      
-      // Datum en tijd
-      const now = new Date();
-      const dateStr = now.toLocaleDateString('nl-NL', { 
-        year: 'numeric', 
-        month: '2-digit', 
-        day: '2-digit' 
-      });
-      const timeStr = now.toLocaleTimeString('nl-NL', { 
-        hour: '2-digit', 
-        minute: '2-digit' 
-      });
-      
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-      doc.text(`Datum: ${dateStr} om ${timeStr}`, pageWidth - margin, margin + 5, { align: 'right' });
-      
-      // Bereken team counts
-      const serviceCounts = calculateServiceCounts();
-      
-      // Bouw tabel data
-      const tableData = [];
-      
-      // Header rij
-      const headerRow = ['Team', 'Naam', 'Totaal'];
-      serviceTypes.forEach(code => {
-        headerRow.push(code);
-      });
-      tableData.push(headerRow);
-      
-      // Team counts rij - FIX: Format met leading zeros
-      const teamCountRow = ['', 'Per team:', ''];
-      serviceTypes.forEach(code => {
-        const groen = (serviceCounts.Groen[code] || 0).toString().padStart(2, '0');
-        const oranje = (serviceCounts.Oranje[code] || 0).toString().padStart(2, '0');
-        const totaal = ((serviceCounts.Groen[code] || 0) + (serviceCounts.Oranje[code] || 0) + (serviceCounts.Overig[code] || 0)).toString().padStart(2, '0');
-        teamCountRow.push(`${groen} ${oranje} ${totaal}`);
-      });
-      tableData.push(teamCountRow);
-      
-      // Data rijen - FIX: Getallen met leading zeros en tracking voor kleur
-      const rowsWithTeam: Array<{row: any[], team: string}> = [];
-      data.forEach(emp => {
-        const row = [
-          emp.team || '',
-          emp.employeeName || '',
-          `${emp.totalDiensten} / ${emp.dienstenperiode}`
-        ];
-        
-        serviceTypes.forEach(code => {
-          const service = emp.services?.[code];
-          const count = service?.enabled ? (service?.count || 0) : 0;
-          // FIX 1: Format met leading zero (##)
-          row.push(count.toString().padStart(2, '0'));
-        });
-        
-        tableData.push(row);
-        rowsWithTeam.push({ row, team: emp.team || '' });
-      });
-      
-      // Genereer tabel met autoTable
-      (doc as any).autoTable({
-        head: [tableData[0]],
-        body: tableData.slice(1),
-        startY: margin + 12,
-        margin: { left: margin, right: margin },
-        styles: {
-          fontSize: 8,
-          cellPadding: 2,
-          overflow: 'linebreak',
-          halign: 'center',
-          valign: 'middle',
-          font: 'helvetica'
-        },
-        headStyles: {
-          fillColor: [41, 128, 185],
-          textColor: 255,
-          fontStyle: 'bold',
-          fontSize: 9
-        },
-        columnStyles: {
-          0: { cellWidth: 20, halign: 'left' },
-          1: { cellWidth: 35, halign: 'left' },
-          2: { cellWidth: 25, halign: 'center' }
-        },
-        didParseCell: function(hookData: any) {
-          // Kleur team kolom
-          if (hookData.section === 'body' && hookData.column.index === 0) {
-            const teamNaam = hookData.cell.raw;
-            if (teamNaam === 'Groen') {
-              hookData.cell.styles.fillColor = [144, 238, 144];
-            } else if (teamNaam === 'Oranje') {
-              hookData.cell.styles.fillColor = [255, 200, 124];
-            } else if (teamNaam === 'Overig') {
-              hookData.cell.styles.fillColor = [173, 216, 230];
-            }
-          }
-          
-          // Team counts rij opmaak
-          if (hookData.section === 'body' && hookData.row.index === 0) {
-            hookData.cell.styles.fillColor = [240, 240, 240];
-            hookData.cell.styles.fontStyle = 'bold';
-          }
-          
-          // FIX 1: Kleur de getallen per team (kolom 3 en hoger)
-          if (hookData.section === 'body' && hookData.row.index > 0 && hookData.column.index >= 3) {
-            // Bepaal het team van deze rij (row.index - 1 omdat eerste rij team counts is)
-            const dataRowIndex = hookData.row.index - 1;
-            if (dataRowIndex >= 0 && dataRowIndex < rowsWithTeam.length) {
-              const team = rowsWithTeam[dataRowIndex].team;
-              
-              // Zet text kleur op basis van team
-              if (team === 'Groen') {
-                hookData.cell.styles.textColor = [0, 128, 0];  // Groen
-              } else if (team === 'Oranje') {
-                hookData.cell.styles.textColor = [255, 140, 0];  // Oranje
-              } else if (team === 'Overig') {
-                hookData.cell.styles.textColor = [0, 0, 255];  // Blauw
-              }
-            }
-          }
-        }
-      });
-      
-      // FIX 2: Footer tekst VERWIJDERD (was: Gebruik instructies en Team-tellers)
-      // Geen footer meer nodig
-      
-      // Bestandsnaam met timestamp
-      const fileDate = now.toISOString().slice(0, 10).replace(/-/g, '');
-      const fileTime = now.toTimeString().slice(0, 5).replace(':', '');
-      const fileName = `DienstenToewijzing${fileDate}${fileTime}.pdf`;
-      
-      // Opslaan met compressie
-      doc.save(fileName);
-      
-      console.log('✅ PDF exported:', fileName);
-    } catch (err: any) {
-      console.error('❌ Error exporting PDF:', err);
-      setError('Fout bij genereren PDF: ' + err.message);
-    } finally {
-      setExportingPDF(false);
-    }
-  }
-
-  // Helper functie om naam te trunceren
-  function truncateName(name: string, max: number) {
-    return name.length > max ? name.substring(0, max - 1) + '…' : name;
-  }
-
-  // Bereken team-counts per diensttype
-  function calculateServiceCounts() {
-    const counts = {
-      Groen: {} as Record<string, number>,
-      Oranje: {} as Record<string, number>,
-      Overig: {} as Record<string, number>
-    };
-    
-    // Initialiseer alle diensten met 0
-    serviceTypes.forEach(code => {
-      counts.Groen[code] = 0;
-      counts.Oranje[code] = 0;
-      counts.Overig[code] = 0;
-    });
-    
-    // Tel werkelijke aantallen per team
-    data.forEach(emp => {
-      serviceTypes.forEach(code => {
-        const service = emp.services?.[code];
-        if (service?.enabled && service?.count > 0) {
-          const team = emp.team === 'Groen' ? 'Groen' 
-                     : emp.team === 'Oranje' ? 'Oranje' 
-                     : 'Overig';
-          counts[team][code] += service.count;
-        }
-      });
-    });
-    
-    return counts;
-  }
+  };
 
   if (loading) {
     return (
@@ -417,195 +203,216 @@ export default function DienstenToewijzingPage() {
     );
   }
 
-  // Bereken counts dynamisch
-  const serviceCounts = calculateServiceCounts();
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-4 md:p-8">
+    <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-7xl mx-auto">
-        <Card className="p-6 md:p-8">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-4">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => router.push('/services')}
-                className="text-gray-600 hover:text-gray-900"
-              >
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Terug naar Dashboard
-              </Button>
-              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 flex items-center">
-                <span className="text-2xl mr-3">🧩</span>
-                Diensten Toewijzing
-              </h1>
-            </div>
-            <div className="flex items-center gap-3">
-              {/* Klein groen vinkje bij succesvolle save */}
-              {success && (
-                <div className="flex items-center gap-1 text-green-600 animate-pulse">
-                  <Check className="w-5 h-5" />
-                </div>
-              )}
-              <Button
-                onClick={() => loadData()}
-                variant="outline"
-                size="sm"
-                disabled={loading}
-              >
-                <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                Vernieuwen
-              </Button>
-              <Button
-                onClick={exportToPDF}
-                variant="outline"
-                size="sm"
-                disabled={exportingPDF}
-              >
-                <FileDown className={`w-4 h-4 mr-2 ${exportingPDF ? 'animate-bounce' : ''}`} />
-                {exportingPDF ? 'PDF wordt gegenereerd...' : 'PDF Export'}
-              </Button>
-            </div>
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push('/dashboard')}
+              className="text-gray-600 hover:text-gray-900"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Terug
+            </Button>
+            <h1 className="text-3xl font-bold text-gray-900">📋 Diensten Overzicht</h1>
+            {rosterId && <span className="text-sm text-gray-500">[Rooster: {rosterId.slice(0, 8)}...]</span>}
           </div>
+          <div className="flex gap-3">
+            <Button
+              onClick={() => loadData(rosterId)}
+              variant="outline"
+              size="sm"
+              disabled={loading}
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+              Vernieuwen
+            </Button>
+            <Button
+              onClick={handleExport}
+              variant="outline"
+              size="sm"
+              className="text-blue-600 hover:text-blue-700"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              CSV Export
+            </Button>
+          </div>
+        </div>
 
-          {/* Error Alert */}
-          {error && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
+        {/* Error Alert */}
+        {error && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
 
-          {/* Tabel met sticky header */}
-          <div className="overflow-x-auto" ref={tableRef}>
-            <table className="w-full border-collapse">
-              <thead>
-                {/* Hoofdheader - STICKY */}
-                <tr className="bg-gray-100 sticky top-0 z-20 shadow-sm">
-                  <th className="border p-3 text-left font-semibold text-gray-700 bg-gray-100">Team</th>
-                  <th className="border p-3 text-left font-semibold text-gray-700 bg-gray-100">Naam</th>
-                  <th className="border px-5 py-3 text-center font-semibold text-gray-700 min-w-[110px] bg-gray-100">Totaal</th>
-                  {serviceTypes.map(code => (
-                    <th key={code} className="border p-3 text-center font-semibold text-gray-700 bg-gray-100">
-                      {code}
-                    </th>
-                  ))}
-                </tr>
-                {/* Team-tellers - STICKY onder hoofdheader */}
-                <tr className="bg-gradient-to-r from-gray-100 to-gray-50 border-b-2 border-gray-300 sticky z-10" style={{ top: '49px' }}>
-                  <td colSpan={3} className="border p-3 text-sm text-gray-600 font-medium bg-gray-100">
-                    Per team:
-                  </td>
-                  {serviceTypes.map(code => {
-                    const groen = serviceCounts.Groen[code] || 0;
-                    const oranje = serviceCounts.Oranje[code] || 0;
-                    const overig = serviceCounts.Overig[code] || 0;
-                    const totaal = groen + oranje + overig;
-                    
-                    return (
-                      <td key={`count-${code}`} className="border p-2 bg-gray-50">
-                        <div className="flex items-center justify-center gap-2 text-sm font-semibold tabular-nums">
-                          <span className="text-green-700" title="Groen team">
-                            {groen.toString().padStart(2, '0')}
-                          </span>
-                          <span className="text-orange-600" title="Oranje team">
-                            {oranje.toString().padStart(2, '0')}
-                          </span>
-                          <span className="text-blue-600" title="Totaal alle teams">
-                            {totaal.toString().padStart(2, '0')}
-                          </span>
-                        </div>
-                      </td>
-                    );
-                  })}
+        {/* Summary Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <Card className="p-4 bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 font-medium">Totaal Diensten</p>
+                <p className="text-3xl font-bold text-blue-700 mt-2">
+                  {filteredData.reduce((sum, d) => sum + d.aantal, 0)}
+                </p>
+              </div>
+              <BarChart3 className="w-8 h-8 text-blue-500 opacity-50" />
+            </div>
+          </Card>
+
+          <Card className="p-4 bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 font-medium">Medewerkers</p>
+                <p className="text-3xl font-bold text-green-700 mt-2">
+                  {new Set(filteredData.map(d => d.employee_id)).size}
+                </p>
+              </div>
+              <BarChart3 className="w-8 h-8 text-green-500 opacity-50" />
+            </div>
+          </Card>
+
+          <Card className="p-4 bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 font-medium">Diensten (Typen)</p>
+                <p className="text-3xl font-bold text-purple-700 mt-2">
+                  {Object.keys(summary).length}
+                </p>
+              </div>
+              <BarChart3 className="w-8 h-8 text-purple-500 opacity-50" />
+            </div>
+          </Card>
+
+          <Card className="p-4 bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 font-medium">Gewogen Totaal</p>
+                <p className="text-3xl font-bold text-orange-700 mt-2">
+                  {filteredData.reduce((sum, d) => 
+                    sum + (d.aantal * (d.dienstwaarde || 1.0)), 0
+                  ).toFixed(1)}
+                </p>
+              </div>
+              <BarChart3 className="w-8 h-8 text-orange-500 opacity-50" />
+            </div>
+          </Card>
+        </div>
+
+        {/* Filter */}
+        <div className="mb-6 flex gap-2 flex-wrap">
+          <Button
+            variant={filter === 'all' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setFilter('all')}
+            className={filter === 'all' ? 'bg-purple-600 hover:bg-purple-700' : ''}
+          >
+            Alles
+          </Button>
+          {Object.keys(summary).map(code => (
+            <Button
+              key={code}
+              variant={filter === code ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setFilter(code)}
+              className={filter === code ? 'bg-purple-600 hover:bg-purple-700' : ''}
+            >
+              {code} ({summary[code].totalAssigned})
+            </Button>
+          ))}
+        </div>
+
+        {/* Team Stats */}
+        {Object.keys(teamStats).length > 0 && (
+          <Card className="mb-6 p-4 bg-white border border-gray-200">
+            <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              👥 Team Statistieken
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {Object.entries(teamStats).map(([team, stats]) => (
+                <div key={team} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                  <p className="font-medium text-gray-900">{team}</p>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {stats.count} diensten ({stats.services} toewijzingen)
+                  </p>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
+        {/* Main Table */}
+        <Card className="overflow-hidden shadow-lg">
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse" style={{ tableLayout: 'auto' }}>
+              <thead className="sticky top-0 z-10 bg-gradient-to-r from-gray-900 to-gray-800 shadow-md">
+                <tr>
+                  <th className="p-3 text-left font-semibold text-white">Medewerker</th>
+                  <th className="p-3 text-center font-semibold text-white">Team</th>
+                  <th className="p-3 text-center font-semibold text-white">Dienst</th>
+                  <th className="p-3 text-center font-semibold text-white">Aantal</th>
+                  <th className="p-3 text-center font-semibold text-white">Waarde</th>
                 </tr>
               </thead>
-              <tbody>
-                {data.length === 0 ? (
+              <tbody className="divide-y divide-gray-200">
+                {filteredData.length === 0 ? (
                   <tr>
-                    <td colSpan={serviceTypes.length + 3} className="border p-8 text-center text-gray-500">
-                      Geen medewerkers gevonden
+                    <td colSpan={5} className="p-8 text-center text-gray-500">
+                      Geen diensten toegewezen
                     </td>
                   </tr>
                 ) : (
-                  data.map((employee) => (
-                    <tr key={employee.employeeId} className="hover:bg-gray-50">
-                      <td className="border p-3">
-                        <span 
-                          className={`inline-block px-3 py-1 rounded text-sm font-medium ${
-                            employee.team === 'Groen' 
-                              ? 'bg-green-100 text-green-800'
-                              : employee.team === 'Oranje'
-                              ? 'bg-orange-100 text-orange-800'
-                              : 'bg-blue-100 text-blue-800'
+                  filteredData.map((assignment) => (
+                    <tr 
+                      key={assignment.id} 
+                      className="hover:bg-purple-50 transition-colors duration-150"
+                    >
+                      <td className="p-3 font-medium text-gray-900">{assignment.employee_name}</td>
+                      <td className="p-3 text-center">
+                        <Badge 
+                          variant="secondary"
+                          className={`${
+                            assignment.team === 'Groen' 
+                              ? 'bg-green-100 text-green-800 border border-green-400' 
+                              : assignment.team === 'Oranje' 
+                              ? 'bg-orange-100 text-orange-800 border border-orange-400' 
+                              : 'bg-blue-100 text-blue-800 border border-blue-400'
                           }`}
                         >
-                          {employee.team}
-                        </span>
+                          {assignment.team || 'Overig'}
+                        </Badge>
                       </td>
-                      <td className="border p-3 font-medium truncate w-[130px] max-w-[130px]">{truncateName(employee.employeeName, 12)}</td>
-                      <td className="border px-5 py-3 text-center font-semibold min-w-[110px]">
-                        <span className={employee.isOnTarget ? 'text-green-600' : 'text-gray-900'}>
-                          {employee.totalDiensten} / {employee.dienstenperiode}
-                        </span>
+                      <td className="p-3 text-center font-mono font-semibold text-gray-900 bg-gray-50">
+                        {assignment.service_code}
                       </td>
-                      {serviceTypes.map(code => {
-                        const service = employee.services?.[code];
-                        const enabled = service?.enabled || false;
-                        const count = service?.count || 0;
-
-                        return (
-                          <td key={code} className="border p-2 text-center">
-                            <div className="flex items-center justify-center gap-2">
-                              <Checkbox
-                                checked={enabled}
-                                onCheckedChange={() => handleToggle(
-                                  employee.employeeId,
-                                  code,
-                                  enabled
-                                )}
-                              />
-                              <Input
-                                type="number"
-                                min="0"
-                                max="35"
-                                value={enabled ? count : 0}
-                                onChange={(e) => {
-                                  if (enabled) {
-                                    handleCountChange(
-                                      employee.employeeId,
-                                      code,
-                                      parseInt(e.target.value) || 0
-                                    );
-                                  }
-                                }}
-                                disabled={!enabled}
-                                className={`w-16 h-8 text-center transition-all ${
-                                  !enabled 
-                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                                    : 'bg-white'
-                                }`}
-                              />
-                            </div>
-                          </td>
-                        );
-                      })}
+                      <td className="p-3 text-center font-bold text-purple-600 bg-purple-50">
+                        {assignment.aantal}
+                      </td>
+                      <td className="p-3 text-center font-semibold text-gray-900">
+                        {(assignment.aantal * (assignment.dienstwaarde || 1.0)).toFixed(2)}
+                      </td>
                     </tr>
                   ))
                 )}
               </tbody>
             </table>
           </div>
-
-          {/* Footer info */}
-          <div className="mt-6 p-4 bg-blue-50 rounded-lg text-sm text-gray-700">
-            <p>💡 <strong>Gebruik:</strong> Vink een dienst aan om deze toe te wijzen. Het getal geeft het aantal keer per periode aan.</p>
-            <p className="mt-1">🎯 <strong>Doel:</strong> Groene getallen betekenen dat de medewerker op target is (totaal diensten = dienstenperiode).</p>
-            <p className="mt-1">⚙️ <strong>Tip:</strong> Input velden met waarde 0 zijn uitgeschakeld maar blijven zichtbaar voor overzicht en ad-hoc planning.</p>
-            <p className="mt-1">📊 <strong>Team-tellers:</strong> Tonen totaal aantal diensten per team (niet aantal medewerkers): <span className="text-green-700 font-semibold">Groen</span> <span className="text-orange-600 font-semibold">Oranje</span> <span className="text-blue-600 font-semibold">Totaal</span></p>
-            <p className="mt-1">📄 <strong>PDF Export:</strong> Klik op 'PDF Export' om een printvriendelijke PDF te genereren met datum/tijd.</p>
-          </div>
         </Card>
+
+        {/* Info Box */}
+        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <p className="flex items-start gap-2 text-sm text-gray-700">
+            <span className="text-lg">ℹ️</span>
+            <span>
+              <strong>REFACTOR DRAAD-194-FASE1:</strong> Dit overzicht gebruikt nu roster_employee_services (team direct beschikbaar). 
+              Gegevens worden real-time geladen op basis van de geselecteerde rooster-context.
+            </span>
+          </p>
+        </div>
       </div>
     </div>
   );
