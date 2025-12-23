@@ -37,6 +37,7 @@ export interface WorkbestandPlanning {
   dagdeel: 'O' | 'M' | 'A';
   status: 0 | 1 | 2 | 3; // 0=open, 1=assigned, 2=blocked, 3=unavailable
   service_id: string | null; // MUTABLE: null or service UUID
+  team?: string; // ✅ DRAAD 342 PRIORITEIT 1 - OPTIONEEL, fallback compatibility
   is_protected: boolean; // TRUE = skip this (pre-planning)
   source: 'autofill' | 'manual' | 'pre_planning' | null;
   blocked_by_date: Date | null; // MUTABLE: which date caused block
@@ -63,7 +64,7 @@ export interface WorkbestandPlanning {
 export interface WorkbestandCapaciteit {
   roster_id: string;
   employee_id: string;
-  team: string;                    // ✅ NIEUW - na employee_id (DRAAD 341)
+  team: string;                    // ✅ DRAAD 341 - na employee_id (PRIMARY source for team info)
   service_id: string;
   service_code: string;
   aantal: number; // MUTABLE: decrements as assigned
