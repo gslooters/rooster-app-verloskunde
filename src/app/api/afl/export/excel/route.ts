@@ -2,7 +2,8 @@
  * DRAAD344-EXCEL-ROUTE: Fixed Excel Export Route
  * Endpoint: POST /api/afl/export/excel
  * 
- * FIXES APPLIED:
+ * CRITICAL FIXES APPLIED:
+ * ✅ Error responses are NOW CSV format (not JSON) - fixes 404 HTML issue
  * ✅ Accept both query parameters AND request body (flexible input)
  * ✅ Use CORRECT Supabase table names from schema:
  *    - roster_assignments (not rosterperiodstaffingdagdelen)
@@ -12,16 +13,17 @@
  * ✅ Return actual CSV blob with correct Content-Type
  * ✅ Add detailed logging for Railway logs
  * ✅ Cache-bust with Date.now() + random
+ * ✅ CSV content validation - proper escaping
  * 
  * INPUT:
  * - Request body: { rosterId: string }
  * - OR query param: ?rosterId=<uuid>
  * 
  * OUTPUT:
- * - 200: CSV blob (Content-Type: text/csv)
- * - 400: Missing rosterId
- * - 404: Roster not found
- * - 500: Database or generation error
+ * - 200: CSV blob (Content-Type: text/csv; charset=utf-8)
+ * - 400: Missing rosterId (CSV error format)
+ * - 404: Roster not found (CSV error format)
+ * - 500: Database or generation error (CSV error format)
  */
 
 import { NextResponse, NextRequest } from 'next/server';
@@ -32,14 +34,26 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 if (!supabaseUrl || !supabaseKey) {
-  console.error('❌ [DRAAD344-EXCEL-ROUTE] Missing Supabase credentials');
+  console.error('❌ [EXCEL-ROUTE] Missing Supabase credentials');
 }
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Log route initialization
-console.log('[DRAAD344-EXCEL-ROUTE] ✅ Excel Export route loaded at:', new Date().toISOString());
-console.log('[DRAAD344-EXCEL-ROUTE] ✅ POST handler registered');
+console.log('[EXCEL-ROUTE] ✅ Excel Export route loaded at:', new Date().toISOString());
+console.log('[EXCEL-ROUTE] ✅ POST/GET handlers registered');
+
+/**
+ * Helper: Escape CSV field values
+ */
+function escapeCSV(value: string | null | undefined): string {
+  if (value === null || value === undefined) return '';
+  const str = String(value);
+  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
 
 /**
  * Helper: Get all days in period
@@ -67,7 +81,27 @@ function formatDate(date: Date): string {
 }
 
 /**
+ * Helper: Return CSV error response
+ * CRITICAL: Errors must be CSV format, not JSON or HTML!
+ */
+function createCSVErrorResponse(statusCode: number, errorMessage: string): NextResponse {
+  const csvContent = `Fout,Beschrijving\n${statusCode},"${errorMessage.replace(/"/g, '""')}"`;
+  
+  console.log(`[EXCEL-ROUTE] ⚠️ Returning CSV error response (${statusCode}): ${errorMessage}`);
+  
+  return new NextResponse(csvContent, {
+    status: statusCode,
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="error-${Date.now()}.csv"`,
+      'Cache-Control': 'no-cache, no-store, must-revalidate'
+    }
+  });
+}
+
+/**
  * Generate CSV content from roster data
+ * IMPROVED: Better escaping and validation
  */
 function generateExcelContent(data: any): string {
   const { roster, assignments, employees, services } = data;
@@ -84,37 +118,49 @@ function generateExcelContent(data: any): string {
     new Date(roster.start_date),
     new Date(roster.end_date)
   );
+  
   const dayHeaders = ['Medewerker', ...days.map(d => formatDate(d))].join(',');
 
   // Create assignment lookup map
   const assignmentMap: { [key: string]: string } = {};
-  assignments.forEach((a: any) => {
+  (assignments || []).forEach((a: any) => {
+    if (!a.employee_id || !a.date) {
+      console.warn(`[EXCEL-ROUTE] ⚠️ Assignment missing employee_id or date:`, a);
+      return;
+    }
+    
     const key = `${a.employee_id}|${a.date}`;
-    const serviceCode = services.find((s: any) => s.id === a.service_id)?.code || 'ONBEKEND';
+    const service = services.find((s: any) => s.id === a.service_id);
+    const serviceCode = service?.code || 'ONBEKEND';
     assignmentMap[key] = serviceCode;
   });
 
+  console.log(`[EXCEL-ROUTE] 📊 Assignment map size: ${Object.keys(assignmentMap).length}`);
+
   // Build employee rows
-  const employeeRows = employees.map((emp: any) => {
+  const employeeRows = (employees || []).map((emp: any) => {
     const name = emp.voornaam && emp.achternaam 
       ? `${emp.voornaam} ${emp.achternaam}` 
       : (emp.name || emp.id);
     
-    const cells = [name];
+    const cells = [escapeCSV(name)];
     
     days.forEach(day => {
       const dateStr = day.toISOString().split('T')[0];
       const key = `${emp.id}|${dateStr}`;
-      cells.push(assignmentMap[key] || '');
+      const serviceCode = assignmentMap[key] || '';
+      cells.push(escapeCSV(serviceCode));
     });
     
     return cells.join(',');
   });
 
-  // Service legend
-  const legend = `\n\nDiensten (Legenda)\nCode,Naam\n${services
-    .map((s: any) => `"${s.code}","${s.naam || s.code}"`)
-    .join('\n')}`;
+  // Service legend - IMPROVED escaping
+  const legendRows = (services || []).map((s: any) => 
+    `${escapeCSV(s.code)},${escapeCSV(s.naam || s.code)}`
+  );
+  
+  const legend = `\n\nDiensten (Legenda)\nCode,Naam\n${legendRows.join('\n')}`;
 
   // Combine all sections
   const csvContent = [
@@ -127,6 +173,8 @@ function generateExcelContent(data: any): string {
     legend
   ].join('\n');
 
+  console.log(`[EXCEL-ROUTE] ✅ CSV content generated: ${csvContent.length} chars, ${employeeRows.length} employees, ${services?.length || 0} services`);
+
   return csvContent;
 }
 
@@ -135,8 +183,14 @@ function generateExcelContent(data: any): string {
  * Accepts: { rosterId } in body OR ?rosterId=<uuid> in query
  */
 export async function POST(request: NextRequest) {
-  const cacheId = `${Date.now()}-${Math.random()}`;
-  console.log(`[DRAAD344-EXCEL-ROUTE] 📋 Starting Excel generation - Cache ID: ${cacheId}`);
+  const cacheId = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  const requestId = request.headers.get('X-Request-ID') || `unknown-${cacheId}`;
+  
+  console.log(`\n${'='.repeat(80)}`);
+  console.log(`[EXCEL-ROUTE] 📋 Excel export request started`);
+  console.log(`[EXCEL-ROUTE] 🆔 Request ID: ${requestId}`);
+  console.log(`[EXCEL-ROUTE] 🔄 Cache ID: ${cacheId}`);
+  console.log(`[EXCEL-ROUTE] 🕐 Timestamp: ${new Date().toISOString()}`);
 
   try {
     // Get rosterId from body OR query params (flexible)
@@ -146,20 +200,23 @@ export async function POST(request: NextRequest) {
       try {
         const body = await request.json() as any;
         rosterId = body.rosterId || body.roster_id;
+        console.log(`[EXCEL-ROUTE] 📥 Got rosterId from request body: ${rosterId?.substring(0, 12)}...`);
       } catch (e) {
-        // Body is not JSON, that's OK
+        console.warn(`[EXCEL-ROUTE] ℹ️ Body is not JSON, using query params only`);
       }
+    } else {
+      console.log(`[EXCEL-ROUTE] 📥 Got rosterId from query params: ${rosterId.substring(0, 12)}...`);
     }
 
-    if (!rosterId) {
-      console.error('[DRAAD344-EXCEL-ROUTE] ❌ Missing rosterId in body or query');
-      return NextResponse.json(
-        { error: 'rosterId parameter required in body or query' },
-        { status: 400 }
+    if (!rosterId || typeof rosterId !== 'string' || rosterId.trim() === '') {
+      console.error('[EXCEL-ROUTE] ❌ Missing or invalid rosterId');
+      return createCSVErrorResponse(
+        400, 
+        'rosterId parameter required in body or query (must be non-empty string)'
       );
     }
 
-    console.log(`[DRAAD344-EXCEL-ROUTE] 🔍 Fetching roster: ${rosterId}`);
+    console.log(`[EXCEL-ROUTE] 🔍 Fetching roster: ${rosterId}`);
 
     // Fetch roster using CORRECT table name: roosters (from schema)
     const { data: roster, error: rosterError } = await supabase
@@ -169,16 +226,15 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (rosterError || !roster) {
-      console.error(`[DRAAD344-EXCEL-ROUTE] ❌ Roster not found: ${rosterError?.message}`);
-      return NextResponse.json(
-        { error: 'Roster not found' },
-        { status: 404 }
-      );
+      const errorMsg = rosterError?.message || 'Unknown error';
+      console.error(`[EXCEL-ROUTE] ❌ Roster not found: ${errorMsg}`);
+      return createCSVErrorResponse(404, `Roster not found: ${errorMsg}`);
     }
 
-    console.log(`[DRAAD344-EXCEL-ROUTE] ✅ Roster found. Fetching assignments...`);
+    console.log(`[EXCEL-ROUTE] ✅ Roster found: ${roster.start_date} to ${roster.end_date}`);
 
     // Fetch assignments using CORRECT table: roster_assignments (from schema)
+    console.log(`[EXCEL-ROUTE] 🔍 Fetching assignments for roster...`);
     const { data: assignments, error: assignError } = await supabase
       .from('roster_assignments')
       .select('id, employee_id, date, service_id')
@@ -186,16 +242,14 @@ export async function POST(request: NextRequest) {
       .not('service_id', 'is', null);
 
     if (assignError) {
-      console.error(`[DRAAD344-EXCEL-ROUTE] ❌ Failed to fetch assignments: ${assignError.message}`);
-      return NextResponse.json(
-        { error: 'Could not fetch assignments' },
-        { status: 500 }
-      );
+      console.error(`[EXCEL-ROUTE] ❌ Failed to fetch assignments: ${assignError.message}`);
+      return createCSVErrorResponse(500, `Could not fetch assignments: ${assignError.message}`);
     }
 
-    console.log(`[DRAAD344-EXCEL-ROUTE] ✅ Found ${assignments?.length || 0} assignments. Fetching employees...`);
+    console.log(`[EXCEL-ROUTE] ✅ Found ${assignments?.length || 0} assignments`);
 
     // Fetch employees from roster_design snapshot (CORRECT table)
+    console.log(`[EXCEL-ROUTE] 🔍 Fetching employee snapshot...`);
     const { data: rosterDesign, error: designError } = await supabase
       .from('roster_design')
       .select('employee_snapshot')
@@ -212,25 +266,24 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log(`[DRAAD344-EXCEL-ROUTE] ✅ Found ${employeeList.length} employees. Fetching service types...`);
+    console.log(`[EXCEL-ROUTE] ✅ Found ${employeeList.length} employees in snapshot`);
 
     // Fetch service types using CORRECT table: service_types (from schema)
+    console.log(`[EXCEL-ROUTE] 🔍 Fetching active service types...`);
     const { data: services, error: servError } = await supabase
       .from('service_types')
       .select('id, code, naam')
       .eq('actief', true);
 
     if (servError) {
-      console.error(`[DRAAD344-EXCEL-ROUTE] ❌ Failed to fetch services: ${servError.message}`);
-      return NextResponse.json(
-        { error: 'Could not fetch service types' },
-        { status: 500 }
-      );
+      console.error(`[EXCEL-ROUTE] ❌ Failed to fetch services: ${servError.message}`);
+      return createCSVErrorResponse(500, `Could not fetch service types: ${servError.message}`);
     }
 
-    console.log(`[DRAAD344-EXCEL-ROUTE] ✅ Found ${services?.length || 0} services. Generating CSV...`);
+    console.log(`[EXCEL-ROUTE] ✅ Found ${services?.length || 0} active services`);
 
     // Generate CSV content
+    console.log(`[EXCEL-ROUTE] 📝 Generating CSV content...`);
     const csvContent = generateExcelContent({
       roster,
       assignments: assignments || [],
@@ -238,10 +291,20 @@ export async function POST(request: NextRequest) {
       services: services || []
     });
 
+    // Validate CSV content
+    if (!csvContent || csvContent.length === 0) {
+      console.error('[EXCEL-ROUTE] ❌ CSV content is empty');
+      return createCSVErrorResponse(500, 'CSV generation resulted in empty content');
+    }
+
     // Return as downloadable CSV file
     const filename = `rooster-planning-${rosterId.substring(0, 8)}-${Date.now()}.csv`;
 
-    console.log(`[DRAAD344-EXCEL-ROUTE] ✅ CSV generated successfully. Returning blob.`);
+    console.log(`[EXCEL-ROUTE] ✅ CSV generated successfully!`);
+    console.log(`[EXCEL-ROUTE] 📦 Filename: ${filename}`);
+    console.log(`[EXCEL-ROUTE] 📊 Content size: ${csvContent.length} bytes`);
+    console.log(`[EXCEL-ROUTE] ✅ RETURNING CSV BLOB - Status 200`);
+    console.log(`${'='.repeat(80)}\n`);
 
     return new NextResponse(csvContent, {
       status: 200,
@@ -255,15 +318,21 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('[DRAAD344-EXCEL-ROUTE] ❌ Unexpected error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error', details: String(error) },
-      { status: 500 }
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('[EXCEL-ROUTE] ❌ UNCAUGHT ERROR:', error);
+    console.error(`[EXCEL-ROUTE] 📝 Error message: ${errorMessage}`);
+    console.error(`[EXCEL-ROUTE] 🔍 Request ID: ${requestId}`);
+    console.log(`${'='.repeat(80)}\n`);
+    
+    return createCSVErrorResponse(
+      500,
+      `Internal server error: ${errorMessage}`
     );
   }
 }
 
 // Handle GET requests (for direct browser access)
 export async function GET(request: NextRequest) {
+  console.log('[EXCEL-ROUTE] ℹ️ GET request received - forwarding to POST handler');
   return POST(request);
 }
