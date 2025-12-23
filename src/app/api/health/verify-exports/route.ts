@@ -165,22 +165,27 @@ async function testRoute(path: string): Promise<RouteTestResult> {
   console.log(`[EXPORT-VERIFY]   Testing ${path}...`);
   console.log(`[EXPORT-VERIFY]   URL: ${fullUrl}`);
 
+  // Setup AbortController with timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
+
   try {
     // Send a HEAD request (no body) to test if route exists
     const response = await fetch(fullUrl, {
       method: 'HEAD',
-      timeout: 5000,
-      // Don't follow redirects to 404
+      signal: controller.signal,  // ✅ VALID: signal property for timeout
       redirect: 'manual'
     }).catch(err => {
       console.log(`[EXPORT-VERIFY]   Fetch error (trying GET): ${(err as Error).message}`);
       // Try GET instead
       return fetch(fullUrl, {
         method: 'GET',
-        timeout: 5000,
+        signal: controller.signal,  // ✅ VALID: signal property for timeout
         redirect: 'manual'
       });
     });
+
+    clearTimeout(timeoutId);
 
     const elapsed = Date.now() - startTime;
     const reachable = response.status !== 404 && response.status < 500;
@@ -203,6 +208,7 @@ async function testRoute(path: string): Promise<RouteTestResult> {
 
     return result;
   } catch (error) {
+    clearTimeout(timeoutId);
     const elapsed = Date.now() - startTime;
     const errorMessage = error instanceof Error ? error.message : String(error);
 
