@@ -161,6 +161,21 @@ export interface ServiceReport {
 }
 
 /**
+ * ✅ OPTIE A: Service & Team Statistics
+ * Combinatie van dienst + team voor gedetailleerde rapportage
+ */
+export interface ServiceTeamStats {
+  service_code: string;
+  service_name: string;
+  team_code: string;
+  team_name: string;
+  planned: number;
+  assigned: number;
+  coverage_pct: number;
+  overstaffing: boolean; // true als > 100%
+}
+
+/**
  * Bottleneck Service
  */
 export interface BottleneckService {
@@ -275,6 +290,7 @@ export interface AflReport {
   };
   
   by_service: ServiceReport[];
+  by_service_team?: ServiceTeamStats[]; // ✅ OPTIE A: Per dienst/team statistieken
   bottleneck_services: BottleneckService[];
   by_team: TeamReport[];
   employee_capacity: EmployeeCapacityReport[];
