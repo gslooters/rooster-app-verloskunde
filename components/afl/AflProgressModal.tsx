@@ -5,9 +5,15 @@ import { Loader2, CheckCircle2, XCircle, X, AlertCircle, Clock, FileText, FileSp
 import { Button } from '@/components/ui/button';
 
 /**
- * AFL Progress Modal Component - DRAAD344: Export Activation
+ * AFL Progress Modal Component - DRAAD346: Modal Flow & Export Fix
  * 
- * DRAAD344 CHANGES:
+ * DRAAD346 CHANGES:
+ * 1. ✅ FIXED close button (X) - only visible on ERROR/TIMEOUT, not on SUCCESS
+ * 2. ✅ DISABLED export buttons (PDF/Excel) - grayed out until API routes work
+ * 3. 🔒 Enforces correct workflow: Ontwerp → Rapportage → Bewerking
+ * 4. 💡 Users MUST click "Naar rooster" button to proceed from success state
+ * 
+ * Previous DRAAD344 CHANGES:
  * 1. ❌ REMOVED "Annuleren" button from success state - users MUST go to "Naar rooster"
  * 2. ✅ ACTIVATED PDF export button with real API call
  * 3. ✅ ACTIVATED Excel export button with real API call
@@ -25,7 +31,7 @@ import { Button } from '@/components/ui/button';
  * - Error handling with detailed messages
  * - Success state with statistics (STAYS VISIBLE)
  * - Blue "Naar rooster" CTA button (triggers parent callback on click)
- * - PDF/Excel export WITH REAL FUNCTIONALITY
+ * - PDF/Excel export TEMPORARILY DISABLED (grayed out)
  * - Prevents accidental closure during processing
  * - Cache-busting headers (Date.now() + random)
  * - Modal stays visible until user confirms
@@ -82,7 +88,7 @@ export function AflProgressModal({
   const [attemptCount, setAttemptCount] = useState<number>(0);
   const [isNavigating, setIsNavigating] = useState(false);
   
-  // DRAAD344: Export states
+  // DRAAD344: Export states (currently disabled)
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -220,127 +226,17 @@ export function AflProgressModal({
   };
 
   /**
-   * DRAAD344: Handle PDF Export
-   * FIXED: Send { afl_run_id } in request body, not query params
-   * FIXED: Better error handling for 404 HTML responses
+   * DRAAD346: Export buttons DISABLED - placeholder functions
+   * These will be re-enabled once API routes are properly implemented
    */
-  const handleExportPDF = async () => {
-    if (!result?.afl_run_id) {
-      setExportError('AFL Run ID ontbreekt - kan PDF niet genereren');
-      return;
-    }
-
-    setIsExportingPDF(true);
-    setExportError(null);
-
-    try {
-      console.log(`📄 [Modal] Exporting PDF for AFL run: ${result.afl_run_id}`);
-      
-      const response = await fetch('/api/afl/export/pdf', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Request-ID': `pdf-export-${Date.now()}`,
-        },
-        body: JSON.stringify({ afl_run_id: result.afl_run_id }),
-      });
-
-      if (!response.ok) {
-        // Better error handling: check if we got HTML instead of JSON
-        const contentType = response.headers.get('content-type');
-        if (contentType?.includes('text/html')) {
-          throw new Error(`API route not found (404) - server returned HTML page instead of PDF`);
-        }
-        
-        try {
-          const errorData = await response.json();
-          throw new Error(errorData.error || `PDF export fout: ${response.status}`);
-        } catch (e) {
-          throw new Error(`PDF export fout: ${response.status} ${response.statusText}`);
-        }
-      }
-
-      // Download PDF blob
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `rooster-rapport-${result.afl_run_id.substring(0, 8)}-${Date.now()}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-
-      console.log('✅ [Modal] PDF downloaded successfully');
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      console.error('❌ [Modal] PDF export failed:', err);
-      setExportError(`PDF export mislukt: ${errorMsg}`);
-    } finally {
-      setIsExportingPDF(false);
-    }
+  const handleExportPDF = () => {
+    console.log('⚠️ [Modal] PDF export temporarily disabled');
+    setExportError('PDF export tijdelijk uitgeschakeld - wordt later geactiveerd');
   };
 
-  /**
-   * DRAAD344: Handle Excel Export
-   * FIXED: Send { rosterId } in request body, not query params
-   * FIXED: Better error handling for 404 HTML responses
-   */
-  const handleExportExcel = async () => {
-    if (!rosterId) {
-      setExportError('Rooster ID ontbreekt - kan Excel niet genereren');
-      return;
-    }
-
-    setIsExportingExcel(true);
-    setExportError(null);
-
-    try {
-      console.log(`📊 [Modal] Exporting Excel for roster: ${rosterId}`);
-      
-      const response = await fetch('/api/afl/export/excel', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Request-ID': `excel-export-${Date.now()}`,
-        },
-        body: JSON.stringify({ rosterId }),
-      });
-
-      if (!response.ok) {
-        // Better error handling: check if we got HTML instead of JSON
-        const contentType = response.headers.get('content-type');
-        if (contentType?.includes('text/html')) {
-          throw new Error(`API route not found (404) - server returned HTML page instead of CSV`);
-        }
-        
-        try {
-          const errorData = await response.json();
-          throw new Error(errorData.error || `Excel export fout: ${response.status}`);
-        } catch (e) {
-          throw new Error(`Excel export fout: ${response.status} ${response.statusText}`);
-        }
-      }
-
-      // Download Excel blob
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `rooster-planning-${rosterId.substring(0, 8)}-${Date.now()}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-
-      console.log('✅ [Modal] Excel downloaded successfully');
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      console.error('❌ [Modal] Excel export failed:', err);
-      setExportError(`Excel export mislukt: ${errorMsg}`);
-    } finally {
-      setIsExportingExcel(false);
-    }
+  const handleExportExcel = () => {
+    console.log('⚠️ [Modal] Excel export temporarily disabled');
+    setExportError('Excel export tijdelijk uitgeschakeld - wordt later geactiveerd');
   };
 
   // Modal niet weergeven als gesloten
@@ -348,7 +244,8 @@ export function AflProgressModal({
     return null;
   }
 
-  const canClose = state !== 'loading' && !isNavigating;
+  // DRAAD346: Close button only visible on ERROR/TIMEOUT, not on SUCCESS
+  const canClose = (state === 'error' || state === 'timeout') && !isNavigating;
 
   return (
     <>
@@ -374,6 +271,7 @@ export function AflProgressModal({
                 {state === 'idle' && '⏷️ Gereed'}
               </p>
             </div>
+            {/* DRAAD346: Close button only on ERROR/TIMEOUT */}
             {canClose && (
               <button
                 onClick={onClose}
@@ -463,7 +361,7 @@ export function AflProgressModal({
               </div>
             )}
 
-            {/* DRAAD344: SUCCESS STATE - REMOVED ANNULEREN BUTTON */}
+            {/* DRAAD346: SUCCESS STATE - Export buttons DISABLED */}
             {state === 'success' && result && (
               <div className="space-y-4">
                 <div className="flex items-center justify-center">
@@ -517,55 +415,37 @@ export function AflProgressModal({
                   Klik "Naar rooster" hieronder om de resultaten te bekijken.
                 </div>
 
-                {/* DRAAD344: ACTIVATED Export Options */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <p className="text-sm font-semibold text-blue-900 mb-3 flex items-center gap-2">
-                    <FileText size={16} />
-                    Export opties beschikbaar
+                {/* DRAAD346: Export buttons DISABLED (grayed out) */}
+                <div className="bg-gray-50 border border-gray-300 rounded-lg p-4">
+                  <p className="text-sm font-semibold text-gray-600 mb-3 flex items-center gap-2">
+                    <FileText size={16} className="text-gray-500" />
+                    Export opties (tijdelijk uitgeschakeld)
                   </p>
                   <div className="flex gap-3 flex-wrap">
                     <button
                       onClick={handleExportPDF}
-                      disabled={isExportingPDF || isExportingExcel}
-                      className="flex-1 min-w-[140px] px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-lg font-medium transition-colors shadow-sm flex items-center justify-center gap-2"
+                      disabled={true}
+                      className="flex-1 min-w-[140px] px-4 py-2 bg-gray-300 cursor-not-allowed text-gray-500 rounded-lg font-medium flex items-center justify-center gap-2"
                     >
-                      {isExportingPDF ? (
-                        <>
-                          <Loader2 size={16} className="animate-spin" />
-                          <span className="text-xs">Bezig...</span>
-                        </>
-                      ) : (
-                        <>
-                          <FileText size={16} />
-                          <span className="text-xs">PDF rapport</span>
-                        </>
-                      )}
+                      <FileText size={16} />
+                      <span className="text-xs">PDF rapport (uit)</span>
                     </button>
                     <button
                       onClick={handleExportExcel}
-                      disabled={isExportingPDF || isExportingExcel}
-                      className="flex-1 min-w-[140px] px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white rounded-lg font-medium transition-colors shadow-sm flex items-center justify-center gap-2"
+                      disabled={true}
+                      className="flex-1 min-w-[140px] px-4 py-2 bg-gray-300 cursor-not-allowed text-gray-500 rounded-lg font-medium flex items-center justify-center gap-2"
                     >
-                      {isExportingExcel ? (
-                        <>
-                          <Loader2 size={16} className="animate-spin" />
-                          <span className="text-xs">Bezig...</span>
-                        </>
-                      ) : (
-                        <>
-                          <FileSpreadsheet size={16} />
-                          <span className="text-xs">Excel export</span>
-                        </>
-                      )}
+                      <FileSpreadsheet size={16} />
+                      <span className="text-xs">Excel export (uit)</span>
                     </button>
                   </div>
                   {exportError && (
-                    <div className="mt-3 bg-red-50 border border-red-200 rounded p-2">
-                      <p className="text-xs text-red-700 font-medium">{exportError}</p>
+                    <div className="mt-3 bg-yellow-50 border border-yellow-200 rounded p-2">
+                      <p className="text-xs text-yellow-800 font-medium">{exportError}</p>
                     </div>
                   )}
-                  <p className="text-xs text-blue-700 mt-2">
-                    💡 Downloads starten automatisch na generatie
+                  <p className="text-xs text-gray-600 mt-2">
+                    ⚠️ Export functies worden later geactiveerd
                   </p>
                 </div>
               </div>
@@ -642,7 +522,7 @@ export function AflProgressModal({
             )}
           </div>
 
-          {/* Footer - DRAAD344: REMOVED ANNULEREN BUTTON FROM SUCCESS STATE */}
+          {/* Footer - DRAAD346: No close button on SUCCESS */}
           <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 rounded-b-lg">
             {state === 'loading' && (
               <div className="space-y-2">
@@ -658,7 +538,7 @@ export function AflProgressModal({
               <div className="space-y-2">
                 <button
                   onClick={handleNavigateToRoster}
-                  disabled={isNavigating || isExportingPDF || isExportingExcel}
+                  disabled={isNavigating}
                   className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg font-semibold transition-colors shadow-md"
                 >
                   {isNavigating ? (
@@ -670,11 +550,10 @@ export function AflProgressModal({
                     '→ Naar rooster'
                   )}
                 </button>
-                {/* DRAAD344: ANNULEREN BUTTON REMOVED - Users MUST go to "Naar rooster" */}
-                {/* This enforces the correct workflow: Ontwerp → Rapportage → Bewerking */}
+                {/* DRAAD346: No "Annuleren" button - users MUST proceed to Bewerking */}
               </div>
             )}
-            {state !== 'loading' && state !== 'success' && (
+            {(state === 'error' || state === 'timeout') && (
               <button
                 onClick={onClose}
                 className="w-full font-medium px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
