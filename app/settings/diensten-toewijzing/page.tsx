@@ -13,18 +13,22 @@ import { ArrowLeft, RefreshCw, Check } from 'lucide-react';
 export const dynamic = 'force-dynamic';
 
 // LAZY IMPORT: Delay Supabase import until client-side rendering
-let getEmployeeServicesOverview: any;
+let getRosterEmployeeServices: any;
+let getRosterEmployeeServicesByEmployee: any;
 let upsertEmployeeService: any;
 let getServiceIdByCode: any;
 let supabase: any;
 
 const loadSupabaseModules = async () => {
-  if (!getEmployeeServicesOverview) {
-    const mod = await import('@/lib/services/medewerker-diensten-supabase');
-    getEmployeeServicesOverview = mod.getEmployeeServicesOverview;
-    upsertEmployeeService = mod.upsertEmployeeService;
-    getServiceIdByCode = mod.getServiceIdByCode;
-    supabase = mod.supabase;
+  if (!getRosterEmployeeServices) {
+    const mod1 = await import('@/lib/services/roster-employee-services');
+    getRosterEmployeeServices = mod1.getRosterEmployeeServices;
+    getRosterEmployeeServicesByEmployee = mod1.getRosterEmployeeServicesByEmployee;
+    
+    const mod2 = await import('@/lib/services/medewerker-diensten-supabase');
+    upsertEmployeeService = mod2.upsertEmployeeService;
+    getServiceIdByCode = mod2.getServiceIdByCode;
+    supabase = mod2.supabase;
   }
 };
 
@@ -36,9 +40,19 @@ export default function DienstenToewijzingPage() {
   const [error, setError] = useState<string | null>(null);
   const [serviceTotals, setServiceTotals] = useState<Record<string, number>>({});
   const [saveState, setSaveState] = useState<Record<string, boolean>>({});
+  const [rosterId, setRosterId] = useState<string | null>(null);
 
   useEffect(() => {
-    loadData();
+    // REFACTOR DRAAD-194-FASE1: Get rosterId from URL or context
+    // For now, try to get from sessionStorage or router
+    const stored = typeof window !== 'undefined' ? sessionStorage.getItem('currentRosterId') : null;
+    if (stored) {
+      setRosterId(stored);
+      loadData(stored);
+    } else {
+      // Fallback: load all data (backward compat)
+      loadData(null);
+    }
   }, []);
 
   // Realtime berekening van mini-totalen per dienst
@@ -59,7 +73,7 @@ export default function DienstenToewijzingPage() {
     }
   }, [data, serviceTypes]);
 
-  async function loadData() {
+  async function loadData(rId: string | null) {
     try {
       setLoading(true);
       setError(null);
@@ -83,8 +97,49 @@ export default function DienstenToewijzingPage() {
       
       setServiceTypes(serviceInfo);
       
-      // Haal medewerker-overzicht op
-      const overview = await getEmployeeServicesOverview();
+      // REFACTOR DRAAD-194-FASE1: Use getRosterEmployeeServices instead of getEmployeeServicesOverview
+      let overview: any[] = [];
+      
+      if (rId) {
+        // Rooster-specific data using roster_employee_services
+        console.log('🔄 [REFACTOR] Loading data for rosterId:', rId);
+        const rosterServices = await getRosterEmployeeServices(rId);
+        console.log('✅ [REFACTOR] Roster services loaded:', rosterServices.length);
+        
+        // Transform roster_employee_services into employee overview format
+        const employeeMap = new Map<string, any>();
+        
+        rosterServices.forEach((rs: any) => {
+          if (!employeeMap.has(rs.employee_id)) {
+            employeeMap.set(rs.employee_id, {
+              employeeId: rs.employee_id,
+              employeeName: rs.employee_id, // Will be enhanced if name available
+              team: rs.team, // ✅ DIRECT from roster_employee_services.team
+              services: {},
+              totalDiensten: 0,
+              dienstenperiode: 0,
+              isOnTarget: false
+            });
+          }
+          
+          const emp = employeeMap.get(rs.employee_id);
+          if (rs.service_types) {
+            emp.services[rs.service_types.code] = {
+              enabled: rs.actief,
+              count: rs.aantal,
+              dienstwaarde: rs.service_types.dienstwaarde || 1.0
+            };
+          }
+        });
+        
+        overview = Array.from(employeeMap.values());
+      } else {
+        // Fallback: Load from old service (backward compat)
+        const mod = await import('@/lib/services/medewerker-diensten-supabase');
+        const getEmployeeServicesOverview = mod.getEmployeeServicesOverview;
+        overview = await getEmployeeServicesOverview();
+      }
+      
       setData(overview);
     } catch (err: any) {
       setError(err.message || 'Fout bij laden van gegevens');
@@ -227,9 +282,10 @@ export default function DienstenToewijzingPage() {
               Terug naar Dashboard
             </Button>
             <h1 className="text-3xl font-bold text-gray-900">🎯 Diensten Toewijzing</h1>
+            {rosterId && <span className="text-sm text-gray-500">[Rooster: {rosterId.slice(0, 8)}...]</span>}
           </div>
           <Button
-            onClick={() => loadData()}
+            onClick={() => loadData(rosterId)}
             variant="outline"
             size="sm"
             disabled={loading}
@@ -329,7 +385,7 @@ export default function DienstenToewijzingPage() {
                               : 'bg-blue-100 text-blue-800 border border-blue-400'
                           }`}
                         >
-                          {employee.team}
+                          {employee.team || 'Overig'}
                         </span>
                       </td>
                       
@@ -461,6 +517,12 @@ export default function DienstenToewijzingPage() {
             <span className="text-lg">✅</span>
             <span>
               <strong>Feedback:</strong> Bij opslaan verschijnt een groen vinkje naast het invoerveld.
+            </span>
+          </p>
+          <p className="flex items-start gap-2">
+            <span className="text-lg">🔄</span>
+            <span>
+              <strong>REFACTOR DRAAD-194-FASE1:</strong> Nu met roster_employee_services (team direct beschikbaar, geen employee-services JOIN meer).
             </span>
           </p>
         </div>
