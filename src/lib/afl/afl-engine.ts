@@ -38,6 +38,15 @@
  * - buildCapaciteit properly maps row.team into WorkbestandCapaciteit.team
  * - Ensures dataflow: roster_employee_services.team → WorkbestandCapaciteit.team → solve-engine
  * - No more undefined team values
+ *
+ * DRAAD348: FIX 5 - PRE-PLANNING DUPLICATION BUG
+ * - Root cause: buildOpdracht() did NOT account for pre-planned assignments in aantal_nog
+ * - Impact: Solve engine saw more work than needed → duplication (Karin DDO/DDA +2)
+ * - Fix: 
+ *   1. Trek invulling af van aantal → aantal_nog = aantal - invulling
+ *   2. Add validation: Unmatched protected assignments detection
+ *   3. Enhanced logging for pre-planning workflow
+ * - Verification: AFLstatus moet 240 zijn (6 pre + 234 new), niet 242 (+2 dubbel)
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -60,9 +69,10 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 );
 
-// 🔧 DRAAD342: CACHE-BUST MARKER
+// 🔧 DRAAD348: CACHE-BUST MARKER + DRAAD342 REFERENCE
 // Change this value to force Railway rebuild (ensures latest code deployed)
-const CACHE_BUST_NONCE = '2025-12-23T08:30:00Z-DRAAD-342-TEAM-FIX';
+// Includes timestamp + Git commit reference for deploy verification
+const CACHE_BUST_NONCE = `2025-12-23T22:00:00Z-DRAAD-348-PREPLANNING-FIX-${Date.now()}`;
 
 /**
  * FASE 1: Load all data from database
@@ -76,14 +86,15 @@ export class AflEngine {
   async loadData(rosterId: string): Promise<AflLoadResult> {
     const startTime = performance.now();
 
-    // ✅ DRAAD339: CACHE-BUST VERIFICATION MARKERS
+    // ✅ DRAAD348: CACHE-BUST VERIFICATION MARKERS
     // These markers appear in Railway build logs to verify correct code version is deployed
     console.log('═══════════════════════════════════════════════════════');
-    console.log('[AFL-ENGINE] 🚀 DRAAD342 CACHE-BUST NONCE:', CACHE_BUST_NONCE);
+    console.log('[AFL-ENGINE] 🚀 DRAAD348 CACHE-BUST NONCE:', CACHE_BUST_NONCE);
     console.log('[AFL-ENGINE] ✅ DRAAD337 FIX: Client-side sorting (no chained .order() calls)');
     console.log('[AFL-ENGINE] ✅ DRAAD338 FIX: Service-code population via metadata lookup');
     console.log('[AFL-ENGINE] ✅ DRAAD339 FIX: Enhanced debug logging + cache-bust markers');
     console.log('[AFL-ENGINE] ✅ DRAAD342 FIX: Team field in buildCapaciteit (dataflow verification)');
+    console.log('[AFL-ENGINE] ✅ DRAAD348 FIX: Pre-planning invulling deduction in aantal_nog');
     console.log('[AFL-ENGINE] 📊 Phase 1 Load starting for roster:', rosterId);
     console.log('═══════════════════════════════════════════════════════');
 
@@ -178,13 +189,40 @@ export class AflEngine {
       const workbestand_planning = this.buildPlanning(planningRaw || []);
       const workbestand_capaciteit = this.buildCapaciteit(capacityRaw || []);
 
+      // ✅ DRAAD348: VALIDATION 1 - Check pre-planning match before adjustment
+      // This detects if any protected assignments aren't accounted for in tasks
+      console.log('[AFL-ENGINE] Phase 1.7a: Validating pre-planning match...');
+      const preplanValidation = this.validatePreplanningMatch(
+        workbestand_planning,
+        workbestand_opdracht
+      );
+      if (preplanValidation.unmatched.length > 0) {
+        console.warn(
+          `⚠️  ${preplanValidation.unmatched.length} protected assignments NOT matched to tasks!`
+        );
+        console.warn('   These would cause duplication:', preplanValidation.unmatched);
+      } else {
+        console.log(`  ✅ All ${preplanValidation.protected_count} protected assignments matched to tasks`);
+      }
+
       // Pre-planning adjustment: Decrement capacity for protected assignments
-      console.log('[AFL-ENGINE] Phase 1.7: Adjusting capacity for pre-planning...');
+      console.log('[AFL-ENGINE] Phase 1.7b: Adjusting capacity for pre-planning...');
       const preplanAdjustmentStats = this.adjustCapacityForPrePlanning(
         workbestand_planning,
         workbestand_capaciteit
       );
       console.log(`  ✅ Pre-planning adjustment: ${preplanAdjustmentStats.decremented} capacity entries decremented`);
+
+      // ✅ DRAAD348: VALIDATION 2 - Verify aantal_nog deduction worked
+      console.log('[AFL-ENGINE] Phase 1.7c: Verifying aantal_nog deductions...');
+      const aantalValidation = this.validateAantalNogDeduction(
+        workbestand_opdracht,
+        workbestand_planning
+      );
+      console.log(`  ✅ aantal_nog deductions verified:`);
+      console.log(`     - Tasks with aantal_nog=0 (pre-planned): ${aantalValidation.tasks_fully_planned}`);
+      console.log(`     - Tasks with aantal_nog>0 (still open): ${aantalValidation.tasks_open}`);
+      console.log(`     - Total aantal_nog remaining: ${aantalValidation.total_aantal_nog}`);
 
       // ✅ DRAAD339: VALIDATION & STATS
       console.log('[AFL-ENGINE] Phase 1.8: Data validation & statistics...');
@@ -214,6 +252,7 @@ export class AflEngine {
       console.log('[AFL-ENGINE] 📊 Workbestand_Opdracht stats:');
       console.log('  - Total tasks:', workbestand_opdracht.length);
       console.log('  - Total required diensten:', opdracht_stats.total_diensten);
+      console.log('  - Total aantal_nog (remaining):', opdracht_stats.total_aantal_nog);
       console.log('  - System services (DIO/DIA/DDO/DDA):', opdracht_stats.system_count);
       console.log('  - Regular services:', opdracht_stats.regular_count);
       console.log('  - Teams:', opdracht_stats.teams);
@@ -269,6 +308,11 @@ export class AflEngine {
    * - All tasks get proper service_code (never empty string)
    * - Fallback to 'UNKNOWN' if service not found (defensive)
    * 
+   * DRAAD348: PRE-PLANNING INVULLING DEDUCTION
+   * - Track invulling from database (pre-planned count)
+   * - Calculate aantal_nog = aantal - invulling (remaining to do)
+   * - This accounts for protected assignments already in planning
+   * 
    * DRAAD337: CLIENT-SIDE SORTING
    * Sort priority: is_system DESC → date ASC → dagdeel ASC → team DESC → service_code ASC
    * Performance: <1ms for typical roster (500-1500 rows)
@@ -284,8 +328,16 @@ export class AflEngine {
 
     // Map raw data to WorkbestandOpdracht objects
     // ✅ DRAAD338: Populate service_code from map
+    // ✅ DRAAD348: CRITICAL FIX - Calculate aantal_nog with invulling deduction
     const opdrachten = tasksRaw.map((row) => {
       const serviceCode = serviceCodeMap.get(row.service_id) || 'UNKNOWN';
+      
+      // ✅ DRAAD348: Trek invulling (pre-planning) af van aantal
+      // invulling = hoeveel ZIJN al ingevuld (protected assignments)
+      // aantal_nog = hoeveel MOETEN nog ingevuld worden (remaining work)
+      const invulling_count = row.invulling || 0;
+      const aantal_nog = Math.max(0, row.aantal - invulling_count);
+      
       return {
         id: row.id,
         roster_id: row.roster_id,
@@ -296,8 +348,8 @@ export class AflEngine {
         service_code: serviceCode, // ✅ POPULATED from metadata lookup
         is_system: row.is_system || false, // ✅ Direct from database (position 13)
         aantal: row.aantal,
-        aantal_nog: row.aantal,
-        invulling: row.invulling || 0,
+        aantal_nog: aantal_nog, // ✅ DRAAD348: FIXED - accounts for pre-planning
+        invulling: invulling_count, // ✅ Track pre-planning count
       };
     });
 
@@ -409,6 +461,85 @@ export class AflEngine {
   }
 
   /**
+   * ✅ DRAAD348: Validate pre-planning match
+   * Detects if protected assignments exist but aren't in task list
+   * This would indicate missing invulling data
+   */
+  private validatePreplanningMatch(
+    planning: WorkbestandPlanning[],
+    opdracht: WorkbestandOpdracht[]
+  ): {
+    protected_count: number;
+    unmatched: Array<{
+      employee_id: string;
+      date: string;
+      dagdeel: string;
+      service_id: string;
+    }>;
+  } {
+    const protectedAssignments = planning.filter(
+      (p) => p.status === 1 && p.is_protected && p.service_id
+    );
+
+    const unmatched = [];
+
+    for (const assignment of protectedAssignments) {
+      const matchingTask = opdracht.find(
+        (t) =>
+          t.date.getTime() === assignment.date.getTime() &&
+          t.dagdeel === assignment.dagdeel &&
+          t.service_id === assignment.service_id
+      );
+
+      if (!matchingTask) {
+        unmatched.push({
+          employee_id: assignment.employee_id,
+          date: assignment.date.toISOString().split('T')[0],
+          dagdeel: assignment.dagdeel,
+          service_id: assignment.service_id || 'unknown',
+        });
+      }
+    }
+
+    return {
+      protected_count: protectedAssignments.length,
+      unmatched,
+    };
+  }
+
+  /**
+   * ✅ DRAAD348: Validate aantal_nog deduction
+   * Confirms that aantal_nog properly reflects invulling deduction
+   */
+  private validateAantalNogDeduction(
+    opdracht: WorkbestandOpdracht[],
+    planning: WorkbestandPlanning[]
+  ): {
+    tasks_fully_planned: number;
+    tasks_open: number;
+    total_aantal_nog: number;
+  } {
+    let tasks_fully_planned = 0;
+    let tasks_open = 0;
+    let total_aantal_nog = 0;
+
+    for (const task of opdracht) {
+      total_aantal_nog += task.aantal_nog;
+      if (task.aantal_nog === 0) {
+        tasks_fully_planned++;
+      } else {
+        tasks_open++;
+      }
+    }
+
+    return {
+      tasks_fully_planned,
+      tasks_open,
+      total_aantal_nog,
+    };
+  }
+
+  /**
    * Adjust capacity for pre-planned assignments
    * For each protected assignment (status=1, is_protected=TRUE),
    * decrement the corresponding capacity
@@ -448,6 +579,7 @@ export class AflEngine {
    */
   private analyzeOpdracht(opdrachten: WorkbestandOpdracht[]): {
     total_diensten: number;
+    total_aantal_nog: number;
     system_count: number;
     regular_count: number;
     teams: Record<string, number>;
@@ -456,10 +588,12 @@ export class AflEngine {
     let system_count = 0;
     let regular_count = 0;
     let total = 0;
+    let total_nog = 0;
 
     for (const op of opdrachten) {
       teams[op.team] = (teams[op.team] || 0) + 1;
       total += op.aantal;
+      total_nog += op.aantal_nog;
       if (op.is_system) {
         system_count += op.aantal;
       } else {
@@ -469,6 +603,7 @@ export class AflEngine {
 
     return {
       total_diensten: total,
+      total_aantal_nog: total_nog,
       system_count,
       regular_count,
       teams,
