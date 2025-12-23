@@ -11,7 +11,9 @@ import { Button } from '@/components/ui/button';
  * 1. ❌ REMOVED "Annuleren" button from success state - users MUST go to "Naar rooster"
  * 2. ✅ ACTIVATED PDF export button with real API call
  * 3. ✅ ACTIVATED Excel export button with real API call
- * 4. 🔒 Enforces correct workflow: Ontwerp → Rapportage → Bewerking
+ * 4. ✅ FIXED error handling for 404 HTML responses (JSON parse)
+ * 5. ✅ Send request body (not query params) to export routes
+ * 6. 🔒 Enforces correct workflow: Ontwerp → Rapportage → Bewerking
  * 
  * Enhanced progress tracking for AFL (AutoFill) pipeline execution
  * Shows 5 phases: Load → Solve → Chain → Write → Report
@@ -183,9 +185,6 @@ export function AflProgressModal({
 
       console.log(`✅ [Modal] AFL execution completed in ${elapsedTime}ms - WAITING FOR USER ACTION`);
       console.log(`✅ [Modal] User must click 'Naar rooster' button to proceed`);
-      
-      // DRAAD337 FIX4: DO NOT call onSuccess here - wait for user to click button
-      // This prevents the auto-navigate that was causing the "flits voorbij" issue
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       console.error('❌ [Modal] AFL execution failed:', err);
@@ -222,7 +221,8 @@ export function AflProgressModal({
 
   /**
    * DRAAD344: Handle PDF Export
-   * Calls backend API to generate PDF report from afl_execution_reports table
+   * FIXED: Send { afl_run_id } in request body, not query params
+   * FIXED: Better error handling for 404 HTML responses
    */
   const handleExportPDF = async () => {
     if (!result?.afl_run_id) {
@@ -246,8 +246,18 @@ export function AflProgressModal({
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `PDF export fout: ${response.status}`);
+        // Better error handling: check if we got HTML instead of JSON
+        const contentType = response.headers.get('content-type');
+        if (contentType?.includes('text/html')) {
+          throw new Error(`API route not found (404) - server returned HTML page instead of PDF`);
+        }
+        
+        try {
+          const errorData = await response.json();
+          throw new Error(errorData.error || `PDF export fout: ${response.status}`);
+        } catch (e) {
+          throw new Error(`PDF export fout: ${response.status} ${response.statusText}`);
+        }
       }
 
       // Download PDF blob
@@ -273,7 +283,8 @@ export function AflProgressModal({
 
   /**
    * DRAAD344: Handle Excel Export
-   * Calls backend API to generate Excel from roster_assignments table
+   * FIXED: Send { rosterId } in request body, not query params
+   * FIXED: Better error handling for 404 HTML responses
    */
   const handleExportExcel = async () => {
     if (!rosterId) {
@@ -297,8 +308,18 @@ export function AflProgressModal({
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Excel export fout: ${response.status}`);
+        // Better error handling: check if we got HTML instead of JSON
+        const contentType = response.headers.get('content-type');
+        if (contentType?.includes('text/html')) {
+          throw new Error(`API route not found (404) - server returned HTML page instead of CSV`);
+        }
+        
+        try {
+          const errorData = await response.json();
+          throw new Error(errorData.error || `Excel export fout: ${response.status}`);
+        } catch (e) {
+          throw new Error(`Excel export fout: ${response.status} ${response.statusText}`);
+        }
       }
 
       // Download Excel blob
@@ -306,7 +327,7 @@ export function AflProgressModal({
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `rooster-planning-${rosterId.substring(0, 8)}-${Date.now()}.xlsx`;
+      a.download = `rooster-planning-${rosterId.substring(0, 8)}-${Date.now()}.csv`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -496,7 +517,7 @@ export function AflProgressModal({
                   Klik "Naar rooster" hieronder om de resultaten te bekijken.
                 </div>
 
-                {/* DRAAD344: ACTIVATED Export Options - NO LONGER DISABLED */}
+                {/* DRAAD344: ACTIVATED Export Options */}
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <p className="text-sm font-semibold text-blue-900 mb-3 flex items-center gap-2">
                     <FileText size={16} />
