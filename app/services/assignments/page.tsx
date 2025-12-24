@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ArrowLeft, RefreshCw, CheckCircle, X } from 'lucide-react';
+import { ArrowLeft, RefreshCw, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
@@ -94,7 +94,6 @@ export default function ServiceAssignmentsPage() {
         return;
       }
 
-      // Extract services
       const serviceCodesSet = new Set<string>();
       const serviceInfoMap = new Map<string, ServiceInfo>();
       
@@ -120,7 +119,6 @@ export default function ServiceAssignmentsPage() {
         ...otherServices
       ];
 
-      // Build serviceIdMap
       const idMap: Record<string, string> = {};
       for (const code of sortedServices) {
         const id = await getServiceIdByCode(code);
@@ -128,7 +126,6 @@ export default function ServiceAssignmentsPage() {
       }
       setServiceIdMap(idMap);
 
-      // Transform data
       const employeeList = overview.map((emp: EmployeeServiceData) => {
         let totalPeriodeWaarde = 0;
 
@@ -149,7 +146,6 @@ export default function ServiceAssignmentsPage() {
         };
       });
 
-      // Calculate team totals (simple count, no weighting)
       const totals: TeamTotals = {};
       employeeList.forEach((emp: EmployeeServiceData) => {
         if (!totals[emp.team]) {
@@ -187,7 +183,6 @@ export default function ServiceAssignmentsPage() {
     try {
       const cellKey = `${employeeId}_${serviceCode}`;
       
-      // Optimistic update - update local state immediately
       setEmployees(prev => prev.map(e => {
         if (e.employeeId !== employeeId) return e;
         
@@ -212,7 +207,6 @@ export default function ServiceAssignmentsPage() {
         };
       }));
 
-      // Update team totals optimistically
       setTeamTotals(prev => {
         const emp = employees.find(e => e.employeeId === employeeId);
         if (!emp) return prev;
@@ -255,12 +249,9 @@ export default function ServiceAssignmentsPage() {
         ...prev,
         [cellKey]: { status: 'success', timestamp: Date.now() }
       }));
-
-      // NO RELOAD - optimistic update is complete
     } catch (err: any) {
       console.error('Error:', err);
       setError(err.message);
-      // Reload only on error to sync state
       loadData();
     }
   };
@@ -276,7 +267,6 @@ export default function ServiceAssignmentsPage() {
 
       const cellKey = `${employeeId}_${serviceCode}`;
       
-      // Optimistic update
       setEmployees(prev => prev.map(e => {
         if (e.employeeId !== employeeId) return e;
         
@@ -301,7 +291,6 @@ export default function ServiceAssignmentsPage() {
         };
       }));
 
-      // Update team totals optimistically
       setTeamTotals(prev => {
         const emp = employees.find(e => e.employeeId === employeeId);
         if (!emp) return prev;
@@ -342,232 +331,58 @@ export default function ServiceAssignmentsPage() {
         ...prev,
         [cellKey]: { status: 'success', timestamp: Date.now() }
       }));
-
-      // NO RELOAD - optimistic update is complete
     } catch (err: any) {
       console.error('Error:', err);
       setError(err.message);
-      // Reload only on error to sync state
       loadData();
     }
   };
 
   const getTeamColor = (team?: string) => {
-    if (!team) return 'bg-blue-500';
+    if (!team) return '#3b82f6';
     const t = team.toLowerCase();
-    if (t === 'groen') return 'bg-green-500';
-    if (t === 'oranje') return 'bg-orange-500';
-    if (t === 'praktijk') return 'bg-blue-500';
-    return 'bg-blue-500';
+    if (t === 'groen') return '#22c55e';
+    if (t === 'oranje') return '#f97316';
+    if (t === 'praktijk') return '#3b82f6';
+    return '#3b82f6';
   };
 
-  const getPdColorClass = (wd: number, pd: number) => {
-    if (pd === wd) {
-      return 'pd-value match';  // Groen
-    } else if (pd < wd) {
-      return 'pd-value underboosted';  // Rood
-    } else {
-      return 'pd-value overboosted';  // Geel
-    }
+  const getPdColor = (wd: number, pd: number) => {
+    if (pd === wd) return { bg: 'rgba(34, 197, 94, 0.1)', text: '#22c55e', label: 'match' };
+    if (pd < wd) return { bg: 'rgba(239, 68, 68, 0.1)', text: '#ef4444', label: 'underboosted' };
+    return { bg: 'rgba(255, 193, 7, 0.1)', text: '#f57f17', label: 'overboosted' };
   };
 
   const CellSaveIndicator = ({ state }: { state?: any }) => {
     if (!state?.status) return null;
     if (state.status === 'saving') {
-      return <span className="save-feedback saving">⟳</span>;
+      return <span style={{ fontSize: '0.75rem', color: '#3b82f6' }}>⟳</span>;
     }
     if (state.status === 'success') {
-      return <span className="save-feedback success">✓</span>;
+      return <span style={{ fontSize: '0.75rem', color: '#22c55e' }}>✓</span>;
     }
     return null;
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <RefreshCw className="animate-spin mx-auto mb-2" size={32} />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+        <div style={{ textAlign: 'center' }}>
+          <RefreshCw className="animate-spin" style={{ margin: '0 auto 0.5rem', width: 32, height: 32 }} />
           <p>Laden...</p>
         </div>
       </div>
     );
   }
 
+  const gridColTemplate = `repeat(3, auto) ${ services.map(() => '80px').join(' ')}`;
+
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
-      <style>{`
-        .assignments-header {
-          position: sticky;
-          top: 0;
-          z-index: 100;
-          background: var(--color-surface, white);
-          border-bottom: 2px solid var(--color-border, #e5e7eb);
-        }
-
-        .service-badge-header {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 0.25rem;
-          padding: 0.5rem;
-          background: var(--color-bg-secondary, #f3f4f6);
-          border-radius: 6px;
-          min-width: 70px;
-        }
-
-        .badge-code {
-          font-weight: 600;
-          font-size: 0.85rem;
-          color: var(--color-text, #000);
-        }
-
-        .badge-dienstwaarde {
-          font-size: 0.75rem;
-          color: var(--color-text-secondary, #6b7280);
-          font-variant-numeric: tabular-nums;
-        }
-
-        .service-cell {
-          display: flex;
-          flex-direction: row;
-          align-items: center;
-          gap: 0.25rem;
-          padding: 0.5rem;
-          min-width: 80px;
-          justify-content: center;
-          position: relative;
-        }
-
-        .service-cell input[type="checkbox"] {
-          cursor: pointer;
-          width: 18px;
-          height: 18px;
-          margin: 0;
-        }
-
-        .service-cell button {
-          padding: 2px 6px;
-          font-size: 0.75rem;
-          min-width: 20px;
-          height: 24px;
-          cursor: pointer;
-          background: var(--color-secondary, #e5e7eb);
-          border: 1px solid var(--color-border, #d1d5db);
-          border-radius: 3px;
-        }
-
-        .service-cell button:hover {
-          background: var(--color-secondary-hover, #d1d5db);
-        }
-
-        .service-cell button:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-
-        .service-cell .count {
-          min-width: 20px;
-          text-align: center;
-          font-variant-numeric: tabular-nums;
-          font-size: 0.9rem;
-        }
-
-        .save-feedback {
-          position: absolute;
-          right: -25px;
-          top: 50%;
-          transform: translateY(-50%);
-          width: 18px;
-          height: 18px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 0.8rem;
-        }
-
-        .save-feedback.saving {
-          animation: spin 1s linear infinite;
-          color: #3b82f6;
-        }
-
-        .save-feedback.success {
-          color: #22c55e;
-          animation: fadeInOut 2s ease-in-out;
-        }
-
-        @keyframes spin {
-          from { transform: translateY(-50%) rotate(0deg); }
-          to { transform: translateY(-50%) rotate(360deg); }
-        }
-
-        @keyframes fadeInOut {
-          0%, 100% { opacity: 0; }
-          10%, 90% { opacity: 1; }
-        }
-
-        .pd-value {
-          padding: 0.5rem 1rem;
-          border-radius: 6px;
-          font-weight: 500;
-          text-align: center;
-          font-variant-numeric: tabular-nums;
-        }
-
-        .pd-value.match {
-          background-color: rgba(34, 197, 94, 0.15);
-          color: #22c55e;
-          border: 1px solid rgba(34, 197, 94, 0.3);
-        }
-
-        .pd-value.underboosted {
-          background-color: rgba(239, 68, 68, 0.15);
-          color: #ef4444;
-          border: 1px solid rgba(239, 68, 68, 0.3);
-        }
-
-        .pd-value.overboosted {
-          background-color: rgba(255, 193, 7, 0.15);
-          color: #f57f17;
-          border: 1px solid rgba(255, 193, 7, 0.3);
-        }
-
-        .wd-column {
-          text-align: center;
-          font-weight: 500;
-          min-width: 60px;
-          font-variant-numeric: tabular-nums;
-        }
-
-        .team-totals-row {
-          background: var(--color-bg-secondary, #f3f4f6);
-          font-weight: 500;
-          border-top: 2px solid var(--color-border, #d1d5db);
-        }
-
-        .team-totals-row.praktijk {
-          border-bottom: 2px solid var(--color-border, #d1d5db);
-        }
-
-        .team-label {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          font-weight: 600;
-        }
-
-        .team-label::before {
-          content: '';
-          width: 12px;
-          height: 12px;
-          border-radius: 50%;
-          background: currentColor;
-        }
-      `}</style>
-
-      <div className="mb-4 flex items-center justify-between">
+    <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', padding: '1rem' }}>
+      <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">🎯 Diensten Medewerkers</h1>
-          <p className="text-sm text-gray-600">Macro-configuratie: globale diensten-toewijzingen</p>
+          <h1 style={{ fontSize: '1.875rem', fontWeight: 'bold', color: '#111827', margin: '0 0 0.25rem 0' }}>🎯 Diensten Medewerkers</h1>
+          <p style={{ fontSize: '0.875rem', color: '#4b5563', margin: 0 }}>Macro-configuratie: globale diensten-toewijzingen</p>
         </div>
         <Button variant="outline" size="sm" onClick={() => router.back()} className="gap-2">
           <ArrowLeft size={16} /> Terug
@@ -581,123 +396,216 @@ export default function ServiceAssignmentsPage() {
         </Alert>
       )}
 
-      <div className="bg-white rounded border border-gray-200 shadow-sm overflow-x-auto">
-        <table className="w-full border-collapse text-sm">
-          {/* HEADER */}
-          <thead className="assignments-header">
-            <tr>
-              <th className="w-32 px-2 py-2 text-left font-semibold text-gray-900">
-                Medewerker
-              </th>
-              <th className="wd-column px-2 py-2 text-center font-semibold text-gray-900">
-                Wd
-              </th>
-              <th className="w-20 px-2 py-2 text-center font-semibold text-gray-900">
-                Pd
-              </th>
-              {services.map(svc => (
-                <th
-                  key={svc.code}
-                  className="service-badge-header"
-                >
-                  <div className="badge-code">{svc.code}</div>
-                  <div className="badge-dienstwaarde">{svc.dienstwaarde}</div>
-                </th>
-              ))}
-            </tr>
-          </thead>
+      <div style={{ backgroundColor: 'white', borderRadius: '0.5rem', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', overflow: 'auto' }}>
+        {/* HEADER ROW - STICKY */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: `1fr auto auto ${services.map(() => '80px').join(' ')}`,
+          gap: 0,
+          position: 'sticky',
+          top: 0,
+          zIndex: 100,
+          backgroundColor: 'white',
+          borderBottom: '2px solid #e5e7eb',
+          padding: 0
+        }}>
+          <div style={{ padding: '0.5rem', textAlign: 'left', fontWeight: '600', color: '#111827', minWidth: '128px' }}>Medewerker</div>
+          <div style={{ padding: '0.5rem', textAlign: 'center', fontWeight: '600', color: '#111827', width: '60px' }}>Wd</div>
+          <div style={{ padding: '0.5rem', textAlign: 'center', fontWeight: '600', color: '#111827', width: '80px' }}>Pd</div>
+          {services.map(svc => (
+            <div key={`header_${svc.code}`} style={{
+              padding: '0.5rem',
+              textAlign: 'center',
+              fontWeight: '600',
+              color: '#111827',
+              backgroundColor: '#f3f4f6',
+              borderRadius: '6px',
+              fontSize: '0.75rem',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '0.25rem',
+              width: '80px',
+              minWidth: '80px'
+            }}>
+              <div style={{ fontWeight: '600' }}>{svc.code}</div>
+              <div style={{ fontSize: '0.7rem', color: '#6b7280' }}>{svc.dienstwaarde}</div>
+            </div>
+          ))}
+        </div>
 
-          {/* BODY */}
-          <tbody>
-            {employees.map((emp) => (
-              <tr key={emp.employeeId} className="border-b border-gray-200 hover:bg-gray-50">
-                {/* Medewerker */}
-                <td className="w-32 px-2 py-2 text-left">
-                  <div className="flex items-center gap-2">
-                    <div className={`w-3 h-3 rounded-full ${getTeamColor(emp.team)}`}></div>
-                    <span className="font-medium text-gray-900">{emp.employeeName}</span>
-                  </div>
-                </td>
+        {/* EMPLOYEE ROWS */}
+        {employees.map((emp) => (
+          <div key={emp.employeeId} style={{
+            display: 'grid',
+            gridTemplateColumns: `1fr auto auto ${services.map(() => '80px').join(' ')}`,
+            gap: 0,
+            borderBottom: '1px solid #e5e7eb',
+            alignItems: 'stretch'
+          }}>
+            {/* Name */}
+            <div style={{
+              padding: '0.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              minWidth: '128px'
+            }}>
+              <div style={{
+                width: '12px',
+                height: '12px',
+                borderRadius: '50%',
+                backgroundColor: getTeamColor(emp.team)
+              }}></div>
+              <span style={{ fontWeight: '500', color: '#111827' }}>{emp.employeeName}</span>
+            </div>
 
-                {/* Wd (Werkdagen) */}
-                <td className="wd-column px-2 py-2 text-center text-gray-900 font-semibold">
-                  {emp.aantalWerkdagen}
-                </td>
+            {/* Wd */}
+            <div style={{
+              padding: '0.5rem',
+              textAlign: 'center',
+              fontWeight: '500',
+              color: '#111827',
+              width: '60px'
+            }}>
+              {emp.aantalWerkdagen}
+            </div>
 
-                {/* Pd (Periode Waarde) */}
-                <td className={`w-20 px-2 py-2 ${getPdColorClass(emp.aantalWerkdagen, emp.totalPeriodeWaarde)}`}>
-                  {emp.totalPeriodeWaarde}
-                </td>
+            {/* Pd */}
+            <div style={{
+              padding: '0.5rem',
+              textAlign: 'center',
+              fontWeight: '500',
+              backgroundColor: getPdColor(emp.aantalWerkdagen, emp.totalPeriodeWaarde).bg,
+              color: getPdColor(emp.aantalWerkdagen, emp.totalPeriodeWaarde).text,
+              borderRadius: '6px',
+              width: '80px'
+            }}>
+              {emp.totalPeriodeWaarde}
+            </div>
 
-                {/* Diensten */}
-                {services.map(svc => {
-                  const srvData = emp.services[svc.code];
-                  const cellKey = `${emp.employeeId}_${svc.code}`;
-                  const cellState = cellStates[cellKey];
+            {/* Services */}
+            {services.map(svc => {
+              const srvData = emp.services[svc.code];
+              const cellKey = `${emp.employeeId}_${svc.code}`;
+              const cellState = cellStates[cellKey];
 
-                  return (
-                    <td
-                      key={cellKey}
-                      className="service-cell border-l border-gray-300"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={srvData?.enabled || false}
-                        onChange={() => handleCheckboxChange(emp.employeeId, svc.code, !srvData?.enabled)}
-                      />
-                      <button 
-                        onClick={() => handleAantalChange(emp.employeeId, svc.code, -1)}
-                        disabled={!srvData?.enabled || cellState?.status === 'saving'}
-                      >
-                        −
-                      </button>
-                      <span className="count">{srvData?.count || 0}</span>
-                      <button 
-                        onClick={() => handleAantalChange(emp.employeeId, svc.code, 1)}
-                        disabled={!srvData?.enabled || cellState?.status === 'saving'}
-                      >
-                        +
-                      </button>
-                      
-                      <CellSaveIndicator state={cellState} />
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-
-            {/* FOOTER: Team Totals - Fixed Order */}
-            {['Groen', 'Oranje', 'Praktijk'].map((team) => {
-              const totals = teamTotals[team] || {};
-              
               return (
-                <tr 
-                  key={`total_${team}`} 
-                  className={`team-totals-row ${team.toLowerCase()}`}
-                >
-                  <td className="w-32 px-2 py-2 text-left text-gray-900">
-                    <div className="team-label" style={{ color: getTeamColor(team).replace('bg-', 'text-') }}>
-                      {team}
-                    </div>
-                  </td>
-                  <td className="wd-column px-2 py-2 text-center">−</td>
-                  <td className="w-20 px-2 py-2 text-center">−</td>
-                  {services.map(svc => (
-                    <td
-                      key={`total_${team}_${svc.code}`}
-                      className="service-cell border-l border-gray-300"
-                    >
-                      <span className="font-bold">{totals[svc.code] || 0}</span>
-                    </td>
-                  ))}
-                </tr>
+                <div key={cellKey} style={{
+                  padding: '0.5rem',
+                  display: 'flex',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.25rem',
+                  borderLeft: '1px solid #d1d5db',
+                  position: 'relative',
+                  width: '80px',
+                  minWidth: '80px'
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={srvData?.enabled || false}
+                    onChange={() => handleCheckboxChange(emp.employeeId, svc.code, !srvData?.enabled)}
+                    style={{ width: '18px', height: '18px', cursor: 'pointer', margin: 0 }}
+                  />
+                  <button
+                    onClick={() => handleAantalChange(emp.employeeId, svc.code, -1)}
+                    disabled={!srvData?.enabled || cellState?.status === 'saving'}
+                    style={{
+                      padding: '2px 6px',
+                      fontSize: '0.75rem',
+                      minWidth: '20px',
+                      height: '24px',
+                      cursor: srvData?.enabled ? 'pointer' : 'default',
+                      backgroundColor: '#e5e7eb',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '3px',
+                      opacity: !srvData?.enabled ? 0.5 : 1
+                    }}
+                  >
+                    −
+                  </button>
+                  <span style={{ minWidth: '20px', textAlign: 'center', fontSize: '0.9rem' }}>
+                    {srvData?.count || 0}
+                  </span>
+                  <button
+                    onClick={() => handleAantalChange(emp.employeeId, svc.code, 1)}
+                    disabled={!srvData?.enabled || cellState?.status === 'saving'}
+                    style={{
+                      padding: '2px 6px',
+                      fontSize: '0.75rem',
+                      minWidth: '20px',
+                      height: '24px',
+                      cursor: srvData?.enabled ? 'pointer' : 'default',
+                      backgroundColor: '#e5e7eb',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '3px',
+                      opacity: !srvData?.enabled ? 0.5 : 1
+                    }}
+                  >
+                    +
+                  </button>
+                  <div style={{ position: 'absolute', right: '-25px', top: '50%', transform: 'translateY(-50%)' }}>
+                    <CellSaveIndicator state={cellState} />
+                  </div>
+                </div>
               );
             })}
-          </tbody>
-        </table>
+          </div>
+        ))}
+
+        {/* TEAM TOTALS FOOTER */}
+        {['Groen', 'Oranje', 'Praktijk'].map((team) => {
+          const totals = teamTotals[team] || {};
+          
+          return (
+            <div key={`total_${team}`} style={{
+              display: 'grid',
+              gridTemplateColumns: `1fr auto auto ${services.map(() => '80px').join(' ')}`,
+              gap: 0,
+              backgroundColor: '#f3f4f6',
+              fontWeight: '500',
+              borderTop: '2px solid #d1d5db',
+              borderBottom: team === 'Praktijk' ? '2px solid #d1d5db' : 'none'
+            }}>
+              <div style={{
+                padding: '0.5rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                fontWeight: '600',
+                color: getTeamColor(team),
+                minWidth: '128px'
+              }}>
+                <div style={{
+                  width: '12px',
+                  height: '12px',
+                  borderRadius: '50%',
+                  backgroundColor: getTeamColor(team)
+                }}></div>
+                {team}
+              </div>
+              <div style={{ padding: '0.5rem', textAlign: 'center', width: '60px' }}>−</div>
+              <div style={{ padding: '0.5rem', textAlign: 'center', width: '80px' }}>−</div>
+              {services.map(svc => (
+                <div key={`total_${team}_${svc.code}`} style={{
+                  padding: '0.5rem',
+                  textAlign: 'center',
+                  fontWeight: 'bold',
+                  borderLeft: '1px solid #d1d5db',
+                  width: '80px',
+                  minWidth: '80px'
+                }}>
+                  {totals[svc.code] || 0}
+                </div>
+              ))}
+            </div>
+          );
+        })}
       </div>
 
-      <div className="mt-4 text-xs text-gray-500 text-center">
+      <div style={{ marginTop: '1rem', fontSize: '0.75rem', color: '#9ca3af', textAlign: 'center' }}>
         Cache: {CACHE_BUST_NONCE}
       </div>
     </div>
