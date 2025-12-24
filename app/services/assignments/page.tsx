@@ -25,7 +25,7 @@ interface EmployeeServiceData {
   employeeId: string;
   employeeName: string;
   team: string;
-  aantalWerkdagen: number;
+  aantalwerkdagen: number;  // ← LOWERCASE per database schema
   services: {
     [serviceCode: string]: {
       enabled: boolean;
@@ -58,7 +58,7 @@ export default function ServiceAssignmentsPage() {
   const [serviceIdMap, setServiceIdMap] = useState<Record<string, string>>({});
   const [teamTotals, setTeamTotals] = useState<TeamTotals>({});
 
-  const CACHE_BUST_NONCE = `draad349e_fase6_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const CACHE_BUST_NONCE = `draad349e_fase7_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
   useEffect(() => {
     loadData();
@@ -127,11 +127,8 @@ export default function ServiceAssignmentsPage() {
       setServiceIdMap(idMap);
 
       const employeeList = overview.map((emp: EmployeeServiceData) => {
-        // VALIDATION: Ensure aantalWerkdagen exists
-        const wd = emp.aantalWerkdagen || 0;
-        if (!wd) {
-          console.warn(`Missing aantalWerkdagen for employee ${emp.employeeId}`);
-        }
+        // CORRECT: Use lowercase aantalwerkdagen from database
+        const wd = emp.aantalwerkdagen ?? 0;
 
         let totalPeriodeWaarde = 0;
 
@@ -146,24 +143,47 @@ export default function ServiceAssignmentsPage() {
           employeeId: emp.employeeId,
           employeeName: emp.employeeName,
           team: emp.team,
-          aantalWerkdagen: wd,  // Direct assignment with fallback
+          aantalwerkdagen: wd,  // ← LOWERCASE
           services: emp.services,
           totalPeriodeWaarde: Math.round(totalPeriodeWaarde * 10) / 10
         };
       });
 
+      /**
+       * CRITICAL FIX #3: Team Totals = GRAND TOTAL for ALL employees per service
+       * NOT filtered by team! Praktijk row = SUM of ALL employees for that service
+       */
       const totals: TeamTotals = {};
+      
+      // Initialize teams with their employees
+      const teamMap: Record<string, EmployeeServiceData[]> = {};
       employeeList.forEach((emp: EmployeeServiceData) => {
-        if (!totals[emp.team]) {
-          totals[emp.team] = {};
-        }
+        if (!teamMap[emp.team]) teamMap[emp.team] = [];
+        teamMap[emp.team].push(emp);
+      });
+
+      // Calculate totals PER TEAM (Groen, Oranje)
+      Object.entries(teamMap).forEach(([team, teamEmployees]) => {
+        totals[team] = {};
         sortedServices.forEach(code => {
+          totals[team][code] = 0;
+          teamEmployees.forEach((emp: EmployeeServiceData) => {
+            const srvData = emp.services[code];
+            if (srvData && srvData.enabled) {
+              totals[team][code] += srvData.count;
+            }
+          });
+        });
+      });
+
+      // Calculate GRAND TOTALS for "Praktijk" = SUM of ALL employees (all teams)
+      totals['Praktijk'] = {};
+      sortedServices.forEach(code => {
+        totals['Praktijk'][code] = 0;
+        employeeList.forEach((emp: EmployeeServiceData) => {
           const srvData = emp.services[code];
-          if (!totals[emp.team][code]) {
-            totals[emp.team][code] = 0;
-          }
           if (srvData && srvData.enabled) {
-            totals[emp.team][code] += srvData.count;
+            totals['Praktijk'][code] += srvData.count;
           }
         });
       });
@@ -185,13 +205,6 @@ export default function ServiceAssignmentsPage() {
     }
   }
 
-  /**
-   * BUSINESS LOGIC - CHECKBOX ONLY:
-   * - ONLY changes enabled state
-   * - KEEPS count unchanged
-   * - If checked: enabled = true, count stays same
-   * - If unchecked: enabled = false, count stays same
-   */
   const handleCheckboxChange = async (employeeId: string, serviceCode: string, enabled: boolean) => {
     try {
       const emp = employees.find(e => e.employeeId === employeeId);
@@ -202,15 +215,13 @@ export default function ServiceAssignmentsPage() {
 
       const cellKey = `${employeeId}_${serviceCode}`;
       
-      // OPTIMISTIC UPDATE - UI updates immediately
-      setEmployees(prev => prev.map(e => {
+      const newEmployees = employees.map(e => {
         if (e.employeeId !== employeeId) return e;
         
         const newServices = { ...e.services };
         newServices[serviceCode] = {
           ...newServices[serviceCode],
           enabled: enabled
-          // count: UNCHANGED
         };
         
         let newTotalPeriodeWaarde = 0;
@@ -225,29 +236,43 @@ export default function ServiceAssignmentsPage() {
           services: newServices,
           totalPeriodeWaarde: Math.round(newTotalPeriodeWaarde * 10) / 10
         };
-      }));
-
-      // Update team totals
-      setTeamTotals(prev => {
-        const emp = employees.find(e => e.employeeId === employeeId);
-        if (!emp) return prev;
-        
-        const updated = { ...prev };
-        const team = emp.team;
-        if (!updated[team]) updated[team] = {};
-        
-        const teamTotal = employees
-          .filter(e => e.team === team)
-          .reduce((sum, e) => {
-            const srv = e.employeeId === employeeId 
-              ? { ...e.services[serviceCode], enabled: enabled }
-              : e.services[serviceCode];
-            return sum + (srv?.enabled ? (srv?.count || 0) : 0);
-          }, 0);
-        
-        updated[team] = { ...updated[team], [serviceCode]: teamTotal };
-        return updated;
       });
+      setEmployees(newEmployees);
+
+      // Recalculate ALL team totals + Praktijk
+      const newTotals: TeamTotals = {};
+      const newTeamMap: Record<string, EmployeeServiceData[]> = {};
+      newEmployees.forEach((emp: EmployeeServiceData) => {
+        if (!newTeamMap[emp.team]) newTeamMap[emp.team] = [];
+        newTeamMap[emp.team].push(emp);
+      });
+
+      Object.entries(newTeamMap).forEach(([team, teamEmployees]) => {
+        newTotals[team] = {};
+        services.forEach(s => {
+          newTotals[team][s.code] = 0;
+          teamEmployees.forEach((emp: EmployeeServiceData) => {
+            const srvData = emp.services[s.code];
+            if (srvData && srvData.enabled) {
+              newTotals[team][s.code] += srvData.count;
+            }
+          });
+        });
+      });
+
+      // Praktijk = GRAND TOTAL
+      newTotals['Praktijk'] = {};
+      services.forEach(s => {
+        newTotals['Praktijk'][s.code] = 0;
+        newEmployees.forEach((emp: EmployeeServiceData) => {
+          const srvData = emp.services[s.code];
+          if (srvData && srvData.enabled) {
+            newTotals['Praktijk'][s.code] += srvData.count;
+          }
+        });
+      });
+
+      setTeamTotals(newTotals);
 
       setCellStates(prev => ({
         ...prev,
@@ -257,12 +282,11 @@ export default function ServiceAssignmentsPage() {
       const serviceId = serviceIdMap[serviceCode];
       if (!serviceId) throw new Error(`Service ID not found for ${serviceCode}`);
 
-      // Save to DB: send EXISTING count + NEW enabled state
       await upsertEmployeeService({
         employee_id: employeeId,
         service_id: serviceId,
-        aantal: currentCount,  // Keep existing count!
-        actief: enabled        // Update enabled state
+        aantal: currentCount,
+        actief: enabled
       });
 
       setCellStates(prev => ({
@@ -276,13 +300,6 @@ export default function ServiceAssignmentsPage() {
     }
   };
 
-  /**
-   * BUSINESS LOGIC - COUNT ONLY:
-   * - ONLY changes count (+/- buttons)
-   * - KEEPS enabled unchanged
-   * - If count changes to 0: enabled stays as-is
-   * - If count changes to >0: enabled stays as-is
-   */
   const handleAantalChange = async (employeeId: string, serviceCode: string, delta: number) => {
     try {
       const emp = employees.find(e => e.employeeId === employeeId);
@@ -295,15 +312,13 @@ export default function ServiceAssignmentsPage() {
 
       const cellKey = `${employeeId}_${serviceCode}`;
       
-      // OPTIMISTIC UPDATE - UI updates immediately
-      setEmployees(prev => prev.map(e => {
+      const newEmployees = employees.map(e => {
         if (e.employeeId !== employeeId) return e;
         
         const newServices = { ...e.services };
         newServices[serviceCode] = {
           ...newServices[serviceCode],
           count: newAantal
-          // enabled: UNCHANGED
         };
         
         let newTotalPeriodeWaarde = 0;
@@ -318,28 +333,43 @@ export default function ServiceAssignmentsPage() {
           services: newServices,
           totalPeriodeWaarde: Math.round(newTotalPeriodeWaarde * 10) / 10
         };
-      }));
-
-      // Update team totals
-      setTeamTotals(prev => {
-        const emp = employees.find(e => e.employeeId === employeeId);
-        if (!emp) return prev;
-        
-        const updated = { ...prev };
-        const team = emp.team;
-        if (!updated[team]) updated[team] = {};
-        
-        const teamTotal = employees
-          .filter(e => e.team === team)
-          .reduce((sum, e) => {
-            const srvCount = e.employeeId === employeeId ? newAantal : (e.services[serviceCode]?.count || 0);
-            const srvEnabled = e.employeeId === employeeId ? currentEnabled : (e.services[serviceCode]?.enabled || false);
-            return sum + (srvEnabled ? srvCount : 0);
-          }, 0);
-        
-        updated[team] = { ...updated[team], [serviceCode]: teamTotal };
-        return updated;
       });
+      setEmployees(newEmployees);
+
+      // Recalculate ALL team totals + Praktijk
+      const newTotals: TeamTotals = {};
+      const newTeamMap: Record<string, EmployeeServiceData[]> = {};
+      newEmployees.forEach((emp: EmployeeServiceData) => {
+        if (!newTeamMap[emp.team]) newTeamMap[emp.team] = [];
+        newTeamMap[emp.team].push(emp);
+      });
+
+      Object.entries(newTeamMap).forEach(([team, teamEmployees]) => {
+        newTotals[team] = {};
+        services.forEach(s => {
+          newTotals[team][s.code] = 0;
+          teamEmployees.forEach((emp: EmployeeServiceData) => {
+            const srvData = emp.services[s.code];
+            if (srvData && srvData.enabled) {
+              newTotals[team][s.code] += srvData.count;
+            }
+          });
+        });
+      });
+
+      // Praktijk = GRAND TOTAL
+      newTotals['Praktijk'] = {};
+      services.forEach(s => {
+        newTotals['Praktijk'][s.code] = 0;
+        newEmployees.forEach((emp: EmployeeServiceData) => {
+          const srvData = emp.services[s.code];
+          if (srvData && srvData.enabled) {
+            newTotals['Praktijk'][s.code] += srvData.count;
+          }
+        });
+      });
+
+      setTeamTotals(newTotals);
 
       setCellStates(prev => ({
         ...prev,
@@ -349,12 +379,11 @@ export default function ServiceAssignmentsPage() {
       const serviceId = serviceIdMap[serviceCode];
       if (!serviceId) throw new Error(`Service ID not found for ${serviceCode}`);
 
-      // Save to DB: send NEW count + EXISTING enabled state
       await upsertEmployeeService({
         employee_id: employeeId,
         service_id: serviceId,
-        aantal: newAantal,      // Update count
-        actief: currentEnabled  // Keep existing enabled!
+        aantal: newAantal,
+        actief: currentEnabled
       });
 
       setCellStates(prev => ({
@@ -424,7 +453,6 @@ export default function ServiceAssignmentsPage() {
         </Alert>
       )}
 
-      {/* OUTER CONTAINER - Handles Overflow */}
       <div style={{ 
         backgroundColor: 'white', 
         borderRadius: '0.5rem', 
@@ -436,10 +464,10 @@ export default function ServiceAssignmentsPage() {
         flexDirection: 'column'
       }}>
         
-        {/* STICKY HEADER - Fixed at top of inner scroll container */}
+        {/* STICKY HEADER - FIX #1: Dienstwaarde INLINE + FIX #4: 100px width */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: `150px 60px 80px ${services.map(() => '80px').join(' ')}`,
+          gridTemplateColumns: `150px 60px 80px ${services.map(() => '100px').join(' ')}`,
           gap: 0,
           position: 'sticky',
           top: 0,
@@ -459,21 +487,20 @@ export default function ServiceAssignmentsPage() {
               fontWeight: '600',
               color: '#111827',
               backgroundColor: '#f3f4f6',
-              fontSize: '0.75rem',
+              fontSize: '0.8rem',
               display: 'flex',
-              flexDirection: 'column',
+              flexDirection: 'row',
               alignItems: 'center',
               justifyContent: 'center',
               gap: '0.25rem',
-              minWidth: '80px'
+              minWidth: '100px'
             }}>
               <div style={{ fontWeight: '600' }}>{svc.code}</div>
-              <div style={{ fontSize: '0.7rem', color: '#6b7280' }}>{svc.dienstwaarde}</div>
+              <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{svc.dienstwaarde}</div>
             </div>
           ))}
         </div>
 
-        {/* SCROLLABLE CONTENT AREA */}
         <div style={{
           overflow: 'auto',
           flex: 1,
@@ -484,7 +511,7 @@ export default function ServiceAssignmentsPage() {
           {employees.map((emp) => (
             <div key={emp.employeeId} style={{
               display: 'grid',
-              gridTemplateColumns: `150px 60px 80px ${services.map(() => '80px').join(' ')}`,
+              gridTemplateColumns: `150px 60px 80px ${services.map(() => '100px').join(' ')}`,
               gap: 0,
               borderBottom: '1px solid #e5e7eb',
               alignItems: 'center',
@@ -510,16 +537,16 @@ export default function ServiceAssignmentsPage() {
                 <span style={{ fontWeight: '500', color: '#111827' }}>{emp.employeeName}</span>
               </div>
 
-              {/* Wd - VALIDATION: Show value or warning */}
+              {/* FIX #2: Wd - Always show value (no warning icon) */}
               <div style={{
                 padding: '0.5rem',
                 textAlign: 'center',
                 fontWeight: '500',
-                color: emp.aantalWerkdagen ? '#111827' : '#ef4444',
+                color: '#111827',
                 fontSize: '0.9rem',
                 minWidth: '60px'
               }}>
-                {emp.aantalWerkdagen || '⚠️'}
+                {emp.aantalwerkdagen}
               </div>
 
               {/* Pd - Colored based on match */}
@@ -527,8 +554,8 @@ export default function ServiceAssignmentsPage() {
                 padding: '0.5rem',
                 textAlign: 'center',
                 fontWeight: '500',
-                backgroundColor: getPdColor(emp.aantalWerkdagen, emp.totalPeriodeWaarde).bg,
-                color: getPdColor(emp.aantalWerkdagen, emp.totalPeriodeWaarde).text,
+                backgroundColor: getPdColor(emp.aantalwerkdagen, emp.totalPeriodeWaarde).bg,
+                color: getPdColor(emp.aantalwerkdagen, emp.totalPeriodeWaarde).text,
                 borderRadius: '6px',
                 fontSize: '0.9rem',
                 minWidth: '80px'
@@ -552,10 +579,9 @@ export default function ServiceAssignmentsPage() {
                     gap: '0',
                     borderLeft: '1px solid #d1d5db',
                     position: 'relative',
-                    minWidth: '80px',
+                    minWidth: '100px',
                     height: '44px'
                   }}>
-                    {/* Checkbox - INDEPENDENT: only toggles enabled */}
                     <input
                       type="checkbox"
                       checked={srvData?.enabled || false}
@@ -563,7 +589,6 @@ export default function ServiceAssignmentsPage() {
                       style={{ width: '16px', height: '16px', cursor: 'pointer', margin: 0, flexShrink: 0 }}
                     />
                     
-                    {/* Minus Button - ALWAYS enabled */}
                     <button
                       onClick={() => handleAantalChange(emp.employeeId, svc.code, -1)}
                       disabled={cellState?.status === 'saving'}
@@ -584,7 +609,6 @@ export default function ServiceAssignmentsPage() {
                       −
                     </button>
 
-                    {/* Count Display */}
                     <span style={{ 
                       minWidth: '16px', 
                       textAlign: 'center', 
@@ -596,7 +620,6 @@ export default function ServiceAssignmentsPage() {
                       {srvData?.count || 0}
                     </span>
 
-                    {/* Plus Button - ALWAYS enabled */}
                     <button
                       onClick={() => handleAantalChange(emp.employeeId, svc.code, 1)}
                       disabled={cellState?.status === 'saving'}
@@ -617,7 +640,6 @@ export default function ServiceAssignmentsPage() {
                       +
                     </button>
 
-                    {/* Save Indicator */}
                     <div style={{ position: 'absolute', right: '2px', top: '50%', transform: 'translateY(-50%)', width: '12px', height: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <CellSaveIndicator state={cellState} />
                     </div>
@@ -627,14 +649,15 @@ export default function ServiceAssignmentsPage() {
             </div>
           ))}
 
-          {/* TEAM TOTALS FOOTER */}
+          {/* TEAM TOTALS FOOTER - FIX #3: Praktijk = GRAND TOTAL */}
           {['Groen', 'Oranje', 'Praktijk'].map((team) => {
             const totals = teamTotals[team] || {};
+            const isGrandTotal = team === 'Praktijk';
             
             return (
               <div key={`total_${team}`} style={{
                 display: 'grid',
-                gridTemplateColumns: `150px 60px 80px ${services.map(() => '80px').join(' ')}`,
+                gridTemplateColumns: `150px 60px 80px ${services.map(() => '100px').join(' ')}`,
                 gap: 0,
                 backgroundColor: '#f3f4f6',
                 fontWeight: '500',
@@ -660,7 +683,7 @@ export default function ServiceAssignmentsPage() {
                     backgroundColor: getTeamColor(team),
                     flexShrink: 0
                   }}></div>
-                  {team}
+                  {isGrandTotal ? 'Praktijk *' : team}
                 </div>
                 <div style={{ padding: '0.5rem', textAlign: 'center', fontSize: '0.9rem', minWidth: '60px' }}>−</div>
                 <div style={{ padding: '0.5rem', textAlign: 'center', fontSize: '0.9rem', minWidth: '80px' }}>−</div>
@@ -671,7 +694,8 @@ export default function ServiceAssignmentsPage() {
                     fontWeight: 'bold',
                     borderLeft: '1px solid #d1d5db',
                     fontSize: '0.9rem',
-                    minWidth: '80px'
+                    minWidth: '100px',
+                    backgroundColor: isGrandTotal ? 'rgba(59, 130, 246, 0.05)' : 'transparent'
                   }}>
                     {totals[svc.code] || 0}
                   </div>
@@ -682,8 +706,8 @@ export default function ServiceAssignmentsPage() {
         </div>
       </div>
 
-      <div style={{ marginTop: '1rem', fontSize: '0.75rem', color: '#9ca3af', textAlign: 'center' }}>
-        Cache: {CACHE_BUST_NONCE}
+      <div style={{ marginTop: '0.5rem', fontSize: '0.7rem', color: '#d1d5db', textAlign: 'right' }}>
+        * Praktijk = Totaal van alle medewerkers | Cache: {CACHE_BUST_NONCE}
       </div>
     </div>
   );
