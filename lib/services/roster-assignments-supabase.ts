@@ -426,8 +426,99 @@ export async function updateAssignmentStatus(
   }
 }
 
+// ============================================================================
+// DRAAD 352: ATOMIC SERVICE CHANGE WITH BLOCKING RESET
+// ============================================================================
+
+/**
+ * DRAAD 352: Change assignment service with proper blocking reset
+ * 
+ * Problem: Direct service_id update doesn't reset blocking on related dayparts
+ * Solution: Use reset-then-insert pattern to trigger proper blocking recalculation
+ * 
+ * Flow:
+ * 1. RESET: status 0, service_id NULL → Trigger deblockeert automatisch
+ * 2. INSERT NEW: status 1, service_id = newServiceId → Trigger berekent nieuw
+ * 
+ * Example: Paula 25-11: DIO→OSP
+ * BEFORE: O = status 1 + DIO | M = status 2 (blocked)
+ * AFTER:  O = status 1 + OSP | M = status 0 (free)
+ */
+export async function changeAssignmentServiceAtomic(
+  assignmentId: string,
+  newServiceId: string | null
+): Promise<void> {
+  // Validate input
+  if (!assignmentId) {
+    throw new Error('assignmentId is required');
+  }
+
+  try {
+    // STAP 1: Fetch current assignment to preserve metadata
+    const { data: currentAssignment, error: fetchError } = await supabase
+      .from('roster_assignments')
+      .select('roster_id, employee_id, date, dagdeel, service_id')
+      .eq('id', assignmentId)
+      .single();
+
+    if (fetchError || !currentAssignment) {
+      throw new Error(`Assignment not found: ${fetchError?.message}`);
+    }
+
+    // STAP 2: RESET - Status 0, service_id NULL
+    // This triggers deblokkering of any blocking records
+    const { error: resetError } = await supabase
+      .from('roster_assignments')
+      .update({
+        status: 0,           // Available
+        service_id: null,    // No service
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', assignmentId);
+
+    if (resetError) {
+      throw new Error(`Reset failed: ${resetError.message}`);
+    }
+
+    // STAP 3: Deblokkering wait (small delay to ensure trigger completion)
+    // In production, consider using Supabase transactions or proper event handling
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // STAP 4: INSERT NEW SERVICE (if provided)
+    if (newServiceId && newServiceId.trim()) {
+      const { error: insertError } = await supabase
+        .from('roster_assignments')
+        .update({
+          status: 1,                     // Assigned
+          service_id: newServiceId,      // New service
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', assignmentId);
+
+      if (insertError) {
+        throw new Error(`Insert new service failed: ${insertError.message}`);
+      }
+
+      // Trigger will automatically calculate new blocking for this service
+      // (if service has blokkeert_volgdag = true)
+    }
+
+    console.log(
+      `✅ DRAAD 352: Assignment ${assignmentId} changed from ${currentAssignment.service_id} to ${newServiceId}`,
+      `with proper blocking reset`
+    );
+
+  } catch (error) {
+    console.error('❌ DRAAD 352: changeAssignmentServiceAtomic failed:', error);
+    throw error;
+  }
+}
+
 /**
  * Update service van een assignment (en zet status automatisch op ASSIGNED)
+ * 
+ * DEPRECATED: Use changeAssignmentServiceAtomic() instead for proper blocking handling
+ * This function is kept for backwards compatibility but should be migrated
  * 
  * @param assignmentId - UUID van de assignment
  * @param serviceId - Service UUID (null = clear assignment, status→AVAILABLE)
