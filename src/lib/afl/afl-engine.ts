@@ -39,14 +39,25 @@
  * - Ensures dataflow: roster_employee_services.team → WorkbestandCapaciteit.team → solve-engine
  * - No more undefined team values
  *
- * DRAAD348: FIX 5 - PRE-PLANNING DUPLICATION BUG
+ * DRAAD348: FIX 5 - PRE-PLANNING DUPLICATION BUG (INCOMPLETE)
  * - Root cause: buildOpdracht() did NOT account for pre-planned assignments in aantal_nog
  * - Impact: Solve engine saw more work than needed → duplication (Karin DDO/DDA +2)
- * - Fix: 
- *   1. Trek invulling af van aantal → aantal_nog = aantal - invulling
- *   2. Add validation: Unmatched protected assignments detection
- *   3. Enhanced logging for pre-planning workflow
- * - Verification: AFLstatus moet 240 zijn (6 pre + 234 new), niet 242 (+2 dubbel)
+ * - Attempted fix: Trek invulling af van aantal → aantal_nog = aantal - invulling
+ * - CRITICAL ISSUE: invulling from database is ALWAYS 0 (no trigger on manual planning)
+ * - Result: DRAAD348 fix was incomplete, duplication still occurs
+ *
+ * DRAAD362: FIX 6 - PRE-PLANNING CALCULATION (ROOT CAUSE FIX)
+ * - Root cause analysis: Database invulling field never updated when assignments manually created
+ * - No trigger in schema to increment invulling on new roster_assignments rows
+ * - Solution: Calculate invulling dynamically from roster_assignments WHERE status >= 1
+ * - Key insight: status field IS the protection (0=free, >=1=allocated)
+ * - is_protected flag is unused in normal app workflow (always FALSE for manual entries)
+ * - Implementation:
+ *   1. New calculateInvullingFromAssignments() counts assignments per date/dagdeel/team/service
+ *   2. buildOpdracht() uses calculated invulling instead of database value
+ *   3. adjustCapacityForPrePlanning() counts ALL status>=1 (not only is_protected=TRUE)
+ *   4. Enhanced logging for verification
+ * - Expected result: AFLstatus = 240 (6 pre + 234 new), not 242 (6 pre + 236 with duplication)
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -69,10 +80,10 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 );
 
-// 🔧 DRAAD348: CACHE-BUST MARKER + DRAAD342 REFERENCE
+// 🔧 DRAAD362: CACHE-BUST MARKER FOR DEPLOYMENT VERIFICATION
 // Change this value to force Railway rebuild (ensures latest code deployed)
 // Includes timestamp + Git commit reference for deploy verification
-const CACHE_BUST_NONCE = `2025-12-23T22:00:00Z-DRAAD-348-PREPLANNING-FIX-${Date.now()}`;
+const CACHE_BUST_NONCE = `2025-12-24T23:45:00Z-DRAAD-362-INVULLING-FIX-${Date.now()}`;
 
 /**
  * FASE 1: Load all data from database
@@ -86,15 +97,16 @@ export class AflEngine {
   async loadData(rosterId: string): Promise<AflLoadResult> {
     const startTime = performance.now();
 
-    // ✅ DRAAD348: CACHE-BUST VERIFICATION MARKERS
+    // ✅ DRAAD362: CACHE-BUST VERIFICATION MARKERS
     // These markers appear in Railway build logs to verify correct code version is deployed
     console.log('═══════════════════════════════════════════════════════');
-    console.log('[AFL-ENGINE] 🚀 DRAAD348 CACHE-BUST NONCE:', CACHE_BUST_NONCE);
+    console.log('[AFL-ENGINE] 🚀 DRAAD362 CACHE-BUST NONCE:', CACHE_BUST_NONCE);
     console.log('[AFL-ENGINE] ✅ DRAAD337 FIX: Client-side sorting (no chained .order() calls)');
     console.log('[AFL-ENGINE] ✅ DRAAD338 FIX: Service-code population via metadata lookup');
     console.log('[AFL-ENGINE] ✅ DRAAD339 FIX: Enhanced debug logging + cache-bust markers');
     console.log('[AFL-ENGINE] ✅ DRAAD342 FIX: Team field in buildCapaciteit (dataflow verification)');
-    console.log('[AFL-ENGINE] ✅ DRAAD348 FIX: Pre-planning invulling deduction in aantal_nog');
+    console.log('[AFL-ENGINE] ✅ DRAAD348 FIX: Pre-planning invulling deduction (incomplete)');
+    console.log('[AFL-ENGINE] ✅ DRAAD362 FIX: Dynamic invulling calculation from assignments');
     console.log('[AFL-ENGINE] 📊 Phase 1 Load starting for roster:', rosterId);
     console.log('═══════════════════════════════════════════════════════');
 
@@ -184,9 +196,14 @@ export class AflEngine {
       // Transform: Build workbenches
       console.log('[AFL-ENGINE] Phase 1.6: Building workbenches...');
       // ✅ DRAAD338: Pass servicesRaw to buildOpdracht for service_code lookup
+      // ✅ DRAAD362: Pass planningRaw to buildOpdracht for dynamic invulling calculation
       const workbestand_services_metadata = this.buildServicesMetadata(servicesRaw || []);
-      const workbestand_opdracht = this.buildOpdracht(tasksRaw || [], servicesRaw || []);
       const workbestand_planning = this.buildPlanning(planningRaw || []);
+      const workbestand_opdracht = this.buildOpdracht(
+        tasksRaw || [],
+        servicesRaw || [],
+        workbestand_planning  // ✅ DRAAD362: NEW - pass planning for invulling calculation
+      );
       const workbestand_capaciteit = this.buildCapaciteit(capacityRaw || []);
 
       // ✅ DRAAD348: VALIDATION 1 - Check pre-planning match before adjustment
@@ -205,16 +222,42 @@ export class AflEngine {
         console.log(`  ✅ All ${preplanValidation.protected_count} protected assignments matched to tasks`);
       }
 
-      // Pre-planning adjustment: Decrement capacity for protected assignments
+      // Pre-planning adjustment: Decrement capacity for ALL status>=1 assignments (DRAAD362 fix)
       console.log('[AFL-ENGINE] Phase 1.7b: Adjusting capacity for pre-planning...');
       const preplanAdjustmentStats = this.adjustCapacityForPrePlanning(
         workbestand_planning,
         workbestand_capaciteit
       );
       console.log(`  ✅ Pre-planning adjustment: ${preplanAdjustmentStats.decremented} capacity entries decremented`);
+      console.log(`     (Total assignments checked: ${preplanAdjustmentStats.assignments_checked})`);
+
+      // ✅ DRAAD362: VERIFICATION LOGGING - Show calculated invulling values
+      console.log('[AFL-ENGINE] Phase 1.7c: DRAAD362 Invulling Verification...');
+      const invullingTasks = workbestand_opdracht.filter(t => t.invulling > 0).slice(0, 5);
+      if (invullingTasks.length > 0) {
+        console.log('[AFL-ENGINE] ✅ Sample tasks with pre-planned invulling:');
+        for (const task of invullingTasks) {
+          const taskDate = task.date.toISOString().split('T')[0];
+          console.log(
+            `  ${task.service_code} | ${taskDate} ${task.dagdeel} | ` +
+            `aantal=${task.aantal} → invulling_calculated=${task.invulling} → aantal_nog=${task.aantal_nog}`
+          );
+        }
+      }
+
+      // Verify totals
+      const totalAantal = workbestand_opdracht.reduce((sum, t) => sum + t.aantal, 0);
+      const totalInvulling = workbestand_opdracht.reduce((sum, t) => sum + t.invulling, 0);
+      const totalAantalNog = workbestand_opdracht.reduce((sum, t) => sum + t.aantal_nog, 0);
+      
+      console.log('[AFL-ENGINE] 📊 DRAAD362 Totals:');
+      console.log(`  Total aantal (all tasks): ${totalAantal}`);
+      console.log(`  Total invulling (pre-planned): ${totalInvulling}`);
+      console.log(`  Total aantal_nog (still needed): ${totalAantalNog}`);
+      console.log(`  ✅ Verification: ${totalAantal} - ${totalInvulling} = ${totalAantalNog}`);
 
       // ✅ DRAAD348: VALIDATION 2 - Verify aantal_nog deduction worked
-      console.log('[AFL-ENGINE] Phase 1.7c: Verifying aantal_nog deductions...');
+      console.log('[AFL-ENGINE] Phase 1.7d: Verifying aantal_nog deductions...');
       const aantalValidation = this.validateAantalNogDeduction(
         workbestand_opdracht,
         workbestand_planning
@@ -302,22 +345,110 @@ export class AflEngine {
   }
 
   /**
+   * ✅ DRAAD362: Calculate actual invulling from roster_assignments
+   * 
+   * CRITICAL FIX: Database invulling field is ALWAYS 0 because:
+   * - No database trigger updates invulling when assignments are manually created
+   * - Only solution: Calculate from actual assignments WHERE status >= 1
+   * 
+   * Key insight: status field IS the protection (0=free, >=1=allocated)
+   * The is_protected flag is unused in normal app workflow
+   * 
+   * Algorithm:
+   * 1. Filter all assignments with status >= 1 (ingepland/allocated)
+   * 2. Build task lookup map (date_dagdeel_service → task)
+   * 3. Count assignments per (date, dagdeel, team, service_id)
+   * 4. Return map for invulling calculation in buildOpdracht()
+   * 
+   * Returns: Map<"2025-12-24_O_Groen_service-id", count>
+   */
+  private calculateInvullingFromAssignments(
+    tasksRaw: any[],
+    planning: WorkbestandPlanning[]
+  ): Map<string, number> {
+    // Step 1: Filter ALL assignments with status >= 1 (not only is_protected=TRUE)
+    // status meanings: 0=free, 1+=allocated (including protected, blocked, unavailable)
+    const plannedAssignments = planning.filter(p =>
+      p.status >= 1 &&
+      p.service_id &&
+      p.date &&
+      p.dagdeel
+    );
+
+    console.log(`[DRAAD362] Found ${plannedAssignments.length} assignments with status >= 1`);
+
+    // Step 2: Build task lookup map for team matching
+    // Key: "date_dagdeel_service" → task object
+    const taskLookup = new Map<string, any>();
+    for (const task of tasksRaw) {
+      // Date format normalization (database returns "YYYY-MM-DD")
+      const taskDate = task.date instanceof Date
+        ? task.date.toISOString().split('T')[0]
+        : task.date;
+      const key = `${taskDate}_${task.dagdeel}_${task.service_id}`;
+      taskLookup.set(key, task);
+    }
+
+    // Step 3: Count assignments per (date, dagdeel, team, service_id)
+    const invullingMap = new Map<string, number>();
+    let matchedCount = 0;
+    let unmatchedCount = 0;
+
+    for (const assignment of plannedAssignments) {
+      // Normalize assignment date
+      const assignDate = assignment.date instanceof Date
+        ? assignment.date.toISOString().split('T')[0]
+        : String(assignment.date);
+
+      // Find corresponding task for team info
+      const lookupKey = `${assignDate}_${assignment.dagdeel}_${assignment.service_id}`;
+      const task = taskLookup.get(lookupKey);
+
+      if (task) {
+        // Build invulling key with team from task
+        const invullingKey = `${assignDate}_${assignment.dagdeel}_${task.team}_${assignment.service_id}`;
+        invullingMap.set(invullingKey, (invullingMap.get(invullingKey) || 0) + 1);
+        matchedCount++;
+      } else {
+        // Warn about unmatched assignment
+        unmatchedCount++;
+        if (unmatchedCount <= 5) { // Only show first 5 warnings
+          console.warn(`[DRAAD362] ⚠️  Assignment for ${lookupKey} not found in tasks`);
+        }
+      }
+    }
+
+    console.log(`[DRAAD362] Invulling calculation complete:`);
+    console.log(`  - Matched assignments: ${matchedCount}`);
+    console.log(`  - Unmatched assignments: ${unmatchedCount}`);
+    console.log(`  - Unique (date,dagdeel,team,service) combinations: ${invullingMap.size}`);
+
+    return invullingMap;
+  }
+
+  /**
    * Build Workbestand_Opdracht from raw task data
-   * DRAAD338: Service-code population from metadata
+   * 
+   * ✅ DRAAD338: Service-code population from metadata
    * - Create serviceCodeMap: service_id → service.code
    * - All tasks get proper service_code (never empty string)
    * - Fallback to 'UNKNOWN' if service not found (defensive)
    * 
-   * DRAAD348: PRE-PLANNING INVULLING DEDUCTION
-   * - Track invulling from database (pre-planned count)
-   * - Calculate aantal_nog = aantal - invulling (remaining to do)
-   * - This accounts for protected assignments already in planning
+   * ✅ DRAAD362: PRE-PLANNING INVULLING CALCULATION (ROOT CAUSE FIX)
+   * - Calculate invulling dynamically from assignments (NOT database value)
+   * - Database invulling is unreliable (always 0, no trigger)
+   * - Calculate aantal_nog = aantal - invulling_calculated
+   * - This properly accounts for all pre-planned assignments
    * 
-   * DRAAD337: CLIENT-SIDE SORTING
-   * Sort priority: is_system DESC → date ASC → dagdeel ASC → team DESC → service_code ASC
-   * Performance: <1ms for typical roster (500-1500 rows)
+   * ✅ DRAAD337: CLIENT-SIDE SORTING
+   * - Sort priority: is_system DESC → date ASC → dagdeel ASC → team DESC → service_code ASC
+   * - Performance: <1ms for typical roster (500-1500 rows)
    */
-  private buildOpdracht(tasksRaw: any[], servicesRaw: any[]): WorkbestandOpdracht[] {
+  private buildOpdracht(
+    tasksRaw: any[],
+    servicesRaw: any[],
+    planning: WorkbestandPlanning[]  // ✅ DRAAD362: NEW parameter
+  ): WorkbestandOpdracht[] {
     // ✅ DRAAD338: BUILD SERVICE CODE MAP
     // Create lookup map: service_id → service_code
     // This is O(n) where n = number of services (typically 8-15)
@@ -326,18 +457,25 @@ export class AflEngine {
       serviceCodeMap.set(service.id, service.code || 'UNKNOWN');
     }
 
+    // ✅ DRAAD362: CALCULATE INVULLING FROM ASSIGNMENTS
+    // This is the critical fix: use calculated values instead of unreliable database field
+    const invullingMap = this.calculateInvullingFromAssignments(tasksRaw, planning);
+
     // Map raw data to WorkbestandOpdracht objects
     // ✅ DRAAD338: Populate service_code from map
-    // ✅ DRAAD348: CRITICAL FIX - Calculate aantal_nog with invulling deduction
+    // ✅ DRAAD362: Populate invulling from calculated map
     const opdrachten = tasksRaw.map((row) => {
       const serviceCode = serviceCodeMap.get(row.service_id) || 'UNKNOWN';
-      
-      // ✅ DRAAD348: Trek invulling (pre-planning) af van aantal
-      // invulling = hoeveel ZIJN al ingevuld (protected assignments)
-      // aantal_nog = hoeveel MOETEN nog ingevuld worden (remaining work)
-      const invulling_count = row.invulling || 0;
-      const aantal_nog = Math.max(0, row.aantal - invulling_count);
-      
+
+      // ✅ DRAAD362: Use calculated invulling, NOT database value
+      // Database invulling is always 0 because no trigger on manual assignment creation
+      const rowDate = row.date instanceof Date
+        ? row.date.toISOString().split('T')[0]
+        : row.date;
+      const invullingKey = `${rowDate}_${row.dagdeel}_${row.team}_${row.service_id}`;
+      const invulling_calculated = invullingMap.get(invullingKey) || 0;
+      const aantal_nog = Math.max(0, row.aantal - invulling_calculated);
+
       return {
         id: row.id,
         roster_id: row.roster_id,
@@ -348,8 +486,8 @@ export class AflEngine {
         service_code: serviceCode, // ✅ POPULATED from metadata lookup
         is_system: row.is_system || false, // ✅ Direct from database (position 13)
         aantal: row.aantal,
-        aantal_nog: aantal_nog, // ✅ DRAAD348: FIXED - accounts for pre-planning
-        invulling: invulling_count, // ✅ Track pre-planning count
+        aantal_nog: aantal_nog, // ✅ DRAAD362: CRITICAL FIX - uses calculated invulling
+        invulling: invulling_calculated, // ✅ DRAAD362: Track calculated value
       };
     });
 
@@ -540,23 +678,32 @@ export class AflEngine {
   }
 
   /**
-   * Adjust capacity for pre-planned assignments
-   * For each protected assignment (status=1, is_protected=TRUE),
-   * decrement the corresponding capacity
+   * ✅ DRAAD362: Adjust capacity for pre-planned assignments
+   * CRITICAL FIX: Count ALL status >= 1 assignments, not only is_protected=TRUE
+   * 
+   * Key insight: status field is the protection (0=free, >=1=allocated)
+   * The is_protected flag is unused in normal workflow
+   * 
+   * For each assignment with status >= 1:
+   * - Find matching capacity record (employee_id + service_id)
+   * - Decrement aantal_beschikbaar by 1
+   * - This prevents solve engine from reassigning same slot
    */
   private adjustCapacityForPrePlanning(
     planning: WorkbestandPlanning[],
     capaciteit: WorkbestandCapaciteit[]
   ): { decremented: number; assignments_checked: number } {
-    // Find all protected assignments
-    const protectedAssignments = planning.filter(
-      (p) => p.status === 1 && p.is_protected && p.service_id
+    // ✅ DRAAD362: CRITICAL FIX
+    // Count ALL status >= 1 assignments (not only is_protected=TRUE)
+    // status field is what actually protects the assignment
+    const plannedAssignments = planning.filter(
+      (p) => p.status >= 1 && p.service_id && p.employee_id
     );
 
     let decremented_count = 0;
 
-    // Decrement capacity for each
-    for (const assignment of protectedAssignments) {
+    // Decrement capacity for each planned assignment
+    for (const assignment of plannedAssignments) {
       const capacityKey = `${assignment.employee_id}:${assignment.service_id}`;
       const capacity = capaciteit.find(
         (c) => `${c.employee_id}:${c.service_id}` === capacityKey
@@ -568,9 +715,11 @@ export class AflEngine {
       }
     }
 
+    console.log(`[DRAAD362] Capacity adjustment: Decremented ${decremented_count} records from ${plannedAssignments.length} status>=1 assignments`);
+
     return {
       decremented: decremented_count,
-      assignments_checked: protectedAssignments.length,
+      assignments_checked: plannedAssignments.length,
     };
   }
 
