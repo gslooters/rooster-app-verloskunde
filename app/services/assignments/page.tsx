@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ArrowLeft, RefreshCw, CheckCircle, X, Minus, Plus } from 'lucide-react';
+import { ArrowLeft, RefreshCw, CheckCircle, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
@@ -58,7 +58,7 @@ export default function ServiceAssignmentsPage() {
   const [serviceIdMap, setServiceIdMap] = useState<Record<string, string>>({});
   const [teamTotals, setTeamTotals] = useState<TeamTotals>({});
 
-  const CACHE_BUST_NONCE = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const CACHE_BUST_NONCE = `draad349e_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
   useEffect(() => {
     loadData();
@@ -186,6 +186,54 @@ export default function ServiceAssignmentsPage() {
   const handleCheckboxChange = async (employeeId: string, serviceCode: string, enabled: boolean) => {
     try {
       const cellKey = `${employeeId}_${serviceCode}`;
+      
+      // Optimistic update - update local state immediately
+      setEmployees(prev => prev.map(e => {
+        if (e.employeeId !== employeeId) return e;
+        
+        const newServices = { ...e.services };
+        newServices[serviceCode] = {
+          ...newServices[serviceCode],
+          enabled: enabled,
+          count: enabled ? (newServices[serviceCode]?.count || 1) : 0
+        };
+        
+        let newTotalPeriodeWaarde = 0;
+        Object.entries(newServices).forEach(([code, srv]: any) => {
+          if (srv?.enabled && srv?.count > 0) {
+            newTotalPeriodeWaarde += srv.count * (srv.dienstwaarde || 1.0);
+          }
+        });
+        
+        return {
+          ...e,
+          services: newServices,
+          totalPeriodeWaarde: Math.round(newTotalPeriodeWaarde * 10) / 10
+        };
+      }));
+
+      // Update team totals optimistically
+      setTeamTotals(prev => {
+        const emp = employees.find(e => e.employeeId === employeeId);
+        if (!emp) return prev;
+        
+        const updated = { ...prev };
+        const team = emp.team;
+        if (!updated[team]) updated[team] = {};
+        
+        const teamTotal = employees
+          .filter(e => e.team === team)
+          .reduce((sum, e) => {
+            const srv = e.employeeId === employeeId 
+              ? { ...e.services[serviceCode], enabled: enabled }
+              : e.services[serviceCode];
+            return sum + (srv?.enabled ? (srv?.count || 0) : 0);
+          }, 0);
+        
+        updated[team] = { ...updated[team], [serviceCode]: teamTotal };
+        return updated;
+      });
+
       setCellStates(prev => ({
         ...prev,
         [cellKey]: { status: 'saving', timestamp: Date.now() }
@@ -208,10 +256,12 @@ export default function ServiceAssignmentsPage() {
         [cellKey]: { status: 'success', timestamp: Date.now() }
       }));
 
-      setTimeout(() => loadData(), 300);
+      // NO RELOAD - optimistic update is complete
     } catch (err: any) {
       console.error('Error:', err);
       setError(err.message);
+      // Reload only on error to sync state
+      loadData();
     }
   };
 
@@ -225,6 +275,52 @@ export default function ServiceAssignmentsPage() {
       const newAantal = Math.max(0, Math.min(35, currentAantal + delta));
 
       const cellKey = `${employeeId}_${serviceCode}`;
+      
+      // Optimistic update
+      setEmployees(prev => prev.map(e => {
+        if (e.employeeId !== employeeId) return e;
+        
+        const newServices = { ...e.services };
+        newServices[serviceCode] = {
+          ...newServices[serviceCode],
+          count: newAantal,
+          enabled: newAantal > 0
+        };
+        
+        let newTotalPeriodeWaarde = 0;
+        Object.entries(newServices).forEach(([code, srv]: any) => {
+          if (srv?.enabled && srv?.count > 0) {
+            newTotalPeriodeWaarde += srv.count * (srv.dienstwaarde || 1.0);
+          }
+        });
+        
+        return {
+          ...e,
+          services: newServices,
+          totalPeriodeWaarde: Math.round(newTotalPeriodeWaarde * 10) / 10
+        };
+      }));
+
+      // Update team totals optimistically
+      setTeamTotals(prev => {
+        const emp = employees.find(e => e.employeeId === employeeId);
+        if (!emp) return prev;
+        
+        const updated = { ...prev };
+        const team = emp.team;
+        if (!updated[team]) updated[team] = {};
+        
+        const teamTotal = employees
+          .filter(e => e.team === team)
+          .reduce((sum, e) => {
+            const srvCount = e.employeeId === employeeId ? newAantal : (e.services[serviceCode]?.count || 0);
+            return sum + srvCount;
+          }, 0);
+        
+        updated[team] = { ...updated[team], [serviceCode]: teamTotal };
+        return updated;
+      });
+
       setCellStates(prev => ({
         ...prev,
         [cellKey]: { status: 'saving', timestamp: Date.now() }
@@ -247,35 +343,41 @@ export default function ServiceAssignmentsPage() {
         [cellKey]: { status: 'success', timestamp: Date.now() }
       }));
 
-      setTimeout(() => loadData(), 300);
+      // NO RELOAD - optimistic update is complete
     } catch (err: any) {
       console.error('Error:', err);
       setError(err.message);
+      // Reload only on error to sync state
+      loadData();
     }
   };
 
   const getTeamColor = (team?: string) => {
-    if (!team) return 'bg-gray-400';
+    if (!team) return 'bg-blue-500';
     const t = team.toLowerCase();
     if (t === 'groen') return 'bg-green-500';
     if (t === 'oranje') return 'bg-orange-500';
-    if (t === 'blauw') return 'bg-blue-500';
-    return 'bg-gray-400';
+    if (t === 'praktijk') return 'bg-blue-500';
+    return 'bg-blue-500';
   };
 
-  const getPdColor = (wd: number, pd: number) => {
-    if (pd === wd) return 'text-green-600 font-bold';
-    if (pd < wd) return 'text-red-600 font-bold';
-    return 'text-black';
+  const getPdColorClass = (wd: number, pd: number) => {
+    if (pd === wd) {
+      return 'pd-value match';  // Groen
+    } else if (pd < wd) {
+      return 'pd-value underboosted';  // Rood
+    } else {
+      return 'pd-value overboosted';  // Geel
+    }
   };
 
   const CellSaveIndicator = ({ state }: { state?: any }) => {
     if (!state?.status) return null;
     if (state.status === 'saving') {
-      return <RefreshCw size={12} className="text-blue-500 animate-spin" />;
+      return <span className="save-feedback saving">⟳</span>;
     }
     if (state.status === 'success') {
-      return <CheckCircle size={12} className="text-green-500" />;
+      return <span className="save-feedback success">✓</span>;
     }
     return null;
   };
@@ -291,13 +393,177 @@ export default function ServiceAssignmentsPage() {
     );
   }
 
-  const SERVICE_CELL_WIDTH = 'w-16';
-  const HEADER_WD = 'w-12';
-  const HEADER_PD = 'w-14';
-  const HEADER_NAME = 'w-32';
-
   return (
     <div className="min-h-screen bg-gray-50 p-4">
+      <style>{`
+        .assignments-header {
+          position: sticky;
+          top: 0;
+          z-index: 100;
+          background: var(--color-surface, white);
+          border-bottom: 2px solid var(--color-border, #e5e7eb);
+        }
+
+        .service-badge-header {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 0.25rem;
+          padding: 0.5rem;
+          background: var(--color-bg-secondary, #f3f4f6);
+          border-radius: 6px;
+          min-width: 70px;
+        }
+
+        .badge-code {
+          font-weight: 600;
+          font-size: 0.85rem;
+          color: var(--color-text, #000);
+        }
+
+        .badge-dienstwaarde {
+          font-size: 0.75rem;
+          color: var(--color-text-secondary, #6b7280);
+          font-variant-numeric: tabular-nums;
+        }
+
+        .service-cell {
+          display: flex;
+          flex-direction: row;
+          align-items: center;
+          gap: 0.25rem;
+          padding: 0.5rem;
+          min-width: 80px;
+          justify-content: center;
+          position: relative;
+        }
+
+        .service-cell input[type="checkbox"] {
+          cursor: pointer;
+          width: 18px;
+          height: 18px;
+          margin: 0;
+        }
+
+        .service-cell button {
+          padding: 2px 6px;
+          font-size: 0.75rem;
+          min-width: 20px;
+          height: 24px;
+          cursor: pointer;
+          background: var(--color-secondary, #e5e7eb);
+          border: 1px solid var(--color-border, #d1d5db);
+          border-radius: 3px;
+        }
+
+        .service-cell button:hover {
+          background: var(--color-secondary-hover, #d1d5db);
+        }
+
+        .service-cell button:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        .service-cell .count {
+          min-width: 20px;
+          text-align: center;
+          font-variant-numeric: tabular-nums;
+          font-size: 0.9rem;
+        }
+
+        .save-feedback {
+          position: absolute;
+          right: -25px;
+          top: 50%;
+          transform: translateY(-50%);
+          width: 18px;
+          height: 18px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 0.8rem;
+        }
+
+        .save-feedback.saving {
+          animation: spin 1s linear infinite;
+          color: #3b82f6;
+        }
+
+        .save-feedback.success {
+          color: #22c55e;
+          animation: fadeInOut 2s ease-in-out;
+        }
+
+        @keyframes spin {
+          from { transform: translateY(-50%) rotate(0deg); }
+          to { transform: translateY(-50%) rotate(360deg); }
+        }
+
+        @keyframes fadeInOut {
+          0%, 100% { opacity: 0; }
+          10%, 90% { opacity: 1; }
+        }
+
+        .pd-value {
+          padding: 0.5rem 1rem;
+          border-radius: 6px;
+          font-weight: 500;
+          text-align: center;
+          font-variant-numeric: tabular-nums;
+        }
+
+        .pd-value.match {
+          background-color: rgba(34, 197, 94, 0.15);
+          color: #22c55e;
+          border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .pd-value.underboosted {
+          background-color: rgba(239, 68, 68, 0.15);
+          color: #ef4444;
+          border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .pd-value.overboosted {
+          background-color: rgba(255, 193, 7, 0.15);
+          color: #f57f17;
+          border: 1px solid rgba(255, 193, 7, 0.3);
+        }
+
+        .wd-column {
+          text-align: center;
+          font-weight: 500;
+          min-width: 60px;
+          font-variant-numeric: tabular-nums;
+        }
+
+        .team-totals-row {
+          background: var(--color-bg-secondary, #f3f4f6);
+          font-weight: 500;
+          border-top: 2px solid var(--color-border, #d1d5db);
+        }
+
+        .team-totals-row.praktijk {
+          border-bottom: 2px solid var(--color-border, #d1d5db);
+        }
+
+        .team-label {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          font-weight: 600;
+        }
+
+        .team-label::before {
+          content: '';
+          width: 12px;
+          height: 12px;
+          border-radius: 50%;
+          background: currentColor;
+        }
+      `}</style>
+
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">🎯 Diensten Medewerkers</h1>
@@ -318,24 +584,24 @@ export default function ServiceAssignmentsPage() {
       <div className="bg-white rounded border border-gray-200 shadow-sm overflow-x-auto">
         <table className="w-full border-collapse text-sm">
           {/* HEADER */}
-          <thead className="sticky top-0 z-20 bg-gray-200 border-b-2 border-gray-300">
+          <thead className="assignments-header">
             <tr>
-              <th className={`${HEADER_NAME} px-2 py-2 text-left font-semibold text-gray-900`}>
+              <th className="w-32 px-2 py-2 text-left font-semibold text-gray-900">
                 Medewerker
               </th>
-              <th className={`${HEADER_WD} px-1 py-2 text-center font-semibold text-gray-900`}>
+              <th className="wd-column px-2 py-2 text-center font-semibold text-gray-900">
                 Wd
               </th>
-              <th className={`${HEADER_PD} px-1 py-2 text-center font-semibold text-gray-900`}>
+              <th className="w-20 px-2 py-2 text-center font-semibold text-gray-900">
                 Pd
               </th>
               {services.map(svc => (
                 <th
                   key={svc.code}
-                  className={`${SERVICE_CELL_WIDTH} px-1 py-2 text-center font-semibold text-gray-700 bg-gray-100 border-l border-gray-300`}
+                  className="service-badge-header"
                 >
-                  <div className="text-xs font-bold">{svc.code}</div>
-                  <div className="text-xs text-gray-600">{svc.dienstwaarde}</div>
+                  <div className="badge-code">{svc.code}</div>
+                  <div className="badge-dienstwaarde">{svc.dienstwaarde}</div>
                 </th>
               ))}
             </tr>
@@ -346,7 +612,7 @@ export default function ServiceAssignmentsPage() {
             {employees.map((emp) => (
               <tr key={emp.employeeId} className="border-b border-gray-200 hover:bg-gray-50">
                 {/* Medewerker */}
-                <td className={`${HEADER_NAME} px-2 py-2 text-left`}>
+                <td className="w-32 px-2 py-2 text-left">
                   <div className="flex items-center gap-2">
                     <div className={`w-3 h-3 rounded-full ${getTeamColor(emp.team)}`}></div>
                     <span className="font-medium text-gray-900">{emp.employeeName}</span>
@@ -354,12 +620,12 @@ export default function ServiceAssignmentsPage() {
                 </td>
 
                 {/* Wd (Werkdagen) */}
-                <td className={`${HEADER_WD} px-1 py-2 text-center font-bold text-gray-900`}>
+                <td className="wd-column px-2 py-2 text-center text-gray-900 font-semibold">
                   {emp.aantalWerkdagen}
                 </td>
 
                 {/* Pd (Periode Waarde) */}
-                <td className={`${HEADER_PD} px-1 py-2 text-center ${getPdColor(emp.aantalWerkdagen, emp.totalPeriodeWaarde)}`}>
+                <td className={`w-20 px-2 py-2 ${getPdColorClass(emp.aantalWerkdagen, emp.totalPeriodeWaarde)}`}>
                   {emp.totalPeriodeWaarde}
                 </td>
 
@@ -372,74 +638,61 @@ export default function ServiceAssignmentsPage() {
                   return (
                     <td
                       key={cellKey}
-                      className={`${SERVICE_CELL_WIDTH} px-1 py-2 text-center border-l border-gray-300`}
+                      className="service-cell border-l border-gray-300"
                     >
-                      {!srvData?.enabled ? (
-                        <input
-                          type="checkbox"
-                          checked={false}
-                          onChange={() => handleCheckboxChange(emp.employeeId, svc.code, true)}
-                          className="w-4 h-4 cursor-pointer"
-                        />
-                      ) : (
-                        <div className="flex flex-col items-center gap-1">
-                          <input
-                            type="checkbox"
-                            checked={true}
-                            onChange={() => handleCheckboxChange(emp.employeeId, svc.code, false)}
-                            className="w-4 h-4 cursor-pointer"
-                          />
-                          <div className="flex items-center gap-0.5">
-                            <button
-                              onClick={() => handleAantalChange(emp.employeeId, svc.code, -1)}
-                              className="px-0.5 hover:bg-gray-200 rounded text-xs disabled:opacity-50"
-                              disabled={cellState?.status === 'saving'}
-                            >
-                              <Minus size={10} />
-                            </button>
-                            <span className="w-3 text-center text-xs font-bold">
-                              {srvData.count}
-                            </span>
-                            <button
-                              onClick={() => handleAantalChange(emp.employeeId, svc.code, 1)}
-                              className="px-0.5 hover:bg-gray-200 rounded text-xs disabled:opacity-50"
-                              disabled={cellState?.status === 'saving'}
-                            >
-                              <Plus size={10} />
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                      <div className="text-xs text-blue-500 mt-0.5">
-                        <CellSaveIndicator state={cellState} />
-                      </div>
+                      <input
+                        type="checkbox"
+                        checked={srvData?.enabled || false}
+                        onChange={() => handleCheckboxChange(emp.employeeId, svc.code, !srvData?.enabled)}
+                      />
+                      <button 
+                        onClick={() => handleAantalChange(emp.employeeId, svc.code, -1)}
+                        disabled={!srvData?.enabled || cellState?.status === 'saving'}
+                      >
+                        −
+                      </button>
+                      <span className="count">{srvData?.count || 0}</span>
+                      <button 
+                        onClick={() => handleAantalChange(emp.employeeId, svc.code, 1)}
+                        disabled={!srvData?.enabled || cellState?.status === 'saving'}
+                      >
+                        +
+                      </button>
+                      
+                      <CellSaveIndicator state={cellState} />
                     </td>
                   );
                 })}
               </tr>
             ))}
 
-            {/* FOOTER: Team Totals */}
-            {Object.entries(teamTotals).map(([team, totals]) => (
-              <tr key={`total_${team}`} className="bg-gray-100 border-t-2 border-gray-300 font-bold">
-                <td className={`${HEADER_NAME} px-2 py-2 text-left text-gray-900`}>
-                  <div className="flex items-center gap-2">
-                    <div className={`w-3 h-3 rounded-full ${getTeamColor(team)}`}></div>
-                    <span>{team === 'praktijk' || team === 'Praktijk' ? '📊 Totaal' : team}</span>
-                  </div>
-                </td>
-                <td className={`${HEADER_WD} px-1 py-2 text-center`}></td>
-                <td className={`${HEADER_PD} px-1 py-2 text-center`}></td>
-                {services.map(svc => (
-                  <td
-                    key={`total_${team}_${svc.code}`}
-                    className={`${SERVICE_CELL_WIDTH} px-1 py-2 text-center border-l border-gray-300`}
-                  >
-                    <span className="font-bold">{totals[svc.code] || 0}</span>
+            {/* FOOTER: Team Totals - Fixed Order */}
+            {['Groen', 'Oranje', 'Praktijk'].map((team) => {
+              const totals = teamTotals[team] || {};
+              
+              return (
+                <tr 
+                  key={`total_${team}`} 
+                  className={`team-totals-row ${team.toLowerCase()}`}
+                >
+                  <td className="w-32 px-2 py-2 text-left text-gray-900">
+                    <div className="team-label" style={{ color: getTeamColor(team).replace('bg-', 'text-') }}>
+                      {team}
+                    </div>
                   </td>
-                ))}
-              </tr>
-            ))}
+                  <td className="wd-column px-2 py-2 text-center">−</td>
+                  <td className="w-20 px-2 py-2 text-center">−</td>
+                  {services.map(svc => (
+                    <td
+                      key={`total_${team}_${svc.code}`}
+                      className="service-cell border-l border-gray-300"
+                    >
+                      <span className="font-bold">{totals[svc.code] || 0}</span>
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
