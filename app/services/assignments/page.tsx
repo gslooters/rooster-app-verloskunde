@@ -98,7 +98,7 @@ export default function ServiceAssignmentsPage() {
       const serviceCodesSet = new Set<string>();
       const serviceInfoMap = new Map<string, ServiceInfo>();
       
-      overview.forEach((emp: any) => {
+      overview.forEach((emp: EmployeeServiceData) => {
         Object.entries(emp.services || {}).forEach(([code, srvData]: any) => {
           serviceCodesSet.add(code);
           if (!serviceInfoMap.has(code)) {
@@ -129,7 +129,7 @@ export default function ServiceAssignmentsPage() {
       setServiceIdMap(idMap);
 
       // Transform data
-      const employeeList = overview.map((emp: any) => {
+      const employeeList = overview.map((emp: EmployeeServiceData) => {
         let totalPeriodeWaarde = 0;
 
         sortedServices.forEach(code => {
@@ -143,7 +143,7 @@ export default function ServiceAssignmentsPage() {
           employeeId: emp.employeeId,
           employeeName: emp.employeeName,
           team: emp.team,
-          aantalWerkdagen: emp.dienstenperiode,
+          aantalWerkdagen: emp.aantalWerkdagen,
           services: emp.services,
           totalPeriodeWaarde: Math.round(totalPeriodeWaarde * 10) / 10
         };
@@ -151,7 +151,7 @@ export default function ServiceAssignmentsPage() {
 
       // Calculate team totals (simple count, no weighting)
       const totals: TeamTotals = {};
-      employeeList.forEach(emp => {
+      employeeList.forEach((emp: EmployeeServiceData) => {
         if (!totals[emp.team]) {
           totals[emp.team] = {};
         }
