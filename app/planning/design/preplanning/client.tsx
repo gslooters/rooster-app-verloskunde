@@ -8,7 +8,6 @@ import toast from 'react-hot-toast';
 import { 
   getPrePlanningData,
   savePrePlanningAssignment,
-  deletePrePlanningAssignment,
   getEmployeesWithServices,
   updateAssignmentStatus
 } from '@/lib/services/preplanning-storage';
@@ -63,13 +62,17 @@ import DienstSelectieModal from './components/DienstSelectieModal';
  * DRAAD 351: Laadscherm tekst gewijzigd naar "Rooster laden..."
  * - Client component loading state aangepast voor consistentie
  * 
+ * DRAAD352-FASE1: ✅ deletePrePlanningAssignment verwijderd
+ * - Alle status=0 updates gaan nu via updateAssignmentStatus
+ * - Database records worden NOOIT verwijderd (soft delete via status=0)
+ * 
  * Dit scherm toont:
  * - Grid met 35 dagen (5 weken) als kolommen x 3 dagdelen (O/M/A)
  * - Medewerkers als rijen
  * - Cellen op basis van status (0=leeg, 1=dienst, 2=geblokkeerd, 3=NB)
  * - Data wordt opgeslagen in Supabase roster_assignments
  * 
- * Cache: 1733596895000
+ * Cache: ${Date.now()}
  */
 export default function PrePlanningClient() {
   const router = useRouter();
@@ -230,45 +233,32 @@ export default function PrePlanningClient() {
     setModalOpen(true);
   }, [employees, assignments, rosterId]); // ⭐ rosterId toegevoegd aan dependencies
 
-  // DRAAD 80 + 89: Modal save handler met database save + grid refresh + toast warnings
+  // DRAAD 80 + 89 + DRAAD352: Modal save handler - alle statussen via updateAssignmentStatus
   const handleModalSave = useCallback(async (serviceId: string | null, status: CellStatus) => {
     if (!selectedCell || !rosterId) return;
     
     try {
       setIsSaving(true);
 
-      let result: { success: boolean; warnings: string[] } | boolean = false;
+      console.log(`[PrePlanning] Updating assignment (status ${status})...`);
+      
+      // ✅ DRAAD352-FASE1: ALLE statussen gaan via updateAssignmentStatus
+      // Status 0 (leeg): service_id=null, status=0 → UPSERT (soft delete)
+      // Status 1 (dienst): service_id=UUID, status=1 → UPSERT
+      // Status 2 (geblokkeerd): service_id=null, status=2 → UPSERT
+      // Status 3 (NB): service_id=null, status=3 → UPSERT
+      const result = await updateAssignmentStatus(
+        rosterId,
+        selectedCell.employeeId,
+        selectedCell.date,
+        selectedCell.dagdeel,
+        status,
+        serviceId,
+        startDate // DRAAD 89: Roster start date voor periode check
+      );
 
-      // Status 0: Delete assignment (cel leeg maken)
-      if (status === 0) {
-        console.log('[PrePlanning] Deleting assignment (status 0)...');
-        const success = await deletePrePlanningAssignment(
-          rosterId,
-          selectedCell.employeeId,
-          selectedCell.date,
-          selectedCell.dagdeel
-        );
-        result = { success, warnings: [] };
-      }
-      // Status 1, 2, 3: Update assignment status
-      else {
-        console.log(`[PrePlanning] Updating assignment (status ${status})...`);
-        
-        // DRAAD 89: Geef rosterStartDate door voor periode validatie
-        result = await updateAssignmentStatus(
-          rosterId,
-          selectedCell.employeeId,
-          selectedCell.date,
-          selectedCell.dagdeel,
-          status,
-          serviceId,
-          startDate // DRAAD 89: Roster start date voor periode check
-        );
-      }
-
-      // Check result (backwards compatible met oude boolean return)
-      const success = typeof result === 'boolean' ? result : result.success;
-      const warnings = typeof result === 'object' ? result.warnings : [];
+      const success = result.success;
+      const warnings = result.warnings || [];
 
       if (!success) {
         throw new Error('Database operatie mislukt');
