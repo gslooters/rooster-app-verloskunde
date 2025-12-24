@@ -14,6 +14,7 @@
  * HERSTEL: Service blocking rules ge-integreerd in getServicesForEmployee + getServicesForEmployeeFiltered
  * DRAAD 100B: FIX getEmployeeServiceCodes - resolve service_code via JOIN met service_types
  * DRAAD179-FASE3: FIXED - Replaced roster_period_staffing with roster_period_staffing_dagdelen
+ * DRAAD352-FASE1: ✅ deletePrePlanningAssignment verwijderd - alle status=0 updates gaan via updateAssignmentStatus
  */
 
 import { supabase } from '@/lib/supabase';
@@ -155,6 +156,7 @@ export async function savePrePlanningAssignment(
  * DRAAD 82: service_code VERWIJDERD - kolom bestaat niet meer in database schema
  * DRAAD 99B: Service blocking rules verwijderd (constraints zijn disabled)
  * HERSTEL: Service blocking validatie weer toegevoegd
+ * DRAAD352-FASE1: ✅ Nu ondersteunt status=0 via UPSERT (soft delete)
  * 
  * Voor het wijzigen van cel status (leeg, dienst, geblokkeerd, NB)
  * 
@@ -461,48 +463,6 @@ export async function getServicesForEmployeeFiltered(
   } catch (error) {
     console.error('❌ Exception in getServicesForEmployeeFiltered:', error);
     return [];
-  }
-}
-
-/**
- * Verwijder een PrePlanning assignment (cel leeg maken)
- * DRAAD 77: Nu met dagdeel parameter
- * DRAAD 99B: Service blocking rules verwijderd
- * 
- * @param rosterId - UUID van het rooster
- * @param employeeId - TEXT ID van de medewerker
- * @param date - Datum (YYYY-MM-DD)
- * @param dagdeel - Dagdeel (O/M/A) - default 'O' voor backwards compatibility
- * @returns true bij succes, false bij fout
- */
-export async function deletePrePlanningAssignment(
-  rosterId: string,
-  employeeId: string,
-  date: string,
-  dagdeel: Dagdeel = 'O'
-): Promise<boolean> {
-  try {
-    console.log('🗑️  Deleting PrePlanning assignment:', { rosterId, employeeId, date, dagdeel });
-    
-    // Delete assignment
-    const { error } = await supabase
-      .from('roster_assignments')
-      .delete()
-      .eq('roster_id', rosterId)
-      .eq('employee_id', employeeId)
-      .eq('date', date)
-      .eq('dagdeel', dagdeel);
-
-    if (error) {
-      console.error('❌ Error deleting PrePlanning assignment:', error);
-      return false;
-    }
-
-    console.log('✅ PrePlanning assignment deleted successfully');
-    return true;
-  } catch (error) {
-    console.error('❌ Exception in deletePrePlanningAssignment:', error);
-    return false;
   }
 }
 
