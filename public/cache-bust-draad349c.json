@@ -1,0 +1,26 @@
+{
+  "draad": "349 C",
+  "timestamp": "2025-12-24T10:16:24Z",
+  "improvements": [
+    "4.1: Sticky header",
+    "4.1.2: Service badges layout from image2",
+    "4.1.3: Service value display",
+    "4.3: Wd column with aantalwerkdagen",
+    "4.4: Pd column with calculation (aantal * dienstwaarde)",
+    "4.4.1: Pd color (green=equal, red=shortage)",
+    "4.5: Service buttons with counter",
+    "4.6: Team totals row",
+    "4.6.1: Service totals per team",
+    "4.7: Update without full page reload"
+  ],
+  "implementation": "RoosterLayout.tsx component",
+  "database_fields": {
+    "employees": "aantalwerkdagen",
+    "service_types": "dienstwaarde, code, kleur",
+    "roster_employee_services": "aantal, actief"
+  },
+  "cachebusting": {
+    "method": "Date.now() + Math.random()",
+    "railway_trigger": "included"
+  }
+}
