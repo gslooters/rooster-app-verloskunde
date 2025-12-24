@@ -60,6 +60,9 @@ import DienstSelectieModal from './components/DienstSelectieModal';
  * - in_progress → /dashboard (HDB - main dashboard)
  * - final → /dashboard (HDB - main dashboard)
  * 
+ * DRAAD 351: Laadscherm tekst gewijzigd naar "Rooster laden..."
+ * - Client component loading state aangepast voor consistentie
+ * 
  * Dit scherm toont:
  * - Grid met 35 dagen (5 weken) als kolommen x 3 dagdelen (O/M/A)
  * - Medewerkers als rijen
@@ -351,7 +354,7 @@ export default function PrePlanningClient() {
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">PrePlanning laden...</p>
+          <p className="text-gray-600">Rooster laden...</p>
         </div>
       </div>
     );
