@@ -58,7 +58,7 @@ export default function ServiceAssignmentsPage() {
   const [serviceIdMap, setServiceIdMap] = useState<Record<string, string>>({});
   const [teamTotals, setTeamTotals] = useState<TeamTotals>({});
 
-  const CACHE_BUST_NONCE = `draad349e_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const CACHE_BUST_NONCE = `draad349e_fase6_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
   useEffect(() => {
     loadData();
@@ -127,6 +127,12 @@ export default function ServiceAssignmentsPage() {
       setServiceIdMap(idMap);
 
       const employeeList = overview.map((emp: EmployeeServiceData) => {
+        // VALIDATION: Ensure aantalWerkdagen exists
+        const wd = emp.aantalWerkdagen || 0;
+        if (!wd) {
+          console.warn(`Missing aantalWerkdagen for employee ${emp.employeeId}`);
+        }
+
         let totalPeriodeWaarde = 0;
 
         sortedServices.forEach(code => {
@@ -140,7 +146,7 @@ export default function ServiceAssignmentsPage() {
           employeeId: emp.employeeId,
           employeeName: emp.employeeName,
           team: emp.team,
-          aantalWerkdagen: emp.aantalWerkdagen,
+          aantalWerkdagen: wd,  // Direct assignment with fallback
           services: emp.services,
           totalPeriodeWaarde: Math.round(totalPeriodeWaarde * 10) / 10
         };
@@ -179,18 +185,32 @@ export default function ServiceAssignmentsPage() {
     }
   }
 
+  /**
+   * BUSINESS LOGIC - CHECKBOX ONLY:
+   * - ONLY changes enabled state
+   * - KEEPS count unchanged
+   * - If checked: enabled = true, count stays same
+   * - If unchecked: enabled = false, count stays same
+   */
   const handleCheckboxChange = async (employeeId: string, serviceCode: string, enabled: boolean) => {
     try {
+      const emp = employees.find(e => e.employeeId === employeeId);
+      if (!emp) return;
+
+      const srvData = emp.services[serviceCode];
+      const currentCount = srvData?.count || 0;
+
       const cellKey = `${employeeId}_${serviceCode}`;
       
+      // OPTIMISTIC UPDATE - UI updates immediately
       setEmployees(prev => prev.map(e => {
         if (e.employeeId !== employeeId) return e;
         
         const newServices = { ...e.services };
         newServices[serviceCode] = {
           ...newServices[serviceCode],
-          enabled: enabled,
-          count: enabled ? (newServices[serviceCode]?.count || 1) : 0
+          enabled: enabled
+          // count: UNCHANGED
         };
         
         let newTotalPeriodeWaarde = 0;
@@ -207,6 +227,7 @@ export default function ServiceAssignmentsPage() {
         };
       }));
 
+      // Update team totals
       setTeamTotals(prev => {
         const emp = employees.find(e => e.employeeId === employeeId);
         if (!emp) return prev;
@@ -236,13 +257,12 @@ export default function ServiceAssignmentsPage() {
       const serviceId = serviceIdMap[serviceCode];
       if (!serviceId) throw new Error(`Service ID not found for ${serviceCode}`);
 
-      const aantal = enabled ? 1 : 0;
-      
+      // Save to DB: send EXISTING count + NEW enabled state
       await upsertEmployeeService({
         employee_id: employeeId,
         service_id: serviceId,
-        aantal: aantal,
-        actief: enabled
+        aantal: currentCount,  // Keep existing count!
+        actief: enabled        // Update enabled state
       });
 
       setCellStates(prev => ({
@@ -256,6 +276,13 @@ export default function ServiceAssignmentsPage() {
     }
   };
 
+  /**
+   * BUSINESS LOGIC - COUNT ONLY:
+   * - ONLY changes count (+/- buttons)
+   * - KEEPS enabled unchanged
+   * - If count changes to 0: enabled stays as-is
+   * - If count changes to >0: enabled stays as-is
+   */
   const handleAantalChange = async (employeeId: string, serviceCode: string, delta: number) => {
     try {
       const emp = employees.find(e => e.employeeId === employeeId);
@@ -264,17 +291,19 @@ export default function ServiceAssignmentsPage() {
       const srvData = emp.services[serviceCode];
       const currentAantal = srvData?.count || 0;
       const newAantal = Math.max(0, Math.min(35, currentAantal + delta));
+      const currentEnabled = srvData?.enabled || false;
 
       const cellKey = `${employeeId}_${serviceCode}`;
       
+      // OPTIMISTIC UPDATE - UI updates immediately
       setEmployees(prev => prev.map(e => {
         if (e.employeeId !== employeeId) return e;
         
         const newServices = { ...e.services };
         newServices[serviceCode] = {
           ...newServices[serviceCode],
-          count: newAantal,
-          enabled: newAantal > 0
+          count: newAantal
+          // enabled: UNCHANGED
         };
         
         let newTotalPeriodeWaarde = 0;
@@ -291,6 +320,7 @@ export default function ServiceAssignmentsPage() {
         };
       }));
 
+      // Update team totals
       setTeamTotals(prev => {
         const emp = employees.find(e => e.employeeId === employeeId);
         if (!emp) return prev;
@@ -303,7 +333,8 @@ export default function ServiceAssignmentsPage() {
           .filter(e => e.team === team)
           .reduce((sum, e) => {
             const srvCount = e.employeeId === employeeId ? newAantal : (e.services[serviceCode]?.count || 0);
-            return sum + srvCount;
+            const srvEnabled = e.employeeId === employeeId ? currentEnabled : (e.services[serviceCode]?.enabled || false);
+            return sum + (srvEnabled ? srvCount : 0);
           }, 0);
         
         updated[team] = { ...updated[team], [serviceCode]: teamTotal };
@@ -318,13 +349,12 @@ export default function ServiceAssignmentsPage() {
       const serviceId = serviceIdMap[serviceCode];
       if (!serviceId) throw new Error(`Service ID not found for ${serviceCode}`);
 
-      const enabled = newAantal > 0;
-
+      // Save to DB: send NEW count + EXISTING enabled state
       await upsertEmployeeService({
         employee_id: employeeId,
         service_id: serviceId,
-        aantal: newAantal,
-        actief: enabled
+        aantal: newAantal,      // Update count
+        actief: currentEnabled  // Keep existing enabled!
       });
 
       setCellStates(prev => ({
@@ -375,8 +405,6 @@ export default function ServiceAssignmentsPage() {
     );
   }
 
-  const gridColTemplate = `repeat(3, auto) ${ services.map(() => '80px').join(' ')}`;
-
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', padding: '1rem' }}>
       <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -396,22 +424,34 @@ export default function ServiceAssignmentsPage() {
         </Alert>
       )}
 
-      <div style={{ backgroundColor: 'white', borderRadius: '0.5rem', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', overflow: 'auto' }}>
-        {/* HEADER ROW - STICKY */}
+      {/* OUTER CONTAINER - Handles Overflow */}
+      <div style={{ 
+        backgroundColor: 'white', 
+        borderRadius: '0.5rem', 
+        border: '1px solid #e5e7eb', 
+        boxShadow: '0 1px 2px rgba(0,0,0,0.05)', 
+        overflow: 'hidden',
+        maxHeight: 'calc(100vh - 250px)',
+        display: 'flex',
+        flexDirection: 'column'
+      }}>
+        
+        {/* STICKY HEADER - Fixed at top of inner scroll container */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: `1fr auto auto ${services.map(() => '80px').join(' ')}`,
+          gridTemplateColumns: `150px 60px 80px ${services.map(() => '80px').join(' ')}`,
           gap: 0,
           position: 'sticky',
           top: 0,
           zIndex: 100,
           backgroundColor: 'white',
           borderBottom: '2px solid #e5e7eb',
-          padding: 0
+          padding: 0,
+          flexShrink: 0
         }}>
-          <div style={{ padding: '0.5rem', textAlign: 'left', fontWeight: '600', color: '#111827', minWidth: '128px' }}>Medewerker</div>
-          <div style={{ padding: '0.5rem', textAlign: 'center', fontWeight: '600', color: '#111827', width: '60px' }}>Wd</div>
-          <div style={{ padding: '0.5rem', textAlign: 'center', fontWeight: '600', color: '#111827', width: '80px' }}>Pd</div>
+          <div style={{ padding: '0.5rem', textAlign: 'left', fontWeight: '600', color: '#111827', fontSize: '0.85rem' }}>Medewerker</div>
+          <div style={{ padding: '0.5rem', textAlign: 'center', fontWeight: '600', color: '#111827', fontSize: '0.85rem' }}>Wd</div>
+          <div style={{ padding: '0.5rem', textAlign: 'center', fontWeight: '600', color: '#111827', fontSize: '0.85rem' }}>Pd</div>
           {services.map(svc => (
             <div key={`header_${svc.code}`} style={{
               padding: '0.5rem',
@@ -419,13 +459,12 @@ export default function ServiceAssignmentsPage() {
               fontWeight: '600',
               color: '#111827',
               backgroundColor: '#f3f4f6',
-              borderRadius: '6px',
               fontSize: '0.75rem',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
+              justifyContent: 'center',
               gap: '0.25rem',
-              width: '80px',
               minWidth: '80px'
             }}>
               <div style={{ fontWeight: '600' }}>{svc.code}</div>
@@ -434,175 +473,213 @@ export default function ServiceAssignmentsPage() {
           ))}
         </div>
 
-        {/* EMPLOYEE ROWS */}
-        {employees.map((emp) => (
-          <div key={emp.employeeId} style={{
-            display: 'grid',
-            gridTemplateColumns: `1fr auto auto ${services.map(() => '80px').join(' ')}`,
-            gap: 0,
-            borderBottom: '1px solid #e5e7eb',
-            alignItems: 'stretch'
-          }}>
-            {/* Name */}
-            <div style={{
-              padding: '0.5rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              minWidth: '128px'
-            }}>
-              <div style={{
-                width: '12px',
-                height: '12px',
-                borderRadius: '50%',
-                backgroundColor: getTeamColor(emp.team)
-              }}></div>
-              <span style={{ fontWeight: '500', color: '#111827' }}>{emp.employeeName}</span>
-            </div>
-
-            {/* Wd */}
-            <div style={{
-              padding: '0.5rem',
-              textAlign: 'center',
-              fontWeight: '500',
-              color: '#111827',
-              width: '60px'
-            }}>
-              {emp.aantalWerkdagen}
-            </div>
-
-            {/* Pd */}
-            <div style={{
-              padding: '0.5rem',
-              textAlign: 'center',
-              fontWeight: '500',
-              backgroundColor: getPdColor(emp.aantalWerkdagen, emp.totalPeriodeWaarde).bg,
-              color: getPdColor(emp.aantalWerkdagen, emp.totalPeriodeWaarde).text,
-              borderRadius: '6px',
-              width: '80px'
-            }}>
-              {emp.totalPeriodeWaarde}
-            </div>
-
-            {/* Services */}
-            {services.map(svc => {
-              const srvData = emp.services[svc.code];
-              const cellKey = `${emp.employeeId}_${svc.code}`;
-              const cellState = cellStates[cellKey];
-
-              return (
-                <div key={cellKey} style={{
-                  padding: '0.5rem',
-                  display: 'flex',
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '0.25rem',
-                  borderLeft: '1px solid #d1d5db',
-                  position: 'relative',
-                  width: '80px',
-                  minWidth: '80px'
-                }}>
-                  <input
-                    type="checkbox"
-                    checked={srvData?.enabled || false}
-                    onChange={() => handleCheckboxChange(emp.employeeId, svc.code, !srvData?.enabled)}
-                    style={{ width: '18px', height: '18px', cursor: 'pointer', margin: 0 }}
-                  />
-                  <button
-                    onClick={() => handleAantalChange(emp.employeeId, svc.code, -1)}
-                    disabled={!srvData?.enabled || cellState?.status === 'saving'}
-                    style={{
-                      padding: '2px 6px',
-                      fontSize: '0.75rem',
-                      minWidth: '20px',
-                      height: '24px',
-                      cursor: srvData?.enabled ? 'pointer' : 'default',
-                      backgroundColor: '#e5e7eb',
-                      border: '1px solid #d1d5db',
-                      borderRadius: '3px',
-                      opacity: !srvData?.enabled ? 0.5 : 1
-                    }}
-                  >
-                    −
-                  </button>
-                  <span style={{ minWidth: '20px', textAlign: 'center', fontSize: '0.9rem' }}>
-                    {srvData?.count || 0}
-                  </span>
-                  <button
-                    onClick={() => handleAantalChange(emp.employeeId, svc.code, 1)}
-                    disabled={!srvData?.enabled || cellState?.status === 'saving'}
-                    style={{
-                      padding: '2px 6px',
-                      fontSize: '0.75rem',
-                      minWidth: '20px',
-                      height: '24px',
-                      cursor: srvData?.enabled ? 'pointer' : 'default',
-                      backgroundColor: '#e5e7eb',
-                      border: '1px solid #d1d5db',
-                      borderRadius: '3px',
-                      opacity: !srvData?.enabled ? 0.5 : 1
-                    }}
-                  >
-                    +
-                  </button>
-                  <div style={{ position: 'absolute', right: '-25px', top: '50%', transform: 'translateY(-50%)' }}>
-                    <CellSaveIndicator state={cellState} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ))}
-
-        {/* TEAM TOTALS FOOTER */}
-        {['Groen', 'Oranje', 'Praktijk'].map((team) => {
-          const totals = teamTotals[team] || {};
-          
-          return (
-            <div key={`total_${team}`} style={{
+        {/* SCROLLABLE CONTENT AREA */}
+        <div style={{
+          overflow: 'auto',
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+          {/* EMPLOYEE ROWS */}
+          {employees.map((emp) => (
+            <div key={emp.employeeId} style={{
               display: 'grid',
-              gridTemplateColumns: `1fr auto auto ${services.map(() => '80px').join(' ')}`,
+              gridTemplateColumns: `150px 60px 80px ${services.map(() => '80px').join(' ')}`,
               gap: 0,
-              backgroundColor: '#f3f4f6',
-              fontWeight: '500',
-              borderTop: '2px solid #d1d5db',
-              borderBottom: team === 'Praktijk' ? '2px solid #d1d5db' : 'none'
+              borderBottom: '1px solid #e5e7eb',
+              alignItems: 'center',
+              minHeight: '44px',
+              backgroundColor: 'white'
             }}>
+              {/* Name */}
               <div style={{
                 padding: '0.5rem',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.5rem',
-                fontWeight: '600',
-                color: getTeamColor(team),
-                minWidth: '128px'
+                minWidth: '150px',
+                fontSize: '0.9rem'
               }}>
                 <div style={{
                   width: '12px',
                   height: '12px',
                   borderRadius: '50%',
-                  backgroundColor: getTeamColor(team)
+                  backgroundColor: getTeamColor(emp.team),
+                  flexShrink: 0
                 }}></div>
-                {team}
+                <span style={{ fontWeight: '500', color: '#111827' }}>{emp.employeeName}</span>
               </div>
-              <div style={{ padding: '0.5rem', textAlign: 'center', width: '60px' }}>−</div>
-              <div style={{ padding: '0.5rem', textAlign: 'center', width: '80px' }}>−</div>
-              {services.map(svc => (
-                <div key={`total_${team}_${svc.code}`} style={{
-                  padding: '0.5rem',
-                  textAlign: 'center',
-                  fontWeight: 'bold',
-                  borderLeft: '1px solid #d1d5db',
-                  width: '80px',
-                  minWidth: '80px'
-                }}>
-                  {totals[svc.code] || 0}
-                </div>
-              ))}
+
+              {/* Wd - VALIDATION: Show value or warning */}
+              <div style={{
+                padding: '0.5rem',
+                textAlign: 'center',
+                fontWeight: '500',
+                color: emp.aantalWerkdagen ? '#111827' : '#ef4444',
+                fontSize: '0.9rem',
+                minWidth: '60px'
+              }}>
+                {emp.aantalWerkdagen || '⚠️'}
+              </div>
+
+              {/* Pd - Colored based on match */}
+              <div style={{
+                padding: '0.5rem',
+                textAlign: 'center',
+                fontWeight: '500',
+                backgroundColor: getPdColor(emp.aantalWerkdagen, emp.totalPeriodeWaarde).bg,
+                color: getPdColor(emp.aantalWerkdagen, emp.totalPeriodeWaarde).text,
+                borderRadius: '6px',
+                fontSize: '0.9rem',
+                minWidth: '80px'
+              }}>
+                {emp.totalPeriodeWaarde}
+              </div>
+
+              {/* Services - Checkbox + Count Controls */}
+              {services.map(svc => {
+                const srvData = emp.services[svc.code];
+                const cellKey = `${emp.employeeId}_${svc.code}`;
+                const cellState = cellStates[cellKey];
+
+                return (
+                  <div key={cellKey} style={{
+                    padding: '0.5rem',
+                    display: 'flex',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0',
+                    borderLeft: '1px solid #d1d5db',
+                    position: 'relative',
+                    minWidth: '80px',
+                    height: '44px'
+                  }}>
+                    {/* Checkbox - INDEPENDENT: only toggles enabled */}
+                    <input
+                      type="checkbox"
+                      checked={srvData?.enabled || false}
+                      onChange={(e) => handleCheckboxChange(emp.employeeId, svc.code, e.target.checked)}
+                      style={{ width: '16px', height: '16px', cursor: 'pointer', margin: 0, flexShrink: 0 }}
+                    />
+                    
+                    {/* Minus Button - ALWAYS enabled */}
+                    <button
+                      onClick={() => handleAantalChange(emp.employeeId, svc.code, -1)}
+                      disabled={cellState?.status === 'saving'}
+                      style={{
+                        padding: '2px 5px',
+                        fontSize: '0.75rem',
+                        minWidth: '18px',
+                        height: '22px',
+                        cursor: cellState?.status === 'saving' ? 'default' : 'pointer',
+                        backgroundColor: '#e5e7eb',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '2px',
+                        opacity: cellState?.status === 'saving' ? 0.5 : 1,
+                        margin: '0 1px',
+                        flexShrink: 0
+                      }}
+                    >
+                      −
+                    </button>
+
+                    {/* Count Display */}
+                    <span style={{ 
+                      minWidth: '16px', 
+                      textAlign: 'center', 
+                      fontSize: '0.85rem',
+                      fontWeight: '500',
+                      margin: '0 2px',
+                      flexShrink: 0
+                    }}>
+                      {srvData?.count || 0}
+                    </span>
+
+                    {/* Plus Button - ALWAYS enabled */}
+                    <button
+                      onClick={() => handleAantalChange(emp.employeeId, svc.code, 1)}
+                      disabled={cellState?.status === 'saving'}
+                      style={{
+                        padding: '2px 5px',
+                        fontSize: '0.75rem',
+                        minWidth: '18px',
+                        height: '22px',
+                        cursor: cellState?.status === 'saving' ? 'default' : 'pointer',
+                        backgroundColor: '#e5e7eb',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '2px',
+                        opacity: cellState?.status === 'saving' ? 0.5 : 1,
+                        margin: '0 1px',
+                        flexShrink: 0
+                      }}
+                    >
+                      +
+                    </button>
+
+                    {/* Save Indicator */}
+                    <div style={{ position: 'absolute', right: '2px', top: '50%', transform: 'translateY(-50%)', width: '12px', height: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <CellSaveIndicator state={cellState} />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
+          ))}
+
+          {/* TEAM TOTALS FOOTER */}
+          {['Groen', 'Oranje', 'Praktijk'].map((team) => {
+            const totals = teamTotals[team] || {};
+            
+            return (
+              <div key={`total_${team}`} style={{
+                display: 'grid',
+                gridTemplateColumns: `150px 60px 80px ${services.map(() => '80px').join(' ')}`,
+                gap: 0,
+                backgroundColor: '#f3f4f6',
+                fontWeight: '500',
+                borderTop: team === 'Groen' ? '2px solid #d1d5db' : '1px solid #d1d5db',
+                borderBottom: team === 'Praktijk' ? '2px solid #d1d5db' : 'none',
+                minHeight: '44px',
+                alignItems: 'center'
+              }}>
+                <div style={{
+                  padding: '0.5rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  fontWeight: '600',
+                  color: getTeamColor(team),
+                  fontSize: '0.9rem',
+                  minWidth: '150px'
+                }}>
+                  <div style={{
+                    width: '12px',
+                    height: '12px',
+                    borderRadius: '50%',
+                    backgroundColor: getTeamColor(team),
+                    flexShrink: 0
+                  }}></div>
+                  {team}
+                </div>
+                <div style={{ padding: '0.5rem', textAlign: 'center', fontSize: '0.9rem', minWidth: '60px' }}>−</div>
+                <div style={{ padding: '0.5rem', textAlign: 'center', fontSize: '0.9rem', minWidth: '80px' }}>−</div>
+                {services.map(svc => (
+                  <div key={`total_${team}_${svc.code}`} style={{
+                    padding: '0.5rem',
+                    textAlign: 'center',
+                    fontWeight: 'bold',
+                    borderLeft: '1px solid #d1d5db',
+                    fontSize: '0.9rem',
+                    minWidth: '80px'
+                  }}>
+                    {totals[svc.code] || 0}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       <div style={{ marginTop: '1rem', fontSize: '0.75rem', color: '#9ca3af', textAlign: 'center' }}>
