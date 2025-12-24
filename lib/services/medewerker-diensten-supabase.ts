@@ -104,10 +104,10 @@ export async function getEmployeeServicesOverview(): Promise<EmployeeServiceRow[
       employeeId: emp.id,
       employeeName: emp.voornaam, // Gebruik voornaam ipv naam
       team: emp.team,
-      dienstenperiode: emp.aantalwerkdagen || 0,   // FIX HIER
+      aantalwerkdagen: emp.aantalwerkdagen || 0,   // ✅ CORRECT VELDNAAM!
       services: servicesObj,
       totalDiensten: Math.round(totalDiensten * 10) / 10,
-      isOnTarget: Math.abs(totalDiensten - (emp.aantalwerkdagen || 0)) < 0.1 // FIX HIER
+      isOnTarget: Math.abs(totalDiensten - (emp.aantalwerkdagen || 0)) < 0.1
     };
   });
 
