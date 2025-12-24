@@ -104,6 +104,7 @@ export async function getEmployeeServicesOverview(): Promise<EmployeeServiceRow[
       employeeId: emp.id,
       employeeName: emp.voornaam, // Gebruik voornaam ipv naam
       team: emp.team,
+      dienstenperiode: emp.aantalwerkdagen || 0,  // ✅ FIX: voeg required field toe
       aantalwerkdagen: emp.aantalwerkdagen || 0,   // ✅ CORRECT VELDNAAM!
       services: servicesObj,
       totalDiensten: Math.round(totalDiensten * 10) / 10,
