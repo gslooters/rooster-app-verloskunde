@@ -25,7 +25,7 @@ interface EmployeeServiceData {
   employeeId: string;
   employeeName: string;
   team: string;
-  aantalwerkdagen: number;  // ← LOWERCASE per database schema
+  aantalwerkdagen: number;  // From Supabase module (line 85: employees.aantalwerkdagen)
   services: {
     [serviceCode: string]: {
       enabled: boolean;
@@ -58,7 +58,7 @@ export default function ServiceAssignmentsPage() {
   const [serviceIdMap, setServiceIdMap] = useState<Record<string, string>>({});
   const [teamTotals, setTeamTotals] = useState<TeamTotals>({});
 
-  const CACHE_BUST_NONCE = `draad349e_fase7_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const CACHE_BUST_NONCE = `draad349e_phase8_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
   useEffect(() => {
     loadData();
@@ -97,7 +97,7 @@ export default function ServiceAssignmentsPage() {
       const serviceCodesSet = new Set<string>();
       const serviceInfoMap = new Map<string, ServiceInfo>();
       
-      overview.forEach((emp: EmployeeServiceData) => {
+      overview.forEach((emp: any) => {
         Object.entries(emp.services || {}).forEach(([code, srvData]: any) => {
           serviceCodesSet.add(code);
           if (!serviceInfoMap.has(code)) {
@@ -126,9 +126,11 @@ export default function ServiceAssignmentsPage() {
       }
       setServiceIdMap(idMap);
 
-      const employeeList = overview.map((emp: EmployeeServiceData) => {
-        // CORRECT: Use lowercase aantalwerkdagen from database
+      const employeeList = overview.map((emp: any) => {
+        // VERIFIED: emp.aantalwerkdagen comes from Supabase module (correctly set)
         const wd = emp.aantalwerkdagen ?? 0;
+        
+        console.log(`Employee: ${emp.employeeName}, aantalwerkdagen: ${wd}, raw: ${emp.aantalwerkdagen}`);
 
         let totalPeriodeWaarde = 0;
 
@@ -143,26 +145,24 @@ export default function ServiceAssignmentsPage() {
           employeeId: emp.employeeId,
           employeeName: emp.employeeName,
           team: emp.team,
-          aantalwerkdagen: wd,  // ← LOWERCASE
+          aantalwerkdagen: wd,
           services: emp.services,
           totalPeriodeWaarde: Math.round(totalPeriodeWaarde * 10) / 10
         };
       });
 
       /**
-       * CRITICAL FIX #3: Team Totals = GRAND TOTAL for ALL employees per service
-       * NOT filtered by team! Praktijk row = SUM of ALL employees for that service
+       * Team Totals = GRAND TOTAL for ALL employees per service
        */
       const totals: TeamTotals = {};
       
-      // Initialize teams with their employees
       const teamMap: Record<string, EmployeeServiceData[]> = {};
       employeeList.forEach((emp: EmployeeServiceData) => {
         if (!teamMap[emp.team]) teamMap[emp.team] = [];
         teamMap[emp.team].push(emp);
       });
 
-      // Calculate totals PER TEAM (Groen, Oranje)
+      // Calculate totals PER TEAM
       Object.entries(teamMap).forEach(([team, teamEmployees]) => {
         totals[team] = {};
         sortedServices.forEach(code => {
@@ -176,7 +176,7 @@ export default function ServiceAssignmentsPage() {
         });
       });
 
-      // Calculate GRAND TOTALS for "Praktijk" = SUM of ALL employees (all teams)
+      // Calculate GRAND TOTALS for "Praktijk" = SUM of ALL employees
       totals['Praktijk'] = {};
       sortedServices.forEach(code => {
         totals['Praktijk'][code] = 0;
@@ -239,7 +239,6 @@ export default function ServiceAssignmentsPage() {
       });
       setEmployees(newEmployees);
 
-      // Recalculate ALL team totals + Praktijk
       const newTotals: TeamTotals = {};
       const newTeamMap: Record<string, EmployeeServiceData[]> = {};
       newEmployees.forEach((emp: EmployeeServiceData) => {
@@ -260,7 +259,6 @@ export default function ServiceAssignmentsPage() {
         });
       });
 
-      // Praktijk = GRAND TOTAL
       newTotals['Praktijk'] = {};
       services.forEach(s => {
         newTotals['Praktijk'][s.code] = 0;
@@ -336,7 +334,6 @@ export default function ServiceAssignmentsPage() {
       });
       setEmployees(newEmployees);
 
-      // Recalculate ALL team totals + Praktijk
       const newTotals: TeamTotals = {};
       const newTeamMap: Record<string, EmployeeServiceData[]> = {};
       newEmployees.forEach((emp: EmployeeServiceData) => {
@@ -357,7 +354,6 @@ export default function ServiceAssignmentsPage() {
         });
       });
 
-      // Praktijk = GRAND TOTAL
       newTotals['Praktijk'] = {};
       services.forEach(s => {
         newTotals['Praktijk'][s.code] = 0;
@@ -464,7 +460,6 @@ export default function ServiceAssignmentsPage() {
         flexDirection: 'column'
       }}>
         
-        {/* STICKY HEADER - FIX #1: Dienstwaarde INLINE + FIX #4: 100px width */}
         <div style={{
           display: 'grid',
           gridTemplateColumns: `150px 60px 80px ${services.map(() => '100px').join(' ')}`,
@@ -507,7 +502,6 @@ export default function ServiceAssignmentsPage() {
           display: 'flex',
           flexDirection: 'column'
         }}>
-          {/* EMPLOYEE ROWS */}
           {employees.map((emp) => (
             <div key={emp.employeeId} style={{
               display: 'grid',
@@ -518,7 +512,6 @@ export default function ServiceAssignmentsPage() {
               minHeight: '44px',
               backgroundColor: 'white'
             }}>
-              {/* Name */}
               <div style={{
                 padding: '0.5rem',
                 display: 'flex',
@@ -537,7 +530,6 @@ export default function ServiceAssignmentsPage() {
                 <span style={{ fontWeight: '500', color: '#111827' }}>{emp.employeeName}</span>
               </div>
 
-              {/* FIX #2: Wd - Always show value (no warning icon) */}
               <div style={{
                 padding: '0.5rem',
                 textAlign: 'center',
@@ -549,7 +541,6 @@ export default function ServiceAssignmentsPage() {
                 {emp.aantalwerkdagen}
               </div>
 
-              {/* Pd - Colored based on match */}
               <div style={{
                 padding: '0.5rem',
                 textAlign: 'center',
@@ -563,7 +554,6 @@ export default function ServiceAssignmentsPage() {
                 {emp.totalPeriodeWaarde}
               </div>
 
-              {/* Services - Checkbox + Count Controls */}
               {services.map(svc => {
                 const srvData = emp.services[svc.code];
                 const cellKey = `${emp.employeeId}_${svc.code}`;
@@ -649,7 +639,6 @@ export default function ServiceAssignmentsPage() {
             </div>
           ))}
 
-          {/* TEAM TOTALS FOOTER - FIX #3: Praktijk = GRAND TOTAL */}
           {['Groen', 'Oranje', 'Praktijk'].map((team) => {
             const totals = teamTotals[team] || {};
             const isGrandTotal = team === 'Praktijk';
