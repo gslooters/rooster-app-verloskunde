@@ -1,0 +1,11 @@
+DRAAD 352: Blocking Reset - Cache Burst Trigger
+
+Timestamp: ${Date.now()}
+Date: 24-12-2025
+Trigger: DRAAD352-BLOCKING-RESET
+ChangeAssignmentServiceAtomic: ENABLED
+
+This file triggers Railway redeploy whenever git detects changes.
+Do NOT remove or modify without understanding Railway's redeploy mechanisms.
+
+Version: 352.1
