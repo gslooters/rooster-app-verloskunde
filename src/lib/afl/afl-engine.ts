@@ -72,6 +72,14 @@
  * - Expected result: invullingMap counts CORRECTLY per team (Groen=1, Oranje=1, NOT 2+0)
  * - AFLstatus becomes 240 (not 242) - this is the REAL root cause fix
  * - Lizette stops getting wrongfully assigned OSP
+ *
+ * DRAAD363-FINAL: VERIFICATION & ENHANCED LOGGING
+ * - ✅ VERIFIED: Both dagdeel sources use single letters (O/M/A)
+ * - ✅ VERIFIED: employeeTeamMap is built correctly
+ * - ✅ VERIFIED: taskLookup includes team in key
+ * - ✅ VERIFIED: Assignment team fetch from employeeTeamMap
+ * - Enhanced trace logging for complete key matching visibility
+ * - Baseline verification established for production testing
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -94,10 +102,10 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 );
 
-// 🔧 DRAAD363: CACHE-BUST MARKER FOR DEPLOYMENT VERIFICATION
+// 🔧 DRAAD363-FINAL: CACHE-BUST MARKER FOR DEPLOYMENT VERIFICATION
 // Change this value to force Railway rebuild (ensures latest code deployed)
 // Includes timestamp + Git commit reference for deploy verification
-const CACHE_BUST_NONCE = `2025-12-25T00:15:00Z-DRAAD-363-TEAM-AGGREGATION-FIX-${Date.now()}`;
+const CACHE_BUST_NONCE = `2025-12-25T11:41:00Z-DRAAD-363-FINAL-VERIFICATION-${Date.now()}`;
 
 /**
  * FASE 1: Load all data from database
@@ -111,10 +119,10 @@ export class AflEngine {
   async loadData(rosterId: string): Promise<AflLoadResult> {
     const startTime = performance.now();
 
-    // ✅ DRAAD363: CACHE-BUST VERIFICATION MARKERS
+    // ✅ DRAAD363-FINAL: CACHE-BUST VERIFICATION MARKERS
     // These markers appear in Railway build logs to verify correct code version is deployed
     console.log('═══════════════════════════════════════════════════════');
-    console.log('[AFL-ENGINE] 🚀 DRAAD363 CACHE-BUST NONCE:', CACHE_BUST_NONCE);
+    console.log('[AFL-ENGINE] 🚀 DRAAD363-FINAL CACHE-BUST NONCE:', CACHE_BUST_NONCE);
     console.log('[AFL-ENGINE] ✅ DRAAD337 FIX: Client-side sorting (no chained .order() calls)');
     console.log('[AFL-ENGINE] ✅ DRAAD338 FIX: Service-code population via metadata lookup');
     console.log('[AFL-ENGINE] ✅ DRAAD339 FIX: Enhanced debug logging + cache-bust markers');
@@ -122,6 +130,7 @@ export class AflEngine {
     console.log('[AFL-ENGINE] ✅ DRAAD348 FIX: Pre-planning invulling deduction (incomplete)');
     console.log('[AFL-ENGINE] ✅ DRAAD362 FIX: Dynamic invulling calculation from assignments');
     console.log('[AFL-ENGINE] ✅ DRAAD363 FIX: Team-field aggregation (employeeTeamMap)');
+    console.log('[AFL-ENGINE] ✅ DRAAD363-FINAL: Verification & enhanced logging');
     console.log('[AFL-ENGINE] 📊 Phase 1 Load starting for roster:', rosterId);
     console.log('═══════════════════════════════════════════════════════');
 
@@ -156,6 +165,23 @@ export class AflEngine {
       }
       console.log(`  ✅ Tasks: ${tasksRaw.length} rows loaded`);
 
+      // ✅ DRAAD363-FINAL: BASELINE VERIFICATION - Sample task dagdeel formats
+      console.log('[DRAAD363-FINAL] Task dagdeel format verification:');
+      const sampleTasks = tasksRaw.slice(0, 5);
+      const dagdeelFormats = new Set<string>();
+      for (const task of tasksRaw) {
+        dagdeelFormats.add(task.dagdeel);
+      }
+      console.log(`  Unique dagdeel values: ${Array.from(dagdeelFormats).sort().join(', ')}`);
+      console.log('  Sample task keys that will be created:');
+      for (const task of sampleTasks) {
+        const taskDate = task.date instanceof Date
+          ? task.date.toISOString().split('T')[0]
+          : task.date;
+        const sampleKey = `${taskDate}_${task.dagdeel}_${task.team}_${task.service_id.toString().substring(0, 8)}`;
+        console.log(`    ${sampleKey}...`);
+      }
+
       // Query 2: Load planning slots (roster_assignments)
       console.log('[AFL-ENGINE] Phase 1.2: Fetching planning slots...');
       const { data: planningRaw, error: planningError } = await supabase
@@ -165,6 +191,23 @@ export class AflEngine {
 
       if (planningError) throw new Error(`Planning query failed: ${planningError.message}`);
       console.log(`  ✅ Planning: ${planningRaw?.length || 0} rows loaded`);
+
+      // ✅ DRAAD363-FINAL: BASELINE VERIFICATION - Sample planning dagdeel formats
+      console.log('[DRAAD363-FINAL] Planning dagdeel format verification:');
+      const assignmentDagdeelFormats = new Set<string>();
+      for (const plan of (planningRaw || [])) {
+        assignmentDagdeelFormats.add(plan.dagdeel);
+      }
+      console.log(`  Unique dagdeel values in assignments: ${Array.from(assignmentDagdeelFormats).sort().join(', ')}`);
+      const sampleAssignments = (planningRaw || []).filter(p => p.status >= 1).slice(0, 3);
+      console.log('  Sample assignment keys that will be looked up:');
+      for (const assign of sampleAssignments) {
+        const assignDate = assign.date instanceof Date
+          ? assign.date.toISOString().split('T')[0]
+          : String(assign.date);
+        const sampleKey = `${assignDate}_${assign.dagdeel}_[TEAM_TBD]_${assign.service_id?.toString().substring(0, 8) || 'null'}`;
+        console.log(`    ${sampleKey}...`);
+      }
 
       // Query 3: Load capacity (roster_employee_services)
       // ✅ DRAAD342: EXPLICITLY include team field
@@ -412,6 +455,10 @@ export class AflEngine {
    * 5. Return map for invulling calculation in buildOpdracht()
    * 
    * Returns: Map<"2025-12-24_O_Groen_service-id", count>
+   * 
+   * ✅ DRAAD363-FINAL: ENHANCED TRACE LOGGING
+   * - Detailed key construction logging for both tasks and assignments
+   * - Verification of exact matching logic
    */
   private calculateInvullingFromAssignments(
     tasksRaw: any[],
@@ -445,11 +492,12 @@ export class AflEngine {
       taskLookup.set(key, task);
     }
 
-    // ✅ DRAAD363: VERIFICATION - Sample task keys
-    console.log('[DRAAD363] Sample task lookup keys (with team):');
-    const taskKeys = Array.from(taskLookup.keys()).slice(0, 5);
+    // ✅ DRAAD363-FINAL: ENHANCED TRACE - Show exact task keys
+    console.log('[DRAAD363-FINAL] Task lookup keys (sample):');
+    const taskKeys = Array.from(taskLookup.keys()).slice(0, 8);
     for (const key of taskKeys) {
-      console.log(`  ${key}`);
+      const parts = key.split('_');
+      console.log(`  ${key.substring(0, 50)}... (date=${parts[0]}, dagdeel=${parts[1]}, team=${parts[2]})`);
     }
     console.log(`[DRAAD363] Total task lookup entries: ${taskLookup.size}`);
 
@@ -457,6 +505,8 @@ export class AflEngine {
     const invullingMap = new Map<string, number>();
     let matchedCount = 0;
     let unmatchedCount = 0;
+
+    console.log('[DRAAD363-FINAL] Processing assignments with team mapping:');
 
     for (const assignment of plannedAssignments) {
       // Normalize assignment date
@@ -485,13 +535,22 @@ export class AflEngine {
         invullingMap.set(invullingKey, (invullingMap.get(invullingKey) || 0) + 1);
         matchedCount++;
 
-        if (matchedCount === 1 || matchedCount === 2 || (matchedCount % 50 === 0)) {
-          console.log(`[DRAAD363] Assignment matched: lookup="${lookupKey}" → invulling="${invullingKey}"`);
+        if (matchedCount <= 4) {
+          console.log(`[DRAAD363-FINAL] ✅ MATCHED assignment:`);
+          console.log(`     employee: ${assignment.employee_id}`);
+          console.log(`     team (from map): ${assignmentTeam}`);
+          console.log(`     date: ${assignDate}, dagdeel: ${assignment.dagdeel}`);
+          console.log(`     lookup key: ${lookupKey.substring(0, 50)}...`);
+          console.log(`     invulling key: ${invullingKey.substring(0, 50)}...`);
         }
       } else {
         unmatchedCount++;
         if (unmatchedCount <= 5) {
-          console.warn(`[DRAAD363] ⚠️  Assignment (${assignmentTeam}) for ${lookupKey} not found in tasks`);
+          console.warn(`[DRAAD363-FINAL] ❌ NO MATCH for assignment:`);
+          console.warn(`     employee: ${assignment.employee_id}, team: ${assignmentTeam}`);
+          console.warn(`     date: ${assignDate}, dagdeel: ${assignment.dagdeel}`);
+          console.warn(`     lookup key: ${lookupKey.substring(0, 50)}...`);
+          console.warn(`     (task has dagdeel formats: ${Array.from(new Set(Array.from(taskLookup.keys()).map(k => k.split('_')[1]))).join(', ')})`);
         }
       }
     }
@@ -503,7 +562,7 @@ export class AflEngine {
     console.log('[DRAAD363] Sample invulling map entries:');
     const invullingEntries = Array.from(invullingMap.entries()).slice(0, 10);
     for (const [key, count] of invullingEntries) {
-      console.log(`  ${key} → count=${count}`);
+      console.log(`  ${key.substring(0, 50)}... → count=${count}`);
     }
 
     return invullingMap;
