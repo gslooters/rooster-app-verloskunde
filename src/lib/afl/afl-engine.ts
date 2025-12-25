@@ -58,6 +58,20 @@
  *   3. adjustCapacityForPrePlanning() counts ALL status>=1 (not only is_protected=TRUE)
  *   4. Enhanced logging for verification
  * - Expected result: AFLstatus = 240 (6 pre + 234 new), not 242 (6 pre + 236 with duplication)
+ *
+ * DRAAD363: FIX 7 - TEAM-FIELD AGGREGATION FIX (CRITICAL DATA-INTEGRITY FIX)
+ * - Root cause: calculateInvullingFromAssignments() matches assignments WITHOUT team in key
+ * - Problem: roster_assignments has NO team field → must fetch from roster_employee_services
+ * - Impact: Both assignments (Merel=Groen, Heike=Oranje) match to SAME Groen-task → count=2
+ * - Solution: Build employeeTeamMap in loadData() → use in calculateInvullingFromAssignments()
+ * - Implementation:
+ *   1. BUILD: employeeTeamMap from roster_employee_services (source of truth)
+ *   2. LOOKUP: taskLookup key now includes team: "date_dagdeel_team_service"
+ *   3. MATCH: Assignment loop gets team via employeeTeamMap.get(employee_id)
+ *   4. PASS: employeeTeamMap through buildOpdracht() → calculateInvullingFromAssignments()
+ * - Expected result: invullingMap counts CORRECTLY per team (Groen=1, Oranje=1, NOT 2+0)
+ * - AFLstatus becomes 240 (not 242) - this is the REAL root cause fix
+ * - Lizette stops getting wrongfully assigned OSP
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -80,10 +94,10 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 );
 
-// 🔧 DRAAD362: CACHE-BUST MARKER FOR DEPLOYMENT VERIFICATION
+// 🔧 DRAAD363: CACHE-BUST MARKER FOR DEPLOYMENT VERIFICATION
 // Change this value to force Railway rebuild (ensures latest code deployed)
 // Includes timestamp + Git commit reference for deploy verification
-const CACHE_BUST_NONCE = `2025-12-24T23:45:00Z-DRAAD-362-INVULLING-FIX-${Date.now()}`;
+const CACHE_BUST_NONCE = `2025-12-25T00:15:00Z-DRAAD-363-TEAM-AGGREGATION-FIX-${Date.now()}`;
 
 /**
  * FASE 1: Load all data from database
@@ -97,16 +111,17 @@ export class AflEngine {
   async loadData(rosterId: string): Promise<AflLoadResult> {
     const startTime = performance.now();
 
-    // ✅ DRAAD362: CACHE-BUST VERIFICATION MARKERS
+    // ✅ DRAAD363: CACHE-BUST VERIFICATION MARKERS
     // These markers appear in Railway build logs to verify correct code version is deployed
     console.log('═══════════════════════════════════════════════════════');
-    console.log('[AFL-ENGINE] 🚀 DRAAD362 CACHE-BUST NONCE:', CACHE_BUST_NONCE);
+    console.log('[AFL-ENGINE] 🚀 DRAAD363 CACHE-BUST NONCE:', CACHE_BUST_NONCE);
     console.log('[AFL-ENGINE] ✅ DRAAD337 FIX: Client-side sorting (no chained .order() calls)');
     console.log('[AFL-ENGINE] ✅ DRAAD338 FIX: Service-code population via metadata lookup');
     console.log('[AFL-ENGINE] ✅ DRAAD339 FIX: Enhanced debug logging + cache-bust markers');
     console.log('[AFL-ENGINE] ✅ DRAAD342 FIX: Team field in buildCapaciteit (dataflow verification)');
     console.log('[AFL-ENGINE] ✅ DRAAD348 FIX: Pre-planning invulling deduction (incomplete)');
     console.log('[AFL-ENGINE] ✅ DRAAD362 FIX: Dynamic invulling calculation from assignments');
+    console.log('[AFL-ENGINE] ✅ DRAAD363 FIX: Team-field aggregation (employeeTeamMap)');
     console.log('[AFL-ENGINE] 📊 Phase 1 Load starting for roster:', rosterId);
     console.log('═══════════════════════════════════════════════════════');
 
@@ -173,6 +188,30 @@ export class AflEngine {
       if (capacityError) throw new Error(`Capacity query failed: ${capacityError.message}`);
       console.log(`  ✅ Capacity: ${capacityRaw?.length || 0} rows loaded`);
 
+      // ✅ DRAAD363 FIX 1: BUILD EMPLOYEE-TEAM MAP
+      // Source: roster_employee_services contains authoritative team assignment
+      // Used by: calculateInvullingFromAssignments() for proper team matching
+      console.log('[AFL-ENGINE] Phase 1.3b: Building employee-team map...');
+      const employeeTeamMap = new Map<string, string>();
+      if (capacityRaw && capacityRaw.length > 0) {
+        for (const capacity of capacityRaw) {
+          if (capacity.employee_id && capacity.team) {
+            // Use first occurrence (all roster_employee_services for same employee have same team)
+            if (!employeeTeamMap.has(capacity.employee_id)) {
+              employeeTeamMap.set(capacity.employee_id, capacity.team);
+            }
+          }
+        }
+      }
+      console.log(`  ✅ Employee-team map built: ${employeeTeamMap.size} employees with team assignments`);
+
+      // ✅ DRAAD363: VERIFICATION - Sample team mappings
+      console.log('[DRAAD363] Sample employee-team mappings:');
+      const sampleEntries = Array.from(employeeTeamMap.entries()).slice(0, 5);
+      for (const [empId, team] of sampleEntries) {
+        console.log(`  ${empId.substring(0, 8)}... → ${team}`);
+      }
+
       // Query 4: Load service metadata (service_types)
       console.log('[AFL-ENGINE] Phase 1.4: Fetching service metadata...');
       const { data: servicesRaw, error: servicesError } = await supabase
@@ -197,12 +236,14 @@ export class AflEngine {
       console.log('[AFL-ENGINE] Phase 1.6: Building workbenches...');
       // ✅ DRAAD338: Pass servicesRaw to buildOpdracht for service_code lookup
       // ✅ DRAAD362: Pass planningRaw to buildOpdracht for dynamic invulling calculation
+      // ✅ DRAAD363: Pass employeeTeamMap to buildOpdracht for team-aware matching
       const workbestand_services_metadata = this.buildServicesMetadata(servicesRaw || []);
       const workbestand_planning = this.buildPlanning(planningRaw || []);
       const workbestand_opdracht = this.buildOpdracht(
         tasksRaw || [],
         servicesRaw || [],
-        workbestand_planning  // ✅ DRAAD362: NEW - pass planning for invulling calculation
+        workbestand_planning,  // ✅ DRAAD362: NEW - pass planning for invulling calculation
+        employeeTeamMap  // ✅ DRAAD363: NEW - pass team map for team-aware matching
       );
       const workbestand_capaciteit = this.buildCapaciteit(capacityRaw || []);
 
@@ -346,6 +387,7 @@ export class AflEngine {
 
   /**
    * ✅ DRAAD362: Calculate actual invulling from roster_assignments
+   * ✅ DRAAD363: ENHANCED - Include team-aware matching
    * 
    * CRITICAL FIX: Database invulling field is ALWAYS 0 because:
    * - No database trigger updates invulling when assignments are manually created
@@ -354,17 +396,27 @@ export class AflEngine {
    * Key insight: status field IS the protection (0=free, >=1=allocated)
    * The is_protected flag is unused in normal app workflow
    * 
+   * DRAAD363 ADDITION:
+   * - roster_assignments has NO team field
+   * - Must fetch team from employeeTeamMap (source: roster_employee_services)
+   * - Include team in lookup key for correct matching
+   * 
    * Algorithm:
    * 1. Filter all assignments with status >= 1 (ingepland/allocated)
-   * 2. Build task lookup map (date_dagdeel_service → task)
-   * 3. Count assignments per (date, dagdeel, team, service_id)
-   * 4. Return map for invulling calculation in buildOpdracht()
+   * 2. Build task lookup map (date_dagdeel_team_service → task) ✅ DRAAD363: WITH TEAM
+   * 3. For each assignment:
+   *    a. Get employee team from employeeTeamMap ✅ DRAAD363: NEW
+   *    b. Build lookup key WITH team ✅ DRAAD363: NEW
+   *    c. Match to correct task ✅ DRAAD363: FIX
+   * 4. Count assignments per (date, dagdeel, team, service_id)
+   * 5. Return map for invulling calculation in buildOpdracht()
    * 
    * Returns: Map<"2025-12-24_O_Groen_service-id", count>
    */
   private calculateInvullingFromAssignments(
     tasksRaw: any[],
-    planning: WorkbestandPlanning[]
+    planning: WorkbestandPlanning[],
+    employeeTeamMap: Map<string, string>  // ✅ DRAAD363: NEW parameter
   ): Map<string, number> {
     // Step 1: Filter ALL assignments with status >= 1 (not only is_protected=TRUE)
     // status meanings: 0=free, 1+=allocated (including protected, blocked, unavailable)
@@ -377,17 +429,29 @@ export class AflEngine {
 
     console.log(`[DRAAD362] Found ${plannedAssignments.length} assignments with status >= 1`);
 
-    // Step 2: Build task lookup map for team matching
-    // Key: "date_dagdeel_service" → task object
+    // ✅ DRAAD363 FIX 2: Task Lookup MET Team
+    // Before: Key was "date_dagdeel_service" (missing team)
+    // Problem: Two tasks (Groen, Oranje) same date/dagdeel/service collapse into 1
+    // After: Key is "date_dagdeel_team_service" to make unique per team
     const taskLookup = new Map<string, any>();
     for (const task of tasksRaw) {
       // Date format normalization (database returns "YYYY-MM-DD")
       const taskDate = task.date instanceof Date
         ? task.date.toISOString().split('T')[0]
         : task.date;
-      const key = `${taskDate}_${task.dagdeel}_${task.service_id}`;
+      
+      // ✅ KEY NOW INCLUDES TEAM
+      const key = `${taskDate}_${task.dagdeel}_${task.team}_${task.service_id}`;
       taskLookup.set(key, task);
     }
+
+    // ✅ DRAAD363: VERIFICATION - Sample task keys
+    console.log('[DRAAD363] Sample task lookup keys (with team):');
+    const taskKeys = Array.from(taskLookup.keys()).slice(0, 5);
+    for (const key of taskKeys) {
+      console.log(`  ${key}`);
+    }
+    console.log(`[DRAAD363] Total task lookup entries: ${taskLookup.size}`);
 
     // Step 3: Count assignments per (date, dagdeel, team, service_id)
     const invullingMap = new Map<string, number>();
@@ -400,28 +464,47 @@ export class AflEngine {
         ? assignment.date.toISOString().split('T')[0]
         : String(assignment.date);
 
-      // Find corresponding task for team info
-      const lookupKey = `${assignDate}_${assignment.dagdeel}_${assignment.service_id}`;
+      // ✅ DRAAD363 FIX 2: GET EMPLOYEE TEAM FROM MAP
+      const assignmentTeam = employeeTeamMap.get(assignment.employee_id);
+      
+      if (!assignmentTeam) {
+        unmatchedCount++;
+        if (unmatchedCount <= 5) {
+          console.warn(`[DRAAD363] ⚠️  Employee ${assignment.employee_id} has no team mapping`);
+        }
+        continue;  // Skip this assignment if no team found
+      }
+
+      // ✅ DRAAD363 FIX 3: LOOKUP KEY NOW INCLUDES TEAM
+      const lookupKey = `${assignDate}_${assignment.dagdeel}_${assignmentTeam}_${assignment.service_id}`;
       const task = taskLookup.get(lookupKey);
 
       if (task) {
-        // Build invulling key with team from task
+        // Invulling key MUST match team
         const invullingKey = `${assignDate}_${assignment.dagdeel}_${task.team}_${assignment.service_id}`;
         invullingMap.set(invullingKey, (invullingMap.get(invullingKey) || 0) + 1);
         matchedCount++;
+
+        if (matchedCount === 1 || matchedCount === 2 || (matchedCount % 50 === 0)) {
+          console.log(`[DRAAD363] Assignment matched: lookup="${lookupKey}" → invulling="${invullingKey}"`);
+        }
       } else {
-        // Warn about unmatched assignment
         unmatchedCount++;
-        if (unmatchedCount <= 5) { // Only show first 5 warnings
-          console.warn(`[DRAAD362] ⚠️  Assignment for ${lookupKey} not found in tasks`);
+        if (unmatchedCount <= 5) {
+          console.warn(`[DRAAD363] ⚠️  Assignment (${assignmentTeam}) for ${lookupKey} not found in tasks`);
         }
       }
     }
 
-    console.log(`[DRAAD362] Invulling calculation complete:`);
+    console.log('[DRAAD363] ✅ Invulling calculation complete:');
     console.log(`  - Matched assignments: ${matchedCount}`);
     console.log(`  - Unmatched assignments: ${unmatchedCount}`);
-    console.log(`  - Unique (date,dagdeel,team,service) combinations: ${invullingMap.size}`);
+    console.log(`  - Unique invulling keys: ${invullingMap.size}`);
+    console.log('[DRAAD363] Sample invulling map entries:');
+    const invullingEntries = Array.from(invullingMap.entries()).slice(0, 10);
+    for (const [key, count] of invullingEntries) {
+      console.log(`  ${key} → count=${count}`);
+    }
 
     return invullingMap;
   }
@@ -440,6 +523,10 @@ export class AflEngine {
    * - Calculate aantal_nog = aantal - invulling_calculated
    * - This properly accounts for all pre-planned assignments
    * 
+   * ✅ DRAAD363: TEAM-FIELD AGGREGATION FIX
+   * - Pass employeeTeamMap to calculateInvullingFromAssignments()
+   * - Ensures team-aware matching in invulling calculation
+   * 
    * ✅ DRAAD337: CLIENT-SIDE SORTING
    * - Sort priority: is_system DESC → date ASC → dagdeel ASC → team DESC → service_code ASC
    * - Performance: <1ms for typical roster (500-1500 rows)
@@ -447,7 +534,8 @@ export class AflEngine {
   private buildOpdracht(
     tasksRaw: any[],
     servicesRaw: any[],
-    planning: WorkbestandPlanning[]  // ✅ DRAAD362: NEW parameter
+    planning: WorkbestandPlanning[],  // ✅ DRAAD362: NEW parameter
+    employeeTeamMap: Map<string, string>  // ✅ DRAAD363: NEW parameter
   ): WorkbestandOpdracht[] {
     // ✅ DRAAD338: BUILD SERVICE CODE MAP
     // Create lookup map: service_id → service_code
@@ -458,12 +546,14 @@ export class AflEngine {
     }
 
     // ✅ DRAAD362: CALCULATE INVULLING FROM ASSIGNMENTS
+    // ✅ DRAAD363: WITH TEAM-AWARE MATCHING
     // This is the critical fix: use calculated values instead of unreliable database field
-    const invullingMap = this.calculateInvullingFromAssignments(tasksRaw, planning);
+    const invullingMap = this.calculateInvullingFromAssignments(tasksRaw, planning, employeeTeamMap);
 
     // Map raw data to WorkbestandOpdracht objects
     // ✅ DRAAD338: Populate service_code from map
     // ✅ DRAAD362: Populate invulling from calculated map
+    // ✅ DRAAD363: Team now correctly separated in invullingMap
     const opdrachten = tasksRaw.map((row) => {
       const serviceCode = serviceCodeMap.get(row.service_id) || 'UNKNOWN';
 
