@@ -1,119 +1,12 @@
-# Railway Deployment Final Trigger
-# DRAAD111 - SOLVER JSON CMD FIX
+# Railway Deployment Trigger - DRAAD 365
+# Timestamp: 2025-12-29T18:36:00+01:00
+# Random: 1735493760000
+# Reason: Force redeploy after source='manual' tracking implementation
 
-Datum: 2025-12-05T21:01 CET
-Random Trigger: 982471
-Timestamp: 1733431073000
+DRAAD 365 - Source Manual Tracking:
+- All manual changes now properly marked with source='manual'
+- Fixes missing source tracking in updateAssignmentStatus
+- Fixes missing source tracking in changeAssignmentServiceAtomic
+- Fixes missing source tracking in updateAssignmentService
 
-## SOLVER DOCKERFILE FIX COMPLEET
-
-### Probleem Opgelost
-❌ **Voor:** Container failed to start - "hostname=0.0.0.0 executable not found"  
-✅ **Na:** Dockerfile CMD in JSON exec form met sh -c wrapper
-
-### Technische Details
-
-**Origineel (Shell Form - FOUT):**
-```dockerfile
-CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
-```
-
-**Geüpdatet (JSON Exec Form - CORRECT):**
-```dockerfile
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
-```
-
-### Waarom Dit de Definitieve Fix Is
-
-1. ✅ **Railway best practice** - JSON args aanbevolen
-2. ✅ **Geen command interpretatie issues** - explicite args array
-3. ✅ **Environment variable expansion** - via sh -c
-4. ✅ **Correcte signal handling** - OS signals naar uvicorn
-5. ✅ **Betrouwbare container start** - geen executable confusion
-
-## DEPLOYED COMMITS (DRAAD111)
-
-### Fase 1: Railway.json Conflict
-1. 49aff93 - railway.json verwijderd
-2. 610506b - Cache-bust railway.json removal
-3. a7e4c06 - Railway trigger fase 1
-4. 5f8cbc0 - Cache-bust JSON update fase 1
-5. 1b7a26a - Documentatie fase 1
-6. e64868f - Deploy trigger fase 1
-
-**Resultaat Fase 1:** ✅ Rooster-app WERKEND
-
-### Fase 2: Solver Dockerfile CMD
-7. ee1c5c3 - Dockerfile CMD naar JSON exec form
-8. a1e4cf7 - Cache-bust Solver fix
-9. 8d575e2 - Railway trigger Solver
-10. c30a48e - Cache-bust JSON update Solver
-11. 577b8e3 - Documentatie Solver fix
-12. [DEZE] - Final deployment trigger
-
-**Resultaat Fase 2:** ✅ Solver VERWACHT WERKEND
-
-## VERIFICATIE CHECKLIST
-
-### Rooster-App Service
-- [x] Deployment succesvol
-- [x] Health check OK
-- [x] Live URL bereikbaar
-- [x] Status: ONLINE & WERKEND
-
-### Solver Service
-- [ ] Check Railway logs: "Application startup complete"
-- [ ] Geen "hostname=0.0.0.0 could not be found" errors
-- [ ] Test /health endpoint
-- [ ] Test /version endpoint
-- [ ] Test /solve endpoint (POST request)
-- [ ] Status: DEPLOYING → VERWACHT ONLINE
-
-## VERWACHT EINDRESULTAAT
-
-🎉 **BEIDE SERVICES ONLINE & WERKEND!**
-
-```
-Rooster-App:
-✅ Next.js applicatie
-✅ Supabase connectie
-✅ UI bereikbaar
-✅ Health: {"status":"healthy"}
-
-Solver:
-✅ Python FastAPI service
-✅ OR-Tools beschikbaar
-✅ uvicorn draait op 0.0.0.0:${PORT}
-✅ Health: {"status":"healthy","service":"rooster-solver"}
-```
-
-## TROUBLESHOOTING
-
-Als Solver nog steeds faalt:
-
-1. Check Railway logs voor nieuwe errors
-2. Verify Dockerfile build succesvol was
-3. Check environment variables (PORT moet beschikbaar zijn)
-4. Test lokaal met Docker:
-   ```bash
-   cd solver/
-   docker build -f docker/Dockerfile -t solver .
-   docker run -p 8000:8000 -e PORT=8000 solver
-   ```
-5. Check requirements.txt: uvicorn en fastapi geïnstalleerd?
-
-## DOCUMENTATIE
-
-- [DRAAD111-FIX-DOCUMENTATION.md](DRAAD111-FIX-DOCUMENTATION.md) - Fase 1 fix
-- [DRAAD111-SOLVER-FIX-DOCUMENTATION.md](DRAAD111-SOLVER-FIX-DOCUMENTATION.md) - Fase 2 fix
-- [solver/docker/Dockerfile](solver/docker/Dockerfile) - Geüpdatete Dockerfile
-
----
-
-**DRAAD: 111 (Fase 1 + 2)**  
-**STATUS: COMPLEET & DEPLOYED**  
-**CONFIDENCE: 100%** - Railway best practices geïmplementeerd  
-**TIMESTAMP: 1733431073000**
-
-Als je dit leest en Solver draait:
-🎉 PROBLEEM OPGELOST! Beide services werken nu correct!
+Deployment required for TypeScript interface changes.
