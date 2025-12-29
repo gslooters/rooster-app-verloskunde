@@ -1,6 +1,6 @@
 {
   "name": "rooster-app-final",
-  "version": "0.1.4-ts-fix-rebuild",
+  "version": "0.1.4-draad366-source-manual-fix",
   "private": true,
   "scripts": {
     "dev": "next dev",
