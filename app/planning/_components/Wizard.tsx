@@ -5,7 +5,7 @@ import {
   generateFiveWeekPeriods, getPeriodStatus, formatWeekRange, formatDateRangeNl
 } from '@/lib/planning/storage';
 import { createRooster } from '@/lib/services/roosters-supabase';
-import { createRosterWithAssignments } from '@/lib/services/roster-assignments-supabase';
+import { initializeRosterAssignments } from '@/lib/services/roster-assignments-supabase';
 import { getAllEmployees } from '@/lib/services/employees-storage';
 import { Employee, TeamType, DienstverbandType, getFullName } from '@/lib/types/employee';
 import { initializeRosterDesign } from '@/lib/planning/rosterDesign';
@@ -299,7 +299,7 @@ export default function Wizard({ onClose }: WizardProps = {}) {
       // Niet kritiek - ga door
     }
     
-    // === FASE 4: DRAAD367 FIX: Roster Assignments via Helper Function (60-80%) ===
+    // === FASE 4: DRAAD367A FIX: Initialize Roster Assignments for Existing Roster (60-80%) ===
     try {
       setCreationPhase('assignments');
       setCreationMessage('Roster assignments worden aangemaakt...');
@@ -309,45 +309,46 @@ export default function Wizard({ onClose }: WizardProps = {}) {
         .filter(emp => emp.actief)
         .map(emp => emp.id);
       
-      // DRAAD367: Validatie dat we actieve medewerkers hebben
+      // DRAAD367A: Validatie dat we actieve medewerkers hebben
       if (activeEmployeeIds.length === 0) {
         throw new Error('Geen actieve medewerkers beschikbaar voor roostering');
       }
       
       console.log('\n' + '='.repeat(80));
-      console.log('[Wizard] 🔄 DRAAD367 FIX: Initialiseer roster_assignments via helper...');
+      console.log('[Wizard] 🔄 DRAAD367A FIX: Initialize roster_assignments for EXISTING roster...');
       console.log(`[Wizard]    - Roster ID: ${rosterId}`);
       console.log(`[Wizard]    - Start date: ${selectedStart}`);
       console.log(`[Wizard]    - Actieve medewerkers: ${activeEmployeeIds.length}`);
       console.log(`[Wizard]    - Verwacht aantal: ${activeEmployeeIds.length * 35 * 3} records`);
       console.log('='.repeat(80) + '\n');
       
-      // DRAAD367: Use helper function instead of direct RPC call
-      const { assignmentCount } = await createRosterWithAssignments(
+      // DRAAD367A: Use initializeRosterAssignments with EXISTING rosterId
+      const { assignmentCount } = await initializeRosterAssignments(
+        rosterId!,  // EXISTING rosterId
         selectedStart,
         activeEmployeeIds
       );
       
       const expectedCount = activeEmployeeIds.length * 35 * 3;
       
-      console.log(`[Wizard] ✅ DRAAD367: ${assignmentCount} roster_assignments aangemaakt`);
+      console.log(`[Wizard] ✅ DRAAD367A: ${assignmentCount} roster_assignments aangemaakt`);
       console.log(`[Wizard]    - Verwacht: ${expectedCount}`);
       console.log(`[Wizard]    - Status: ${assignmentCount === expectedCount ? '✅ CORRECT' : '⚠️  AFWIJKING'}`);
       
       if (assignmentCount === 0) {
-        console.error('[Wizard] ❌ DRAAD367: CRITICAL - Geen assignments aangemaakt!');
+        console.error('[Wizard] ❌ DRAAD367A: CRITICAL - Geen assignments aangemaakt!');
         throw new Error('Geen roster assignments aangemaakt');
       }
       
       if (assignmentCount !== expectedCount) {
-        console.warn(`[Wizard] ⚠️  DRAAD367: Verkeerd aantal assignments! Gevonden: ${assignmentCount}, verwacht: ${expectedCount}`);
+        console.warn(`[Wizard] ⚠️  DRAAD367A: Verkeerd aantal assignments! Gevonden: ${assignmentCount}, verwacht: ${expectedCount}`);
       }
       
       setCreationProgress(80);
       console.log('');
       
     } catch (err) {
-      console.error('[Wizard] ❌ DRAAD367: FOUT BIJ ROSTER ASSIGNMENTS');
+      console.error('[Wizard] ❌ DRAAD367A: FOUT BIJ ROSTER ASSIGNMENTS');
       console.error('[Wizard] Error:', err);
       setError('Kon roster assignments niet aanmaken.');
       setIsCreating(false);
@@ -658,7 +659,7 @@ export default function Wizard({ onClose }: WizardProps = {}) {
                     {creationPhase === 'creating' && 'Rooster record wordt aangemaakt in database...'}
                     {creationPhase === 'initializing' && 'Medewerker snapshot en basis structuur worden ingesteld...'}
                     {creationPhase === 'generating' && 'Diensten per dag worden berekend en opgeslagen...'}
-                    {creationPhase === 'assignments' && 'Roster assignments worden aangemaakt (11 × 35 × 3 = 1155 records)...'}
+                    {creationPhase === 'assignments' && 'Roster assignments worden aangemaakt via initializeRosterAssignments()...'}
                     {creationPhase === 'verifying' && `Database commit wordt geverifieerd (poging ${verifyAttempt}/5)...`}
                     {creationPhase === 'done' && 'Alles gereed! Dashboard wordt geladen...'}
                   </div>
