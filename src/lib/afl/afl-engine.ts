@@ -80,6 +80,16 @@
  * - ✅ VERIFIED: Assignment team fetch from employeeTeamMap
  * - Enhanced trace logging for complete key matching visibility
  * - Baseline verification established for production testing
+ *
+ * DRAAD365: FIX 8 - ROSTER_ASSIGNMENTS TEAM FIELD MAPPING
+ * - Issue: Team field exists in database but NOT mapped into WorkbestandPlanning
+ * - Database: roster_assignments.team (text, position 20) ✅ EXISTS
+ * - Interface: WorkbestandPlanning.team ✅ EXISTS (made mandatory, previously optional)
+ * - Mapping: buildPlanning() missing team assignment ❌ FIXED
+ * - Solution: Added `team: row.team` to buildPlanning() object mapping
+ * - Data flow: roster_assignments.team → buildPlanning() → WorkbestandPlanning.team
+ * - Verification: Enhanced logging shows team distribution in Planning workbestand
+ * - Status after fix: Team field now correctly mapped from database to workbestand
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -102,10 +112,10 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 );
 
-// 🔧 DRAAD363-FINAL: CACHE-BUST MARKER FOR DEPLOYMENT VERIFICATION
+// 🔧 DRAAD365: CACHE-BUST MARKER FOR DEPLOYMENT VERIFICATION
 // Change this value to force Railway rebuild (ensures latest code deployed)
 // Includes timestamp + Git commit reference for deploy verification
-const CACHE_BUST_NONCE = `2025-12-25T11:41:00Z-DRAAD-363-FINAL-VERIFICATION-${Date.now()}`;
+const CACHE_BUST_NONCE = `2025-12-29T19:41:00Z-DRAAD-365-TEAM-FIELD-MAPPING-${Date.now()}`;
 
 /**
  * FASE 1: Load all data from database
@@ -119,10 +129,10 @@ export class AflEngine {
   async loadData(rosterId: string): Promise<AflLoadResult> {
     const startTime = performance.now();
 
-    // ✅ DRAAD363-FINAL: CACHE-BUST VERIFICATION MARKERS
+    // ✅ DRAAD365: CACHE-BUST VERIFICATION MARKERS
     // These markers appear in Railway build logs to verify correct code version is deployed
     console.log('═══════════════════════════════════════════════════════');
-    console.log('[AFL-ENGINE] 🚀 DRAAD363-FINAL CACHE-BUST NONCE:', CACHE_BUST_NONCE);
+    console.log('[AFL-ENGINE] 🚀 DRAAD365 CACHE-BUST NONCE:', CACHE_BUST_NONCE);
     console.log('[AFL-ENGINE] ✅ DRAAD337 FIX: Client-side sorting (no chained .order() calls)');
     console.log('[AFL-ENGINE] ✅ DRAAD338 FIX: Service-code population via metadata lookup');
     console.log('[AFL-ENGINE] ✅ DRAAD339 FIX: Enhanced debug logging + cache-bust markers');
@@ -131,6 +141,7 @@ export class AflEngine {
     console.log('[AFL-ENGINE] ✅ DRAAD362 FIX: Dynamic invulling calculation from assignments');
     console.log('[AFL-ENGINE] ✅ DRAAD363 FIX: Team-field aggregation (employeeTeamMap)');
     console.log('[AFL-ENGINE] ✅ DRAAD363-FINAL: Verification & enhanced logging');
+    console.log('[AFL-ENGINE] ✅ DRAAD365 FIX: Team field mapping in buildPlanning()');
     console.log('[AFL-ENGINE] 📊 Phase 1 Load starting for roster:', rosterId);
     console.log('═══════════════════════════════════════════════════════');
 
@@ -289,6 +300,30 @@ export class AflEngine {
         employeeTeamMap  // ✅ DRAAD363: NEW - pass team map for team-aware matching
       );
       const workbestand_capaciteit = this.buildCapaciteit(capacityRaw || []);
+
+      // ✅ DRAAD365: VERIFY TEAM FIELD MAPPING IN PLANNING
+      console.log('[DRAAD365] Team field mapping verification in Workbestand_Planning:');
+      const planningWithTeam = workbestand_planning.filter(p => p.team && p.team.trim().length > 0);
+      const planningWithoutTeam = workbestand_planning.filter(p => !p.team || p.team.trim().length === 0);
+      console.log(`  - Planning entries with team populated: ${planningWithTeam.length}/${workbestand_planning.length}`);
+      console.log(`  - Planning entries without team: ${planningWithoutTeam.length}/${workbestand_planning.length}`);
+      
+      if (planningWithTeam.length > 0) {
+        const teamDistribution: Record<string, number> = {};
+        planningWithTeam.forEach(p => {
+          teamDistribution[p.team!] = (teamDistribution[p.team!] || 0) + 1;
+        });
+        console.log(`  - Team distribution in planning:`, teamDistribution);
+        
+        // Sample some entries
+        const samples = planningWithTeam.slice(0, 3);
+        console.log('[DRAAD365] Sample planning entries with team:');
+        for (const plan of samples) {
+          console.log(`  employee: ${plan.employee_id.substring(0, 8)}..., team: ${plan.team}, date: ${plan.date.toISOString().split('T')[0]}, status: ${plan.status}`);
+        }
+      } else {
+        console.warn('[DRAAD365] ⚠️  WARNING: No team values found in planning workbestand!');
+      }
 
       // ✅ DRAAD348: VALIDATION 1 - Check pre-planning match before adjustment
       // This detects if any protected assignments aren't accounted for in tasks
@@ -682,6 +717,9 @@ export class AflEngine {
 
   /**
    * Build Workbestand_Planning from raw assignment data
+   * ✅ DRAAD365 FIX: Map team field from roster_assignments.team
+   * - Team field is now properly mapped into the workbestand object
+   * - Made mandatory (no longer optional) per database requirements
    */
   private buildPlanning(planningRaw: any[]): WorkbestandPlanning[] {
     return planningRaw.map((row) => ({
@@ -692,6 +730,7 @@ export class AflEngine {
       dagdeel: row.dagdeel,
       status: row.status,
       service_id: row.service_id || null,
+      team: row.team,  // ✅ DRAAD365 FIX: Added team field mapping from database
       is_protected: row.is_protected || false,
       source: row.source || null,
       blocked_by_date: row.blocked_by_date ? new Date(row.blocked_by_date) : null,
