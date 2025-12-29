@@ -1,0 +1,33 @@
+# DRAAD363 - Cache Buster & Deployment Trigger
+
+**Purpose:** Force Railway to detect and deploy new migrations
+
+**Timestamp:** 2025-12-29T17:05:00Z  
+**Migration:** 20251229_DRAAD363_add_team_to_initialize_roster.sql  
+**Random Hash:** 8471923  
+**Status:** ✅ Ready for Deployment
+
+---
+
+## Deployment Checklist
+
+- [x] Migration file created: `supabase/migrations/20251229_DRAAD363_add_team_to_initialize_roster.sql`
+- [x] Implementation report: `docs/DRAAD363_IMPLEMENTATION_REPORT.md`
+- [x] Test results verified: 1470/1470 records with correct team field
+- [x] GitHub commits pushed
+- [x] Cache buster created
+
+## Next Steps
+
+1. Railway will detect new migration file
+2. Auto-deploy pipeline executes
+3. Migration runs in Supabase database
+4. Function updated with team field support
+5. Verification: Test new roster creation
+
+## Monitoring
+
+Watch Railway deployment logs at:
+https://railway.com/project/90165889-1a50-4236-aefe-b1e1ae44dc7f
+
+Expect deployment to complete within 2-5 minutes.
