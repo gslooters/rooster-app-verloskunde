@@ -15,6 +15,7 @@
  * DRAAD 100B: FIX getEmployeeServiceCodes - resolve service_code via JOIN met service_types
  * DRAAD179-FASE3: FIXED - Replaced roster_period_staffing with roster_period_staffing_dagdelen
  * DRAAD352-FASE1: ✅ deletePrePlanningAssignment verwijderd - alle status=0 updates gaan via updateAssignmentStatus
+ * DRAAD366: ✅ FIXED - Added source: 'manual' to track UI-initiated changes
  */
 
 import { supabase } from '@/lib/supabase';
@@ -94,6 +95,8 @@ export async function getPrePlanningData(
 /**
  * Sla een PrePlanning assignment op (of update bestaande)
  * DRAAD 77: Nu met dagdeel ondersteuning
+ * DRAAD366: ✅ FIXED - Added source: 'manual' to track UI-initiated changes
+ * 
  * @param rosterId - UUID van het rooster
  * @param employeeId - TEXT ID van de medewerker
  * @param date - Datum (YYYY-MM-DD)
@@ -133,6 +136,7 @@ export async function savePrePlanningAssignment(
         status: 1, // Dienst
         service_id: serviceData.id,
         service_code: serviceCode, // Voor backwards compatibility
+        source: 'manual',  // ✅ DRAAD366: Set source to 'manual' for all UI-initiated changes
         updated_at: new Date().toISOString()
       }, {
         onConflict: 'roster_id,employee_id,date,dagdeel'
@@ -157,6 +161,7 @@ export async function savePrePlanningAssignment(
  * DRAAD 99B: Service blocking rules verwijderd (constraints zijn disabled)
  * HERSTEL: Service blocking validatie weer toegevoegd
  * DRAAD352-FASE1: ✅ Nu ondersteunt status=0 via UPSERT (soft delete)
+ * DRAAD366: ✅ FIXED - Added source: 'manual' to track UI-initiated changes
  * 
  * Voor het wijzigen van cel status (leeg, dienst, geblokkeerd, NB)
  * 
@@ -205,6 +210,7 @@ export async function updateAssignmentStatus(
         dagdeel: dagdeel,
         status: status,
         service_id: serviceId,
+        source: 'manual',  // ✅ DRAAD366: Set source to 'manual' for all UI-initiated changes
         updated_at: new Date().toISOString()
       }, {
         onConflict: 'roster_id,employee_id,date,dagdeel'
