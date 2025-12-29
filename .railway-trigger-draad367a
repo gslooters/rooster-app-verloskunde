@@ -1,0 +1,31 @@
+DRAAD367A FIX: Initialize Roster Assignments for Existing Roster
+Deployment Trigger: 2025-12-30T00:08:15.123Z
+Random UUID: a7f3c8d2-9e41-4b6a-8f2c-3d5e1a9b6c7f
+
+Changes:
+1. router-assignments-supabase.ts:
+   - NEW: initializeRosterAssignments(rosterId, startDate, employeeIds)
+   - REFACTORED: createRosterWithAssignments() to use initializeRosterAssignments()
+   - DEPRECATED: createRosterWithAssignments marked as legacy
+
+2. Wizard.tsx:
+   - Updated import: initializeRosterAssignments (was: createRosterWithAssignments)
+   - FASE 4: Now passes rosterId to initializeRosterAssignments()
+   - Validation: Checks that rosterId exists before calling function
+   - Logging: Enhanced debug output for DRAAD367A fix
+
+3. Database Schema Validation:
+   - roster_assignments table: 20 fields verified
+   - unique constraint (roster_id, employee_id, date, dagdeel): OK
+   - source field: Supports 'system', 'manual', 'ort', 'afl' - OK
+   - status field: Validates (0,1,2,3) - OK
+   - dagdeel field: Validates ('O','M','A') - OK
+
+4. Stored Procedure:
+   - initialize_roster_assignments(): Called with p_roster_id (existing roster)
+   - p_start_date: 2025-01-06
+   - p_employee_ids: array of TEXT ids from employees table
+   - Returns: number of assignments created (should be employees.length × 35 × 3)
+
+Deployment Status: Ready for Railway deployment
+Verification: Database schema baseline verified ✅
