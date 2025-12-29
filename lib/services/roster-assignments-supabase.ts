@@ -36,8 +36,9 @@ export const DAGDEEL_LABELS: Record<Dagdeel, string> = {
 };
 
 /**
- * RosterAssignment Interface - DRAAD68 Updated
+ * RosterAssignment Interface - DRAAD68 Updated + DRAAD365
  * Nieuwe structuur met dagdeel, status en service_id ipv service_code
+ * DRAAD365: source toegevoegd voor tracking van handmatige wijzigingen
  */
 export interface RosterAssignment {
   id: string;
@@ -47,6 +48,7 @@ export interface RosterAssignment {
   dagdeel: Dagdeel;
   status: AssignmentStatus;
   service_id: string | null;
+  source: string | null;  // DRAAD365: 'greedy', 'fixed', 'manual', etc.
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -62,6 +64,7 @@ export interface CreateRosterAssignmentInput {
   dagdeel: Dagdeel;
   status: AssignmentStatus;
   service_id?: string | null;
+  source?: string | null;  // DRAAD365: optioneel, defaults to 'fixed' or 'manual'
   notes?: string | null;
 }
 
@@ -384,6 +387,7 @@ export async function createRosterWithAssignments(
 
 /**
  * Update status van een assignment
+ * DRAAD365: Nu met source='manual' tracking
  * 
  * @param assignmentId - UUID van de assignment
  * @param status - Nieuwe status (0-3)
@@ -397,7 +401,10 @@ export async function updateAssignmentStatus(
   try {
     console.log('🔄 Update assignment status:', { assignmentId, status, serviceId });
     
-    const updateData: any = { status };
+    const updateData: any = { 
+      status,
+      source: 'manual'  // DRAAD365: Track manual changes
+    };
     
     // Als status = ASSIGNED (1), moet service_id gezet worden
     if (status === AssignmentStatus.ASSIGNED) {
@@ -419,7 +426,7 @@ export async function updateAssignmentStatus(
     
     if (error) throw error;
     
-    console.log('✅ Status updated successfully');
+    console.log('✅ Status updated successfully (source=manual)');
   } catch (error) {
     console.error('❌ Fout bij updateAssignmentStatus:', error);
     throw error;
@@ -427,18 +434,19 @@ export async function updateAssignmentStatus(
 }
 
 // ============================================================================
-// DRAAD 352: ATOMIC SERVICE CHANGE WITH BLOCKING RESET
+// DRAAD 352 + DRAAD 365: ATOMIC SERVICE CHANGE WITH BLOCKING RESET
 // ============================================================================
 
 /**
- * DRAAD 352: Change assignment service with proper blocking reset
+ * DRAAD 352 + 365: Change assignment service with proper blocking reset
  * 
  * Problem: Direct service_id update doesn't reset blocking on related dayparts
  * Solution: Use reset-then-insert pattern to trigger proper blocking recalculation
+ * DRAAD365: Now tracks manual changes via source='manual'
  * 
  * Flow:
- * 1. RESET: status 0, service_id NULL → Trigger deblockeert automatisch
- * 2. INSERT NEW: status 1, service_id = newServiceId → Trigger berekent nieuw
+ * 1. RESET: status 0, service_id NULL, source='manual' → Trigger deblockeert automatisch
+ * 2. INSERT NEW: status 1, service_id = newServiceId, source='manual' → Trigger berekent nieuw
  * 
  * Example: Paula 25-11: DIO→OSP
  * BEFORE: O = status 1 + DIO | M = status 2 (blocked)
@@ -465,13 +473,14 @@ export async function changeAssignmentServiceAtomic(
       throw new Error(`Assignment not found: ${fetchError?.message}`);
     }
 
-    // STAP 2: RESET - Status 0, service_id NULL
+    // STAP 2: RESET - Status 0, service_id NULL, source='manual'
     // This triggers deblokkering of any blocking records
     const { error: resetError } = await supabase
       .from('roster_assignments')
       .update({
         status: 0,           // Available
         service_id: null,    // No service
+        source: 'manual',    // DRAAD365: Track manual change
         updated_at: new Date().toISOString()
       })
       .eq('id', assignmentId);
@@ -491,6 +500,7 @@ export async function changeAssignmentServiceAtomic(
         .update({
           status: 1,                     // Assigned
           service_id: newServiceId,      // New service
+          source: 'manual',              // DRAAD365: Track manual change
           updated_at: new Date().toISOString()
         })
         .eq('id', assignmentId);
@@ -504,12 +514,12 @@ export async function changeAssignmentServiceAtomic(
     }
 
     console.log(
-      `✅ DRAAD 352: Assignment ${assignmentId} changed from ${currentAssignment.service_id} to ${newServiceId}`,
-      `with proper blocking reset`
+      `✅ DRAAD 365: Assignment ${assignmentId} changed from ${currentAssignment.service_id} to ${newServiceId}`,
+      `with proper blocking reset and source='manual' tracking`
     );
 
   } catch (error) {
-    console.error('❌ DRAAD 352: changeAssignmentServiceAtomic failed:', error);
+    console.error('❌ DRAAD 365: changeAssignmentServiceAtomic failed:', error);
     throw error;
   }
 }
@@ -519,6 +529,7 @@ export async function changeAssignmentServiceAtomic(
  * 
  * DEPRECATED: Use changeAssignmentServiceAtomic() instead for proper blocking handling
  * This function is kept for backwards compatibility but should be migrated
+ * DRAAD365: Now tracks manual changes via source='manual'
  * 
  * @param assignmentId - UUID van de assignment
  * @param serviceId - Service UUID (null = clear assignment, status→AVAILABLE)
@@ -532,7 +543,8 @@ export async function updateAssignmentService(
     
     const updateData: any = {
       service_id: serviceId,
-      status: serviceId ? AssignmentStatus.ASSIGNED : AssignmentStatus.AVAILABLE
+      status: serviceId ? AssignmentStatus.ASSIGNED : AssignmentStatus.AVAILABLE,
+      source: 'manual'  // DRAAD365: Track manual change
     };
     
     const { error } = await supabase
@@ -542,7 +554,7 @@ export async function updateAssignmentService(
     
     if (error) throw error;
     
-    console.log('✅ Service updated successfully');
+    console.log('✅ Service updated successfully (source=manual)');
   } catch (error) {
     console.error('❌ Fout bij updateAssignmentService:', error);
     throw error;
