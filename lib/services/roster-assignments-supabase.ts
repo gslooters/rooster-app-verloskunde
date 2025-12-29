@@ -327,27 +327,121 @@ export async function getNBAssignmentsByRosterId(
 }
 
 // ============================================================================
-// NIEUWE FUNCTIES - DRAAD68
+// DRAAD367A FIX: Initialize Roster Assignments for Existing Roster
 // ============================================================================
 
 /**
- * Maak rooster aan inclusief alle assignments via stored procedure
- * Gebruikt initialize_roster_assignments() uit DRAAD67
+ * DRAAD367A FIX: Initialize assignments voor BESTAAND rooster via stored procedure
  * 
+ * Dit vervangt createRosterWithAssignments() die verkeerdelijk een NIEUW rooster
+ * aanmaakte in plaats van assignments toe te voegen aan bestaand rooster.
+ * 
+ * @param rosterId - UUID van BESTAAND rooster (NIET optioneel)
  * @param startDate - Start datum in ISO formaat (YYYY-MM-DD)
  * @param employeeIds - Array van employee IDs
- * @returns Object met rosterId en aantal aangemaakte assignments
+ * @returns Object met aantal aangemaakte assignments
+ */
+export async function initializeRosterAssignments(
+  rosterId: string,
+  startDate: string,
+  employeeIds: string[]
+): Promise<{ assignmentCount: number }> {
+  try {
+    console.log('🔄 [DRAAD367A] Initialize roster assignments for EXISTING roster');
+    console.log(`   Roster ID: ${rosterId}`);
+    console.log(`   Start date: ${startDate}`);
+    console.log(`   Employees: ${employeeIds.length}`);
+    
+    // STAP 1: Valideer dat rooster bestaat
+    const { data: roster, error: rosterError } = await supabase
+      .from('roosters')
+      .select('id, start_date, end_date, status')
+      .eq('id', rosterId)
+      .single();
+    
+    if (rosterError || !roster) {
+      const errorMsg = `Rooster ${rosterId} not found: ${rosterError?.message || 'Unknown error'}`;
+      console.error(`❌ [DRAAD367A] ${errorMsg}`);
+      throw new Error(errorMsg);
+    }
+    
+    console.log(`✅ [DRAAD367A] Rooster validated:`);
+    console.log(`   - ID: ${roster.id}`);
+    console.log(`   - Status: ${roster.status}`);
+    console.log(`   - Period: ${roster.start_date} to ${roster.end_date}`);
+    
+    // STAP 2: Roep stored procedure aan
+    console.log('[DRAAD367A] Calling initialize_roster_assignments RPC...');
+    const { data, error } = await supabase.rpc('initialize_roster_assignments', {
+      p_roster_id: rosterId,
+      p_start_date: startDate,
+      p_employee_ids: employeeIds
+    });
+    
+    if (error) {
+      const errorMsg = `RPC initialize_roster_assignments failed: ${error.message}`;
+      console.error(`❌ [DRAAD367A] ${errorMsg}`);
+      console.error('   Error details:', error);
+      throw new Error(errorMsg);
+    }
+    
+    const assignmentCount = data || 0;
+    const expectedCount = employeeIds.length * 35 * 3;
+    
+    console.log(`✅ [DRAAD367A] RPC execution completed`);
+    console.log(`   - Created: ${assignmentCount} assignments`);
+    console.log(`   - Expected: ${expectedCount} (${employeeIds.length} emp × 35 days × 3 dagdelen)`);
+    
+    // STAP 3: Valideer resultaat
+    if (assignmentCount === 0) {
+      const warnMsg = 'CRITICAL: RPC returned 0 assignments - check PostgreSQL function';
+      console.error(`❌ [DRAAD367A] ${warnMsg}`);
+      throw new Error(warnMsg);
+    }
+    
+    if (assignmentCount !== expectedCount) {
+      console.warn(`⚠️  [DRAAD367A] Assignment count mismatch!`);
+      console.warn(`   Got: ${assignmentCount}, Expected: ${expectedCount}`);
+    }
+    
+    console.log(`✅ [DRAAD367A] initializeRosterAssignments COMPLETED`);
+    return { assignmentCount };
+    
+  } catch (error) {
+    console.error('❌ [DRAAD367A] initializeRosterAssignments FAILED:', error);
+    throw error;
+  }
+}
+
+// ============================================================================
+// BACKWARD COMPATIBILITY: Deprecated createRosterWithAssignments
+// ============================================================================
+
+/**
+ * DEPRECATED: Use initializeRosterAssignments() instead
+ * Kept for backwards compatibility only - uses old pattern of creating new roster
+ * 
+ * WARNING: This function creates a NEW rooster instead of using an existing one.
+ * This causes the double rooster bug fixed in DRAAD367A.
+ * 
+ * @deprecated Use initializeRosterAssignments(rosterId, startDate, employeeIds) instead
  */
 export async function createRosterWithAssignments(
   startDate: string,
   employeeIds: string[]
 ): Promise<{ rosterId: string; assignmentCount: number }> {
+  console.warn(
+    '⚠️  DEPRECATED: createRosterWithAssignments() called\n' +
+    '   This function creates a NEW rooster (causing double rooster bug)\n' +
+    '   Migrate to initializeRosterAssignments(rosterId, startDate, employeeIds)'
+  );
+  
   try {
-    console.log('🔄 Creating roster with assignments via stored procedure');
+    console.log('🔄 [LEGACY] Creating NEW rooster with assignments');
     console.log(`   Start date: ${startDate}`);
     console.log(`   Employees: ${employeeIds.length}`);
     
-    // Eerst rooster aanmaken
+    // Maak NIEUW rooster aan (legacy behavior)
     const { data: roster, error: rosterError } = await supabase
       .from('roosters')
       .insert({
@@ -357,33 +451,32 @@ export async function createRosterWithAssignments(
       .select()
       .single();
     
-    if (rosterError) throw rosterError;
-    
-    const rosterId = roster.id;
-    console.log(`✅ Rooster created: ${rosterId}`);
-    
-    // Dan stored procedure aanroepen om assignments aan te maken
-    const { data, error } = await supabase.rpc('initialize_roster_assignments', {
-      p_roster_id: rosterId,
-      p_start_date: startDate,
-      p_employee_ids: employeeIds
-    });
-    
-    if (error) {
-      console.error('❌ Stored procedure failed:', error);
-      throw error;
+    if (rosterError) {
+      console.error('❌ [LEGACY] Rooster creation failed:', rosterError);
+      throw rosterError;
     }
     
-    const assignmentCount = data || 0;
-    console.log(`✅ Created ${assignmentCount} assignments`);
-    console.log(`   Expected: ${employeeIds.length * 35 * 3} (${employeeIds.length} emp × 35 days × 3 dagdelen)`);
+    const rosterId = roster.id;
+    console.log(`✅ [LEGACY] NEW Rooster created: ${rosterId}`);
+    
+    // Initialize assignments
+    const { assignmentCount } = await initializeRosterAssignments(
+      rosterId,
+      startDate,
+      employeeIds
+    );
     
     return { rosterId, assignmentCount };
+    
   } catch (error) {
-    console.error('❌ Fout bij createRosterWithAssignments:', error);
+    console.error('❌ [LEGACY] createRosterWithAssignments FAILED:', error);
     throw error;
   }
 }
+
+// ============================================================================
+// ADDITIONAL OPERATIONS
+// ============================================================================
 
 /**
  * Update status van een assignment
