@@ -5,6 +5,7 @@ import {
   generateFiveWeekPeriods, getPeriodStatus, formatWeekRange, formatDateRangeNl
 } from '@/lib/planning/storage';
 import { createRooster } from '@/lib/services/roosters-supabase';
+import { createRosterWithAssignments } from '@/lib/services/roster-assignments-supabase';
 import { getAllEmployees } from '@/lib/services/employees-storage';
 import { Employee, TeamType, DienstverbandType, getFullName } from '@/lib/types/employee';
 import { initializeRosterDesign } from '@/lib/planning/rosterDesign';
@@ -298,7 +299,7 @@ export default function Wizard({ onClose }: WizardProps = {}) {
       // Niet kritiek - ga door
     }
     
-    // === FASE 4: DRAAD69: Roster Assignments Initialiseren (60-80%) ===
+    // === FASE 4: DRAAD367 FIX: Roster Assignments via Helper Function (60-80%) ===
     try {
       setCreationPhase('assignments');
       setCreationMessage('Roster assignments worden aangemaakt...');
@@ -308,48 +309,45 @@ export default function Wizard({ onClose }: WizardProps = {}) {
         .filter(emp => emp.actief)
         .map(emp => emp.id);
       
+      // DRAAD367: Validatie dat we actieve medewerkers hebben
+      if (activeEmployeeIds.length === 0) {
+        throw new Error('Geen actieve medewerkers beschikbaar voor roostering');
+      }
+      
       console.log('\n' + '='.repeat(80));
-      console.log('[Wizard] 🔄 DRAAD69: Initialiseer roster_assignments...');
+      console.log('[Wizard] 🔄 DRAAD367 FIX: Initialiseer roster_assignments via helper...');
       console.log(`[Wizard]    - Roster ID: ${rosterId}`);
       console.log(`[Wizard]    - Start date: ${selectedStart}`);
       console.log(`[Wizard]    - Actieve medewerkers: ${activeEmployeeIds.length}`);
       console.log(`[Wizard]    - Verwacht aantal: ${activeEmployeeIds.length * 35 * 3} records`);
       console.log('='.repeat(80) + '\n');
       
-      const { data: assignmentCount, error: assignmentError } = await supabase.rpc(
-        'initialize_roster_assignments',
-        {
-          p_roster_id: rosterId,
-          p_start_date: selectedStart,
-          p_employee_ids: activeEmployeeIds
-        }
+      // DRAAD367: Use helper function instead of direct RPC call
+      const { assignmentCount } = await createRosterWithAssignments(
+        selectedStart,
+        activeEmployeeIds
       );
-      
-      if (assignmentError) {
-        console.error('[Wizard] ❌ DRAAD69: Fout bij initialiseren assignments:', assignmentError);
-        throw assignmentError;
-      }
       
       const expectedCount = activeEmployeeIds.length * 35 * 3;
       
-      console.log(`[Wizard] ✅ DRAAD69: ${assignmentCount} roster_assignments aangemaakt`);
+      console.log(`[Wizard] ✅ DRAAD367: ${assignmentCount} roster_assignments aangemaakt`);
       console.log(`[Wizard]    - Verwacht: ${expectedCount}`);
       console.log(`[Wizard]    - Status: ${assignmentCount === expectedCount ? '✅ CORRECT' : '⚠️  AFWIJKING'}`);
       
       if (assignmentCount === 0) {
-        console.error('[Wizard] ❌ DRAAD69: CRITICAL - Geen assignments aangemaakt!');
+        console.error('[Wizard] ❌ DRAAD367: CRITICAL - Geen assignments aangemaakt!');
         throw new Error('Geen roster assignments aangemaakt');
       }
       
       if (assignmentCount !== expectedCount) {
-        console.warn(`[Wizard] ⚠️  DRAAD69: Verkeerd aantal assignments! Gevonden: ${assignmentCount}, verwacht: ${expectedCount}`);
+        console.warn(`[Wizard] ⚠️  DRAAD367: Verkeerd aantal assignments! Gevonden: ${assignmentCount}, verwacht: ${expectedCount}`);
       }
       
       setCreationProgress(80);
       console.log('');
       
     } catch (err) {
-      console.error('[Wizard] ❌ DRAAD69: FOUT BIJ ROSTER ASSIGNMENTS');
+      console.error('[Wizard] ❌ DRAAD367: FOUT BIJ ROSTER ASSIGNMENTS');
       console.error('[Wizard] Error:', err);
       setError('Kon roster assignments niet aanmaken.');
       setIsCreating(false);
