@@ -19,6 +19,9 @@
  * DRAAD399-FASE2: ✅ QUERY - Select id, team uit roster_period_staffing_dagdelen
  * DRAAD399-FASE3: ✅ MAPPING - Add team_variant + variant_id aan services
  * DRAAD399-FASE6: ✅ STORAGE - Save roster_period_staffing_dagdelen_id naar database
+ * DRAAD400-FASE1: ✅ FIX - Vervang .find() door .filter() voor ALLE team-varianten
+ * 
+ * Cache: ${Date.now()}
  */
 
 import { supabase } from '@/lib/supabase';
@@ -344,6 +347,7 @@ export async function getServicesForEmployee(
  * DRAAD 92: Fix status filtering - !== 'MAG_NIET' ipv === 'MAG', verwijder onjuist actief filter
  * DRAAD179-FASE3: FIXED - Replaced roster_period_staffing with roster_period_staffing_dagdelen
  * DRAAD399-FASE2,3: ✅ Select id, team from roster_period_staffing_dagdelen + map to team_variant + variant_id
+ * DRAAD400-FASE1: ✅ FIX - Vervang .find() door .filter() voor ALLE team-varianten per service
  * 
  * Status waarden:
  * - 'MAG' = toegestaan (toon)
@@ -351,11 +355,17 @@ export async function getServicesForEmployee(
  * - 'AANGEPAST' = aangepast (toon)
  * - 'MAG_NIET' = niet toegestaan (NIET tonen)
  * 
+ * DRAAD400-FASE1 LOGICA:
+ * - Voor ELKE service: haal ALLE staffing records op voor datum
+ * - Voor ELKE record met dagdeel === target AND status !== 'MAG_NIET'
+ * - Voeg aparte entry toe per variant (team + variant_id uniek)
+ * - Result: service DIO krijgt 3 entries voor 3 teams
+ * 
  * @param employeeId - TEXT ID van de medewerker
  * @param rosterId - UUID van het rooster (voor staffing check)
  * @param date - Datum (YYYY-MM-DD)
  * @param dagdeel - Dagdeel (O/M/A)
- * @returns Array van ServiceTypeWithTimes die NIET status MAG_NIET hebben
+ * @returns Array van ServiceTypeWithTimes met ALLE team-varianten
  */
 export async function getServicesForEmployeeFiltered(
   employeeId: string,
@@ -430,10 +440,9 @@ export async function getServicesForEmployeeFiltered(
       // Continue zonder blocking (graceful degradation)
     }
 
-    // Stap 2: Filter diensten op basis van staffing status
+    // Stap 2: Filter diensten op basis van staffing status - DRAAD400: ALLE variants per service
     const filteredServices: ServiceTypeWithTimes[] = [];
     
-    // DRAAD 91: FIX - Type casting toegevoegd voor TypeScript build
     for (const service of baseServices) {
       // Check staffing status voor deze dienst op datum/dagdeel
       // DRAAD179-FASE3: FIXED - Query direct uit roster_period_staffing_dagdelen (no parent join)
@@ -462,26 +471,29 @@ export async function getServicesForEmployeeFiltered(
         continue;
       }
       
-      // DRAAD 92: FIX - Check of dagdeel NIET status='MAG_NIET' heeft (ipv === 'MAG')
-      // Dit toont nu MAG, MOET en AANGEPAST, maar NIET MAG_NIET
-      const dagdeelData = staffingData.find(
+      // DRAAD400-FASE1: FIX - Vervang .find() door .filter()
+      // Haal ALLE variants op (niet alleen eerste) met correct dagdeel en status
+      const dagdeelDataList = staffingData.filter(
         (d: any) => d.dagdeel === dagdeel && d.status !== 'MAG_NIET'
       );
       
-      if (!dagdeelData) continue;
+      // Als geen variants beschikbaar, skip service
+      if (dagdeelDataList.length === 0) continue;
       
-      // DRAAD399-FASE3: Map team en variant_id naar service
-      // Dienst is toegestaan - voeg toe aan resultaat MET team variant info
-      filteredServices.push({
-        ...service,
-        team_variant: dagdeelData.team, // 'GRO' | 'ORA' | 'TOT'
-        variant_id: dagdeelData.id      // UUID van staffing record
-      });
+      // DRAAD400-FASE1: Voor ELKE variant: aparte entry toevoegen
+      // Dit zorgt dat service DIO + 3 teams = 3 entries in resultaat
+      for (const dagdeelData of dagdeelDataList) {
+        filteredServices.push({
+          ...service,
+          team_variant: dagdeelData.team, // 'GRO' | 'ORA' | 'TOT'
+          variant_id: dagdeelData.id      // UUID van staffing record (uniek per variant)
+        });
+      }
     }
     
     console.log(
-      `✅ Found ${filteredServices.length}/${baseServices.length} ALLOWED services ` +
-      `for employee ${employeeId} on ${date} ${dagdeel} (after blocking + staffing filter)`
+      `✅ Found ${filteredServices.length}/${baseServices.length} service variants ` +
+      `for employee ${employeeId} on ${date} ${dagdeel} (after blocking + staffing filter + team expansion)`
     );
     return filteredServices;
   } catch (error) {
