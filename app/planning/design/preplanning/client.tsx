@@ -66,6 +66,10 @@ import DienstSelectieModal from './components/DienstSelectieModal';
  * - Alle status=0 updates gaan nu via updateAssignmentStatus
  * - Database records worden NOOIT verwijderd (soft delete via status=0)
  * 
+ * DRAAD399-FASE5: ✅ variantId parameter doorvoeren naar updateAssignmentStatus
+ * - Modal geeft variantId mee bij onSave
+ * - handleModalSave ontvangt en passert variantId door
+ * 
  * Dit scherm toont:
  * - Grid met 35 dagen (5 weken) als kolommen x 3 dagdelen (O/M/A)
  * - Medewerkers als rijen
@@ -233,8 +237,8 @@ export default function PrePlanningClient() {
     setModalOpen(true);
   }, [employees, assignments, rosterId]); // ⭐ rosterId toegevoegd aan dependencies
 
-  // DRAAD 80 + 89 + DRAAD352: Modal save handler - alle statussen via updateAssignmentStatus
-  const handleModalSave = useCallback(async (serviceId: string | null, status: CellStatus) => {
+  // DRAAD 80 + 89 + DRAAD352 + DRAAD399: Modal save handler - alle statussen via updateAssignmentStatus
+  const handleModalSave = useCallback(async (serviceId: string | null, status: CellStatus, variantId?: string | null) => {
     if (!selectedCell || !rosterId) return;
     
     try {
@@ -247,6 +251,7 @@ export default function PrePlanningClient() {
       // Status 1 (dienst): service_id=UUID, status=1 → UPSERT
       // Status 2 (geblokkeerd): service_id=null, status=2 → UPSERT
       // Status 3 (NB): service_id=null, status=3 → UPSERT
+      // DRAAD399: Voeg variantId toe
       const result = await updateAssignmentStatus(
         rosterId,
         selectedCell.employeeId,
@@ -254,7 +259,8 @@ export default function PrePlanningClient() {
         selectedCell.dagdeel,
         status,
         serviceId,
-        startDate // DRAAD 89: Roster start date voor periode check
+        startDate, // DRAAD 89: Roster start date voor periode check
+        variantId  // DRAAD399: Doorvoeren variant ID
       );
 
       const success = result.success;
