@@ -1,6 +1,7 @@
 /**
  * DRAAD 90: Dienst Selectie Modal - Met Filtering op Dagdeel/Datum/Status
  * HERSTEL: rosterId doorgeven aan getServicesForEmployee voor service blocking
+ * DRAAD399-FASE4,5: Team variant labels + variant_id collection
  * 
  * Modal pop-up voor toewijzen/wijzigen van diensten aan cellen
  * Ondersteunt alle 4 statussen:
@@ -15,6 +16,11 @@
  * - Visuele indicatie voor niet-toegestane diensten in admin modus
  * - rosterId wordt doorgegeven voor filtering query
  * 
+ * NIEUW in DRAAD399:
+ * - Team variant labels tonen (GRO, ORA, TOT → Groen, Oranje, Praktijk)
+ * - Variant ID collectie bij save
+ * - Ondersteuning voor meerdere service varianten per service/datum/dagdeel
+ * 
  * HERSTEL:
  * - rosterId nu ook doorgegeven aan getServicesForEmployee() (admin toggle)
  * - Zorgt voor service blocking rules in beide modes
@@ -28,7 +34,7 @@
  * - Visuele markering van huidige status
  * - Read-only mode voor status='final'
  * 
- * Cache: 1733066174000
+ * Cache: ${Date.now()}
  */
 
 'use client';
@@ -59,7 +65,7 @@ interface DienstSelectieModalProps {
   isOpen: boolean;
   cellData: ModalCellData | null;
   onClose: () => void;
-  onSave: (serviceId: string | null, status: CellStatus) => void;
+  onSave: (serviceId: string | null, status: CellStatus, variantId?: string | null) => void; // DRAAD399: Added variantId
   readOnly?: boolean; // Voor status='final'
   isSaving?: boolean; // DRAAD 80: Prop van parent voor loading state
 }
@@ -164,14 +170,18 @@ export default function DienstSelectieModal({
     return false;
   }, [cellData, selectedStatus, selectedServiceId]);
 
-  // DRAAD 80: Save handler - geen interne isSaving state meer
+  // DRAAD 399-FASE5: Save handler - collect variant_id
   function handleSave() {
     if (selectedStatus === 1) {
       if (!selectedServiceId) {
         alert('Selecteer een dienst');
         return;
       }
-      onSave(selectedServiceId, 1);
+      // DRAAD399: Verzamel variant_id van geselecteerde service
+      const selectedService = availableServices.find(s => s.id === selectedServiceId);
+      const variantId = selectedService?.variant_id || null;
+      
+      onSave(selectedServiceId, 1, variantId); // Geef variantId door
     } else if (selectedStatus === 0) {
       onSave(null, 0);
     } else if (selectedStatus === 2) {
@@ -205,6 +215,17 @@ export default function DienstSelectieModal({
       case 'O': return 'Ochtend';
       case 'M': return 'Middag';
       case 'A': return 'Avond';
+    }
+  }
+
+  // DRAAD399-FASE4: Helper - team variant label
+  function getTeamLabel(teamVariant?: string): string {
+    if (!teamVariant) return '';
+    switch(teamVariant) {
+      case 'GRO': return 'Groen';
+      case 'ORA': return 'Oranje';
+      case 'TOT': return 'Praktijk';
+      default: return teamVariant;
     }
   }
 
@@ -261,7 +282,11 @@ export default function DienstSelectieModal({
           <span className="text-sm font-medium text-gray-600">Huidige dienst: </span>
           {cellData.currentAssignment && cellData.currentAssignment.status === 1 && currentService ? (
             <span className="text-sm font-bold text-gray-900">
-              {currentService.code} ({currentService.naam})
+              {currentService.code}
+              {currentService.team_variant && (
+                <span className="text-xs text-gray-600 ml-1">[{getTeamLabel(currentService.team_variant)}]</span>
+              )}
+              ({currentService.naam})
             </span>
           ) : cellData.currentAssignment && cellData.currentAssignment.status === 2 ? (
             <span className="text-sm font-bold text-gray-600">
@@ -314,10 +339,16 @@ export default function DienstSelectieModal({
               {availableServices.length > 0 ? (
                 <div className="space-y-1.5">
                   {[...availableServices]
-                    .sort((a, b) => a.code.localeCompare(b.code, 'nl'))
+                    .sort((a, b) => {
+                      // Sort by code first, then by team variant
+                      const codeCompare = a.code.localeCompare(b.code, 'nl');
+                      if (codeCompare !== 0) return codeCompare;
+                      // If code is the same, sort by team variant
+                      return (a.team_variant || '').localeCompare(b.team_variant || '', 'nl');
+                    })
                     .map(service => (
                     <label
-                      key={service.id}
+                      key={`${service.id}-${service.variant_id}`}
                       className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer transition-colors"
                     >
                       <input
@@ -331,6 +362,12 @@ export default function DienstSelectieModal({
                       />
                       <div className="flex-1 flex items-center gap-2">
                         <span className="font-medium text-gray-900">{service.code}</span>
+                        {/* DRAAD399-FASE4: Toon team variant label */}
+                        {service.team_variant && (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-medium">
+                            [{getTeamLabel(service.team_variant)}]
+                          </span>
+                        )}
                         <span className="text-sm text-gray-600">({service.naam})</span>
                         {selectedServiceId === service.id && selectedStatus === 1 && (
                           <Check className="w-4 h-4 text-blue-600 ml-auto" />
