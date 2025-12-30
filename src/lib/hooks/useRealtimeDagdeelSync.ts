@@ -11,6 +11,8 @@
  * Solution: Subscribe to dagdeel real-time events and sync state automatically
  * Result: Modal shows fresh data immediately after PUT
  * ============================================================================
+ * 
+ * [DRAAD369] ENHANCEMENT: Now includes roster_period_staffing_dagdelen_id in payloads
  */
 
 import { useEffect, useCallback, useRef } from 'react';
@@ -39,6 +41,8 @@ interface UseRealtimeDagdeelSyncOptions {
  * - Hook triggert onDagdeelUpdate callback
  * - React component update state
  * - UI toont nieuwe data IMMEDIATELY
+ * 
+ * [DRAAD369] Enhancement: Now passes through roster_period_staffing_dagdelen_id
  */
 export function useRealtimeDagdeelSync(options: UseRealtimeDagdeelSyncOptions = {}) {
   const {
@@ -107,6 +111,9 @@ export function useRealtimeDagdeelSync(options: UseRealtimeDagdeelSyncOptions = 
             changes: {
               aantal_before: payload.old?.aantal,
               aantal_after: payload.new?.aantal,
+              // [DRAAD369] NEW: Log variant ID changes
+              variant_id_before: payload.old?.roster_period_staffing_dagdelen_id,
+              variant_id_after: payload.new?.roster_period_staffing_dagdelen_id,
             },
           });
         }
