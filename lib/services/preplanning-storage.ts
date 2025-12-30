@@ -16,6 +16,9 @@
  * DRAAD179-FASE3: FIXED - Replaced roster_period_staffing with roster_period_staffing_dagdelen
  * DRAAD352-FASE1: ✅ deletePrePlanningAssignment verwijderd - alle status=0 updates gaan via updateAssignmentStatus
  * DRAAD366: ✅ FIXED - Added source: 'manual' to track UI-initiated changes
+ * DRAAD399-FASE2: ✅ QUERY - Select id, team uit roster_period_staffing_dagdelen
+ * DRAAD399-FASE3: ✅ MAPPING - Add team_variant + variant_id aan services
+ * DRAAD399-FASE6: ✅ STORAGE - Save roster_period_staffing_dagdelen_id naar database
  */
 
 import { supabase } from '@/lib/supabase';
@@ -96,12 +99,14 @@ export async function getPrePlanningData(
  * Sla een PrePlanning assignment op (of update bestaande)
  * DRAAD 77: Nu met dagdeel ondersteuning
  * DRAAD366: ✅ FIXED - Added source: 'manual' to track UI-initiated changes
+ * DRAAD399-FASE6: ✅ Added roster_period_staffing_dagdelen_id parameter
  * 
  * @param rosterId - UUID van het rooster
  * @param employeeId - TEXT ID van de medewerker
  * @param date - Datum (YYYY-MM-DD)
  * @param serviceCode - Dienst code (bijv. 'NB', 'Echo', 'Besch')
  * @param dagdeel - Dagdeel (O/M/A) - default 'O'
+ * @param variantId - UUID van roster_period_staffing_dagdelen record (optional)
  * @returns true bij succes, false bij fout
  */
 export async function savePrePlanningAssignment(
@@ -109,10 +114,11 @@ export async function savePrePlanningAssignment(
   employeeId: string,
   date: string,
   serviceCode: string,
-  dagdeel: Dagdeel = 'O'
+  dagdeel: Dagdeel = 'O',
+  variantId?: string | null
 ): Promise<boolean> {
   try {
-    console.log('💾 Saving PrePlanning assignment:', { rosterId, employeeId, date, serviceCode, dagdeel });
+    console.log('💾 Saving PrePlanning assignment:', { rosterId, employeeId, date, serviceCode, dagdeel, variantId });
     
     // Haal service_id op basis van code
     const { data: serviceData, error: serviceError } = await supabase
@@ -136,6 +142,7 @@ export async function savePrePlanningAssignment(
         status: 1, // Dienst
         service_id: serviceData.id,
         service_code: serviceCode, // Voor backwards compatibility
+        roster_period_staffing_dagdelen_id: variantId || null, // DRAAD399: Sla variant ID op
         source: 'manual',  // ✅ DRAAD366: Set source to 'manual' for all UI-initiated changes
         updated_at: new Date().toISOString()
       }, {
@@ -162,6 +169,7 @@ export async function savePrePlanningAssignment(
  * HERSTEL: Service blocking validatie weer toegevoegd
  * DRAAD352-FASE1: ✅ Nu ondersteunt status=0 via UPSERT (soft delete)
  * DRAAD366: ✅ FIXED - Added source: 'manual' to track UI-initiated changes
+ * DRAAD399-FASE6: ✅ Added roster_period_staffing_dagdelen_id parameter
  * 
  * Voor het wijzigen van cel status (leeg, dienst, geblokkeerd, NB)
  * 
@@ -172,6 +180,7 @@ export async function savePrePlanningAssignment(
  * @param status - Nieuwe status (0/1/2/3)
  * @param serviceId - UUID van service (alleen bij status 1)
  * @param rosterStartDate - Startdatum van rooster (voor periode validatie) - DEPRECATED
+ * @param variantId - UUID van roster_period_staffing_dagdelen record (optional)
  * @returns Object met { success: boolean, warnings: string[] }
  */
 export async function updateAssignmentStatus(
@@ -181,12 +190,13 @@ export async function updateAssignmentStatus(
   dagdeel: Dagdeel,
   status: CellStatus,
   serviceId: string | null,
-  rosterStartDate?: string
+  rosterStartDate?: string,
+  variantId?: string | null
 ): Promise<{ success: boolean; warnings: string[] }> {
   const warnings: string[] = [];
   
   try {
-    console.log('🔄 Updating assignment status:', { rosterId, employeeId, date, dagdeel, status, serviceId });
+    console.log('🔄 Updating assignment status:', { rosterId, employeeId, date, dagdeel, status, serviceId, variantId });
     
     // Validatie: bij status 1 moet service_id aanwezig zijn
     if (status === 1 && !serviceId) {
@@ -210,6 +220,7 @@ export async function updateAssignmentStatus(
         dagdeel: dagdeel,
         status: status,
         service_id: serviceId,
+        roster_period_staffing_dagdelen_id: variantId || null, // DRAAD399: Sla variant ID op
         source: 'manual',  // ✅ DRAAD366: Set source to 'manual' for all UI-initiated changes
         updated_at: new Date().toISOString()
       }, {
@@ -332,6 +343,7 @@ export async function getServicesForEmployee(
  * DRAAD 91: Fix TypeScript type error - toegevoegd type casting as any[]
  * DRAAD 92: Fix status filtering - !== 'MAG_NIET' ipv === 'MAG', verwijder onjuist actief filter
  * DRAAD179-FASE3: FIXED - Replaced roster_period_staffing with roster_period_staffing_dagdelen
+ * DRAAD399-FASE2,3: ✅ Select id, team from roster_period_staffing_dagdelen + map to team_variant + variant_id
  * 
  * Status waarden:
  * - 'MAG' = toegestaan (toon)
@@ -425,9 +437,10 @@ export async function getServicesForEmployeeFiltered(
     for (const service of baseServices) {
       // Check staffing status voor deze dienst op datum/dagdeel
       // DRAAD179-FASE3: FIXED - Query direct uit roster_period_staffing_dagdelen (no parent join)
+      // DRAAD399-FASE2: SELECT id, team uit roster_period_staffing_dagdelen
       const { data: staffingData, error: staffingError } = await supabase
         .from('roster_period_staffing_dagdelen')
-        .select('dagdeel, status')
+        .select('id, dagdeel, status, team') // DRAAD399: Voeg id en team toe
         .eq('roster_id', rosterId)
         .eq('service_id', service.id)
         .eq('date', date);
@@ -457,8 +470,13 @@ export async function getServicesForEmployeeFiltered(
       
       if (!dagdeelData) continue;
       
-      // Dienst is toegestaan - voeg toe aan resultaat
-      filteredServices.push(service);
+      // DRAAD399-FASE3: Map team en variant_id naar service
+      // Dienst is toegestaan - voeg toe aan resultaat MET team variant info
+      filteredServices.push({
+        ...service,
+        team_variant: dagdeelData.team, // 'GRO' | 'ORA' | 'TOT'
+        variant_id: dagdeelData.id      // UUID van staffing record
+      });
     }
     
     console.log(
