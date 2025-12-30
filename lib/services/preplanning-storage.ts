@@ -20,6 +20,7 @@
  * DRAAD399-FASE3: ✅ MAPPING - Add team_variant + variant_id aan services
  * DRAAD399-FASE6: ✅ STORAGE - Save roster_period_staffing_dagdelen_id naar database
  * DRAAD400-FASE1: ✅ FIX - Vervang .find() door .filter() voor ALLE team-varianten
+ * DRAAD401-FASE2: ✅ FIX - updateAssignmentStatus() slaagt variantId op in database
  * 
  * Cache: ${Date.now()}
  */
@@ -173,6 +174,7 @@ export async function savePrePlanningAssignment(
  * DRAAD352-FASE1: ✅ Nu ondersteunt status=0 via UPSERT (soft delete)
  * DRAAD366: ✅ FIXED - Added source: 'manual' to track UI-initiated changes
  * DRAAD399-FASE6: ✅ Added roster_period_staffing_dagdelen_id parameter
+ * DRAAD401-FASE2: ✅ FIXED - updateAssignmentStatus() slaagt variantId op in database
  * 
  * Voor het wijzigen van cel status (leeg, dienst, geblokkeerd, NB)
  * 
@@ -199,7 +201,15 @@ export async function updateAssignmentStatus(
   const warnings: string[] = [];
   
   try {
-    console.log('🔄 Updating assignment status:', { rosterId, employeeId, date, dagdeel, status, serviceId, variantId });
+    console.log('🔄 Updating assignment status:', { 
+      rosterId, 
+      employeeId, 
+      date, 
+      dagdeel, 
+      status, 
+      serviceId, 
+      variantId  // ✅ DRAAD401: Log variantId
+    });
     
     // Validatie: bij status 1 moet service_id aanwezig zijn
     if (status === 1 && !serviceId) {
@@ -223,7 +233,7 @@ export async function updateAssignmentStatus(
         dagdeel: dagdeel,
         status: status,
         service_id: serviceId,
-        roster_period_staffing_dagdelen_id: variantId || null, // DRAAD399: Sla variant ID op
+        roster_period_staffing_dagdelen_id: variantId || null, // ✅ DRAAD401: Sla variant ID op
         source: 'manual',  // ✅ DRAAD366: Set source to 'manual' for all UI-initiated changes
         updated_at: new Date().toISOString()
       }, {
@@ -235,7 +245,7 @@ export async function updateAssignmentStatus(
       return { success: false, warnings: [] };
     }
 
-    console.log('✅ Assignment status updated successfully');
+    console.log('✅ Assignment status updated (variant_id:', variantId, ')');
     
     return { success: true, warnings };
   } catch (error) {
