@@ -5,6 +5,7 @@
  * 
  * DRAAD 77: Uitgebreid met dagdeel ondersteuning en cel status structuur
  * DRAAD 79: ServiceTypeWithTimes toegevoegd voor modal component
+ * DRAAD399: team_variant + variant_id velden toegevoegd voor team-aware diensten
  */
 
 /**
@@ -71,6 +72,7 @@ export interface PrePlanningData {
 
 /**
  * DRAAD 79: Service type met tijden voor modal component
+ * DRAAD399: Uitgebreid met team_variant en variant_id voor team-aware diensten
  * Simplified versie van ServiceType met alleen benodigde velden
  */
 export interface ServiceTypeWithTimes {
@@ -80,6 +82,9 @@ export interface ServiceTypeWithTimes {
   kleur: string;
   start_tijd: string; // HH:MM format (begintijd)
   eind_tijd: string;  // HH:MM format (eindtijd)
+  // DRAAD399: Nieuwe velden voor team-variant support
+  team_variant?: string; // 'GRO' | 'ORA' | 'TOT' - team waar deze variant voor is
+  variant_id?: string;   // UUID van roster_period_staffing_dagdelen record
 }
 
 /**
