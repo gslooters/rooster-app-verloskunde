@@ -13,6 +13,7 @@
  * Performance target: 500-700ms
  * 
  * [DRAAD369] UPDATE: Now includes roster_period_staffing_dagdelen_id lookup
+ * [DRAAD403B] FOUT 2 & 3 FIXES: Variant ID lookup + invulling update
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -42,6 +43,16 @@ interface AssignmentUpdatePayload {
 }
 
 /**
+ * Staffing record for variant ID lookup
+ * [DRAAD403B FOUT 2] Used to find the demand record
+ */
+interface StaffingRecord {
+  id: string; // roster_period_staffing_dagdelen.id
+  invulling: number; // Current invulling count
+  aantal: number; // Required count
+}
+
+/**
  * Write Engine Result
  * Returned after Phase 4 database writes
  */
@@ -52,6 +63,7 @@ export interface WriteEngineResult {
   updated_count: number; // How many roster_assignments records updated
   rooster_status_updated: boolean; // Did we update rooster.status?
   database_write_ms: number;
+  invulling_updates_count: number; // [DRAAD403B FOUT 3] How many invulling records updated
   error?: string | null;
 }
 
@@ -64,12 +76,14 @@ export class WriteEngine {
    * 
    * Performs:
    * 1. Collect modified records from workbestand_planning
-   * 2. Build update payloads (compact format)
+   * 2. Build update payloads with variant ID lookup (FOUT 2 FIX)
    * 3. Batch UPDATE to roster_assignments (via Supabase)
-   * 4. UPDATE rooster status to 'in_progress'
-   * 5. Track run via afl_run_id / ort_run_id
+   * 4. Batch UPDATE to roster_period_staffing_dagdelen (FOUT 3 FIX)
+   * 5. UPDATE rooster status to 'in_progress'
+   * 6. Track run via afl_run_id / ort_run_id
    * 
    * [DRAAD369] Now includes variant ID lookups
+   * [DRAAD403B] Now includes invulling updates
    */
   async writeModifiedSlots(
     rosterId: string,
@@ -93,12 +107,13 @@ export class WriteEngine {
           updated_count: 0,
           rooster_status_updated: true,
           database_write_ms,
+          invulling_updates_count: 0,
           error: null,
         };
       }
 
       // Step 2: Build update payloads with variant ID lookups
-      // [DRAAD369] NEW STEP: Lookup variant IDs before building payloads
+      // [DRAAD403B FOUT 2] FIX: Lookup variant IDs before building payloads
       const update_payloads = await this.buildUpdatePayloadsWithVariantIds(
         modified_slots,
         afl_run_id,
@@ -112,7 +127,13 @@ export class WriteEngine {
         afl_run_id
       );
 
-      // Step 4: UPDATE rooster status
+      // Step 4: [DRAAD403B FOUT 3] Update invulling counters
+      const invulling_updates_count = await this.updateInvullingCounters(
+        modified_slots,
+        rosterId
+      );
+
+      // Step 5: UPDATE rooster status
       const rooster_updated = await this.updateRosterStatus(rosterId, afl_run_id);
 
       const database_write_ms = performance.now() - startTime;
@@ -124,6 +145,7 @@ export class WriteEngine {
         updated_count,
         rooster_status_updated: rooster_updated,
         database_write_ms,
+        invulling_updates_count,
         error: null,
       };
     } catch (error) {
@@ -139,13 +161,131 @@ export class WriteEngine {
         updated_count: 0,
         rooster_status_updated: false,
         database_write_ms,
+        invulling_updates_count: 0,
         error: error_message,
       };
     }
   }
 
   /**
-   * [DRAAD369] HELPER: Lookup variant ID from database
+   * [DRAAD403B FOUT 3] NEW: Update invulling counters
+   * 
+   * After assignments are made, increment the invulling counter
+   * for the corresponding roster_period_staffing_dagdelen record
+   * 
+   * Process:
+   * 1. Collect all unique staffing record IDs that got assigned
+   * 2. For each record, count how many assignments point to it
+   * 3. UPDATE invulling = invulling + count
+   */
+  private async updateInvullingCounters(
+    modified_slots: WorkbestandPlanning[],
+    rosterId: string
+  ): Promise<number> {
+    const invulling_updates_count = 0;
+
+    try {
+      // Group assignments by their variant ID
+      const variant_counts: Map<string, number> = new Map();
+
+      for (const slot of modified_slots) {
+        // Only count successful assignments (status=1)
+        if (slot.status !== 1 || !slot.service_id) {
+          continue;
+        }
+
+        // Lookup variant ID
+        const dateStr = slot.date instanceof Date
+          ? slot.date.toISOString().split('T')[0]
+          : slot.date;
+
+        const variantId = await this.getVariantId(
+          rosterId,
+          dateStr,
+          slot.dagdeel,
+          slot.service_id,
+          slot.team
+        );
+
+        if (variantId) {
+          variant_counts.set(
+            variantId,
+            (variant_counts.get(variantId) || 0) + 1
+          );
+        }
+      }
+
+      // Update each variant's invulling counter
+      const update_promises = Array.from(variant_counts.entries()).map(
+        async ([variantId, count]) => {
+          try {
+            const { data, error } = await supabase
+              .from('roster_period_staffing_dagdelen')
+              .select('invulling')
+              .eq('id', variantId)
+              .single();
+
+            if (error || !data) {
+              console.warn(
+                `[DRAAD403B FOUT 3] Failed to read invulling for ${variantId}:`,
+                error?.message
+              );
+              return 0;
+            }
+
+            // UPDATE invulling += count
+            const new_invulling = (data.invulling || 0) + count;
+            const { error: updateError } = await supabase
+              .from('roster_period_staffing_dagdelen')
+              .update({ invulling: new_invulling })
+              .eq('id', variantId);
+
+            if (updateError) {
+              console.warn(
+                `[DRAAD403B FOUT 3] Failed to update invulling for ${variantId}:`,
+                updateError.message
+              );
+              return 0;
+            }
+
+            console.log(
+              `[DRAAD403B FOUT 3] Updated invulling for ${variantId}: +${count} (new total: ${new_invulling})`
+            );
+            return 1;
+          } catch (err) {
+            console.warn(
+              `[DRAAD403B FOUT 3] Exception updating invulling for ${variantId}:`,
+              err
+            );
+            return 0;
+          }
+        }
+      );
+
+      const results = await Promise.allSettled(update_promises);
+      const successful_updates = results.reduce((sum, result) => {
+        if (result.status === 'fulfilled') {
+          return sum + (result.value || 0);
+        }
+        return sum;
+      }, 0);
+
+      console.log(
+        `[DRAAD403B FOUT 3] Completed invulling updates: ${successful_updates}/${variant_counts.size} staffing records`
+      );
+
+      return successful_updates;
+    } catch (error) {
+      console.error(
+        '[DRAAD403B FOUT 3] Critical error in updateInvullingCounters:',
+        error instanceof Error ? error.message : String(error)
+      );
+      return 0;
+    }
+  }
+
+  /**
+   * [DRAAD403B FOUT 2] HELPER: Lookup variant ID from database
    * 
    * Matches roster_period_staffing_dagdelen record by:
    * - roster_id
@@ -173,7 +313,7 @@ export class WriteEngine {
         .single();
 
       if (error) {
-        console.warn('[DRAAD369] Variant ID lookup failed:', {
+        console.warn('[DRAAD403B FOUT 2] Variant ID lookup failed:', {
           rosterId,
           date,
           dagdeel,
@@ -186,13 +326,13 @@ export class WriteEngine {
 
       return data?.id || null;
     } catch (err) {
-      console.warn('[DRAAD369] Variant ID lookup exception:', err);
+      console.warn('[DRAAD403B FOUT 2] Variant ID lookup exception:', err);
       return null;
     }
   }
 
   /**
-   * [DRAAD369] NEW: Build update payloads with variant ID resolution
+   * [DRAAD403B FOUT 2] Build update payloads with variant ID resolution
    * 
    * For each modified slot:
    * 1. Lookup variant ID via getVariantId()
@@ -212,7 +352,7 @@ export class WriteEngine {
         ? slot.date.toISOString().split('T')[0]
         : slot.date;
 
-      // Lookup variant ID [DRAAD369]
+      // Lookup variant ID [DRAAD403B FOUT 2]
       let variantId: string | null = null;
       if (slot.service_id && slot.team) {
         variantId = await this.getVariantId(
@@ -224,9 +364,9 @@ export class WriteEngine {
         );
       }
 
-      if (!variantId) {
+      if (!variantId && slot.status === 1 && slot.service_id) {
         console.warn(
-          '[DRAAD369] No variant ID found for assignment, using null',
+          '[DRAAD403B FOUT 2] No variant ID found for assignment',
           {
             employee: slot.employee_id,
             date: dateStr,
@@ -251,14 +391,14 @@ export class WriteEngine {
         blocked_by_service_id: slot.blocked_by_service_id || null,
         constraint_reason: slot.constraint_reason || null,
         previous_service_id: slot.previous_service_id || null,
-        roster_period_staffing_dagdelen_id: variantId, // [DRAAD369] NEW!
+        roster_period_staffing_dagdelen_id: variantId, // [DRAAD403B FOUT 2] FIX!
       };
 
       payloads.push(payload);
     }
 
     console.log(
-      `[DRAAD369] Built ${payloads.length} update payloads with variant IDs`
+      `[DRAAD403B FOUT 2] Built ${payloads.length} update payloads with variant IDs`
     );
     return payloads;
   }
@@ -315,7 +455,7 @@ export class WriteEngine {
 
   /**
    * Update a single roster_assignments record
-   * [DRAAD369] Now includes roster_period_staffing_dagdelen_id
+   * [DRAAD403B FOUT 2] Now includes roster_period_staffing_dagdelen_id
    */
   private async updateSingleAssignment(
     payload: AssignmentUpdatePayload,
@@ -332,7 +472,7 @@ export class WriteEngine {
         blocked_by_service_id: payload.blocked_by_service_id,
         constraint_reason: payload.constraint_reason,
         previous_service_id: payload.previous_service_id,
-        roster_period_staffing_dagdelen_id: payload.roster_period_staffing_dagdelen_id, // [DRAAD369] NEW!
+        roster_period_staffing_dagdelen_id: payload.roster_period_staffing_dagdelen_id, // [DRAAD403B FOUT 2] NEW!
         ort_run_id: afl_run_id, // Use ort_run_id for tracking
         updated_at: new Date().toISOString(),
       })
@@ -340,7 +480,7 @@ export class WriteEngine {
 
     if (error) {
       throw new Error(
-        `[DRAAD369] Failed to update assignment ${payload.id}: ${error.message}`
+        `[DRAAD403B FOUT 2] Failed to update assignment ${payload.id}: ${error.message}`
       );
     }
 
