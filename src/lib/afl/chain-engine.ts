@@ -8,6 +8,11 @@
  * - Generates chain integrity reports
  * - Prepares data for Phase 4 database writing
  * 
+ * [DRAAD403B FOUT 4] NEW: DIO/DIA pairing validation
+ * - Ensures DIA is assigned to SAME employee as DIO
+ * - Ensures DIA is on NEXT DAY, DAGDEEL A
+ * - Detects unpaired DIO assignments (error)
+ * 
  * Performance target: 1-2 seconds
  * Validation coverage: 100% of DIO/DDO assignments
  * All operations in-memory (no DB queries)
@@ -56,7 +61,10 @@ export interface ValidationError {
     | 'OVERLAPPING_BLOCKS'
     | 'DUPLICATE_DIA'
     | 'PERIOD_BOUNDARY'
-    | 'INCONSISTENT_BLOCKING';
+    | 'INCONSISTENT_BLOCKING'
+    | 'WRONG_DIA_EMPLOYEE' // [DRAAD403B FOUT 4]
+    | 'WRONG_DIA_DATE' // [DRAAD403B FOUT 4]
+    | 'WRONG_DIA_DAGDEEL'; // [DRAAD403B FOUT 4]
   message: string;
   severity: 'error' | 'warning';
   affected_slots?: string[]; // Slot IDs involved
@@ -79,6 +87,14 @@ export interface ChainReport {
   coverage: {
     with_dia_auto: number; // DIO with DIA assigned
     with_next_day_blocks: number; // DIO with recovery blocks
+  };
+  
+  // [DRAAD403B FOUT 4] NEW: DIO/DIA pairing stats
+  dio_dia_pairing: {
+    correctly_paired: number; // DIO with correct DIA
+    unpaired_dio: number; // DIO without DIA
+    mismatched_employee: number; // DIA assigned to wrong person
+    mismatched_date_time: number; // DIA on wrong day/dagdeel
   };
   
   chains: ChainDetail[];
@@ -106,6 +122,10 @@ export class ChainEngine {
   private workbestand_services_metadata: WorkbestandServicesMetadata[];
   private rooster_start_date: Date;
   private rooster_end_date: Date;
+  
+  // [DRAAD403B FOUT 4] Service ID mapping
+  private readonly DIO_SERVICE_ID = 'd43f1b52-415c-4429-a41e-4d9cf8768543';
+  private readonly DIA_SERVICE_ID = '4832f3b0-78bc-4f19-887e-fb4ece6d1d43';
 
   constructor(
     planning: WorkbestandPlanning[],
@@ -185,11 +205,14 @@ export class ChainEngine {
   /**
    * Validate a single DIO/DDO assignment and its chain
    * 
+   * [DRAAD403B FOUT 4] ENHANCED: Now validates DIO/DIA pairing
+   * 
    * A valid chain requires:
    * 1. DIO/DDO assigned on Ochtend (status=1)
    * 2. Middag of same day blocked (status=2)
-   * 3. DIA assigned to Avond of same day (status=1)
-   * 4. Next day O+M blocked (status=2), if not beyond period
+   * 3. DIA assigned to Avond of SAME DAY (status=1) - [DRAAD403B FOUT 4] KEY FIX
+   * 4. DIA assigned to SAME EMPLOYEE (status=1) - [DRAAD403B FOUT 4] KEY FIX
+   * 5. Next day O+M blocked (status=2), if not beyond period
    */
   private validateChain(assignment: WorkbestandPlanning): DIOChain {
     const chain_id = assignment.id;
@@ -235,19 +258,20 @@ export class ChainEngine {
       });
     }
 
-    // Step 3: Find and verify DIA assignment (Avond)
+    // [DRAAD403B FOUT 4] Step 3: Find and verify DIA assignment
+    // CRITICAL: DIA MUST be on SAME DAY, DAGDEEL A, and assigned to SAME EMPLOYEE
     const dia_assignment = this.workbestand_planning.find(
       (p) =>
-        p.employee_id === employee_id &&
-        this.isSameDay(p.date, assign_date) &&
-        p.dagdeel === 'A'
+        p.employee_id === employee_id && // [DRAAD403B] SAME EMPLOYEE
+        this.isSameDay(p.date, assign_date) && // [DRAAD403B] SAME DAY (not next day!)
+        p.dagdeel === 'A' // [DRAAD403B] DAGDEEL A (avond)
     );
 
     if (!dia_assignment) {
       errors.push({
         chain_id,
         error_type: 'MISSING_DIA',
-        message: `DIO assignment missing DIA assignment for ${employee_id} on ${assign_date.toISOString().split('T')[0]}`,
+        message: `[DRAAD403B FOUT 4] DIO assignment missing DIA for ${employee_id} on ${assign_date.toISOString().split('T')[0]} DAGDEEL A`,
         severity: 'error',
       });
     } else if (dia_assignment.status !== 1) {
@@ -265,7 +289,29 @@ export class ChainEngine {
         errors.push({
           chain_id,
           error_type: 'INCONSISTENT_BLOCKING',
-          message: `Avond slot has service ${dia_service?.code}, expected DIA`,
+          message: `[DRAAD403B FOUT 4] Avond slot has service ${dia_service?.code}, expected DIA`,
+          severity: 'error',
+          affected_slots: [dia_assignment.id],
+        });
+      }
+      
+      // [DRAAD403B FOUT 4] NEW: Verify DIA is to SAME EMPLOYEE
+      if (dia_assignment.employee_id !== employee_id) {
+        errors.push({
+          chain_id,
+          error_type: 'WRONG_DIA_EMPLOYEE',
+          message: `[DRAAD403B FOUT 4] DIA assigned to ${dia_assignment.employee_id}, expected ${employee_id} (SAME as DIO)`,
+          severity: 'error',
+          affected_slots: [dia_assignment.id],
+        });
+      }
+      
+      // [DRAAD403B FOUT 4] NEW: Verify DIA is on SAME DAY
+      if (!this.isSameDay(dia_assignment.date, assign_date)) {
+        errors.push({
+          chain_id,
+          error_type: 'WRONG_DIA_DATE',
+          message: `[DRAAD403B FOUT 4] DIA on ${dia_assignment.date.toISOString().split('T')[0]}, expected ${assign_date.toISOString().split('T')[0]} (SAME DAY as DIO)`,
           severity: 'error',
           affected_slots: [dia_assignment.id],
         });
@@ -273,7 +319,6 @@ export class ChainEngine {
     }
 
     // Step 4: Find and verify next-day recovery blocks (if not beyond period)
-    // IMPORTANT: Use explicit null assignment to avoid undefined in type
     let next_day_ochtend_block: WorkbestandPlanning | null = null;
     let next_day_middag_block: WorkbestandPlanning | null = null;
 
@@ -461,9 +506,38 @@ export class ChainEngine {
   }
 
   /**
-   * Generate comprehensive chain report
+   * [DRAAD403B FOUT 4] Generate comprehensive chain report with pairing stats
    */
   private generateChainReport(chains: DIOChain[]): ChainReport {
+    // Calculate pairing statistics
+    let correctly_paired = 0;
+    let unpaired_dio = 0;
+    let mismatched_employee = 0;
+    let mismatched_date_time = 0;
+
+    for (const chain of chains) {
+      // Check if DIA exists
+      if (!chain.slots.dia_assignment) {
+        unpaired_dio++;
+        continue;
+      }
+
+      // Check if employee matches
+      if (chain.slots.dia_assignment.employee_id !== chain.employee_id) {
+        mismatched_employee++;
+        continue;
+      }
+
+      // Check if date matches
+      if (!this.isSameDay(chain.slots.dia_assignment.date, chain.assignment_date)) {
+        mismatched_date_time++;
+        continue;
+      }
+
+      // All checks passed
+      correctly_paired++;
+    }
+
     const report: ChainReport = {
       total_chains: chains.length,
       valid_chains: chains.filter((c) => c.valid).length,
@@ -477,6 +551,12 @@ export class ChainEngine {
         with_next_day_blocks: chains.filter(
           (c) => c.slots.next_day_ochtend_block !== null || c.slots.next_day_middag_block !== null
         ).length,
+      },
+      dio_dia_pairing: {
+        correctly_paired,
+        unpaired_dio,
+        mismatched_employee,
+        mismatched_date_time,
       },
       chains: chains.map((chain) => ({
         chain_id: chain.chain_id,
