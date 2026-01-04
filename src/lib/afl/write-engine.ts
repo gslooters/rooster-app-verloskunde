@@ -14,6 +14,7 @@
  * 
  * [DRAAD369] UPDATE: Now includes roster_period_staffing_dagdelen_id lookup
  * [DRAAD403B] FOUT 2 & 3 FIXES: Variant ID lookup + invulling update
+ * [DRAAD403B] DEPLOYMENT FIX: Type safety for undefined team field
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -84,6 +85,7 @@ export class WriteEngine {
    * 
    * [DRAAD369] Now includes variant ID lookups
    * [DRAAD403B] Now includes invulling updates
+   * [DRAAD403B] DEPLOYMENT FIX: Type safety for undefined fields
    */
   async writeModifiedSlots(
     rosterId: string,
@@ -199,12 +201,15 @@ export class WriteEngine {
           ? slot.date.toISOString().split('T')[0]
           : slot.date;
 
+        // [DRAAD403B DEPLOYMENT FIX] Type-safe team handling
+        const team = slot.team || 'default';
+
         const variantId = await this.getVariantId(
           rosterId,
           dateStr,
           slot.dagdeel,
           slot.service_id,
-          slot.team
+          team
         );
 
         if (variantId) {
@@ -333,6 +338,7 @@ export class WriteEngine {
 
   /**
    * [DRAAD403B FOUT 2] Build update payloads with variant ID resolution
+   * [DRAAD403B DEPLOYMENT FIX] Type-safe undefined field handling
    * 
    * For each modified slot:
    * 1. Lookup variant ID via getVariantId()
@@ -352,15 +358,18 @@ export class WriteEngine {
         ? slot.date.toISOString().split('T')[0]
         : slot.date;
 
+      // [DRAAD403B DEPLOYMENT FIX] Type-safe team handling with null-coalescing
+      const team = slot.team || 'default';
+
       // Lookup variant ID [DRAAD403B FOUT 2]
       let variantId: string | null = null;
-      if (slot.service_id && slot.team) {
+      if (slot.service_id) {
         variantId = await this.getVariantId(
           rosterId,
           dateStr,
           slot.dagdeel,
           slot.service_id,
-          slot.team
+          team
         );
       }
 
@@ -372,7 +381,7 @@ export class WriteEngine {
             date: dateStr,
             dagdeel: slot.dagdeel,
             service_id: slot.service_id,
-            team: slot.team,
+            team: team,
           }
         );
       }
