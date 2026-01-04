@@ -248,12 +248,14 @@ export class SolveEngine {
   /**
    * Find all available candidates for a task
    * 
-   * ✅ OPTIE A: Strict team filtering
+   * ✅ FOUT 1 FIX: Status check ontbreekt
+   * 
    * Criteria:
    * - In correct team (or fallback)
    * - Has available slot on date/dagdeel with status=0
    * - Has capacity > 0 for this service
    * - Not blocked by pre-planning (is_protected=FALSE)
+   * - ✅ NEW: Employee status !== 3 (not unavailable)
    */
   private findCandidates(task: WorkbestandOpdracht): SolveCandidate[] {
     const candidates: SolveCandidate[] = [];
@@ -289,6 +291,24 @@ export class SolveEngine {
 
         if (!capacity_row || !capacity_row.actief || (capacity_row.aantal_beschikbaar || 0) <= 0) {
           continue; // Not qualified or no capacity
+        }
+
+        // ✅ FOUT 1 FIX: Check employee status !== 3 (not unavailable)
+        // Status 3 = NB (niet beschikbaar = not available)
+        // We need to check the employee's status in their planning slot
+        const employee_status_in_slot = this.workbestand_planning.find(
+          (p) =>
+            p.employee_id === emp.employee_id &&
+            p.date.getTime() === task.date.getTime() &&
+            p.dagdeel === task.dagdeel
+        )?.status;
+
+        // If status=3 (NB), skip this employee - they are unavailable
+        if (employee_status_in_slot === 3) {
+          if (this.debug_enabled) {
+            console.log(`⏭️  FOUT 1 FIX: Skipping employee ${emp.employee_id} (status=3/NB on ${task.date.toISOString().split('T')[0]})`);
+          }
+          continue;
         }
 
         // Check: Available slot on this date/dagdeel/status=0?
