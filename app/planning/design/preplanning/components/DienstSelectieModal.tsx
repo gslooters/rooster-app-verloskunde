@@ -5,6 +5,7 @@
  * DRAAD402: FIXES - variant_id state + radio button logic + cache-busting
  * DRAAD402-HOTFIX: Type error fix - correct service_id reference
  * DRAAD402-OPERATIVE: KRITIEKE FIX - onChange parameter correction
+ * DRAAD404: ✅ IMPLEMENTATIE - Gebruik getServicesForEmployeeWithAllVariants() in admin mode
  * 
  * Modal pop-up voor toewijzen/wijzigen van diensten aan cellen
  * Ondersteunt alle 4 statussen:
@@ -37,6 +38,11 @@
  *   Was: handleServiceSelect(service.id, service.id) ❌
  *   Now: handleServiceSelect(service.id, service.service_id) ✅
  * 
+ * DRAAD404 FIX (4 JAN 2026):
+ * - Regel 89: Admin mode nu gebruikt getServicesForEmployeeWithAllVariants() ✅
+ * - Geeft 27 entries terug (9 diensten × 3 teams) ipv 9 ✅
+ * - Team labels duidelijk zichtbaar [Groen], [Oranje], [Praktijk] ✅
+ * 
  * HERSTEL:
  * - rosterId nu ook doorgegeven aan getServicesForEmployee() (admin toggle)
  * - Zorgt voor service blocking rules in beide modes
@@ -50,7 +56,7 @@
  * - Visuele markering van huidige status
  * - Read-only mode voor status='final'
  * 
- * Cache: 2026-01-04T11:56:00Z  // ⭐ OPERATIVE FIX: Updated timestamp
+ * Cache: 2026-01-04T12:48:00Z  // ⭐ DRAAD404: Updated timestamp
  */
 
 'use client';
@@ -64,8 +70,9 @@ import {
   ServiceTypeWithTimes 
 } from '@/lib/types/preplanning';
 import { 
-  getServicesForEmployee, 
-  getServicesForEmployeeFiltered 
+  getServicesForEmployee,
+  getServicesForEmployeeFiltered,
+  getServicesForEmployeeWithAllVariants  // ✅ DRAAD404: NEW - for admin mode
 } from '@/lib/services/preplanning-storage';
 
 interface ModalCellData {
@@ -116,12 +123,16 @@ export default function DienstSelectieModal({
       let services: ServiceTypeWithTimes[];
       
       if (showAllServices) {
-        // Admin modus: toon alle diensten (ongefilterd)
-        // HERSTEL: Geef rosterId door voor service blocking check
-        services = await getServicesForEmployee(cellData.employeeId, cellData.rosterId);
-        console.log('[DienstSelectieModal] Admin mode: loaded', services.length, 'services');
+        // ✅ DRAAD404: Admin modus - haal ALLE team-varianten op (27 entries)
+        services = await getServicesForEmployeeWithAllVariants(
+          cellData.employeeId,
+          cellData.rosterId,
+          cellData.date,        // ✅ Geef datum door
+          cellData.dagdeel      // ✅ Geef dagdeel door
+        );
+        console.log('[DienstSelectieModal] Admin mode: loaded', services.length, 'service variants (with teams)');
       } else {
-        // Normale modus: filter op dagdeel/datum/status
+        // Gefilterde modus: filter op dagdeel/datum/status - ONGEWIJZIGD
         services = await getServicesForEmployeeFiltered(
           cellData.employeeId,
           cellData.rosterId,
