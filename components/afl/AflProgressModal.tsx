@@ -5,9 +5,15 @@ import { Loader2, CheckCircle2, XCircle, X, AlertCircle, Clock, FileText, FileSp
 import { Button } from '@/components/ui/button';
 
 /**
- * AFL Progress Modal Component - DRAAD346: Modal Flow & Export Fix
+ * AFL Progress Modal Component - DRAAD404: Timeout Increase to 60 Seconds
  * 
- * DRAAD346 CHANGES:
+ * DRAAD404 CHANGES:
+ * 1. ✅ INCREASED client-side timeout from 15s to 60s
+ * 2. ✅ Updated phase feedback messages to reflect 60s max
+ * 3. ✅ Matches API route timeout (maxDuration = 60)
+ * 4. 🔒 Prevents modal timeout while API is still processing
+ * 
+ * Previous DRAAD346 CHANGES:
  * 1. ✅ FIXED close button (X) - only visible on ERROR/TIMEOUT, not on SUCCESS
  * 2. ✅ DISABLED export buttons (PDF/Excel) - grayed out until API routes work
  * 3. 🔒 Enforces correct workflow: Ontwerp → Rapportage → Bewerking
@@ -27,7 +33,7 @@ import { Button } from '@/components/ui/button';
  * FEATURES:
  * - Real-time progress tracking with detailed feedback
  * - Phase-by-phase status indicators
- * - Timeout detection (15 second max)
+ * - Timeout detection (60 second max) - DRAAD404
  * - Error handling with detailed messages
  * - Success state with statistics (STAYS VISIBLE)
  * - Blue "Naar rooster" CTA button (triggers parent callback on click)
@@ -70,7 +76,9 @@ const PHASES = [
   { id: 5, name: 'Rapport', description: 'Rapporten genereren' }
 ];
 
-const AFL_TIMEOUT_MS = 15000; // 15 seconden timeout
+// ✅ DRAAD404: INCREASED from 15000ms to 60000ms (60 seconds)
+// API route now has maxDuration = 60, so client should wait max 60s
+const AFL_TIMEOUT_MS = 60000; // 60 seconden timeout
 const PHASE_TIMEOUT_MS = 5000; // Max 5 sec per phase
 
 export function AflProgressModal({
@@ -111,12 +119,12 @@ export function AflProgressModal({
     let aborted = false;
 
     try {
-      // DRAAD337: Timeout detection
+      // ✅ DRAAD404: Timeout detection - 60 seconds
       const timeoutHandle = setTimeout(() => {
-        console.error('❌ [Modal] AFL execution TIMEOUT after 15 seconds');
+        console.error('❌ [Modal] AFL execution TIMEOUT after 60 seconds');
         aborted = true;
         setState('timeout');
-        setError('AFL-pijplijn heeft te lang geduurd (>15 seconden). Controleer de server-logs.');
+        setError('AFL-pijplijn heeft te lang geduurd (>60 seconden). Controleer de server-logs op Railway.');
         setExecutionTime(Date.now() - startTime);
       }, AFL_TIMEOUT_MS);
 
@@ -295,7 +303,7 @@ export function AflProgressModal({
                   <Loader2 size={18} className="text-blue-600 animate-spin flex-shrink-0 mt-0.5" />
                   <div>
                     <p className="text-sm font-medium text-blue-900">{statusMessage}</p>
-                    <p className="text-xs text-blue-700 mt-1">Even geduld... dit kan tot 15 seconden duren</p>
+                    <p className="text-xs text-blue-700 mt-1">Even geduld... dit kan tot 60 seconden duren</p>
                   </div>
                 </div>
 
@@ -500,7 +508,7 @@ export function AflProgressModal({
                     ⏱️ Timeout - AFL-pijplijn te lang aan het uitvoeren
                   </h3>
                   <p className="text-sm text-gray-600">
-                    De pijplijn heeft meer dan 15 seconden nodig gehad.
+                    De pijplijn heeft meer dan 60 seconden nodig gehad.
                   </p>
                 </div>
 
@@ -527,7 +535,7 @@ export function AflProgressModal({
             {state === 'loading' && (
               <div className="space-y-2">
                 <p className="text-xs text-gray-600 text-center font-medium">
-                  ⏳ Alstublieft wachten... Dit kan tot 15 seconden duren
+                  ⏳ Alstublieft wachten... Dit kan tot 60 seconden duren
                 </p>
                 <p className="text-xs text-gray-500 text-center">
                   Sluit dit venster niet - dit onderbreekt de pijplijn
