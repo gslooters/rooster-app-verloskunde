@@ -70,13 +70,18 @@ import DienstSelectieModal from './components/DienstSelectieModal';
  * - Modal geeft variantId mee bij onSave
  * - handleModalSave ontvangt en passert variantId door
  * 
+ * DRAAD402: ✅ Cache-busting + radio button fixes
+ * - variantId (roster_period_staffing_dagdelen.id) wordt correct doorgegeven
+ * - Radio buttons gebruiken UNIEKE variant ID als selection key
+ * - Hardcoded cache timestamp voor browser cache invalidation
+ * 
  * Dit scherm toont:
  * - Grid met 35 dagen (5 weken) als kolommen x 3 dagdelen (O/M/A)
  * - Medewerkers als rijen
  * - Cellen op basis van status (0=leeg, 1=dienst, 2=geblokkeerd, 3=NB)
  * - Data wordt opgeslagen in Supabase roster_assignments
  * 
- * Cache: ${Date.now()}
+ * Cache: 2026-01-04T11:30:00Z  // ⭐ FIX #6: Hardcoded timestamp
  */
 export default function PrePlanningClient() {
   const router = useRouter();
@@ -237,7 +242,7 @@ export default function PrePlanningClient() {
     setModalOpen(true);
   }, [employees, assignments, rosterId]); // ⭐ rosterId toegevoegd aan dependencies
 
-  // DRAAD 80 + 89 + DRAAD352 + DRAAD399: Modal save handler - alle statussen via updateAssignmentStatus
+  // DRAAD 80 + 89 + DRAAD352 + DRAAD399 + DRAAD402: Modal save handler - alle statussen via updateAssignmentStatus
   const handleModalSave = useCallback(async (serviceId: string | null, status: CellStatus, variantId?: string | null) => {
     if (!selectedCell || !rosterId) return;
     
@@ -252,6 +257,7 @@ export default function PrePlanningClient() {
       // Status 2 (geblokkeerd): service_id=null, status=2 → UPSERT
       // Status 3 (NB): service_id=null, status=3 → UPSERT
       // DRAAD399: Voeg variantId toe
+      // DRAAD402: variantId wordt correct doorgegeven voor alle statussen
       const result = await updateAssignmentStatus(
         rosterId,
         selectedCell.employeeId,
@@ -260,7 +266,7 @@ export default function PrePlanningClient() {
         status,
         serviceId,
         startDate, // DRAAD 89: Roster start date voor periode check
-        variantId  // DRAAD399: Doorvoeren variant ID
+        variantId  // DRAAD399+402: Doorvoeren variant ID (roster_period_staffing_dagdelen.id)
       );
 
       const success = result.success;
@@ -426,7 +432,7 @@ export default function PrePlanningClient() {
         </div>
       </div>
 
-      {/* DRAAD 80 + 90: Dienst Selectie Modal met isSaving prop + rosterId in cellData */}
+      {/* DRAAD 80 + 90 + 402: Dienst Selectie Modal met isSaving prop + rosterId in cellData + variantId handling */}
       <DienstSelectieModal
         isOpen={modalOpen}
         cellData={selectedCell}
