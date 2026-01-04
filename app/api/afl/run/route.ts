@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
  * 
  * DRAAD337: AFL Pipeline API with cache-busting
  * DRAAD335: AFL Pipeline API Integration
+ * DRAAD404: TIMEOUT INCREASE - 60 seconds for complete pipeline
  * 
  * DOEL:
  * - Execute complete AFL pipeline (FASE 1-5)
@@ -21,6 +22,7 @@ import { NextRequest, NextResponse } from 'next/server';
  * 
  * PERFORMANCE:
  * - Expected: 5-7 seconds for full roster
+ * - Timeout: 60 seconds (was 15s, increased DRAAD404)
  * - Target coverage: 87-95% (210-240 assignments)
  * 
  * REQUEST:
@@ -34,7 +36,18 @@ import { NextRequest, NextResponse } from 'next/server';
  *   "execution_time_ms": 6234,
  *   "report": { ... }
  * }
+ * 
+ * DRAAD404 CHANGES:
+ * - Added `maxDuration` config for Vercel (60 seconds)
+ * - API route timeout increased from 15s to 60s
+ * - Frontend modal timeout increased from 15s to 60s
+ * - Allows complete AFL pipeline execution even with database load
  */
+
+// ✅ DRAAD404: Set maxDuration for Vercel/Next.js
+// This allows the serverless function to run for up to 60 seconds
+// Without this, default is 10 seconds and will timeout
+export const maxDuration = 60;
 
 // Force dynamic rendering (no cache!)
 export const dynamic = 'force-dynamic';
@@ -42,12 +55,15 @@ export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
-  const deploymentTimestamp = '2025-12-22T21:14:00Z'; // DRAAD337 deployment marker
+  const deploymentTimestamp = '2026-01-04T15:35:00Z-DRAAD404-TIMEOUT-INCREASE'; // DRAAD404 deployment marker
 
   try {
+    console.log('═══════════════════════════════════════════════════════');
     console.log('🤖 [AFL API] AFL execution requested');
-    console.log(`📍 [DRAAD337] Deployment version: ${deploymentTimestamp}`);
+    console.log(`📍 [DRAAD404] Deployment version: ${deploymentTimestamp}`);
+    console.log(`📍 [DRAAD404] API maxDuration: 60 seconds (was 15s)`);
     console.log(`⏱️ [Request Start] ${new Date(startTime).toISOString()}`);
+    console.log('═══════════════════════════════════════════════════════');
 
     // STAP 1: Parse request body
     let rosterId: string;
@@ -107,6 +123,7 @@ export async function POST(request: NextRequest) {
     // STAP 4: Success - return complete result
     const totalTime = Date.now() - startTime;
 
+    console.log('═══════════════════════════════════════════════════════');
     console.log(`✅ [AFL API] Pipeline completed successfully for roster ${rosterId}`);
     console.log(`   📈 Total execution time: ${result.execution_time_ms}ms`);
     console.log(`   🎯 AFL Run ID: ${result.afl_run_id}`);
@@ -118,6 +135,7 @@ export async function POST(request: NextRequest) {
     console.log(`      - Report: ${result.phase_timings?.report_generation_ms}ms`);
     console.log(`   📈 Coverage: ${result.report?.summary.coverage_percent.toFixed(1)}%`);
     console.log(`   👥 Assigned: ${result.report?.summary.total_planned} / ${result.report?.summary.total_required}`);
+    console.log('═══════════════════════════════════════════════════════');
 
     const cacheToken = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
@@ -141,7 +159,7 @@ export async function POST(request: NextRequest) {
           'X-Execution-Time': `${result.execution_time_ms}ms`,
           'X-Cache-Bust': cacheToken,
           'X-Deployment': deploymentTimestamp,
-          'X-DRAAD': '337'
+          'X-DRAAD': '404'
         }
       }
     );
@@ -153,7 +171,7 @@ export async function POST(request: NextRequest) {
       error: error?.message ?? String(error),
       stack: error?.stack,
       duration: `${totalTime}ms`,
-      draad: 'DRAAD337'
+      draad: 'DRAAD404'
     });
 
     return NextResponse.json(
@@ -161,13 +179,13 @@ export async function POST(request: NextRequest) {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred',
         details: error?.stack ?? null,
-        deployment_version: '2025-12-22T21:14:00Z'
+        deployment_version: '2026-01-04T15:35:00Z-DRAAD404-TIMEOUT-INCREASE'
       },
       { 
         status: 500,
         headers: {
           'X-Cache-Bust': `${Date.now()}-${Math.floor(Math.random() * 10000)}`,
-          'X-DRAAD': '337'
+          'X-DRAAD': '404'
         }
       }
     );
@@ -184,7 +202,7 @@ export async function OPTIONS() {
       headers: {
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
-        'X-DRAAD': '337'
+        'X-DRAAD': '404'
       }
     }
   );
