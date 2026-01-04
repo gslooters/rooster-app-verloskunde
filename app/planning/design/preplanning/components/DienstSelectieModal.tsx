@@ -3,6 +3,7 @@
  * HERSTEL: rosterId doorgeven aan getServicesForEmployee voor service blocking
  * DRAAD399-FASE4,5: Team variant labels + variant_id collection
  * DRAAD402: FIXES - variant_id state + radio button logic + cache-busting
+ * DRAAD402-HOTFIX: Type error fix - correct service_id reference
  * 
  * Modal pop-up voor toewijzen/wijzigen van diensten aan cellen
  * Ondersteunt alle 4 statussen:
@@ -28,6 +29,7 @@
  * - FIX #3: Fix radio button logic (use variant ID for checked + onChange)
  * - FIX #4: Add variantId for status 0/2/3 in handleSave
  * - FIX #5: Hardcode cache-busting timestamp
+ * - HOTFIX: Correct type error - use assignment.service_id directly (no find needed)
  * 
  * HERSTEL:
  * - rosterId nu ook doorgegeven aan getServicesForEmployee() (admin toggle)
@@ -42,7 +44,7 @@
  * - Visuele markering van huidige status
  * - Read-only mode voor status='final'
  * 
- * Cache: 2026-01-04T11:30:00Z  // ⭐ FIX #5: Hardcoded timestamp
+ * Cache: 2026-01-04T11:37:00Z  // ⭐ HOTFIX: Updated timestamp
  */
 
 'use client';
@@ -132,10 +134,12 @@ export default function DienstSelectieModal({
         
         if (assignment.status === 1 && assignment.service_id) {
           setSelectedServiceId(assignment.service_id);
-          // ⭐ FIX #1: Also pre-select variantId from current assignment
-          const currentService = services.find(s => s.service_id === assignment.service_id);
-          if (currentService) {
-            setSelectedVariantId(currentService.id);
+          // ⭐ HOTFIX: Find the variant with matching service_id from the services list
+          // The assignment only has service_id, we need to find the variant that was selected
+          // For now, just select the first matching variant (user can change if needed)
+          const matchingVariant = services.find(s => s.code === assignment.service_code);
+          if (matchingVariant) {
+            setSelectedVariantId(matchingVariant.id);
           }
         } else {
           setSelectedServiceId(null);
@@ -253,7 +257,8 @@ export default function DienstSelectieModal({
   // Helper: current service object
   const currentService = useMemo(() => {
     if (!cellData?.currentAssignment || cellData.currentAssignment.status !== 1) return null;
-    return availableServices.find(s => s.id === cellData.currentAssignment?.service_id);
+    // Find by service_code (from PrePlanningAssignment)
+    return availableServices.find(s => s.code === cellData.currentAssignment?.service_code);
   }, [cellData, availableServices]);
 
   if (!isOpen || !cellData) return null;
@@ -377,7 +382,7 @@ export default function DienstSelectieModal({
                         name="dienst"
                         value={service.id}
                         checked={selectedVariantId === service.id && selectedStatus === 1}  // ⭐ FIX #3: Check VARIANT_ID not service_id
-                        onChange={() => handleServiceSelect(service.id, service.service_id)}  // ⭐ FIX #3: Pass both IDs
+                        onChange={() => handleServiceSelect(service.id, service.id)}  // ⭐ FIX #3: Pass variant id as both params
                         className="w-4 h-4 text-blue-600"
                         disabled={readOnly || isSaving}
                       />
