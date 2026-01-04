@@ -6,6 +6,7 @@
  * DRAAD 77: Uitgebreid met dagdeel ondersteuning en cel status structuur
  * DRAAD 79: ServiceTypeWithTimes toegevoegd voor modal component
  * DRAAD399: team_variant + variant_id velden toegevoegd voor team-aware diensten
+ * DRAAD402-HOTFIX: ✅ Added service_id field to fix TypeScript compilation error
  */
 
 /**
@@ -73,18 +74,27 @@ export interface PrePlanningData {
 /**
  * DRAAD 79: Service type met tijden voor modal component
  * DRAAD399: Uitgebreid met team_variant en variant_id voor team-aware diensten
+ * DRAAD402-HOTFIX: ✅ Added service_id field for FK integrity
+ * 
  * Simplified versie van ServiceType met alleen benodigde velden
+ * 
+ * Field mapping:
+ * - id: roster_period_staffing_dagdelen.id (VARIANT ID - unique per date/dagdeel/team)
+ * - service_id: service_types.id (SERVICE ID - FK for database)
+ * - code: service_types.code (SERVICE CODE - e.g., "DIO", "NB")
+ * - team_variant: roster_period_staffing_dagdelen.team (TEAM - 'GRO', 'ORA', 'TOT')
+ * - variant_id: duplicate of 'id' (for backwards compatibility)
  */
 export interface ServiceTypeWithTimes {
-  id: string;
-  code: string;
-  naam: string;
-  kleur: string;
-  start_tijd: string; // HH:MM format (begintijd)
-  eind_tijd: string;  // HH:MM format (eindtijd)
-  // DRAAD399: Nieuwe velden voor team-variant support
-  team_variant?: string; // 'GRO' | 'ORA' | 'TOT' - team waar deze variant voor is
-  variant_id?: string;   // UUID van roster_period_staffing_dagdelen record
+  id: string;                           // variant_id: roster_period_staffing_dagdelen.id
+  code: string;                         // service code
+  naam: string;                         // service name
+  kleur: string;                        // service color
+  start_tijd: string;                   // HH:MM format
+  eind_tijd: string;                    // HH:MM format
+  service_id: string;                   // ✅ NEW - service_types.id (for database FK)
+  team_variant?: string;                // 'GRO' | 'ORA' | 'TOT'
+  variant_id?: string;                  // duplicate of 'id' for backwards compat
 }
 
 /**
