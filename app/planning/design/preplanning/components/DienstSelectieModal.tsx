@@ -2,6 +2,7 @@
  * DRAAD 90: Dienst Selectie Modal - Met Filtering op Dagdeel/Datum/Status
  * HERSTEL: rosterId doorgeven aan getServicesForEmployee voor service blocking
  * DRAAD399-FASE4,5: Team variant labels + variant_id collection
+ * DRAAD402: FIXES - variant_id state + radio button logic + cache-busting
  * 
  * Modal pop-up voor toewijzen/wijzigen van diensten aan cellen
  * Ondersteunt alle 4 statussen:
@@ -21,6 +22,13 @@
  * - Variant ID collectie bij save
  * - Ondersteuning voor meerdere service varianten per service/datum/dagdeel
  * 
+ * DRAAD402 FIXES:
+ * - FIX #1: Add selectedVariantId state (roster_period_staffing_dagdelen.id)
+ * - FIX #2: Update handleServiceSelect signature (variantId FIRST param)
+ * - FIX #3: Fix radio button logic (use variant ID for checked + onChange)
+ * - FIX #4: Add variantId for status 0/2/3 in handleSave
+ * - FIX #5: Hardcode cache-busting timestamp
+ * 
  * HERSTEL:
  * - rosterId nu ook doorgegeven aan getServicesForEmployee() (admin toggle)
  * - Zorgt voor service blocking rules in beide modes
@@ -29,12 +37,12 @@
  * - Toont medewerker info, datum en dagdeel
  * - Lijst met diensten die medewerker kan uitvoeren (alfabetisch op code)
  * - Gefilterd op dagdeel/datum/status (tenzij admin toggle actief)
- * - Radio buttons voor dienst selectie
+ * - Radio buttons voor dienst selectie (UNIEKE variant ID als key)
  * - Opties voor Leeg, Blokkade en NB
  * - Visuele markering van huidige status
  * - Read-only mode voor status='final'
  * 
- * Cache: ${Date.now()}
+ * Cache: 2026-01-04T11:30:00Z  // ⭐ FIX #5: Hardcoded timestamp
  */
 
 'use client';
@@ -80,6 +88,7 @@ export default function DienstSelectieModal({
 }: DienstSelectieModalProps) {
   const [availableServices, setAvailableServices] = useState<ServiceTypeWithTimes[]>([]);
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);  // ⭐ FIX #1: NEW - roster_period_staffing_dagdelen.id
   const [selectedStatus, setSelectedStatus] = useState<CellStatus>(0); // 0, 1, 2, of 3
   const [isLoading, setIsLoading] = useState(false);
   const [showAllServices, setShowAllServices] = useState(false); // ⭐ NIEUW - Admin toggle
@@ -123,13 +132,20 @@ export default function DienstSelectieModal({
         
         if (assignment.status === 1 && assignment.service_id) {
           setSelectedServiceId(assignment.service_id);
+          // ⭐ FIX #1: Also pre-select variantId from current assignment
+          const currentService = services.find(s => s.service_id === assignment.service_id);
+          if (currentService) {
+            setSelectedVariantId(currentService.id);
+          }
         } else {
           setSelectedServiceId(null);
+          setSelectedVariantId(null);  // ⭐ FIX #1: Reset variantId for non-status-1
         }
       } else {
         // Geen assignment: status 0 (leeg)
         setSelectedStatus(0);
         setSelectedServiceId(null);
+        setSelectedVariantId(null);  // ⭐ FIX #1: Reset variantId
       }
     } catch (error) {
       console.error('[DienstSelectieModal] Error loading services:', error);
@@ -138,9 +154,10 @@ export default function DienstSelectieModal({
     }
   }
 
-  // Handler voor dienst selectie (status 1)
-  function handleServiceSelect(serviceId: string) {
-    setSelectedServiceId(serviceId);
+  // Handler voor dienst selectie (status 1) - ⭐ FIX #2: Updated signature
+  function handleServiceSelect(variantId: string, serviceId: string) {  // ⭐ variantId FIRST param
+    setSelectedVariantId(variantId);  // ⭐ Set variant (roster_period_staffing_dagdelen.id)
+    setSelectedServiceId(serviceId);   // Set service (service_types.id)
     setSelectedStatus(1); // Dienst = status 1
   }
 
@@ -149,6 +166,7 @@ export default function DienstSelectieModal({
     if (status === 0 || status === 2 || status === 3) {
       setSelectedStatus(status);
       setSelectedServiceId(null); // Deze statussen hebben geen service_id
+      setSelectedVariantId(null);  // ⭐ FIX #1: Reset variantId voor non-status-1
     }
   }
 
@@ -170,24 +188,27 @@ export default function DienstSelectieModal({
     return false;
   }, [cellData, selectedStatus, selectedServiceId]);
 
-  // DRAAD 399-FASE5: Save handler - collect variant_id
+  // DRAAD 399-FASE5 + FIX #4: Save handler - collect variant_id + add for all statuses
   function handleSave() {
     if (selectedStatus === 1) {
-      if (!selectedServiceId) {
+      // ✅ Status 1: User selected a service
+      if (!selectedServiceId || !selectedVariantId) {  // ⭐ FIX #4: Check BOTH
         alert('Selecteer een dienst');
         return;
       }
-      // DRAAD399: Verzamel variant_id van geselecteerde service
-      const selectedService = availableServices.find(s => s.id === selectedServiceId);
-      const variantId = selectedService?.variant_id || null;
-      
-      onSave(selectedServiceId, 1, variantId); // Geef variantId door
+      // Get variant_id from state (already set during selection)
+      const variantId = selectedVariantId;  // ⭐ FIX #4: Use stored selectedVariantId
+      onSave(selectedServiceId, 1, variantId);  // ✅ HAS variantId
     } else if (selectedStatus === 0) {
-      onSave(null, 0);
+      // ✅ Status 0: Delete (Leeg)
+      // Pass selectedVariantId so trigger can decrement invulling
+      onSave(null, 0, selectedVariantId);  // ⭐ FIX #4: Add variantId for DB trigger
     } else if (selectedStatus === 2) {
-      onSave(null, 2);
+      // ✅ Status 2: Blocked (Blokkade)
+      onSave(null, 2, selectedVariantId);  // ⭐ FIX #4: Add variantId
     } else if (selectedStatus === 3) {
-      onSave(null, 3);
+      // ✅ Status 3: NB (Niet Beschikbaar)
+      onSave(null, 3, selectedVariantId);  // ⭐ FIX #4: Add variantId
     }
     // Parent component regelt isSaving state en modal sluiten
   }
@@ -348,15 +369,15 @@ export default function DienstSelectieModal({
                     })
                     .map(service => (
                     <label
-                      key={`${service.id}-${service.variant_id}`}
+                      key={service.id}  // ⭐ FIX #3: Key is roster_period_staffing_dagdelen.id (UNIEKE)
                       className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer transition-colors"
                     >
                       <input
                         type="radio"
                         name="dienst"
                         value={service.id}
-                        checked={selectedServiceId === service.id && selectedStatus === 1}
-                        onChange={() => handleServiceSelect(service.id)}
+                        checked={selectedVariantId === service.id && selectedStatus === 1}  // ⭐ FIX #3: Check VARIANT_ID not service_id
+                        onChange={() => handleServiceSelect(service.id, service.service_id)}  // ⭐ FIX #3: Pass both IDs
                         className="w-4 h-4 text-blue-600"
                         disabled={readOnly || isSaving}
                       />
@@ -369,7 +390,7 @@ export default function DienstSelectieModal({
                           </span>
                         )}
                         <span className="text-sm text-gray-600">({service.naam})</span>
-                        {selectedServiceId === service.id && selectedStatus === 1 && (
+                        {selectedVariantId === service.id && selectedStatus === 1 && (  // ⭐ FIX #3: Check variant
                           <Check className="w-4 h-4 text-blue-600 ml-auto" />
                         )}
                       </div>
