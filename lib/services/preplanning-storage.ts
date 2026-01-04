@@ -21,6 +21,7 @@
  * DRAAD399-FASE6: ✅ STORAGE - Save roster_period_staffing_dagdelen_id naar database
  * DRAAD400-FASE1: ✅ FIX - Vervang .find() door .filter() voor ALLE team-varianten
  * DRAAD401-FASE2: ✅ FIX - updateAssignmentStatus() slaagt variantId op in database
+ * DRAAD402-HOTFIX: ✅ FIX - Add service_id to returned ServiceTypeWithTimes objects
  * 
  * Cache: ${Date.now()}
  */
@@ -257,6 +258,7 @@ export async function updateAssignmentStatus(
 /**
  * DRAAD 79: Haal diensten op die een specifieke medewerker kan uitvoeren
  * Via employee_services koppeltabel
+ * DRAAD402-HOTFIX: ✅ Add service_id to returned objects
  * HERSTEL: Service blocking rules integratie
  * 
  * BLOCKING LOGIC:
@@ -298,15 +300,17 @@ export async function getServicesForEmployee(
     }
 
     // Transform nested data naar platte structuur
+    // DRAAD402-HOTFIX: ✅ Add service_id to returned objects
     let services: ServiceTypeWithTimes[] = (data || [])
       .filter((item: any) => item.service_types && item.service_types.actief)
       .map((item: any) => ({
-        id: item.service_types.id,
+        id: item.service_types.id,                          // service_types.id (same as service_id)
         code: item.service_types.code,
         naam: item.service_types.naam,
         kleur: item.service_types.kleur || '#3B82F6',
         start_tijd: item.service_types.begintijd || '09:00',
         eind_tijd: item.service_types.eindtijd || '17:00',
+        service_id: item.service_types.id,                  // ✅ ADD THIS - for type safety
         actief: true
       }));
 
@@ -351,6 +355,7 @@ export async function getServicesForEmployee(
  * DRAAD 90: Nieuwe functie - Gefilterde diensten ophalen
  * Haal diensten op die beschikbaar zijn voor specifieke medewerker op datum/dagdeel
  * Filtert op basis van roster_period_staffing_dagdelen status (NIET status='MAG_NIET')
+ * DRAAD402-HOTFIX: ✅ Add service_id when building filtered services
  * HERSTEL: Service blocking rules integratie
  * 
  * DRAAD 91: Fix TypeScript type error - toegevoegd type casting as any[]
@@ -420,6 +425,7 @@ export async function getServicesForEmployeeFiltered(
         kleur: item.service_types.kleur || '#3B82F6',
         start_tijd: item.service_types.begintijd || '09:00',
         eind_tijd: item.service_types.eindtijd || '17:00',
+        service_id: item.service_types.id,                  // ✅ DRAAD402: Add service_id
         actief: true
       }));
 
@@ -492,11 +498,13 @@ export async function getServicesForEmployeeFiltered(
       
       // DRAAD400-FASE1: Voor ELKE variant: aparte entry toevoegen
       // Dit zorgt dat service DIO + 3 teams = 3 entries in resultaat
+      // DRAAD402-HOTFIX: ✅ Preserve service_id from baseServices
       for (const dagdeelData of dagdeelDataList) {
         filteredServices.push({
-          ...service,
-          team_variant: dagdeelData.team, // 'GRO' | 'ORA' | 'TOT'
-          variant_id: dagdeelData.id      // UUID van staffing record (uniek per variant)
+          ...service,                         // ✅ Includes service_id from baseServices
+          id: dagdeelData.id,                 // ⭐ Override with variant ID (roster_period_staffing_dagdelen.id)
+          team_variant: dagdeelData.team,     // 'GRO' | 'ORA' | 'TOT'
+          variant_id: dagdeelData.id          // UUID van staffing record (uniek per variant)
         });
       }
     }
