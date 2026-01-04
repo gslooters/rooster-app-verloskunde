@@ -75,13 +75,17 @@ import DienstSelectieModal from './components/DienstSelectieModal';
  * - Radio buttons gebruiken UNIEKE variant ID als selection key
  * - Hardcoded cache timestamp voor browser cache invalidation
  * 
+ * DRAAD402-OPERATIVE: KRITIEKE FIX applied
+ * - DienstSelectieModal: onChange parameter fix (service.id → service.service_id)
+ * - Cache timestamp synchronized
+ * 
  * Dit scherm toont:
  * - Grid met 35 dagen (5 weken) als kolommen x 3 dagdelen (O/M/A)
  * - Medewerkers als rijen
  * - Cellen op basis van status (0=leeg, 1=dienst, 2=geblokkeerd, 3=NB)
  * - Data wordt opgeslagen in Supabase roster_assignments
  * 
- * Cache: 2026-01-04T11:30:00Z  // ⭐ FIX #6: Hardcoded timestamp
+ * Cache: 2026-01-04T11:56:00Z  // ⭐ OPERATIVE: Synchronized timestamp
  */
 export default function PrePlanningClient() {
   const router = useRouter();
