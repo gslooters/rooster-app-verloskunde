@@ -22,6 +22,7 @@
  * DRAAD400-FASE1: ✅ FIX - Vervang .find() door .filter() voor ALLE team-varianten
  * DRAAD401-FASE2: ✅ FIX - updateAssignmentStatus() slaagt variantId op in database
  * DRAAD402-HOTFIX: ✅ FIX - Add service_id to returned ServiceTypeWithTimes objects
+ * DRAAD404: ✅ IMPLEMENTATIE - New getServicesForEmployeeWithAllVariants() for admin mode
  * 
  * Cache: ${Date.now()}
  */
@@ -348,6 +349,108 @@ export async function getServicesForEmployee(
   } catch (error) {
     console.error('❌ Exception in getServicesForEmployee:', error);
     return [];
+  }
+}
+
+/**
+ * DRAAD404: NIEUWE FUNCTIE - Haal ALLE team-varianten op voor admin modus
+ * 
+ * Retourneert ALLE mogelijke service×team combinaties voor admin modus.
+ * Gebruik voor admin toggle om alle 27 entries (9 diensten × 3 teams) te tonen.
+ * 
+ * LOGIC:
+ * 1. Haal basis services van medewerker op (via employee_services)
+ * 2. Voor ELKE service: Query roster_period_staffing_dagdelen op datum/dagdeel
+ * 3. Collect ALLE team-varianten (GRO, ORA, TOT) per service
+ * 4. Voeg aparte entry toe per variant (team_variant + variant_id uniek)
+ * 5. Result: 9 diensten × 3 teams = 27 entries met duidelijke team labels
+ * 
+ * Edge cases:
+ * - Service ZONDER team-varianten → Fallback: service zonder team label
+ * - Geen staffing records → Log warning, continue
+ * - No services for employee → Return empty array
+ * 
+ * DRAAD404-IMPLEMENTATIE: Nieuwe functie voor admin modus met alle varianten
+ * @param employeeId - TEXT ID van de medewerker
+ * @param rosterId - UUID van het rooster
+ * @param targetDate - Datum (YYYY-MM-DD) voor staffing lookup
+ * @param targetDagdeel - Dagdeel (O/M/A) voor staffing lookup
+ * @returns Array van ServiceTypeWithTimes met team_variant per entry (27 entries expected)
+ */
+export async function getServicesForEmployeeWithAllVariants(
+  employeeId: string,
+  rosterId: string,
+  targetDate: string,
+  targetDagdeel: Dagdeel
+): Promise<ServiceTypeWithTimes[]> {
+  try {
+    console.log(
+      '[getServicesForEmployeeWithAllVariants] Loading all team variants for admin mode:',
+      { employeeId, rosterId, targetDate, targetDagdeel }
+    );
+    
+    // Stap 1: Haal basis services op (9 diensten)
+    let baseServices = await getServicesForEmployee(employeeId, rosterId);
+    
+    if (baseServices.length === 0) {
+      console.warn('[getServicesForEmployeeWithAllVariants] No base services found');
+      return [];
+    }
+    
+    console.log(`[getServicesForEmployeeWithAllVariants] Found ${baseServices.length} base services`);
+    
+    // Stap 2: Voor ELKE service - haal ALLE team-varianten op
+    const servicesWithVariants: ServiceTypeWithTimes[] = [];
+    
+    for (const service of baseServices) {
+      // Query: Haal ALLE staffing records voor deze service op target datum/dagdeel
+      const { data: staffingData, error } = await supabase
+        .from('roster_period_staffing_dagdelen')
+        .select('id, team, dagdeel, status')
+        .eq('roster_id', rosterId)
+        .eq('service_id', service.service_id)  // ✅ Use service_id for lookup
+        .eq('date', targetDate)
+        .eq('dagdeel', targetDagdeel);
+      
+      if (error) {
+        console.warn(
+          `[getServicesForEmployeeWithAllVariants] Error querying variants for ${service.code}:`,
+          error
+        );
+        continue;
+      }
+      
+      if (!staffingData || staffingData.length === 0) {
+        console.warn(
+          `[getServicesForEmployeeWithAllVariants] No variants found for ${service.code} ` +
+          `on ${targetDate} ${targetDagdeel} - service may not be configured`
+        );
+        // Fallback: Voeg service zonder team toe
+        servicesWithVariants.push(service);
+        continue;
+      }
+      
+      // Voor ELKE team-variant: voeg aparte entry toe
+      // Dit zorgt dat service DIO met 3 teams = 3 entries
+      for (const variant of staffingData) {
+        servicesWithVariants.push({
+          ...service,                    // ✅ Behoud alle velden van baseService
+          id: variant.id,                // ⭐ Override: variant ID (roster_period_staffing_dagdelen.id)
+          team_variant: variant.team,    // ⭐ Add: 'GRO'|'ORA'|'TOT'
+          variant_id: variant.id         // ⭐ Add: UUID van staffing record
+        });
+      }
+    }
+    
+    console.log(
+      `✅ Found ${servicesWithVariants.length} service variants ` +
+      `(${baseServices.length} services × teams) for admin mode`
+    );
+    return servicesWithVariants;
+  } catch (error) {
+    console.error('[getServicesForEmployeeWithAllVariants] Exception:', error);
+    // Graceful fallback: Return basis services
+    return getServicesForEmployee(employeeId, rosterId);
   }
 }
 
