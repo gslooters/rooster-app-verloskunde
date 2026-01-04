@@ -4,6 +4,7 @@
  * DRAAD399-FASE4,5: Team variant labels + variant_id collection
  * DRAAD402: FIXES - variant_id state + radio button logic + cache-busting
  * DRAAD402-HOTFIX: Type error fix - correct service_id reference
+ * DRAAD402-OPERATIVE: KRITIEKE FIX - onChange parameter correction
  * 
  * Modal pop-up voor toewijzen/wijzigen van diensten aan cellen
  * Ondersteunt alle 4 statussen:
@@ -24,12 +25,17 @@
  * - Ondersteuning voor meerdere service varianten per service/datum/dagdeel
  * 
  * DRAAD402 FIXES:
- * - FIX #1: Add selectedVariantId state (roster_period_staffing_dagdelen.id)
- * - FIX #2: Update handleServiceSelect signature (variantId FIRST param)
- * - FIX #3: Fix radio button logic (use variant ID for checked + onChange)
- * - FIX #4: Add variantId for status 0/2/3 in handleSave
- * - FIX #5: Hardcode cache-busting timestamp
- * - HOTFIX: Correct type error - use assignment.service_id directly (no find needed)
+ * - FIX #1: Add selectedVariantId state (roster_period_staffing_dagdelen.id) ✅
+ * - FIX #2: Update handleServiceSelect signature (variantId FIRST param) ✅
+ * - FIX #3a: Fix radio button logic - checked (use variant ID) ✅
+ * - FIX #3b: Fix radio button onChange - PARAMETERS (service.id, service.service_id) ✅ KRITIEKE FIX
+ * - FIX #4: Add variantId for status 0/2/3 in handleSave ✅
+ * - FIX #5: Hardcode cache-busting timestamp ✅
+ * 
+ * OPERATIVE FIX (4 JAN 2026):
+ * - Regel 267: onChange() passes correct parameters
+ *   Was: handleServiceSelect(service.id, service.id) ❌
+ *   Now: handleServiceSelect(service.id, service.service_id) ✅
  * 
  * HERSTEL:
  * - rosterId nu ook doorgegeven aan getServicesForEmployee() (admin toggle)
@@ -44,7 +50,7 @@
  * - Visuele markering van huidige status
  * - Read-only mode voor status='final'
  * 
- * Cache: 2026-01-04T11:37:00Z  // ⭐ HOTFIX: Updated timestamp
+ * Cache: 2026-01-04T11:56:00Z  // ⭐ OPERATIVE FIX: Updated timestamp
  */
 
 'use client';
@@ -382,7 +388,7 @@ export default function DienstSelectieModal({
                         name="dienst"
                         value={service.id}
                         checked={selectedVariantId === service.id && selectedStatus === 1}  // ⭐ FIX #3: Check VARIANT_ID not service_id
-                        onChange={() => handleServiceSelect(service.id, service.id)}  // ⭐ FIX #3: Pass variant id as both params
+                        onChange={() => handleServiceSelect(service.id, service.service_id)}  // ⭐ FIX #3b: OPERATIVE FIX - Pass service.service_id for 2nd param
                         className="w-4 h-4 text-blue-600"
                         disabled={readOnly || isSaving}
                       />
