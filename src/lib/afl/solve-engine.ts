@@ -11,6 +11,11 @@
  * 
  * Performance target: 3-5 seconds for full roster
  * Coverage target: 87-95% (210-240 services assigned)
+ * 
+ * ✅ DRAAD405 PATCHES APPLIED:
+ * - PATCH 1A/1B/1C: DIO/DIA validation methods
+ * - PATCH 2: Enhanced findCandidates() with validation
+ * - PATCH 3: Enhanced prepareForChaining() with logging
  */
 
 import {
@@ -95,6 +100,122 @@ export class SolveEngine {
         total_employees: unique_employees.size,
       });
     }
+  }
+
+  /**
+   * ✅ PATCH 1A: Valideer DIO-keten volledigheid
+   * 
+   * Voor DIO: alle 3 dagdelen (O, M, A) moeten beschikbaar zijn (status=0)
+   * Voor DIA: DIO moet al toegewezen zijn op dezelfde dag in dagdeel O
+   * 
+   * Returns: { valid: boolean; reason?: string }
+   */
+  private validateDIOChainComplete(
+    employee_id: string,
+    date: Date,
+    team: string,
+    service_code: string
+  ): { valid: boolean; reason?: string } {
+    const dateTime = date.getTime();
+
+    // REGEL 1: DIO vereist ALLE 3 dagdelen beschikbaar
+    if (service_code === 'DIO' || service_code === 'DDO') {
+      const required_dagdelen = ['O', 'M', 'A'];
+      const unavailable_dagdelen: string[] = [];
+
+      for (const dagdeel of required_dagdelen) {
+        const slot = this.workbestand_planning.find(
+          (p) =>
+            p.employee_id === employee_id &&
+            p.date.getTime() === dateTime &&
+            p.dagdeel === dagdeel &&
+            p.status === 0 // Moet open zijn
+        );
+
+        if (!slot) {
+          unavailable_dagdelen.push(dagdeel);
+        }
+      }
+
+      if (unavailable_dagdelen.length > 0) {
+        return {
+          valid: false,
+          reason: `DIO requires all 3 dagdelen available, missing: ${unavailable_dagdelen.join(',')}`,
+        };
+      }
+    }
+
+    // REGEL 2: DIA vereist DIO eerder in dezelfde dag
+    if (service_code === 'DIA') {
+      const dio_service_id = this.getDIOServiceId();
+
+      const dio_assigned = this.workbestand_planning.some(
+        (p) =>
+          p.employee_id === employee_id &&
+          p.date.getTime() === dateTime &&
+          p.dagdeel === 'O' &&
+          p.service_id === dio_service_id &&
+          p.status === 1 // Must be assigned
+      );
+
+      if (!dio_assigned) {
+        return {
+          valid: false,
+          reason: `DIA requires DIO to be assigned first on same day in Ochtend`,
+        };
+      }
+    }
+
+    return { valid: true };
+  }
+
+  /**
+   * ✅ PATCH 1B: Helper - Get DIO service ID
+   */
+  private getDIOServiceId(): string {
+    const dio_service = this.workbestand_services_metadata.find(
+      (s) => s.code === 'DIO'
+    );
+    return dio_service?.id || '';
+  }
+
+  /**
+   * ✅ PATCH 1C: Check dagdeel-quota (prevent duplicates)
+   * 
+   * Per dagdeel mag maar 1x DIA/DIO/etc per team toegewezen zijn
+   * (tenzij service-config zegt anders)
+   */
+  private checkDagdeelQuota(
+    date: Date,
+    dagdeel: string,
+    team: string,
+    service_id: string
+  ): { available: boolean; current_count: number; max_allowed: number } {
+    const dateTime = date.getTime();
+
+    // Tellen hoeveel al toegewezen zijn
+    const current_count = this.workbestand_planning.filter(
+      (p) =>
+        p.date.getTime() === dateTime &&
+        p.dagdeel === dagdeel &&
+        p.team === team &&
+        p.service_id === service_id &&
+        p.status === 1 // Assigned
+    ).length;
+
+    // Service config - hoeveel mag per dagdeel?
+    const service_meta = this.workbestand_services_metadata.find(
+      (s) => s.id === service_id
+    );
+
+    // Default: 1 per dagdeel per team (unless overridden)
+    const max_allowed = 1;
+
+    return {
+      available: current_count < max_allowed,
+      current_count,
+      max_allowed,
+    };
   }
 
   /**
@@ -248,17 +369,36 @@ export class SolveEngine {
   /**
    * Find all available candidates for a task
    * 
-   * ✅ FOUT 1 FIX: Status check ontbreekt
+   * ✅ PATCH 2: Enhanced with DIO/DIA chain validation + quota check
    * 
    * Criteria:
    * - In correct team (or fallback)
    * - Has available slot on date/dagdeel with status=0
    * - Has capacity > 0 for this service
    * - Not blocked by pre-planning (is_protected=FALSE)
-   * - ✅ NEW: Employee status !== 3 (not unavailable)
+   * - ✅ PATCH 2A: QUOTA CHECK FIRST
+   * - ✅ PATCH 2B: DIO/DIA CHAIN VALIDATION
+   * - ✅ Employee status !== 3 (not unavailable)
    */
   private findCandidates(task: WorkbestandOpdracht): SolveCandidate[] {
     const candidates: SolveCandidate[] = [];
+
+    // ✅ PATCH 2A: QUOTA CHECK FIRST
+    const quota = this.checkDagdeelQuota(
+      task.date,
+      task.dagdeel,
+      task.team,
+      task.service_id
+    );
+
+    if (!quota.available) {
+      if (this.debug_enabled) {
+        console.log(
+          `⛔ QUOTA FULL: Service already assigned ${quota.current_count}x on ${task.dagdeel} for team ${task.team}`
+        );
+      }
+      return []; // Return empty - quota reached
+    }
 
     // Step 1: Determine team search order
     const teams_to_try = this.getTeamSearchOrder(task.team);
@@ -274,15 +414,13 @@ export class SolveEngine {
     }
 
     if (this.debug_enabled) {
-      console.log(`🔍 TEAM FILTER: Task team=${task.team}, searching in:`, teams_to_try);
+      console.log(`🔍 FINDCANDIDATES: Service=${task.service_code} Date=${task.date.toISOString().split('T')[0]} Dagdeel=${task.dagdeel} Teams=${teams_to_try.join(',')}`);
     }
 
     // Step 2: Search by team
     for (const team of teams_to_try) {
-      // Find all employees in this team
       const employees_in_team = this.employees_by_team.get(team) || [];
 
-      // For each employee
       for (const emp of employees_in_team) {
         // Check: Bevoegd (actief) voor deze service?
         const capacity_row = this.workbestand_capaciteit.find(
@@ -293,9 +431,25 @@ export class SolveEngine {
           continue; // Not qualified or no capacity
         }
 
-        // ✅ FOUT 1 FIX: Check employee status !== 3 (not unavailable)
+        // ✅ PATCH 2B: DIO/DIA CHAIN VALIDATION
+        const chain_validation = this.validateDIOChainComplete(
+          emp.employee_id,
+          task.date,
+          task.team,
+          task.service_code
+        );
+
+        if (!chain_validation.valid) {
+          if (this.debug_enabled) {
+            console.log(
+              `⛔ CHAIN INVALID: ${emp.employee_id} - ${chain_validation.reason}`
+            );
+          }
+          continue; // Skip this employee
+        }
+
+        // Check: Employee status !== 3 (not unavailable)
         // Status 3 = NB (niet beschikbaar = not available)
-        // We need to check the employee's status in their planning slot
         const employee_status_in_slot = this.workbestand_planning.find(
           (p) =>
             p.employee_id === emp.employee_id &&
@@ -303,12 +457,13 @@ export class SolveEngine {
             p.dagdeel === task.dagdeel
         )?.status;
 
-        // If status=3 (NB), skip this employee - they are unavailable
         if (employee_status_in_slot === 3) {
           if (this.debug_enabled) {
-            console.log(`⏭️  FOUT 1 FIX: Skipping employee ${emp.employee_id} (status=3/NB on ${task.date.toISOString().split('T')[0]})`);
+            console.log(
+              `⏭️  UNAVAILABLE: ${emp.employee_id} has status=3 on ${task.dagdeel}`
+            );
           }
-          continue;
+          continue; // Status 3 = NB (not available)
         }
 
         // Check: Available slot on this date/dagdeel/status=0?
@@ -356,7 +511,9 @@ export class SolveEngine {
     }
 
     if (candidates.length === 0 && this.debug_enabled) {
-      console.log(`❌ NO CANDIDATES: No employees available in teams:`, teams_to_try);
+      console.log(
+        `❌ NO CANDIDATES: Service ${task.service_code} on ${task.dagdeel}`
+      );
     }
 
     return candidates;
@@ -514,7 +671,8 @@ export class SolveEngine {
   }
 
   /**
-   * Prepare for DIO/DDO chaining (Phase 3 prep)
+   * ✅ PATCH 3: Prepare for DIO/DDO chaining (Phase 3 prep)
+   * Enhanced with comprehensive logging
    * 
    * DIO logic:
    * - Ochtend: Assign DIO
@@ -530,6 +688,12 @@ export class SolveEngine {
     // DIO only applies to Ochtend dagdeel
     if (slot.dagdeel !== 'O' || !['DIO', 'DDO'].includes(service_code)) {
       return;
+    }
+
+    if (this.debug_enabled) {
+      console.log(
+        `🔗 CHAIN START: ${employee_id} - ${service_code} on ${assign_date.toISOString().split('T')[0]}`
+      );
     }
 
     // Step 1: Block Middag (same day)
@@ -548,6 +712,18 @@ export class SolveEngine {
       middag_slot.blocked_by_service_id = task.service_id;
       middag_slot.is_modified = true;
       this.modified_slots.push(middag_slot);
+
+      if (this.debug_enabled) {
+        console.log(
+          `  ✅ BLOCKED: Middag (already works ${service_code} in Ochtend)`
+        );
+      }
+    } else {
+      if (this.debug_enabled) {
+        console.log(
+          `  ⚠️  MIDDAG SLOT NOT FOUND (might already be blocked/assigned)`
+        );
+      }
     }
 
     // Step 2: Assign DIA to Avond (same day)
@@ -560,8 +736,10 @@ export class SolveEngine {
     );
 
     if (avond_slot) {
-      // Find DIA service
-      const dia_service = this.workbestand_services_metadata.find((s) => s.code === 'DIA');
+      const dia_service = this.workbestand_services_metadata.find(
+        (s) => s.code === 'DIA'
+      );
+
       if (dia_service) {
         avond_slot.service_id = dia_service.id;
         avond_slot.status = 1; // Assigned
@@ -569,8 +747,24 @@ export class SolveEngine {
         avond_slot.is_modified = true;
         this.modified_slots.push(avond_slot);
 
+        if (this.debug_enabled) {
+          console.log(
+            `  ✅ DIA ASSIGNED: Avond (${employee_id})`
+          );
+        }
+
         // Update capacity for DIA
         this.decrementCapacity(employee_id, dia_service.id);
+      } else {
+        if (this.debug_enabled) {
+          console.log(`  ❌ DIA SERVICE NOT FOUND`);
+        }
+      }
+    } else {
+      if (this.debug_enabled) {
+        console.log(
+          `  ⚠️  AVOND SLOT NOT FOUND (cannot assign DIA)`
+        );
       }
     }
 
@@ -597,6 +791,12 @@ export class SolveEngine {
         };
         next_ochtend.is_modified = true;
         this.modified_slots.push(next_ochtend);
+
+        if (this.debug_enabled) {
+          console.log(
+            `  ✅ BLOCKED: Next day Ochtend (recovery)`
+          );
+        }
       }
 
       // Block next day Middag
@@ -619,7 +819,19 @@ export class SolveEngine {
         };
         next_middag.is_modified = true;
         this.modified_slots.push(next_middag);
+
+        if (this.debug_enabled) {
+          console.log(
+            `  ✅ BLOCKED: Next day Middag (recovery)`
+          );
+        }
       }
+    }
+
+    if (this.debug_enabled) {
+      console.log(
+        `🔗 CHAIN COMPLETE: ${employee_id} ${service_code} chain processed`
+      );
     }
   }
 
