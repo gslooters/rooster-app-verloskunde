@@ -99,7 +99,7 @@ const supabase = createClient(
 // 🔧 [DRAAD403B] CACHE-BUST MARKER FOR DEPLOYMENT VERIFICATION
 // Change this value to force Railway rebuild (ensures latest code deployed)
 // Includes: timestamp + DRAAD403B reference + all 4 fouten fixes + Date.now() randomizer
-const CACHE_BUST_NONCE = `2026-01-05T14:57:00Z-DRAAD-403B-ALL-4-FOUTEN-FIXED-${Date.now()}`;
+const CACHE_BUST_NONCE = `2026-01-05T17:57:00Z-DRAAD-403B-ALL-4-FOUTEN-FIXED-${Date.now()}`;
 
 /**
  * FASE 1: Load all data from database
