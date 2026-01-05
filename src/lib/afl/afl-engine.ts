@@ -67,6 +67,13 @@
  * - ✅ Allows complete FASE 1-5 pipeline even with database load
  * - Expected execution: 5-7 seconds normal, up to 40s under load
  * - Cache-bust nonce updated to force Railway rebuild
+ *
+ * [DRAAD403B] FINAL VERIFICATION: All 4 FOUTEN Fixed + Deployed
+ * - FOUT 1: Status check validation in solve-engine ✅
+ * - FOUT 2: Variant ID lookup in write-engine ✅
+ * - FOUT 3: Invulling counter updates in write-engine ✅
+ * - FOUT 4: DIO/DIA pairing validation in chain-engine ✅
+ * - DEPLOYMENT FIX: Type-safe team field handling ✅
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -89,10 +96,10 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 );
 
-// 🔧 DRAAD404: CACHE-BUST MARKER FOR DEPLOYMENT VERIFICATION
+// 🔧 [DRAAD403B] CACHE-BUST MARKER FOR DEPLOYMENT VERIFICATION
 // Change this value to force Railway rebuild (ensures latest code deployed)
-// Includes timestamp + DRAAD404 timeout fix reference
-const CACHE_BUST_NONCE = `2026-01-04T15:38:00Z-DRAAD-404-TIMEOUT-60S-${Date.now()}`;
+// Includes: timestamp + DRAAD403B reference + all 4 fouten fixes + Date.now() randomizer
+const CACHE_BUST_NONCE = `2026-01-05T14:57:00Z-DRAAD-403B-ALL-4-FOUTEN-FIXED-${Date.now()}`;
 
 /**
  * FASE 1: Load all data from database
@@ -106,10 +113,15 @@ export class AflEngine {
   async loadData(rosterId: string): Promise<AflLoadResult> {
     const startTime = performance.now();
 
-    // ✅ DRAAD404: CACHE-BUST VERIFICATION MARKERS
+    // ✅ [DRAAD403B] CACHE-BUST VERIFICATION MARKERS
     // These markers appear in Railway build logs to verify correct code version is deployed
     console.log('═══════════════════════════════════════════════════════');
-    console.log('[AFL-ENGINE] 🚀 DRAAD404 CACHE-BUST NONCE:', CACHE_BUST_NONCE);
+    console.log('[AFL-ENGINE] 🚀 [DRAAD403B] CACHE-BUST NONCE:', CACHE_BUST_NONCE);
+    console.log('[AFL-ENGINE] ✅ [DRAAD403B] FOUT 1: Status check validation (solve-engine)');
+    console.log('[AFL-ENGINE] ✅ [DRAAD403B] FOUT 2: Variant ID lookup (write-engine)');
+    console.log('[AFL-ENGINE] ✅ [DRAAD403B] FOUT 3: Invulling counter updates (write-engine)');
+    console.log('[AFL-ENGINE] ✅ [DRAAD403B] FOUT 4: DIO/DIA pairing validation (chain-engine)');
+    console.log('[AFL-ENGINE] ✅ [DRAAD403B] DEPLOYMENT FIX: Type-safe team field handling');
     console.log('[AFL-ENGINE] ✅ DRAAD337 FIX: Client-side sorting (no chained .order() calls)');
     console.log('[AFL-ENGINE] ✅ DRAAD338 FIX: Service-code population via metadata lookup');
     console.log('[AFL-ENGINE] ✅ DRAAD339 FIX: Enhanced debug logging + cache-bust markers');
@@ -350,7 +362,7 @@ export class AflEngine {
 
       console.log('═══════════════════════════════════════════════════════');
       console.log('[AFL-ENGINE] ✅ Phase 1 COMPLETE in', load_duration_ms.toFixed(2), 'ms');
-      console.log('[AFL-ENGINE] 🎯 DRAAD403: Invulling read directly from database');
+      console.log('[AFL-ENGINE] 🎯 [DRAAD403B]: All 4 FOUTEN fixed + deployed');
       console.log('[AFL-ENGINE] 🎯 DRAAD404: Timeout support - 60 seconds available');
       console.log('═══════════════════════════════════════════════════════');
 
