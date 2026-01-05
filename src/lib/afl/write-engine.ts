@@ -15,6 +15,7 @@
  * [DRAAD369] UPDATE: Now includes roster_period_staffing_dagdelen_id lookup
  * [DRAAD403B] FOUT 2 & 3 FIXES: Variant ID lookup + invulling update
  * [DRAAD403B] DEPLOYMENT FIX: Type safety for undefined team field
+ * [DRAAD403B-FIX] ROBUST QUERY HANDLING: Better error handling for .single() & fallback lookups
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -86,6 +87,7 @@ export class WriteEngine {
    * [DRAAD369] Now includes variant ID lookups
    * [DRAAD403B] Now includes invulling updates
    * [DRAAD403B] DEPLOYMENT FIX: Type safety for undefined fields
+   * [DRAAD403B-FIX] Robust query error handling
    */
   async writeModifiedSlots(
     rosterId: string,
@@ -179,12 +181,13 @@ export class WriteEngine {
    * 1. Collect all unique staffing record IDs that got assigned
    * 2. For each record, count how many assignments point to it
    * 3. UPDATE invulling = invulling + count
+   * [DRAAD403B-FIX] Enhanced error handling for .single() queries
    */
   private async updateInvullingCounters(
     modified_slots: WorkbestandPlanning[],
     rosterId: string
   ): Promise<number> {
-    const invulling_updates_count = 0;
+    let invulling_updates_count = 0;
 
     try {
       // Group assignments by their variant ID
@@ -224,22 +227,39 @@ export class WriteEngine {
       const update_promises = Array.from(variant_counts.entries()).map(
         async ([variantId, count]) => {
           try {
+            // [DRAAD403B-FIX] Robust query with better error handling
             const { data, error } = await supabase
               .from('roster_period_staffing_dagdelen')
               .select('invulling')
-              .eq('id', variantId)
-              .single();
+              .eq('id', variantId);
 
-            if (error || !data) {
+            if (error) {
               console.warn(
                 `[DRAAD403B FOUT 3] Failed to read invulling for ${variantId}:`,
-                error?.message
+                error.message
+              );
+              return 0;
+            }
+
+            // Handle case where query returns empty or invalid data
+            if (!data || data.length === 0) {
+              console.warn(
+                `[DRAAD403B FOUT 3] No record found for variant ${variantId}`
+              );
+              return 0;
+            }
+
+            // Get first record (safeguard against multiple matches)
+            const record = data[0];
+            if (!record) {
+              console.warn(
+                `[DRAAD403B FOUT 3] Invalid record structure for variant ${variantId}`
               );
               return 0;
             }
 
             // UPDATE invulling += count
-            const new_invulling = (data.invulling || 0) + count;
+            const new_invulling = (record.invulling || 0) + count;
             const { error: updateError } = await supabase
               .from('roster_period_staffing_dagdelen')
               .update({ invulling: new_invulling })
@@ -275,11 +295,13 @@ export class WriteEngine {
         return sum;
       }, 0);
 
+      invulling_updates_count = successful_updates;
+
       console.log(
         `[DRAAD403B FOUT 3] Completed invulling updates: ${successful_updates}/${variant_counts.size} staffing records`
       );
 
-      return successful_updates;
+      return invulling_updates_count;
     } catch (error) {
       console.error(
         '[DRAAD403B FOUT 3] Critical error in updateInvullingCounters:',
@@ -298,6 +320,9 @@ export class WriteEngine {
    * - dagdeel
    * - service_id
    * - team
+   * 
+   * [DRAAD403B-FIX] Robust error handling for .single() queries
+   * If .single() fails (multiple matches or no match), use fallback strategy
    */
   private async getVariantId(
     rosterId: string,
@@ -307,6 +332,7 @@ export class WriteEngine {
     team: string
   ): Promise<string | null> {
     try {
+      // [DRAAD403B-FIX] Use non-single query first to handle edge cases
       const { data, error } = await supabase
         .from('roster_period_staffing_dagdelen')
         .select('id')
@@ -314,8 +340,7 @@ export class WriteEngine {
         .eq('date', date)
         .eq('dagdeel', dagdeel)
         .eq('service_id', serviceId)
-        .eq('team', team)
-        .single();
+        .eq('team', team);
 
       if (error) {
         console.warn('[DRAAD403B FOUT 2] Variant ID lookup failed:', {
@@ -329,7 +354,33 @@ export class WriteEngine {
         return null;
       }
 
-      return data?.id || null;
+      // Handle empty result
+      if (!data || data.length === 0) {
+        console.warn('[DRAAD403B FOUT 2] No variant found for:', {
+          rosterId,
+          date,
+          dagdeel,
+          serviceId,
+          team,
+        });
+        return null;
+      }
+
+      // Return first match (most recent or first created)
+      const variant = data[0];
+      if (!variant?.id) {
+        console.warn('[DRAAD403B FOUT 2] Invalid variant structure');
+        return null;
+      }
+
+      // Log if multiple matches found
+      if (data.length > 1) {
+        console.warn(
+          `[DRAAD403B FOUT 2] Multiple variants found (${data.length}), using first: ${variant.id}`
+        );
+      }
+
+      return variant.id;
     } catch (err) {
       console.warn('[DRAAD403B FOUT 2] Variant ID lookup exception:', err);
       return null;
@@ -339,6 +390,7 @@ export class WriteEngine {
   /**
    * [DRAAD403B FOUT 2] Build update payloads with variant ID resolution
    * [DRAAD403B DEPLOYMENT FIX] Type-safe undefined field handling
+   * [DRAAD403B-FIX] Robust variant lookup with fallback
    * 
    * For each modified slot:
    * 1. Lookup variant ID via getVariantId()
@@ -437,7 +489,6 @@ export class WriteEngine {
     const chunk_size = 50;
     for (let i = 0; i < update_payloads.length; i += chunk_size) {
       const chunk = update_payloads.slice(i, i + chunk_size);
-      const chunk_ids = chunk.map((p) => p.id);
 
       // Update all records in this chunk in parallel
       const update_promises = chunk.map((payload) =>
