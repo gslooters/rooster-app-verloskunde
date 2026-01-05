@@ -11,7 +11,8 @@ const nextConfig = {
   env: {
     NEXT_DISABLE_SWC_CACHE: '1',
     NEXT_PRIVATE_DISABLE_CACHE: 'true',
-    FORCE_REBUILD_TIMESTAMP: Date.now().toString(),
+    FORCE_REBUILD_TIMESTAMP: '1735959600000', // DRAAD403B: 2026-01-05T14:00:00Z CACHE BUST
+    DRAAD403B_AFL_FIXES_DEPLOYED: 'true', // All 4 fouten fixed: status check, variant ID, invulling, DIO/DIA
   },
   
   // Performance settings
