@@ -1,6 +1,6 @@
 {
   "name": "rooster-app-final",
-  "version": "0.1.4-draad366-source-manual-fix",
+  "version": "0.1.5-draad405-dio-validation-fix",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -39,5 +39,11 @@
   "engines": {
     "node": ">=20.0.0",
     "npm": ">=10.0.0"
+  },
+  "_deploy_metadata": {
+    "timestamp": "2026-01-06T00:27:56Z",
+    "draad": "405",
+    "cache_bust": true,
+    "patches": ["1A", "1B", "1C", "2", "3"]
   }
 }
