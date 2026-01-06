@@ -336,7 +336,7 @@ export class SolveEngine {
     if (this.debug_enabled) {
       console.log(`🚀 SOLVE v2.1: Starting main loop with ${this.workbestand_opdracht.length} tasks`, {
         cache_busting_timestamp: this.cache_busting_timestamp,
-        railway_trigger: `railway-${this.cache_busting_timestamp}`, // ✅ Railway deployment trigger
+        railway_trigger: `railway-${this.cache_busting_timestamp}-${Date.now()}`, // ✅ Railway deployment trigger with extra Date.now()
       });
     }
 
@@ -455,7 +455,7 @@ export class SolveEngine {
         },
         cache_hit_rate_percent: this.performance_metrics.cache_hit_rate.toFixed(1),
         memory_peak_mb: this.performance_metrics.memory_peak_mb.toFixed(2),
-        railway_trigger: `railway-${this.cache_busting_timestamp}`,
+        railway_trigger: `railway-${this.cache_busting_timestamp}-${Date.now()}`,
       });
     }
 
@@ -535,4 +535,493 @@ export class SolveEngine {
     }
 
     if (this.debug_enabled) {
-      console.log(`🔍 FINDCANDIDATES: Service=${task.service_code} Date=${task.date.toISOString().split('T')[0]} Dagdeel=${task.dagdeel} Teams=${teams_to_try.join(',')}`);\n    }\n\n    // Step 2: Search by team\n    for (const team of teams_to_try) {\n      const employees_in_team = this.employees_by_team.get(team) || [];\n\n      for (const emp of employees_in_team) {\n        // Check: Bevoegd (actief) voor deze service?\n        const capacity_row = this.workbestand_capaciteit.find(\n          (c) => c.employee_id === emp.employee_id && c.service_id === task.service_id\n        );\n\n        if (!capacity_row || !capacity_row.actief || (capacity_row.aantal_beschikbaar || 0) <= 0) {\n          continue; // Not qualified or no capacity\n        }\n\n        // ✅ PATCH 2B: DIO/DIA CHAIN VALIDATION\n        const chain_validation = this.validateDIOChainComplete(\n          emp.employee_id,\n          task.date,\n          task.team,\n          task.service_code\n        );\n\n        if (!chain_validation.valid) {\n          if (this.debug_enabled) {\n            console.log(\n              `⛔ CHAIN INVALID: ${emp.employee_id} - ${chain_validation.reason}`\n            );\n          }\n          continue; // Skip this employee\n        }\n\n        // Check: Employee status !== 3 (not unavailable)\n        // Status 3 = NB (niet beschikbaar = not available)\n        const employee_status_in_slot = this.workbestand_planning.find(\n          (p) =>\n            p.employee_id === emp.employee_id &&\n            p.date.getTime() === task.date.getTime() &&\n            p.dagdeel === task.dagdeel\n        )?.status;\n\n        if (employee_status_in_slot === 3) {\n          if (this.debug_enabled) {\n            console.log(\n              `⏭️  UNAVAILABLE: ${emp.employee_id} has status=3 on ${task.dagdeel}`\n            );\n          }\n          continue; // Status 3 = NB (not available)\n        }\n\n        // Check: Available slot on this date/dagdeel/status=0?\n        const available_slot = this.workbestand_planning.find(\n          (p) =>\n            p.employee_id === emp.employee_id &&\n            p.date.getTime() === task.date.getTime() &&\n            p.dagdeel === task.dagdeel &&\n            p.status === 0 &&\n            !p.is_protected\n        );\n\n        if (!available_slot) {\n          continue; // No slot available\n        }\n\n        // ✅ Valid candidate found\n        candidates.push({\n          employee_id: emp.employee_id,\n          employee_name: emp.employee_name,\n          team: emp.team,\n          dienstverband: emp.dienstverband,\n          capacity_remaining: capacity_row.aantal_beschikbaar || 0,\n          last_worked: emp.last_worked,\n          fair_score: emp.fair_score,\n          slot: available_slot,\n        });\n\n        // ✅ OPTIE A: Track team of found candidate\n        if (this.team_filter_stats.has(task_key)) {\n          const stats = this.team_filter_stats.get(task_key)!;\n          stats.found_teams.add(emp.team);\n          stats.count += 1;\n        }\n      }\n\n      // If candidates found, don't try next team (fallback only if empty)\n      if (candidates.length > 0) {\n        if (this.debug_enabled) {\n          const stats = this.team_filter_stats.get(task_key);\n          console.log(`✅ FOUND: ${candidates.length} candidates in teams:`, Array.from(stats?.found_teams || []));\n        }\n        break;\n      }\n    }\n\n    if (candidates.length === 0 && this.debug_enabled) {\n      console.log(\n        `❌ NO CANDIDATES: Service ${task.service_code} on ${task.dagdeel}`\n      );\n    }\n\n    return candidates;\n  }\n\n  /**\n   * Determine team search order (primary team first, then fallbacks)\n   * FIX 2: CORRECTED TEAM NAME MAPPING\n   * ✅ OPTIE A: Strict team isolation\n   */\n  private getTeamSearchOrder(team: string): string[] {\n    // ✅ FIX 2: Use correct database team names\n    // ✅ OPTIE A: Strict search order - GRO NEVER looks in ORA, ORA NEVER in GRO\n    switch (team) {\n      case 'GRO':\n        return ['Groen', 'Overig']; // GRO: First Groen, then Overig (NEVER Oranje)\n      case 'ORA':\n        return ['Oranje', 'Overig']; // ORA: First Oranje, then Overig (NEVER Groen)\n      case 'TOT':\n        return ['Groen', 'Oranje', 'Overig']; // TOT: All teams\n      default:\n        return ['Groen', 'Oranje', 'Overig'];\n    }\n  }\n\n  /**\n   * Get all employees in a specific team\n   * Use preloaded cache\n   */\n  private getEmployeesByTeam(team: string): any[] {\n    return this.employees_by_team.get(team) || [];\n  }\n\n  /**\n   * Get employee info by ID\n   * Build from capacity data + planning data\n   */\n  private getEmployeeInfo(employee_id: string): any {\n    // Check cache first\n    if (this.employee_cache.has(employee_id)) {\n      return this.employee_cache.get(employee_id);\n    }\n\n    // Extract from capacity data\n    const capacity_row = this.workbestand_capaciteit.find((c) => c.employee_id === employee_id);\n    if (!capacity_row) {\n      return null; // Unknown employee\n    }\n\n    // Get last worked date\n    const last_slot = this.workbestand_planning\n      .filter((p) => p.employee_id === employee_id && p.status === 1 && p.service_id)\n      .sort((a, b) => b.date.getTime() - a.date.getTime())[0];\n\n    const emp_info = {\n      employee_id,\n      employee_name: employee_id, // Simplified: use ID as name (can be enhanced)\n      team: this.extractTeamFromEmployeeId(employee_id),\n      dienstverband: 'Maat', // Simplified: default\n      last_worked: last_slot?.date || null,\n      fair_score: this.calculateFairnessScore(employee_id),\n    };\n\n    this.employee_cache.set(employee_id, emp_info);\n    return emp_info;\n  }\n\n  /**\n   * Extract team from employee capacity data ONLY\n   * ✅ DRAAD 342 PRIORITEIT 2: Cleaned up to use ONLY workbestand_capaciteit.team\n   * \n   * REASON:\n   * - roster_assignments (planning source) has NO team column\n   * - The authoritative team source is roster_employee_services.team\n   * - Which gets mapped into workbestand_capaciteit.team\n   * \n   * This method now uses ONE clear source, not multiple fallbacks\n   */\n  private extractTeamFromEmployeeId(employee_id: string): string {\n    // ✅ ONLY source: workbestand_capaciteit (which comes from roster_employee_services)\n    const capacity_rows = this.workbestand_capaciteit.filter(\n      (c) => c.employee_id === employee_id\n    );\n\n    if (capacity_rows.length > 0) {\n      // Get first non-empty team or fallback\n      const teams = capacity_rows.map((c) => c.team).filter(Boolean);\n      if (teams.length > 0) {\n        return teams[0];\n      }\n    }\n\n    // Safe default if no capacity found\n    return 'Overig';\n  }\n\n  /**\n   * Calculate fairness score for an employee\n   * Lower score = recently worked more = should get fewer assignments\n   * 0.0 = brand new, 1.0 = hasn't worked in a while\n   */\n  private calculateFairnessScore(employee_id: string): number {\n    // Count recent assignments\n    const recent_count = this.workbestand_planning.filter(\n      (p) =>\n        p.employee_id === employee_id &&\n        p.status === 1 &&\n        p.service_id &&\n        p.date.getTime() >= new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).getTime()\n    ).length;\n\n    // Normalize: fewer recent assignments = higher score\n    const max_recent = 10;\n    return Math.max(0, Math.min(1, 1 - recent_count / max_recent));\n  }\n\n  /**\n   * Select the BEST candidate using tiebreaker logic\n   * \n   * Tiebreaker order:\n   * 1. PRIMARY: Capacity remaining (higher = better)\n   * 2. SECONDARY: Fairness score (lower = recently worked, better to skip)\n   * 3. TERTIARY: Alphabetical name (deterministic)\n   */\n  private selectBestCandidate(candidates: SolveCandidate[]): SolveCandidate {\n    const sorted = candidates.sort((a, b) => {\n      // Primary: Capacity remaining (DESC - higher is better)\n      if (a.capacity_remaining !== b.capacity_remaining) {\n        return b.capacity_remaining - a.capacity_remaining;\n      }\n\n      // Secondary: Fairness score (ASC - lower means recently worked more)\n      if (a.fair_score !== b.fair_score) {\n        return a.fair_score - b.fair_score;\n      }\n\n      // Tertiary: Name (alphabetical, deterministic)\n      return a.employee_name.localeCompare(b.employee_name, 'nl');\n    });\n\n    return sorted[0];\n  }\n\n  /**\n   * Decrement capacity for employee/service\n   */\n  private decrementCapacity(employee_id: string, service_id: string): void {\n    const capacity = this.workbestand_capaciteit.find(\n      (c) => c.employee_id === employee_id && c.service_id === service_id\n    );\n\n    if (capacity && capacity.aantal_beschikbaar !== undefined) {\n      capacity.aantal_beschikbaar = Math.max(0, capacity.aantal_beschikbaar - 1);\n    }\n  }\n\n  /**\n   * ✅ PATCH 3: Prepare for DIO/DDO chaining (Phase 3 prep)\n   * Enhanced with comprehensive logging\n   * \n   * DIO logic:\n   * - Ochtend: Assign DIO\n   * - Middag: Block (werkt al)\n   * - Avond: Assign DIA (auto)\n   * - Next day O+M: Block (too tired)\n   */\n  private prepareForChaining(task: WorkbestandOpdracht, slot: WorkbestandPlanning): void {\n    const employee_id = slot.employee_id;\n    const assign_date = slot.date;\n    const service_code = task.service_code;\n\n    // DIO only applies to Ochtend dagdeel\n    if (slot.dagdeel !== 'O' || !['DIO', 'DDO'].includes(service_code)) {\n      return;\n    }\n\n    if (this.debug_enabled) {\n      console.log(\n        `🔗 CHAIN START: ${employee_id} - ${service_code} on ${assign_date.toISOString().split('T')[0]}`\n      );\n    }\n\n    // Step 1: Block Middag (same day)\n    const middag_slot = this.workbestand_planning.find(\n      (p) =>\n        p.employee_id === employee_id &&\n        p.date.getTime() === assign_date.getTime() &&\n        p.dagdeel === 'M' &&\n        p.status === 0\n    );\n\n    if (middag_slot) {\n      middag_slot.status = 2; // Blocked\n      middag_slot.blocked_by_date = assign_date;\n      middag_slot.blocked_by_dagdeel = 'O';\n      middag_slot.blocked_by_service_id = task.service_id;\n      middag_slot.is_modified = true;\n      this.modified_slots.push(middag_slot);\n\n      if (this.debug_enabled) {\n        console.log(\n          `  ✅ BLOCKED: Middag (already works ${service_code} in Ochtend)`\n        );\n      }\n    } else {\n      if (this.debug_enabled) {\n        console.log(\n          `  ⚠️  MIDDAG SLOT NOT FOUND (might already be blocked/assigned)`\n        );\n      }\n    }\n\n    // Step 2: Assign DIA to Avond (same day)\n    const avond_slot = this.workbestand_planning.find(\n      (p) =>\n        p.employee_id === employee_id &&\n        p.date.getTime() === assign_date.getTime() &&\n        p.dagdeel === 'A' &&\n        p.status === 0\n    );\n\n    if (avond_slot) {\n      const dia_service = this.workbestand_services_metadata.find(\n        (s) => s.code === 'DIA'\n      );\n\n      if (dia_service) {\n        avond_slot.service_id = dia_service.id;\n        avond_slot.status = 1; // Assigned\n        avond_slot.source = 'autofill';\n        avond_slot.is_modified = true;\n        this.modified_slots.push(avond_slot);\n\n        if (this.debug_enabled) {\n          console.log(\n            `  ✅ DIA ASSIGNED: Avond (${employee_id})`\n          );\n        }\n\n        // Update capacity for DIA\n        this.decrementCapacity(employee_id, dia_service.id);\n      } else {\n        if (this.debug_enabled) {\n          console.log(`  ❌ DIA SERVICE NOT FOUND`);\n        }\n      }\n    } else {\n      if (this.debug_enabled) {\n        console.log(\n          `  ⚠️  AVOND SLOT NOT FOUND (cannot assign DIA)`\n        );\n      }\n    }\n\n    // Step 3: Block next day O+M (if not beyond end date)\n    const next_date = new Date(assign_date.getTime() + 24 * 60 * 60 * 1000);\n    if (next_date.getTime() <= this.rooster_end_date.getTime()) {\n      // Block next day Ochtend\n      const next_ochtend = this.workbestand_planning.find(\n        (p) =>\n          p.employee_id === employee_id &&\n          p.date.getTime() === next_date.getTime() &&\n          p.dagdeel === 'O' &&\n          p.status === 0\n      );\n\n      if (next_ochtend) {\n        next_ochtend.status = 2; // Blocked\n        next_ochtend.blocked_by_date = assign_date;\n        next_ochtend.blocked_by_dagdeel = 'O';\n        next_ochtend.blocked_by_service_id = task.service_id;\n        next_ochtend.constraint_reason = {\n          reason: 'DIO_recovery',\n          by_service_code: service_code,\n        };\n        next_ochtend.is_modified = true;\n        this.modified_slots.push(next_ochtend);\n\n        if (this.debug_enabled) {\n          console.log(\n            `  ✅ BLOCKED: Next day Ochtend (recovery)`\n          );\n        }\n      }\n\n      // Block next day Middag\n      const next_middag = this.workbestand_planning.find(\n        (p) =>\n          p.employee_id === employee_id &&\n          p.date.getTime() === next_date.getTime() &&\n          p.dagdeel === 'M' &&\n          p.status === 0\n      );\n\n      if (next_middag) {\n        next_middag.status = 2; // Blocked\n        next_middag.blocked_by_date = assign_date;\n        next_middag.blocked_by_dagdeel = 'O';\n        next_middag.blocked_by_service_id = task.service_id;\n        next_middag.constraint_reason = {\n          reason: 'DIO_recovery',\n          by_service_code: service_code,\n        };\n        next_middag.is_modified = true;\n        this.modified_slots.push(next_middag);\n\n        if (this.debug_enabled) {\n          console.log(\n            `  ✅ BLOCKED: Next day Middag (recovery)`\n          );\n        }\n      }\n    }\n\n    if (this.debug_enabled) {\n      console.log(\n        `🔗 CHAIN COMPLETE: ${employee_id} ${service_code} chain processed`\n      );\n    }\n  }\n\n  /**\n   * Count assigned services\n   */\n  private countAssignedServices(): number {\n    return this.workbestand_planning.filter((p) => p.status === 1 && p.service_id).length;\n  }\n\n  /**\n   * Count open services (assignments not made)\n   */\n  private countOpenServices(): number {\n    return this.workbestand_opdracht.reduce((sum, task) => sum + task.aantal_nog, 0);\n  }\n}\n\n/**\n * Helper: Create SolveEngine and run solve\n * ✅ v2.1: Fixed TypeScript memory property error\n * ✅ Returns performance metrics + cache-busting timestamp\n */\nexport async function runSolveEngine(\n  workbestand_opdracht: WorkbestandOpdracht[],\n  workbestand_planning: WorkbestandPlanning[],\n  workbestand_capaciteit: WorkbestandCapaciteit[],\n  workbestand_services_metadata: WorkbestandServicesMetadata[],\n  rooster_start_date: Date,\n  rooster_end_date: Date\n): Promise<{\n  modified_slots: WorkbestandPlanning[];\n  solve_duration_ms: number;\n  assigned_count: number;\n  open_count: number;\n  task_stats: { processed: number; open: number; total: number };\n  team_filter_stats?: Map<string, { searched_teams: string[]; found_teams: string[]; count: number }>;\n  performance_metrics?: PerformanceMetrics;\n  cache_busting_timestamp?: number;\n}> {\n  const engine = new SolveEngine(\n    workbestand_opdracht,\n    workbestand_planning,\n    workbestand_capaciteit,\n    workbestand_services_metadata,\n    rooster_start_date,\n    rooster_end_date\n  );\n\n  return engine.solve();\n}\n
+      console.log(
+        `🔍 FINDCANDIDATES: Service=${task.service_code} Date=${task.date
+          .toISOString()
+          .split('T')[0]} Dagdeel=${task.dagdeel} Teams=${teams_to_try.join(',')}`
+      );
+    }
+
+    // Step 2: Search by team
+    for (const team of teams_to_try) {
+      const employees_in_team = this.employees_by_team.get(team) || [];
+
+      for (const emp of employees_in_team) {
+        // Check: Bevoegd (actief) voor deze service?
+        const capacity_row = this.workbestand_capaciteit.find(
+          (c) => c.employee_id === emp.employee_id && c.service_id === task.service_id
+        );
+
+        if (!capacity_row || !capacity_row.actief || (capacity_row.aantal_beschikbaar || 0) <= 0) {
+          continue; // Not qualified or no capacity
+        }
+
+        // ✅ PATCH 2B: DIO/DIA CHAIN VALIDATION
+        const chain_validation = this.validateDIOChainComplete(
+          emp.employee_id,
+          task.date,
+          task.team,
+          task.service_code
+        );
+
+        if (!chain_validation.valid) {
+          if (this.debug_enabled) {
+            console.log(
+              `⛔ CHAIN INVALID: ${emp.employee_id} - ${chain_validation.reason}`
+            );
+          }
+          continue; // Skip this employee
+        }
+
+        // Check: Employee status !== 3 (not unavailable)
+        // Status 3 = NB (niet beschikbaar = not available)
+        const employee_status_in_slot = this.workbestand_planning.find(
+          (p) =>
+            p.employee_id === emp.employee_id &&
+            p.date.getTime() === task.date.getTime() &&
+            p.dagdeel === task.dagdeel
+        )?.status;
+
+        if (employee_status_in_slot === 3) {
+          if (this.debug_enabled) {
+            console.log(
+              `⏭️  UNAVAILABLE: ${emp.employee_id} has status=3 on ${task.dagdeel}`
+            );
+          }
+          continue; // Status 3 = NB (not available)
+        }
+
+        // Check: Available slot on this date/dagdeel/status=0?
+        const available_slot = this.workbestand_planning.find(
+          (p) =>
+            p.employee_id === emp.employee_id &&
+            p.date.getTime() === task.date.getTime() &&
+            p.dagdeel === task.dagdeel &&
+            p.status === 0 &&
+            !p.is_protected
+        );
+
+        if (!available_slot) {
+          continue; // No slot available
+        }
+
+        // ✅ Valid candidate found
+        candidates.push({
+          employee_id: emp.employee_id,
+          employee_name: emp.employee_name,
+          team: emp.team,
+          dienstverband: emp.dienstverband,
+          capacity_remaining: capacity_row.aantal_beschikbaar || 0,
+          last_worked: emp.last_worked,
+          fair_score: emp.fair_score,
+          slot: available_slot,
+        });
+
+        // ✅ OPTIE A: Track team of found candidate
+        if (this.team_filter_stats.has(task_key)) {
+          const stats = this.team_filter_stats.get(task_key)!;
+          stats.found_teams.add(emp.team);
+          stats.count += 1;
+        }
+      }
+
+      // If candidates found, don't try next team (fallback only if empty)
+      if (candidates.length > 0) {
+        if (this.debug_enabled) {
+          const stats = this.team_filter_stats.get(task_key);
+          console.log(
+            `✅ FOUND: ${candidates.length} candidates in teams:`,
+            Array.from(stats?.found_teams || [])
+          );
+        }
+        break;
+      }
+    }
+
+    if (candidates.length === 0 && this.debug_enabled) {
+      console.log(
+        `❌ NO CANDIDATES: Service ${task.service_code} on ${task.dagdeel}`
+      );
+    }
+
+    return candidates;
+  }
+
+  /**
+   * Determine team search order (primary team first, then fallbacks)
+   * FIX 2: CORRECTED TEAM NAME MAPPING
+   * ✅ OPTIE A: Strict team isolation
+   */
+  private getTeamSearchOrder(team: string): string[] {
+    // ✅ FIX 2: Use correct database team names
+    // ✅ OPTIE A: Strict search order - GRO NEVER looks in ORA, ORA NEVER in GRO
+    switch (team) {
+      case 'GRO':
+        return ['Groen', 'Overig']; // GRO: First Groen, then Overig (NEVER Oranje)
+      case 'ORA':
+        return ['Oranje', 'Overig']; // ORA: First Oranje, then Overig (NEVER Groen)
+      case 'TOT':
+        return ['Groen', 'Oranje', 'Overig']; // TOT: All teams
+      default:
+        return ['Groen', 'Oranje', 'Overig'];
+    }
+  }
+
+  /**
+   * Get all employees in a specific team
+   * Use preloaded cache
+   */
+  private getEmployeesByTeam(team: string): any[] {
+    return this.employees_by_team.get(team) || [];
+  }
+
+  /**
+   * Get employee info by ID
+   * Build from capacity data + planning data
+   */
+  private getEmployeeInfo(employee_id: string): any {
+    // Check cache first
+    if (this.employee_cache.has(employee_id)) {
+      return this.employee_cache.get(employee_id);
+    }
+
+    // Extract from capacity data
+    const capacity_row = this.workbestand_capaciteit.find(
+      (c) => c.employee_id === employee_id
+    );
+    if (!capacity_row) {
+      return null; // Unknown employee
+    }
+
+    // Get last worked date
+    const last_slot = this.workbestand_planning
+      .filter((p) => p.employee_id === employee_id && p.status === 1 && p.service_id)
+      .sort((a, b) => b.date.getTime() - a.date.getTime())[0];
+
+    const emp_info = {
+      employee_id,
+      employee_name: employee_id, // Simplified: use ID as name (can be enhanced)
+      team: this.extractTeamFromEmployeeId(employee_id),
+      dienstverband: 'Maat', // Simplified: default
+      last_worked: last_slot?.date || null,
+      fair_score: this.calculateFairnessScore(employee_id),
+    };
+
+    this.employee_cache.set(employee_id, emp_info);
+    return emp_info;
+  }
+
+  /**
+   * Extract team from employee capacity data ONLY
+   * ✅ DRAAD 342 PRIORITEIT 2: Cleaned up to use ONLY workbestand_capaciteit.team
+   * 
+   * REASON:
+   * - roster_assignments (planning source) has NO team column
+   * - The authoritative team source is roster_employee_services.team
+   * - Which gets mapped into workbestand_capaciteit.team
+   * 
+   * This method now uses ONE clear source, not multiple fallbacks
+   */
+  private extractTeamFromEmployeeId(employee_id: string): string {
+    // ✅ ONLY source: workbestand_capaciteit (which comes from roster_employee_services)
+    const capacity_rows = this.workbestand_capaciteit.filter(
+      (c) => c.employee_id === employee_id
+    );
+
+    if (capacity_rows.length > 0) {
+      // Get first non-empty team or fallback
+      const teams = capacity_rows.map((c) => c.team).filter(Boolean);
+      if (teams.length > 0) {
+        return teams[0];
+      }
+    }
+
+    // Safe default if no capacity found
+    return 'Overig';
+  }
+
+  /**
+   * Calculate fairness score for an employee
+   * Lower score = recently worked more = should get fewer assignments
+   * 0.0 = brand new, 1.0 = hasn't worked in a while
+   */
+  private calculateFairnessScore(employee_id: string): number {
+    // Count recent assignments
+    const recent_count = this.workbestand_planning.filter(
+      (p) =>
+        p.employee_id === employee_id &&
+        p.status === 1 &&
+        p.service_id &&
+        p.date.getTime() >=
+          new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).getTime()
+    ).length;
+
+    // Normalize: fewer recent assignments = higher score
+    const max_recent = 10;
+    return Math.max(0, Math.min(1, 1 - recent_count / max_recent));
+  }
+
+  /**
+   * Select the BEST candidate using tiebreaker logic
+   * 
+   * Tiebreaker order:
+   * 1. PRIMARY: Capacity remaining (higher = better)
+   * 2. SECONDARY: Fairness score (lower = recently worked, better to skip)
+   * 3. TERTIARY: Alphabetical name (deterministic)
+   */
+  private selectBestCandidate(candidates: SolveCandidate[]): SolveCandidate {
+    const sorted = candidates.sort((a, b) => {
+      // Primary: Capacity remaining (DESC - higher is better)
+      if (a.capacity_remaining !== b.capacity_remaining) {
+        return b.capacity_remaining - a.capacity_remaining;
+      }
+
+      // Secondary: Fairness score (ASC - lower means recently worked more)
+      if (a.fair_score !== b.fair_score) {
+        return a.fair_score - b.fair_score;
+      }
+
+      // Tertiary: Name (alphabetical, deterministic)
+      return a.employee_name.localeCompare(b.employee_name, 'nl');
+    });
+
+    return sorted[0];
+  }
+
+  /**
+   * Decrement capacity for employee/service
+   */
+  private decrementCapacity(employee_id: string, service_id: string): void {
+    const capacity = this.workbestand_capaciteit.find(
+      (c) => c.employee_id === employee_id && c.service_id === service_id
+    );
+
+    if (capacity && capacity.aantal_beschikbaar !== undefined) {
+      capacity.aantal_beschikbaar = Math.max(0, capacity.aantal_beschikbaar - 1);
+    }
+  }
+
+  /**
+   * ✅ PATCH 3: Prepare for DIO/DDO chaining (Phase 3 prep)
+   * Enhanced with comprehensive logging
+   * 
+   * DIO logic:
+   * - Ochtend: Assign DIO
+   * - Middag: Block (werkt al)
+   * - Avond: Assign DIA (auto)
+   * - Next day O+M: Block (too tired)
+   */
+  private prepareForChaining(
+    task: WorkbestandOpdracht,
+    slot: WorkbestandPlanning
+  ): void {
+    const employee_id = slot.employee_id;
+    const assign_date = slot.date;
+    const service_code = task.service_code;
+
+    // DIO only applies to Ochtend dagdeel
+    if (slot.dagdeel !== 'O' || !['DIO', 'DDO'].includes(service_code)) {
+      return;
+    }
+
+    if (this.debug_enabled) {
+      console.log(
+        `🔗 CHAIN START: ${employee_id} - ${service_code} on ${assign_date
+          .toISOString()
+          .split('T')[0]}`
+      );
+    }
+
+    // Step 1: Block Middag (same day)
+    const middag_slot = this.workbestand_planning.find(
+      (p) =>
+        p.employee_id === employee_id &&
+        p.date.getTime() === assign_date.getTime() &&
+        p.dagdeel === 'M' &&
+        p.status === 0
+    );
+
+    if (middag_slot) {
+      middag_slot.status = 2; // Blocked
+      middag_slot.blocked_by_date = assign_date;
+      middag_slot.blocked_by_dagdeel = 'O';
+      middag_slot.blocked_by_service_id = task.service_id;
+      middag_slot.is_modified = true;
+      this.modified_slots.push(middag_slot);
+
+      if (this.debug_enabled) {
+        console.log(
+          `  ✅ BLOCKED: Middag (already works ${service_code} in Ochtend)`
+        );
+      }
+    } else {
+      if (this.debug_enabled) {
+        console.log(
+          `  ⚠️  MIDDAG SLOT NOT FOUND (might already be blocked/assigned)`
+        );
+      }
+    }
+
+    // Step 2: Assign DIA to Avond (same day)
+    const avond_slot = this.workbestand_planning.find(
+      (p) =>
+        p.employee_id === employee_id &&
+        p.date.getTime() === assign_date.getTime() &&
+        p.dagdeel === 'A' &&
+        p.status === 0
+    );
+
+    if (avond_slot) {
+      const dia_service = this.workbestand_services_metadata.find(
+        (s) => s.code === 'DIA'
+      );
+
+      if (dia_service) {
+        avond_slot.service_id = dia_service.id;
+        avond_slot.status = 1; // Assigned
+        avond_slot.source = 'autofill';
+        avond_slot.is_modified = true;
+        this.modified_slots.push(avond_slot);
+
+        if (this.debug_enabled) {
+          console.log(`  ✅ DIA ASSIGNED: Avond (${employee_id})`);
+        }
+
+        // Update capacity for DIA
+        this.decrementCapacity(employee_id, dia_service.id);
+      } else {
+        if (this.debug_enabled) {
+          console.log(`  ❌ DIA SERVICE NOT FOUND`);
+        }
+      }
+    } else {
+      if (this.debug_enabled) {
+        console.log(
+          `  ⚠️  AVOND SLOT NOT FOUND (cannot assign DIA)`
+        );
+      }
+    }
+
+    // Step 3: Block next day O+M (if not beyond end date)
+    const next_date = new Date(assign_date.getTime() + 24 * 60 * 60 * 1000);
+    if (next_date.getTime() <= this.rooster_end_date.getTime()) {
+      // Block next day Ochtend
+      const next_ochtend = this.workbestand_planning.find(
+        (p) =>
+          p.employee_id === employee_id &&
+          p.date.getTime() === next_date.getTime() &&
+          p.dagdeel === 'O' &&
+          p.status === 0
+      );
+
+      if (next_ochtend) {
+        next_ochtend.status = 2; // Blocked
+        next_ochtend.blocked_by_date = assign_date;
+        next_ochtend.blocked_by_dagdeel = 'O';
+        next_ochtend.blocked_by_service_id = task.service_id;
+        next_ochtend.constraint_reason = {
+          reason: 'DIO_recovery',
+          by_service_code: service_code,
+        };
+        next_ochtend.is_modified = true;
+        this.modified_slots.push(next_ochtend);
+
+        if (this.debug_enabled) {
+          console.log(
+            `  ✅ BLOCKED: Next day Ochtend (recovery)`
+          );
+        }
+      }
+
+      // Block next day Middag
+      const next_middag = this.workbestand_planning.find(
+        (p) =>
+          p.employee_id === employee_id &&
+          p.date.getTime() === next_date.getTime() &&
+          p.dagdeel === 'M' &&
+          p.status === 0
+      );
+
+      if (next_middag) {
+        next_middag.status = 2; // Blocked
+        next_middag.blocked_by_date = assign_date;
+        next_middag.blocked_by_dagdeel = 'O';
+        next_middag.blocked_by_service_id = task.service_id;
+        next_middag.constraint_reason = {
+          reason: 'DIO_recovery',
+          by_service_code: service_code,
+        };
+        next_middag.is_modified = true;
+        this.modified_slots.push(next_middag);
+
+        if (this.debug_enabled) {
+          console.log(
+            `  ✅ BLOCKED: Next day Middag (recovery)`
+          );
+        }
+      }
+    }
+
+    if (this.debug_enabled) {
+      console.log(
+        `🔗 CHAIN COMPLETE: ${employee_id} ${service_code} chain processed`
+      );
+    }
+  }
+
+  /**
+   * Count assigned services
+   */
+  private countAssignedServices(): number {
+    return this.workbestand_planning.filter(
+      (p) => p.status === 1 && p.service_id
+    ).length;
+  }
+
+  /**
+   * Count open services (assignments not made)
+   */
+  private countOpenServices(): number {
+    return this.workbestand_opdracht.reduce(
+      (sum, task) => sum + task.aantal_nog,
+      0
+    );
+  }
+}
+
+/**
+ * Helper: Create SolveEngine and run solve
+ * ✅ v2.1: Fixed TypeScript memory property error
+ * ✅ Returns performance metrics + cache-busting timestamp
+ */
+export async function runSolveEngine(
+  workbestand_opdracht: WorkbestandOpdracht[],
+  workbestand_planning: WorkbestandPlanning[],
+  workbestand_capaciteit: WorkbestandCapaciteit[],
+  workbestand_services_metadata: WorkbestandServicesMetadata[],
+  rooster_start_date: Date,
+  rooster_end_date: Date
+): Promise<{
+  modified_slots: WorkbestandPlanning[];
+  solve_duration_ms: number;
+  assigned_count: number;
+  open_count: number;
+  task_stats: { processed: number; open: number; total: number };
+  team_filter_stats?: Map<
+    string,
+    { searched_teams: string[]; found_teams: string[]; count: number }
+  >;
+  performance_metrics?: PerformanceMetrics;
+  cache_busting_timestamp?: number;
+}> {
+  const engine = new SolveEngine(
+    workbestand_opdracht,
+    workbestand_planning,
+    workbestand_capaciteit,
+    workbestand_services_metadata,
+    rooster_start_date,
+    rooster_end_date
+  );
+
+  return engine.solve();
+}
