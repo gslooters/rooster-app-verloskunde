@@ -1,6 +1,6 @@
 {
   "name": "rooster-app-final",
-  "version": "0.1.5-draad405-dio-validation-fix",
+  "version": "0.1.6-draad405e-dda-koppeling",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -41,9 +41,10 @@
     "npm": ">=10.0.0"
   },
   "_deploy_metadata": {
-    "timestamp": "2026-01-06T00:27:56Z",
-    "draad": "405",
+    "timestamp": "2026-01-06T16:30:00Z",
+    "draad": "405E",
     "cache_bust": true,
-    "patches": ["1A", "1B", "1C", "2", "3"]
+    "cache_bust_id": "draad405e-dda-koppeling-1673092200000",
+    "patches": ["1A", "1B", "1C", "2", "3", "6 (DDO→DDA)"]
   }
 }
