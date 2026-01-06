@@ -1,0 +1,76 @@
+DEPLOYMENT TRIGGER: DRAAD406
+============================
+
+Date: 2026-01-06T22:14:39Z
+Version: 0.1.7-draad406-pdf-export-activated
+Cache Bust ID: draad406-pdf-export-v7-1735956868000
+
+CHANGES SUMMARY:
+===============
+1. ✅ AflProgressModal.tsx - PDF Export Button ACTIVATED
+   - Imported usePDFDownload hook
+   - Removed hardcoded disabled={true}
+   - Implemented real PDF download handler
+   - Added loading/error states
+   - Button now shows 📥 PDF rapport
+
+2. ✅ PDFDownloadHandler.tsx - Cache-Bust Headers Added
+   - Imported generateCacheBustToken() utility
+   - Added X-Cache-Bust header to fetch call
+   - Added Cache-Control, Pragma, Expires headers
+   - Works with Railway caching layer
+
+3. ✅ cache-bust.ts - New Utility Module
+   - generateCacheBustToken() - Creates unique tokens
+   - getCacheBustHeaders() - Returns header object
+   - addCacheBustParam() - Adds ?bust= to URLs
+   - buildCacheBustFetchOptions() - Combines headers
+
+4. ✅ package.json - Deployment Metadata Updated
+   - Version bumped to 0.1.7
+   - Status: READY-FOR-DEPLOYMENT
+   - All fixes documented
+
+DEPLOYMENT ACTIONS:
+===================
+[ ] 1. Push commits to GitHub (DONE - 3 commits)
+[ ] 2. Railway automatic detection (auto-triggered)
+[ ] 3. Build: npm run build
+[ ] 4. Start: npm start
+[ ] 5. Verify: Check /afl/rooster endpoint
+
+TESTING CHECKLIST:
+==================
+[ ] Click 'Bewerk rooster' on RoosterBewerking
+[ ] Wait for AFL execution to complete (60s max)
+[ ] Look for green success state with statistics
+[ ] Click 📥 PDF rapport button
+[ ] Should download PDF file to local Downloads folder
+[ ] Check browser console for no errors
+[ ] Verify "Cache-Bust" in Network tab headers
+
+ROLLBACK PLAN:
+==============
+If deployment fails:
+1. Railway will show build error in logs
+2. Check /api/reports/[id]/pdf endpoint (should exist)
+3. Check database schema: afl_execution_reports table
+4. Verify Supabase connection string in environment
+
+MONITORING:
+===========
+- Watch Railway logs in real-time
+- Look for: "PDF download" console messages
+- Check for 404 errors on /api/reports endpoint
+- Monitor for cache-related issues (timeout/stale data)
+
+ONE-LINER GIT LOG:
+==================
+Commit 1: fix(DRAAD406): Activate PDF export
+Commit 2: feat(DRAAD406): Add cache-busting utility
+Commit 3: fix(DRAAD406): Add cache-bust headers to PDF download
+Commit 4: chore(DRAAD406): Update deployment metadata
+
+
+DEPLOYMENT STATUS: ✅ READY TO PUSH TO PRODUCTION
+==================================================
