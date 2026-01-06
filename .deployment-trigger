@@ -1,0 +1,21 @@
+# Railway Deployment Trigger
+# Timestamp: 2026-01-06T16:57:00+01:00
+# Build: railway-20260106-165700-patch7-dda-fix
+# Commit: cfcfa724cc619602ad69a7e5070d185f35270eed
+# Patch: DRAAD405F - PATCH 7: DDA dubbel-inplannen fix
+#
+# ROOT CAUSE FIXED:
+# - DDA wordt nu NIET meer dubbel ingepland
+# - chained_task.aantal_nog wordt decremented nadat DDA auto-assigned
+# - Resulteert in 12x DDA (correct) in plaats van 23x (fout)
+#
+# EXPECTED RESULT:
+# ✅ DDO: 12x (onveranderd)
+# ✅ DDA: 12x (was 23x - FIXED!)
+# ✅ Capaciteit tracking: Klopt nu
+# ✅ Performance: Cache-busting enabled
+#
+# Next verification:
+# - Run AFL rooster week 45-52 (5 weken, 10 personen)
+# - Check DDA count in output
+# - Verify no other services affected
