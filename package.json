@@ -1,6 +1,6 @@
 {
   "name": "rooster-app-final",
-  "version": "0.1.6-draad406-pdf-export-fix",
+  "version": "0.1.6-draad406-pdf-export-fix-v2",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -41,12 +41,14 @@
     "npm": ">=10.0.0"
   },
   "_deploy_metadata": {
-    "timestamp": "2026-01-06T20:33:49Z",
-    "draad": "406-FIX",
-    "version": "0.1.6-draad406-pdf-export-fix",
+    "timestamp": "2026-01-06T20:48:47Z",
+    "draad": "406-TYPESCRIPT-FIX",
+    "version": "0.1.6-draad406-pdf-export-fix-v2",
     "cache_bust": true,
-    "cache_bust_id": "draad406-pdf-fix-1673092429000",
-    "fix": "TypeScript setFont undefined parameter",
-    "status": "RETRY"
+    "cache_bust_id": "draad406-pdf-hook-fix-1735948127000",
+    "fix": "Remove React.FC wrapper from PDFDownloadHandler - keep hook only",
+    "status": "RETRY-3",
+    "deployment_attempt": 3,
+    "reason": "TypeScript compilation - component architecture fix"
   }
 }
