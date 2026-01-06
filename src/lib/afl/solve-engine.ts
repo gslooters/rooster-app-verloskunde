@@ -18,7 +18,8 @@
  * - PATCH 3: Enhanced prepareForChaining() with logging
  * - PATCH 4: Cache-busting + performance optimization (v2.0)
  * - PATCH 5: ✅ TypeScript memory.property fix (use process.memoryUsage())
- * - ✅ PATCH 6: DRAAD405E - DDO→DDA conditional koppeling
+ * - PATCH 6: DRAAD405E - DDO→DDA conditional koppeling
+ * - ✅ PATCH 7: DRAAD405F - DDA dubbel-inplannen fix (chained-only tracking)
  */
 
 import {
@@ -58,6 +59,7 @@ interface PerformanceMetrics {
  * ✅ v2.0: With cache-busting + performance instrumentation
  * ✅ v2.1: Fixed TypeScript memory property error
  * ✅ v2.2: DRAAD405E - Fixed DDO→DDA conditional koppeling
+ * ✅ v2.3: DRAAD405F - Fixed DDA dubbel-inplannen via chained-only tracking
  */
 export class SolveEngine {
   private workbestand_opdracht: WorkbestandOpdracht[];
@@ -95,6 +97,9 @@ export class SolveEngine {
     memory_peak_mb: 0,
     cache_hit_rate: 0,
   };
+
+  // ✅ PATCH 7: Track chained services to prevent double-assignment
+  private chained_services_assigned: Map<string, number> = new Map();
 
   constructor(
     opdracht: WorkbestandOpdracht[],
@@ -140,7 +145,7 @@ export class SolveEngine {
     this.performance_metrics.preload_duration_ms = performance.now() - startTime;
 
     if (this.debug_enabled) {
-      console.log(`✅ SOLVE v2.2: Preloaded employees by team:`, {
+      console.log(`✅ SOLVE v2.3: Preloaded employees by team:`, {
         teams: Array.from(this.employees_by_team.keys()),
         total_employees: unique_employees.size,
         duration_ms: this.performance_metrics.preload_duration_ms.toFixed(2),
@@ -226,6 +231,29 @@ export class SolveEngine {
       }
     }
 
+    // REGEL 3: DDA vereist DDO eerder in dezelfde dag
+    if (service_code === 'DDA') {
+      const ddo_service_id = this.getDDOServiceId();
+
+      const ddo_assigned = this.workbestand_planning.some(
+        (p) =>
+          p.employee_id === employee_id &&
+          p.date.getTime() === dateTime &&
+          p.dagdeel === 'O' &&
+          p.service_id === ddo_service_id &&
+          p.status === 1 // Must be assigned
+      );
+
+      if (!ddo_assigned) {
+        const result = {
+          valid: false,
+          reason: `DDA requires DDO to be assigned first on same day in Ochtend`,
+        };
+        this.validation_result_cache.set(cache_key, false);
+        return result;
+      }
+    }
+
     // ✅ Cache positive result
     this.validation_result_cache.set(cache_key, true);
     return { valid: true };
@@ -255,6 +283,18 @@ export class SolveEngine {
     this.dio_service_id_cache_timestamp = now;
     
     return result;
+  }
+
+  /**
+   * ✅ PATCH 7: Helper - Get DDO service ID (for DDA chain validation)
+   * Enhanced with caching (avoid repeated lookups)
+   */
+  private getDDOServiceId(): string {
+    const ddo_service = this.workbestand_services_metadata.find(
+      (s) => s.code === 'DDO'
+    );
+    
+    return ddo_service?.id || '';
   }
 
   /**
@@ -316,6 +356,7 @@ export class SolveEngine {
    * MAIN SOLVE LOOP - FIX 1: CRITICAL LOOP CONDITION CORRECTED
    * ✅ PATCH 4: With performance metrics + cache-busting trigger
    * ✅ PATCH 5: Fixed memory tracking
+   * ✅ PATCH 7: With chained service tracking
    * Iterate through tasks and assign services
    */
   solve(): {
@@ -334,9 +375,10 @@ export class SolveEngine {
     this.task_open_count = 0;
     this.team_filter_stats.clear();
     this.validation_result_cache.clear(); // ✅ Clear cache each solve run
+    this.chained_services_assigned.clear(); // ✅ PATCH 7: Clear chained tracking
 
     if (this.debug_enabled) {
-      console.log(`🚀 SOLVE v2.2: Starting main loop with ${this.workbestand_opdracht.length} tasks`, {
+      console.log(`🚀 SOLVE v2.3: Starting main loop with ${this.workbestand_opdracht.length} tasks`, {
         cache_busting_timestamp: this.cache_busting_timestamp,
         railway_trigger: `railway-${this.cache_busting_timestamp}-${Date.now()}`, // ✅ Railway deployment trigger with extra Date.now()
       });
@@ -440,12 +482,13 @@ export class SolveEngine {
           count: value.count,
         };
       }
-      console.log(`✅ SOLVE v2.2: Team Filter Statistics:`, stats_for_log);
-      console.log(`✅ SOLVE v2.2: Performance Metrics:`, this.performance_metrics);
+      console.log(`✅ SOLVE v2.3: Team Filter Statistics:`, stats_for_log);
+      console.log(`✅ SOLVE v2.3: Performance Metrics:`, this.performance_metrics);
+      console.log(`✅ SOLVE v2.3: Chained Services Assigned:`, Object.fromEntries(this.chained_services_assigned));
     }
 
     if (this.debug_enabled) {
-      console.log(`✅ SOLVE v2.2: Complete`, {
+      console.log(`✅ SOLVE v2.3: Complete`, {
         duration_ms: solve_duration_ms.toFixed(0),
         assigned: assigned_count,
         open: open_count,
@@ -457,6 +500,7 @@ export class SolveEngine {
         },
         cache_hit_rate_percent: this.performance_metrics.cache_hit_rate.toFixed(1),
         memory_peak_mb: this.performance_metrics.memory_peak_mb.toFixed(2),
+        chained_services_count: this.chained_services_assigned.size,
         railway_trigger: `railway-${this.cache_busting_timestamp}-${Date.now()}`,
       });
     }
@@ -804,13 +848,11 @@ export class SolveEngine {
   }
 
   /**
-   * ✅ PATCH 3 + PATCH 6 (DRAAD405E): Prepare for DIO/DDO chaining (Phase 3 prep)
+   * ✅ PATCH 3 + PATCH 6 + PATCH 7 (DRAAD405E-F): Prepare for DIO/DDO chaining (Phase 3 prep)
    * Enhanced with comprehensive logging
    * 
    * 🔴 PATCH 6 (DRAAD405E): FIXED DDO→DDA conditional koppeling
-   * - Line 766-771: BEFORE: Hardcoded DIA lookup (only worked for DIO)
-   * - NOW: Conditional logic - DIO → DIA, DDO → DDA
-   * - BOTH services now correctly supported
+   * 🔴 PATCH 7 (DRAAD405F): FIXED DDA dubbel-inplannen by decrementing chained task
    * 
    * DIO logic:
    * - Ochtend: Assign DIO
@@ -823,6 +865,11 @@ export class SolveEngine {
    * - Middag: Block
    * - Avond: Assign DDA (was missing!)
    * - Next day O+M: Block
+   * 
+   * ✅ PATCH 7 - Decrement chained task counter:
+   * - Find chained_task in workbestand_opdracht for DIA/DDA
+   * - Decrement aantal_nog by 1
+   * - Prevents double-assignment in next solve iteration
    */
   private prepareForChaining(
     task: WorkbestandOpdracht,
@@ -920,6 +967,37 @@ export class SolveEngine {
 
         // Update capacity for chained service
         this.decrementCapacity(employee_id, chained_service.id);
+
+        // ✅ PATCH 7: Decrement chained task counter to prevent double-assignment
+        const chained_task = this.workbestand_opdracht.find(
+          (t) =>
+            t.service_id === chained_service.id &&
+            t.date.getTime() === assign_date.getTime() &&
+            t.dagdeel === 'A'  // Chained services are ALWAYS in Avond
+        );
+
+        if (chained_task) {
+          chained_task.aantal_nog -= 1;
+          
+          // Track for reporting
+          const chain_key = `${chained_service_code}_${employee_id}_${assign_date.toISOString().split('T')[0]}`;
+          this.chained_services_assigned.set(
+            chain_key,
+            (this.chained_services_assigned.get(chain_key) || 0) + 1
+          );
+
+          if (this.debug_enabled) {
+            console.log(
+              `  ✅ PATCH 7: Decremented ${chained_service_code} task counter (antal_nog now ${chained_task.aantal_nog})`
+            );
+          }
+        } else {
+          if (this.debug_enabled) {
+            console.warn(
+              `[PATCH 7] Could not find chained task for ${chained_service_code} on ${assign_date.toISOString().split('T')[0]} Avond`
+            );
+          }
+        }
       } else {
         if (this.debug_enabled) {
           console.warn(
@@ -1024,9 +1102,10 @@ export class SolveEngine {
 
 /**
  * Helper: Create SolveEngine and run solve
- * ✅ v2.2: Fixed TypeScript memory property error
+ * ✅ v2.3: With PATCH 7 chained service tracking
  * ✅ Returns performance metrics + cache-busting timestamp
  * ✅ DRAAD405E: DDO→DDA conditional koppeling fixed
+ * ✅ DRAAD405F: DDA dubbel-inplannen fixed
  */
 export async function runSolveEngine(
   workbestand_opdracht: WorkbestandOpdracht[],
