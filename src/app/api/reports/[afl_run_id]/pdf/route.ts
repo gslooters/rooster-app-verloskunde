@@ -1,5 +1,6 @@
 /**
  * DRAAD 406: PDF RAPPORT EXPORT ENDPOINT
+ * FIX: TypeScript strict mode - setFont() parameter type
  * 
  * Endpoint: GET /api/reports/{afl_run_id}/pdf
  * 
@@ -106,13 +107,13 @@ export async function GET(
 
     // Add title
     doc.setFontSize(20);
-    doc.setFont(undefined, 'bold');
+    doc.setFont('', 'bold');
     doc.text('ROOSTER-BEWERKING RAPPORT', marginX, currentY);
     currentY += 12;
 
     // Add date
     doc.setFontSize(10);
-    doc.setFont(undefined, 'normal');
+    doc.setFont('', 'normal');
     doc.text(`Gegenereerd: ${new Date().toLocaleDateString('nl-NL')}`, marginX, currentY);
     currentY += 8;
 
@@ -123,12 +124,12 @@ export async function GET(
 
     // Rooster Period Section
     doc.setFontSize(12);
-    doc.setFont(undefined, 'bold');
+    doc.setFont('', 'bold');
     doc.text('Rooster Periode', marginX, currentY);
     currentY += 7;
 
     doc.setFontSize(10);
-    doc.setFont(undefined, 'normal');
+    doc.setFont('', 'normal');
 
     const startDate = new Date(roosterData.start_date).toLocaleDateString('nl-NL');
     const endDate = new Date(roosterData.end_date).toLocaleDateString('nl-NL');
@@ -142,12 +143,12 @@ export async function GET(
 
     // Metrics Section
     doc.setFontSize(12);
-    doc.setFont(undefined, 'bold');
+    doc.setFont('', 'bold');
     doc.text('Resultaten', marginX, currentY);
     currentY += 7;
 
     doc.setFontSize(10);
-    doc.setFont(undefined, 'normal');
+    doc.setFont('', 'normal');
 
     // Create metrics table
     const metricsData = [
