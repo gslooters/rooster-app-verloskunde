@@ -18,6 +18,7 @@
  * - PATCH 3: Enhanced prepareForChaining() with logging
  * - PATCH 4: Cache-busting + performance optimization (v2.0)
  * - PATCH 5: ✅ TypeScript memory.property fix (use process.memoryUsage())
+ * - ✅ PATCH 6: DRAAD405E - DDO→DDA conditional koppeling
  */
 
 import {
@@ -56,6 +57,7 @@ interface PerformanceMetrics {
  * Solve Engine - Main FASE 2 Algorithm
  * ✅ v2.0: With cache-busting + performance instrumentation
  * ✅ v2.1: Fixed TypeScript memory property error
+ * ✅ v2.2: DRAAD405E - Fixed DDO→DDA conditional koppeling
  */
 export class SolveEngine {
   private workbestand_opdracht: WorkbestandOpdracht[];
@@ -138,7 +140,7 @@ export class SolveEngine {
     this.performance_metrics.preload_duration_ms = performance.now() - startTime;
 
     if (this.debug_enabled) {
-      console.log(`✅ SOLVE v2.1: Preloaded employees by team:`, {
+      console.log(`✅ SOLVE v2.2: Preloaded employees by team:`, {
         teams: Array.from(this.employees_by_team.keys()),
         total_employees: unique_employees.size,
         duration_ms: this.performance_metrics.preload_duration_ms.toFixed(2),
@@ -334,7 +336,7 @@ export class SolveEngine {
     this.validation_result_cache.clear(); // ✅ Clear cache each solve run
 
     if (this.debug_enabled) {
-      console.log(`🚀 SOLVE v2.1: Starting main loop with ${this.workbestand_opdracht.length} tasks`, {
+      console.log(`🚀 SOLVE v2.2: Starting main loop with ${this.workbestand_opdracht.length} tasks`, {
         cache_busting_timestamp: this.cache_busting_timestamp,
         railway_trigger: `railway-${this.cache_busting_timestamp}-${Date.now()}`, // ✅ Railway deployment trigger with extra Date.now()
       });
@@ -438,12 +440,12 @@ export class SolveEngine {
           count: value.count,
         };
       }
-      console.log(`✅ SOLVE v2.1: Team Filter Statistics:`, stats_for_log);
-      console.log(`✅ SOLVE v2.1: Performance Metrics:`, this.performance_metrics);
+      console.log(`✅ SOLVE v2.2: Team Filter Statistics:`, stats_for_log);
+      console.log(`✅ SOLVE v2.2: Performance Metrics:`, this.performance_metrics);
     }
 
     if (this.debug_enabled) {
-      console.log(`✅ SOLVE v2.1: Complete`, {
+      console.log(`✅ SOLVE v2.2: Complete`, {
         duration_ms: solve_duration_ms.toFixed(0),
         assigned: assigned_count,
         open: open_count,
@@ -802,14 +804,25 @@ export class SolveEngine {
   }
 
   /**
-   * ✅ PATCH 3: Prepare for DIO/DDO chaining (Phase 3 prep)
+   * ✅ PATCH 3 + PATCH 6 (DRAAD405E): Prepare for DIO/DDO chaining (Phase 3 prep)
    * Enhanced with comprehensive logging
+   * 
+   * 🔴 PATCH 6 (DRAAD405E): FIXED DDO→DDA conditional koppeling
+   * - Line 766-771: BEFORE: Hardcoded DIA lookup (only worked for DIO)
+   * - NOW: Conditional logic - DIO → DIA, DDO → DDA
+   * - BOTH services now correctly supported
    * 
    * DIO logic:
    * - Ochtend: Assign DIO
    * - Middag: Block (werkt al)
    * - Avond: Assign DIA (auto)
    * - Next day O+M: Block (too tired)
+   * 
+   * ✅ DDO logic (NEW - DRAAD405E FIX):
+   * - Ochtend: Assign DDO
+   * - Middag: Block
+   * - Avond: Assign DDA (was missing!)
+   * - Next day O+M: Block
    */
   private prepareForChaining(
     task: WorkbestandOpdracht,
@@ -819,7 +832,7 @@ export class SolveEngine {
     const assign_date = slot.date;
     const service_code = task.service_code;
 
-    // DIO only applies to Ochtend dagdeel
+    // DIO/DDO only applies to Ochtend dagdeel
     if (slot.dagdeel !== 'O' || !['DIO', 'DDO'].includes(service_code)) {
       return;
     }
@@ -862,7 +875,22 @@ export class SolveEngine {
       }
     }
 
-    // Step 2: Assign DIA to Avond (same day)
+    // Step 2: Assign chained service to Avond (DIA for DIO, DDA for DDO)
+    // ✅ DRAAD405E FIX: Determine chained service based on service_code
+    let chained_service_code: string;
+    if (service_code === 'DIO') {
+      chained_service_code = 'DIA';  // DIO → DIA
+    } else if (service_code === 'DDO') {
+      chained_service_code = 'DDA';  // DDO → DDA (DRAAD405E FIX)
+    } else {
+      if (this.debug_enabled) {
+        console.warn(
+          `[DRAAD405E] Unknown service code for chaining: ${service_code}`
+        );
+      }
+      return; // Unknown service - skip chaining
+    }
+
     const avond_slot = this.workbestand_planning.find(
       (p) =>
         p.employee_id === employee_id &&
@@ -872,32 +900,37 @@ export class SolveEngine {
     );
 
     if (avond_slot) {
-      const dia_service = this.workbestand_services_metadata.find(
-        (s) => s.code === 'DIA'
+      // ✅ Use conditional lookup instead of hardcoded 'DIA'
+      const chained_service = this.workbestand_services_metadata.find(
+        (s) => s.code === chained_service_code  // ✅ Dynamic!
       );
 
-      if (dia_service) {
-        avond_slot.service_id = dia_service.id;
+      if (chained_service) {
+        avond_slot.service_id = chained_service.id;
         avond_slot.status = 1; // Assigned
         avond_slot.source = 'autofill';
         avond_slot.is_modified = true;
         this.modified_slots.push(avond_slot);
 
         if (this.debug_enabled) {
-          console.log(`  ✅ DIA ASSIGNED: Avond (${employee_id})`);
+          console.log(
+            `  ✅ ${chained_service_code} ASSIGNED: Avond (${employee_id})`
+          );
         }
 
-        // Update capacity for DIA
-        this.decrementCapacity(employee_id, dia_service.id);
+        // Update capacity for chained service
+        this.decrementCapacity(employee_id, chained_service.id);
       } else {
         if (this.debug_enabled) {
-          console.log(`  ❌ DIA SERVICE NOT FOUND`);
+          console.warn(
+            `[DRAAD405E] No service found for chained code: ${chained_service_code}`
+          );
         }
       }
     } else {
       if (this.debug_enabled) {
         console.log(
-          `  ⚠️  AVOND SLOT NOT FOUND (cannot assign DIA)`
+          `  ⚠️  AVOND SLOT NOT FOUND (cannot assign ${chained_service_code})`
         );
       }
     }
@@ -964,7 +997,7 @@ export class SolveEngine {
 
     if (this.debug_enabled) {
       console.log(
-        `🔗 CHAIN COMPLETE: ${employee_id} ${service_code} chain processed`
+        `🔗 CHAIN COMPLETE: ${employee_id} ${service_code} → ${chained_service_code} chain processed`
       );
     }
   }
@@ -991,8 +1024,9 @@ export class SolveEngine {
 
 /**
  * Helper: Create SolveEngine and run solve
- * ✅ v2.1: Fixed TypeScript memory property error
+ * ✅ v2.2: Fixed TypeScript memory property error
  * ✅ Returns performance metrics + cache-busting timestamp
+ * ✅ DRAAD405E: DDO→DDA conditional koppeling fixed
  */
 export async function runSolveEngine(
   workbestand_opdracht: WorkbestandOpdracht[],
