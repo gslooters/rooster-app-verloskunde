@@ -1,6 +1,6 @@
 {
   "name": "rooster-app-final",
-  "version": "0.1.6-draad405e-dda-koppeling",
+  "version": "0.1.6-draad406-pdf-export-fix",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -41,10 +41,12 @@
     "npm": ">=10.0.0"
   },
   "_deploy_metadata": {
-    "timestamp": "2026-01-06T16:30:00Z",
-    "draad": "405E",
+    "timestamp": "2026-01-06T20:33:49Z",
+    "draad": "406-FIX",
+    "version": "0.1.6-draad406-pdf-export-fix",
     "cache_bust": true,
-    "cache_bust_id": "draad405e-dda-koppeling-1673092200000",
-    "patches": ["1A", "1B", "1C", "2", "3", "6 (DDO→DDA)"]
+    "cache_bust_id": "draad406-pdf-fix-1673092429000",
+    "fix": "TypeScript setFont undefined parameter",
+    "status": "RETRY"
   }
 }
