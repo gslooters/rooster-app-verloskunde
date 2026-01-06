@@ -1,5 +1,6 @@
 /**
  * AUTO-FILL BUTTON COMPONENT - GREEDY INTEGRATION
+ * DRAAD 406 UPDATE: PDF RAPPORT EXPORT ONTSLUITING
  * 
  * DRAAD 201: STAP 4 Frontend Integration - GREEDY ONLY
  * DRAAD 221: FIX - Verwijder auto-reload voor rapport display
@@ -12,17 +13,25 @@
  * - Add type safety with ApiResponse interface
  * - Console logging for debugging
  * 
+ * DRAAD 406 UPDATE:
+ * - Add usePDFDownload hook integration
+ * - Enable PDF rapport download button
+ * - Remove disabled state from PDF export
+ * - Add loading state for PDF generation
+ * 
  * Behavior:
  *   1. Show loading spinner + "Bezig met roostering..."
  *   2. Call GREEDY endpoint POST /api/greedy/solve
  *   3. Display results with coverage
  *   4. Show bottleneck summary
- *   5. Gebruiker kiest zelf wanneer te vernieuwen (GEEN auto-reload!)
- *   6. Error classification: network/server/timeout with Dutch messages
+ *   5. PDF rapport button ACTIVE - click to download
+ *   6. Gebruiker kiest zelf wanneer te vernieuwen (GEEN auto-reload!)
+ *   7. Error classification: network/server/timeout with Dutch messages
  */
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { usePDFDownload } from './PDFDownloadHandler';
 
 // Environment Configuration
 const GREEDY_ENDPOINT = process.env.REACT_APP_GREEDY_ENDPOINT || 
@@ -32,6 +41,7 @@ const HEALTH_CHECK_URL = process.env.REACT_APP_GREEDY_HEALTH ||
 
 interface AutoFillButtonProps {
   rosterId: string;
+  afl_run_id?: string; // DRAAD 406: AFL run ID for PDF export
   onSolveComplete?: (result: SolveResult) => void;
   disabled?: boolean;
 }
@@ -43,6 +53,7 @@ interface SolveResult {
   bottlenecks: number;
   solve_time: number;
   message: string;
+  afl_run_id?: string; // DRAAD 406: Store AFL run ID from result
   details?: {
     pre_planned: number;
     greedy_assigned: number;
@@ -132,6 +143,7 @@ const healthCheck = async (): Promise<boolean> => {
 
 const AutoFillButton: React.FC<AutoFillButtonProps> = ({
   rosterId,
+  afl_run_id: initialAflRunId,
   onSolveComplete,
   disabled = false
 }) => {
@@ -140,6 +152,12 @@ const AutoFillButton: React.FC<AutoFillButtonProps> = ({
   const [error, setError] = useState<ErrorClassification | null>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [isGreedyHealthy, setIsGreedyHealthy] = useState<boolean | null>(null);
+  const [currentAflRunId, setCurrentAflRunId] = useState<string | null>(initialAflRunId || null);
+  
+  // DRAAD 406: PDF download hook
+  const { downloadPDF, isLoading: isPDFLoading, error: pdfError } = usePDFDownload(
+    currentAflRunId || result?.afl_run_id || ''
+  );
 
   // Health check on mount
   useEffect(() => {
@@ -206,6 +224,12 @@ const AutoFillButton: React.FC<AutoFillButtonProps> = ({
       const solveResult: SolveResult = responseData.solver_result;
       console.log('[AutoFillButton] Extracted solver_result:', solveResult);
       
+      // DRAAD 406: Store AFL run ID if available
+      if (solveResult.afl_run_id) {
+        setCurrentAflRunId(solveResult.afl_run_id);
+        console.log(`[AutoFillButton] AFL Run ID set: ${solveResult.afl_run_id}`);
+      }
+      
       setResult(solveResult);
 
       if (onSolveComplete) {
@@ -229,6 +253,16 @@ const AutoFillButton: React.FC<AutoFillButtonProps> = ({
     }
   };
 
+  // DRAAD 406: Handle PDF download with error feedback
+  const handlePDFDownload = async () => {
+    console.log(`[AutoFillButton] Initiating PDF download...`);
+    try {
+      await downloadPDF();
+    } catch (err) {
+      console.error('[AutoFillButton] PDF download error:', err);
+    }
+  };
+
   // Loading state
   if (isLoading) {
     return (
@@ -244,6 +278,8 @@ const AutoFillButton: React.FC<AutoFillButtonProps> = ({
 
   // Success state
   if (result && result.status === 'SUCCESS') {
+    const canDownloadPDF = currentAflRunId || result?.afl_run_id;
+    
     return (
       <div className="space-y-3">
         {/* Success banner */}
@@ -272,6 +308,38 @@ const AutoFillButton: React.FC<AutoFillButtonProps> = ({
             <span className="text-gray-700">Oplossingsduur:</span>
             <span className="font-mono text-blue-700">{result.solve_time}s</span>
           </div>
+        </div>
+
+        {/* DRAAD 406: PDF Export Section - NOW ACTIVE */}
+        <div className="bg-purple-50 rounded-lg p-3 border border-purple-200">
+          <button
+            onClick={handlePDFDownload}
+            disabled={!canDownloadPDF || isPDFLoading}
+            className="w-full px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-purple-600 to-purple-700 rounded-lg hover:from-purple-700 hover:to-purple-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg"
+            title="Download PDF rapport van deze roostering"
+          >
+            {isPDFLoading ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="animate-spin">⚙️</span>
+                <span>PDF wordt gegenereerd...</span>
+              </span>
+            ) : (
+              <span className="flex items-center justify-center gap-2">
+                <span>📥</span>
+                <span>PDF Rapport Downloaden</span>
+              </span>
+            )}
+          </button>
+          {pdfError && (
+            <div className="mt-2 text-xs text-red-600 bg-red-50 p-2 rounded border border-red-200">
+              ⚠️ {pdfError}
+            </div>
+          )}
+          {!canDownloadPDF && (
+            <div className="mt-2 text-xs text-gray-600 bg-gray-50 p-2 rounded border border-gray-200">
+              ℹ️ AFL Run ID niet beschikbaar
+            </div>
+          )}
         </div>
 
         {/* Details */}
