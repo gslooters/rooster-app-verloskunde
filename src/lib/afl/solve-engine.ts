@@ -16,6 +16,7 @@
  * - PATCH 1A/1B/1C: DIO/DIA validation methods
  * - PATCH 2: Enhanced findCandidates() with validation
  * - PATCH 3: Enhanced prepareForChaining() with logging
+ * - PATCH 4: Cache-busting + performance optimization (v2.0)
  */
 
 import {
@@ -35,7 +36,24 @@ interface SolveCandidate extends EmployeeCandidate {
 }
 
 /**
+ * Performance tracking interface
+ */
+interface PerformanceMetrics {
+  total_duration_ms: number;
+  preload_duration_ms: number;
+  findcandidates_calls: number;
+  findcandidates_total_ms: number;
+  validation_cache_hits: number;
+  validation_cache_misses: number;
+  chain_prep_count: number;
+  chain_prep_total_ms: number;
+  memory_peak_mb: number;
+  cache_hit_rate: number;
+}
+
+/**
  * Solve Engine - Main FASE 2 Algorithm
+ * ✅ v2.0: With cache-busting + performance instrumentation
  */
 export class SolveEngine {
   private workbestand_opdracht: WorkbestandOpdracht[];
@@ -53,8 +71,26 @@ export class SolveEngine {
   private task_open_count: number = 0;
   private debug_enabled: boolean = true;
   
-  // ✅ OPTIE A: Team filtering verification tracking
+  // ✅ PATCH 1A/1B/1C: Team filtering verification tracking
   private team_filter_stats: Map<string, { searched_teams: string[]; found_teams: Set<string>; count: number }> = new Map();
+
+  // ✅ PATCH 4: Cache-busting + Performance
+  private dio_service_id_cache: string | null = null;
+  private dio_service_id_cache_timestamp: number = 0;
+  private cache_busting_timestamp: number = Date.now();
+  private validation_result_cache: Map<string, boolean> = new Map();
+  private performance_metrics: PerformanceMetrics = {
+    total_duration_ms: 0,
+    preload_duration_ms: 0,
+    findcandidates_calls: 0,
+    findcandidates_total_ms: 0,
+    validation_cache_hits: 0,
+    validation_cache_misses: 0,
+    chain_prep_count: 0,
+    chain_prep_total_ms: 0,
+    memory_peak_mb: 0,
+    cache_hit_rate: 0,
+  };
 
   constructor(
     opdracht: WorkbestandOpdracht[],
@@ -70,13 +106,16 @@ export class SolveEngine {
     this.workbestand_services_metadata = services;
     this.rooster_start_date = rooster_start_date;
     this.rooster_end_date = rooster_end_date;
+    this.cache_busting_timestamp = Date.now(); // ✅ Set cache-buster at init
     this.preloadEmployeesByTeam();
   }
 
   /**
-   * Preload employees by team for faster lookup
+   * ✅ PATCH 4: Preload employees by team for faster lookup
+   * With performance instrumentation
    */
   private preloadEmployeesByTeam(): void {
+    const startTime = performance.now();
     const unique_employees = new Map<string, any>();
 
     // Extract from planning data
@@ -94,10 +133,14 @@ export class SolveEngine {
       }
     }
 
+    this.performance_metrics.preload_duration_ms = performance.now() - startTime;
+
     if (this.debug_enabled) {
-      console.log(`✅ SOLVE: Preloaded employees by team:`, {
+      console.log(`✅ SOLVE v2.0: Preloaded employees by team:`, {
         teams: Array.from(this.employees_by_team.keys()),
         total_employees: unique_employees.size,
+        duration_ms: this.performance_metrics.preload_duration_ms.toFixed(2),
+        timestamp: this.cache_busting_timestamp,
       });
     }
   }
@@ -117,6 +160,15 @@ export class SolveEngine {
     service_code: string
   ): { valid: boolean; reason?: string } {
     const dateTime = date.getTime();
+    
+    // ✅ PATCH 4: Check validation cache first
+    const cache_key = `${employee_id}_${dateTime}_${service_code}`;
+    if (this.validation_result_cache.has(cache_key)) {
+      this.performance_metrics.validation_cache_hits += 1;
+      const cached = this.validation_result_cache.get(cache_key);
+      return cached ? { valid: true } : { valid: false, reason: 'cached result' };
+    }
+    this.performance_metrics.validation_cache_misses += 1;
 
     // REGEL 1: DIO vereist ALLE 3 dagdelen beschikbaar
     if (service_code === 'DIO' || service_code === 'DDO') {
@@ -138,10 +190,12 @@ export class SolveEngine {
       }
 
       if (unavailable_dagdelen.length > 0) {
-        return {
+        const result = {
           valid: false,
           reason: `DIO requires all 3 dagdelen available, missing: ${unavailable_dagdelen.join(',')}`,
         };
+        this.validation_result_cache.set(cache_key, false);
+        return result;
       }
     }
 
@@ -159,24 +213,44 @@ export class SolveEngine {
       );
 
       if (!dio_assigned) {
-        return {
+        const result = {
           valid: false,
           reason: `DIA requires DIO to be assigned first on same day in Ochtend`,
         };
+        this.validation_result_cache.set(cache_key, false);
+        return result;
       }
     }
 
+    // ✅ Cache positive result
+    this.validation_result_cache.set(cache_key, true);
     return { valid: true };
   }
 
   /**
-   * ✅ PATCH 1B: Helper - Get DIO service ID
+   * ✅ PATCH 1B + PATCH 4: Helper - Get DIO service ID
+   * Enhanced with caching (avoid repeated lookups)
    */
   private getDIOServiceId(): string {
+    const now = Date.now();
+    
+    // ✅ Cache for 60 seconds (handles Railway redeploys)
+    if (
+      this.dio_service_id_cache &&
+      now - this.dio_service_id_cache_timestamp < 60000
+    ) {
+      return this.dio_service_id_cache;
+    }
+
     const dio_service = this.workbestand_services_metadata.find(
       (s) => s.code === 'DIO'
     );
-    return dio_service?.id || '';
+    
+    const result = dio_service?.id || '';
+    this.dio_service_id_cache = result;
+    this.dio_service_id_cache_timestamp = now;
+    
+    return result;
   }
 
   /**
@@ -220,6 +294,7 @@ export class SolveEngine {
 
   /**
    * MAIN SOLVE LOOP - FIX 1: CRITICAL LOOP CONDITION CORRECTED
+   * ✅ PATCH 4: With performance metrics + cache-busting trigger
    * Iterate through tasks and assign services
    */
   solve(): {
@@ -228,26 +303,27 @@ export class SolveEngine {
     assigned_count: number;
     open_count: number;
     task_stats: { processed: number; open: number; total: number };
-    team_filter_stats?: Map<string, { searched_teams: string[]; found_teams: string[]; count: number }>; // ✅ OPTIE A
+    team_filter_stats?: Map<string, { searched_teams: string[]; found_teams: string[]; count: number }>;
+    performance_metrics?: PerformanceMetrics;
+    cache_busting_timestamp?: number;
   } {
     const startTime = performance.now();
     this.modified_slots = [];
     this.task_processed_count = 0;
     this.task_open_count = 0;
-    this.team_filter_stats.clear(); // ✅ OPTIE A: Reset stats
+    this.team_filter_stats.clear();
+    this.validation_result_cache.clear(); // ✅ Clear cache each solve run
 
     if (this.debug_enabled) {
-      console.log(`🚀 SOLVE: Starting main loop with ${this.workbestand_opdracht.length} tasks`);
+      console.log(`🚀 SOLVE v2.0: Starting main loop with ${this.workbestand_opdracht.length} tasks`, {
+        cache_busting_timestamp: this.cache_busting_timestamp,
+        railway_trigger: `railway-${this.cache_busting_timestamp}`, // ✅ Railway deployment trigger
+      });
     }
 
     // Main loop: for each task
     for (const task of this.workbestand_opdracht) {
       // ✅ FIX 1: CORRECT CONDITION
-      // OLD (WRONG): const still_needed = task.aantal - task.aantal_nog;
-      //               if (still_needed > 0) continue;  ← SKIPS task when work is DONE
-      // NEW (CORRECT): if (task.aantal_nog === 0) continue;  ← SKIPS task only when FULLY assigned
-
-      // Check: How many still need assignment?
       if (task.aantal_nog === 0) {
         // ✅ Task fully assigned - skip
         this.task_processed_count++;
@@ -257,7 +333,10 @@ export class SolveEngine {
       // Inner loop: assign one at a time until aantal_nog = 0
       while (task.aantal_nog > 0) {
         // Step 1: Find candidates
+        const findcandidates_start = performance.now();
         const candidates = this.findCandidates(task);
+        this.performance_metrics.findcandidates_total_ms +=
+          performance.now() - findcandidates_start;
 
         if (candidates.length === 0) {
           // ❌ No available employees - task remains OPEN
@@ -299,7 +378,11 @@ export class SolveEngine {
 
         // Step 7: Handle DIO/DDO chain prep (Phase 2 job)
         if (['DIO', 'DDO'].includes(task.service_code)) {
+          const chain_start = performance.now();
           this.prepareForChaining(task, slot);
+          this.performance_metrics.chain_prep_total_ms +=
+            performance.now() - chain_start;
+          this.performance_metrics.chain_prep_count += 1;
         }
       }
 
@@ -315,6 +398,17 @@ export class SolveEngine {
     const assigned_count = this.countAssignedServices();
     const open_count = this.countOpenServices();
 
+    // ✅ Calculate final performance metrics
+    this.performance_metrics.total_duration_ms = solve_duration_ms;
+    this.performance_metrics.findcandidates_calls = this.team_filter_stats.size;
+    this.performance_metrics.cache_hit_rate =
+      this.performance_metrics.validation_cache_hits /
+      (this.performance_metrics.validation_cache_hits +
+        this.performance_metrics.validation_cache_misses) *
+      100;
+    this.performance_metrics.memory_peak_mb =
+      (performance.memory?.usedJSHeapSize || 0) / 1024 / 1024;
+
     // ✅ OPTIE A: Log team filter statistics
     if (this.debug_enabled) {
       const stats_for_log: Record<string, { searched_teams: string[]; found_teams: string[]; count: number }> = {};
@@ -322,14 +416,15 @@ export class SolveEngine {
         stats_for_log[key] = {
           searched_teams: value.searched_teams,
           found_teams: Array.from(value.found_teams),
-          count: value.count
+          count: value.count,
         };
       }
-      console.log(`✅ SOLVE: Team Filter Statistics:`, stats_for_log);
+      console.log(`✅ SOLVE v2.0: Team Filter Statistics:`, stats_for_log);
+      console.log(`✅ SOLVE v2.0: Performance Metrics:`, this.performance_metrics);
     }
 
     if (this.debug_enabled) {
-      console.log(`✅ SOLVE: Complete`, {
+      console.log(`✅ SOLVE v2.0: Complete`, {
         duration_ms: solve_duration_ms.toFixed(0),
         assigned: assigned_count,
         open: open_count,
@@ -339,6 +434,8 @@ export class SolveEngine {
           open: this.task_open_count,
           total: this.workbestand_opdracht.length,
         },
+        cache_hit_rate_percent: this.performance_metrics.cache_hit_rate.toFixed(1),
+        railway_trigger: `railway-${this.cache_busting_timestamp}`,
       });
     }
 
@@ -348,7 +445,7 @@ export class SolveEngine {
       stats_for_return.set(key, {
         searched_teams: value.searched_teams,
         found_teams: Array.from(value.found_teams),
-        count: value.count
+        count: value.count,
       });
     }
 
@@ -363,6 +460,8 @@ export class SolveEngine {
         total: this.workbestand_opdracht.length,
       },
       team_filter_stats: stats_for_return,
+      performance_metrics: this.performance_metrics, // ✅ Return metrics
+      cache_busting_timestamp: this.cache_busting_timestamp, // ✅ Return for Railway
     };
   }
 
@@ -370,6 +469,7 @@ export class SolveEngine {
    * Find all available candidates for a task
    * 
    * ✅ PATCH 2: Enhanced with DIO/DIA chain validation + quota check
+   * ✅ PATCH 4: With performance instrumentation
    * 
    * Criteria:
    * - In correct team (or fallback)
@@ -382,6 +482,7 @@ export class SolveEngine {
    */
   private findCandidates(task: WorkbestandOpdracht): SolveCandidate[] {
     const candidates: SolveCandidate[] = [];
+    this.performance_metrics.findcandidates_calls += 1;
 
     // ✅ PATCH 2A: QUOTA CHECK FIRST
     const quota = this.checkDagdeelQuota(
@@ -409,7 +510,7 @@ export class SolveEngine {
       this.team_filter_stats.set(task_key, {
         searched_teams: teams_to_try,
         found_teams: new Set<string>(),
-        count: 0
+        count: 0,
       });
     }
 
@@ -852,6 +953,7 @@ export class SolveEngine {
 
 /**
  * Helper: Create SolveEngine and run solve
+ * ✅ v2.0: Returns performance metrics + cache-busting timestamp
  */
 export async function runSolveEngine(
   workbestand_opdracht: WorkbestandOpdracht[],
@@ -866,7 +968,9 @@ export async function runSolveEngine(
   assigned_count: number;
   open_count: number;
   task_stats: { processed: number; open: number; total: number };
-  team_filter_stats?: Map<string, { searched_teams: string[]; found_teams: string[]; count: number }>; // ✅ OPTIE A
+  team_filter_stats?: Map<string, { searched_teams: string[]; found_teams: string[]; count: number }>;
+  performance_metrics?: PerformanceMetrics;
+  cache_busting_timestamp?: number;
 }> {
   const engine = new SolveEngine(
     workbestand_opdracht,
