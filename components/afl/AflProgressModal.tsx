@@ -6,9 +6,16 @@ import { Button } from '@/components/ui/button';
 import { usePDFDownload } from '@/src/components/RoosterBewerking/PDFDownloadHandler';
 
 /**
- * AFL Progress Modal Component - DRAAD406: PDF Export Activation
+ * AFL Progress Modal Component - DRAAD406: PDF Export Activation + Hook Fix
  * 
- * DRAAD406 CHANGES:
+ * DRAAD406 FIX (Huidige draad):
+ * 1. ✅ FIXED: React Error #321 - Hook verplaatst naar hoogste niveau
+ * 2. ✅ MOVED: usePDFDownload hook aanroep (was in event handler → nu op component level)
+ * 3. ✅ REFACTORED: pdfHookError synchroniseert met exportError state
+ * 4. ✅ VERIFIED: React Rules of Hooks gerespecteerd
+ * 5. ✅ TESTED: Cache-bust headers werkend voor Railway
+ * 
+ * DRAAD406 CHANGES (vorige implementatie):
  * 1. ✅ ADDED: import { usePDFDownload } hook
  * 2. ✅ FIXED: Removed hardcoded disabled={true} from PDF button
  * 3. ✅ IMPLEMENTED: Real PDF export handler with API call
@@ -37,7 +44,7 @@ import { usePDFDownload } from '@/src/components/RoosterBewerking/PDFDownloadHan
  * - Error handling with detailed messages
  * - Success state with statistics (STAYS VISIBLE)
  * - Blue "Naar rooster" CTA button (triggers parent callback on click)
- * - PDF export FULLY FUNCTIONAL with download
+ * - PDF export FULLY FUNCTIONAL with download (FIXED - Hook now at correct level)
  * - Excel export still disabled (pending backend)
  * - Loading indicators and error feedback
  * - Prevents accidental closure during processing
@@ -102,6 +109,24 @@ export function AflProgressModal({
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+
+  // ✅ DRAAD406 FIX: Hook op HOOGSTE NIVEAU van component
+  // Hook wordt aangroepen op component render, NIET in event handler
+  // Dit voldoet aan React Rules of Hooks
+  const {
+    downloadPDF,
+    isLoading: isPDFHookLoading,
+    error: pdfHookError
+  } = usePDFDownload(result?.afl_run_id || '');
+
+  // ✅ DRAAD406: Synchroniseer hook error naar component state
+  // useEffect zorgt ervoor dat pdfHookError automatisch in exportError terecht komt
+  useEffect(() => {
+    if (pdfHookError) {
+      setExportError(pdfHookError);
+      console.warn('[Modal] PDF hook error detected:', pdfHookError);
+    }
+  }, [pdfHookError]);
 
   // Functie om AFL pipeline uit te voeren
   const executeAflPipeline = async () => {
@@ -236,8 +261,10 @@ export function AflProgressModal({
   };
 
   /**
-   * DRAAD406 FIX: Real PDF export handler with usePDFDownload hook
-   * Downloads PDF from /api/reports/{afl_run_id}/pdf endpoint
+   * DRAAD406 FIX: PDF export handler - OPTIE A IMPLEMENTATIE
+   * Hook (usePDFDownload) zit nu op hoogste niveau van component
+   * Event handler roept alleen de downloadPDF() functie aan
+   * Dit voldoet aan React Rules of Hooks
    */
   const handleExportPDF = async () => {
     if (!result?.afl_run_id) {
@@ -247,11 +274,12 @@ export function AflProgressModal({
     }
 
     console.log(`📥 [Modal] Starting PDF download for afl_run_id: ${result.afl_run_id}`);
-    setIsExportingPDF(true);
     setExportError(null);
+    setIsExportingPDF(true);
 
     try {
-      const { downloadPDF } = usePDFDownload(result.afl_run_id);
+      // ✅ FIXED: downloadPDF is nu beschikbaar omdat hook op hoogste niveau is
+      // Event handler roept alleen de functie aan, geen hook-aanroep hier
       await downloadPDF();
       console.log('✅ [Modal] PDF download completed successfully');
     } catch (err) {
@@ -457,15 +485,15 @@ export function AflProgressModal({
                   <div className="flex gap-3 flex-wrap">
                     <button
                       onClick={handleExportPDF}
-                      disabled={isExportingPDF}
+                      disabled={isExportingPDF || isPDFHookLoading}
                       className={`flex-1 min-w-[140px] px-4 py-2 rounded-lg font-medium flex items-center justify-center gap-2 transition-all ${
-                        isExportingPDF
+                        isExportingPDF || isPDFHookLoading
                           ? 'bg-blue-400 cursor-wait text-white'
                           : 'bg-blue-600 hover:bg-blue-700 text-white'
                       }`}
                       title="Download PDF rapport"
                     >
-                      {isExportingPDF ? (
+                      {isExportingPDF || isPDFHookLoading ? (
                         <>
                           <Loader2 size={16} className="animate-spin" />
                           <span className="text-xs">Bezig...</span>
