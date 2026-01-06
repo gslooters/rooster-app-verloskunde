@@ -3,9 +3,17 @@
 import React, { useState, useEffect } from 'react';
 import { Loader2, CheckCircle2, XCircle, X, AlertCircle, Clock, FileText, FileSpreadsheet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { usePDFDownload } from '@/src/components/RoosterBewerking/PDFDownloadHandler';
 
 /**
- * AFL Progress Modal Component - DRAAD404: Timeout Increase to 60 Seconds
+ * AFL Progress Modal Component - DRAAD406: PDF Export Activation
+ * 
+ * DRAAD406 CHANGES:
+ * 1. ✅ ADDED: import { usePDFDownload } hook
+ * 2. ✅ FIXED: Removed hardcoded disabled={true} from PDF button
+ * 3. ✅ IMPLEMENTED: Real PDF export handler with API call
+ * 4. ✅ ADDED: Loading state, error handling, success feedback
+ * 5. ✅ ACTIVATED: PDF export button with full functionality
  * 
  * DRAAD404 CHANGES:
  * 1. ✅ INCREASED client-side timeout from 15s to 60s
@@ -15,17 +23,9 @@ import { Button } from '@/components/ui/button';
  * 
  * Previous DRAAD346 CHANGES:
  * 1. ✅ FIXED close button (X) - only visible on ERROR/TIMEOUT, not on SUCCESS
- * 2. ✅ DISABLED export buttons (PDF/Excel) - grayed out until API routes work
+ * 2. ✅ Excel export still disabled (grayed out) - awaiting backend implementation
  * 3. 🔒 Enforces correct workflow: Ontwerp → Rapportage → Bewerking
  * 4. 💡 Users MUST click "Naar rooster" button to proceed from success state
- * 
- * Previous DRAAD344 CHANGES:
- * 1. ❌ REMOVED "Annuleren" button from success state - users MUST go to "Naar rooster"
- * 2. ✅ ACTIVATED PDF export button with real API call
- * 3. ✅ ACTIVATED Excel export button with real API call
- * 4. ✅ FIXED error handling for 404 HTML responses (JSON parse)
- * 5. ✅ Send request body (not query params) to export routes
- * 6. 🔒 Enforces correct workflow: Ontwerp → Rapportage → Bewerking
  * 
  * Enhanced progress tracking for AFL (AutoFill) pipeline execution
  * Shows 5 phases: Load → Solve → Chain → Write → Report
@@ -33,11 +33,13 @@ import { Button } from '@/components/ui/button';
  * FEATURES:
  * - Real-time progress tracking with detailed feedback
  * - Phase-by-phase status indicators
- * - Timeout detection (60 second max) - DRAAD404
+ * - Timeout detection (60 second max)
  * - Error handling with detailed messages
  * - Success state with statistics (STAYS VISIBLE)
  * - Blue "Naar rooster" CTA button (triggers parent callback on click)
- * - PDF/Excel export TEMPORARILY DISABLED (grayed out)
+ * - PDF export FULLY FUNCTIONAL with download
+ * - Excel export still disabled (pending backend)
+ * - Loading indicators and error feedback
  * - Prevents accidental closure during processing
  * - Cache-busting headers (Date.now() + random)
  * - Modal stays visible until user confirms
@@ -96,7 +98,7 @@ export function AflProgressModal({
   const [attemptCount, setAttemptCount] = useState<number>(0);
   const [isNavigating, setIsNavigating] = useState(false);
   
-  // DRAAD344: Export states (currently disabled)
+  // DRAAD406: Export states - PDF now active, Excel still disabled
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -234,17 +236,40 @@ export function AflProgressModal({
   };
 
   /**
-   * DRAAD346: Export buttons DISABLED - placeholder functions
-   * These will be re-enabled once API routes are properly implemented
+   * DRAAD406 FIX: Real PDF export handler with usePDFDownload hook
+   * Downloads PDF from /api/reports/{afl_run_id}/pdf endpoint
    */
-  const handleExportPDF = () => {
-    console.log('⚠️ [Modal] PDF export temporarily disabled');
-    setExportError('PDF export tijdelijk uitgeschakeld - wordt later geactiveerd');
+  const handleExportPDF = async () => {
+    if (!result?.afl_run_id) {
+      setExportError('AFL Run ID niet beschikbaar voor PDF export');
+      console.error('❌ [Modal] AFL Run ID missing:', result);
+      return;
+    }
+
+    console.log(`📥 [Modal] Starting PDF download for afl_run_id: ${result.afl_run_id}`);
+    setIsExportingPDF(true);
+    setExportError(null);
+
+    try {
+      const { downloadPDF } = usePDFDownload(result.afl_run_id);
+      await downloadPDF();
+      console.log('✅ [Modal] PDF download completed successfully');
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'PDF download mislukt';
+      console.error('❌ [Modal] PDF download failed:', err);
+      setExportError(errorMsg);
+    } finally {
+      setIsExportingPDF(false);
+    }
   };
 
+  /**
+   * DRAAD406: Excel export still disabled
+   * Placeholder for future implementation
+   */
   const handleExportExcel = () => {
     console.log('⚠️ [Modal] Excel export temporarily disabled');
-    setExportError('Excel export tijdelijk uitgeschakeld - wordt later geactiveerd');
+    setExportError('Excel export wordt later geactiveerd');
   };
 
   // Modal niet weergeven als gesloten
@@ -369,7 +394,7 @@ export function AflProgressModal({
               </div>
             )}
 
-            {/* DRAAD346: SUCCESS STATE - Export buttons DISABLED */}
+            {/* DRAAD406: SUCCESS STATE - PDF Export ACTIVATED */}
             {state === 'success' && result && (
               <div className="space-y-4">
                 <div className="flex items-center justify-center">
@@ -423,37 +448,52 @@ export function AflProgressModal({
                   Klik "Naar rooster" hieronder om de resultaten te bekijken.
                 </div>
 
-                {/* DRAAD346: Export buttons DISABLED (grayed out) */}
+                {/* DRAAD406: Export buttons - PDF ACTIVATED, Excel disabled */}
                 <div className="bg-gray-50 border border-gray-300 rounded-lg p-4">
                   <p className="text-sm font-semibold text-gray-600 mb-3 flex items-center gap-2">
                     <FileText size={16} className="text-gray-500" />
-                    Export opties (tijdelijk uitgeschakeld)
+                    Export opties
                   </p>
                   <div className="flex gap-3 flex-wrap">
                     <button
                       onClick={handleExportPDF}
-                      disabled={true}
-                      className="flex-1 min-w-[140px] px-4 py-2 bg-gray-300 cursor-not-allowed text-gray-500 rounded-lg font-medium flex items-center justify-center gap-2"
+                      disabled={isExportingPDF}
+                      className={`flex-1 min-w-[140px] px-4 py-2 rounded-lg font-medium flex items-center justify-center gap-2 transition-all ${
+                        isExportingPDF
+                          ? 'bg-blue-400 cursor-wait text-white'
+                          : 'bg-blue-600 hover:bg-blue-700 text-white'
+                      }`}
+                      title="Download PDF rapport"
                     >
-                      <FileText size={16} />
-                      <span className="text-xs">PDF rapport (uit)</span>
+                      {isExportingPDF ? (
+                        <>
+                          <Loader2 size={16} className="animate-spin" />
+                          <span className="text-xs">Bezig...</span>
+                        </>
+                      ) : (
+                        <>
+                          <FileText size={16} />
+                          <span className="text-xs">📥 PDF rapport</span>
+                        </>
+                      )}
                     </button>
                     <button
                       onClick={handleExportExcel}
                       disabled={true}
                       className="flex-1 min-w-[140px] px-4 py-2 bg-gray-300 cursor-not-allowed text-gray-500 rounded-lg font-medium flex items-center justify-center gap-2"
+                      title="Excel export - wordt later geactiveerd"
                     >
                       <FileSpreadsheet size={16} />
-                      <span className="text-xs">Excel export (uit)</span>
+                      <span className="text-xs">Excel (uit)</span>
                     </button>
                   </div>
                   {exportError && (
                     <div className="mt-3 bg-yellow-50 border border-yellow-200 rounded p-2">
-                      <p className="text-xs text-yellow-800 font-medium">{exportError}</p>
+                      <p className="text-xs text-yellow-800 font-medium">⚠️ {exportError}</p>
                     </div>
                   )}
                   <p className="text-xs text-gray-600 mt-2">
-                    ⚠️ Export functies worden later geactiveerd
+                    ✅ PDF export is actief | Excel export wordt later geactiveerd
                   </p>
                 </div>
               </div>
