@@ -1,15 +1,21 @@
 /**
- * DRAAD 406: PDF DOWNLOAD HANDLER HOOK
+ * DRAAD 406: PDF DOWNLOAD HANDLER HOOK - CACHE-BUST EDITION
  * 
  * Custom hook to handle PDF download trigger
  * Integrates with /api/reports/[afl_run_id]/pdf endpoint
  * 
+ * DRAAD406 CHANGES:
+ * 1. ✅ ADDED: generateCacheBustToken() import
+ * 2. ✅ IMPLEMENTED: Cache-bust headers in fetch call
+ * 3. ✅ TESTED: Works with Railway deployment
+ * 
  * FEATURES:
  * - Blob response handling
  * - Browser download trigger
- * - Error handling with toast notifications
+ * - Error handling with console logging
  * - Loading state management
  * - Filename generation
+ * - Cache-bust headers to prevent stale responses
  * 
  * FIX: Removed React.FC component wrapper (was returning object, not JSX)
  * - Kept only the usePDFDownload hook which is architecturally correct
@@ -17,6 +23,7 @@
  */
 
 import React, { useState } from 'react';
+import { generateCacheBustToken } from '@/src/lib/cache-bust';
 
 /**
  * Hook: usePDFDownload
@@ -52,11 +59,17 @@ export const usePDFDownload = (afl_run_id: string) => {
     try {
       console.log(`[usePDFDownload] Initiating PDF download for afl_run_id: ${afl_run_id}`);
 
-      // Call PDF API endpoint
+      // DRAAD406: Generate cache-bust token for Railway deployment
+      const cacheBustToken = generateCacheBustToken();
+
+      // Call PDF API endpoint with cache-bust headers
       const response = await fetch(`/api/reports/${afl_run_id}/pdf`, {
         method: 'GET',
         headers: {
-          'Cache-Control': 'no-cache'
+          'X-Cache-Bust': cacheBustToken,
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
         }
       });
 
