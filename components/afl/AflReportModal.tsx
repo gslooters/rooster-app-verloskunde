@@ -15,10 +15,14 @@ import { X, AlertCircle, CheckCircle2, TrendingDown } from 'lucide-react';
  * 6. ✅ ADDED: Terug knop (enige knop in deze modal)
  * 7. ✅ ADDED: Warnings/alerts voor onderbezetting
  * 8. ✅ TESTED: Syntax errors gecontroleerd
+ * 9. ✅ FIXED: Z-index bug - z-55 en z-60 zijn ongeldig in Tailwind CSS
+ *    - Changed z-55 → z-[9998] (arbitrary value)
+ *    - Changed z-60 → z-[9999] (arbitrary value)
+ *    - Zorg dat AflReportModal BOVEN AflProgressModal verschijnt
  * 
  * DESIGN FILOSOFIE:
  * - Modal ziet er uit als printable document (PDF-vriendelijk)
- * - Hoge z-index (z-60) om boven AflProgressModal (z-50) te zitten
+ * - Hoge z-index (z-[9999]) om boven AflProgressModal (z-50) te zitten
  * - Overzichtelijk layout met secties
  * - Kleurcodering voor status indicators
  * - "Terug" knop brengt gebruiker terug naar AflProgressModal
@@ -37,6 +41,14 @@ import { X, AlertCircle, CheckCircle2, TrendingDown } from 'lucide-react';
  * - PDF-vriendelijk (geen javascript animaties, printbare kleuren)
  * - Print-optimized layout
  * - Kleurcodering: Groen (OK), Oranje (Waarschuwing), Rood (Kritiek)
+ * 
+ * FIX DETAILS:
+ * Problem: z-55 en z-60 zijn GEEN geldige Tailwind CSS klassen
+ * Tailwind standaard z-index waarden:
+ *   - z-0, z-10, z-20, z-30, z-40, z-50, z-auto
+ *   - z-55, z-60, etc. bestaan NIET
+ * Solution: Gebruik arbitrary values: z-[9998] en z-[9999]
+ * Result: AflReportModal appear BOVEN AflProgressModal (z-50)
  */
 
 interface AflReportModalProps {
@@ -91,11 +103,11 @@ export function AflReportModal({ isOpen, reportData, onClose }: AflReportModalPr
 
   return (
     <>
-      {/* Overlay - dunner om AflProgressModal zichtbaar te houden */}
-      <div className="fixed inset-0 z-55 bg-black/30" />
+      {/* Overlay - FIX: z-[9998] in plaats van ongeldig z-55 */}
+      <div className="fixed inset-0 z-[9998] bg-black/30" />
 
-      {/* Report Modal - hoger z-index dan progress modal */}
-      <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
+      {/* Report Modal - FIX: z-[9999] in plaats van ongeldig z-60 */}
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
         <div className="relative w-full max-w-4xl bg-white rounded-lg shadow-2xl max-h-[90vh] overflow-y-auto">
           {/* Header - Print-friendly */}
           <div className="sticky top-0 bg-white border-b-2 border-gray-300 px-8 py-6 flex items-center justify-between bg-gradient-to-r from-slate-50 to-gray-50">
