@@ -1,84 +1,52 @@
 /**
- * AFL (Autofill) - Direct Write Engine (Phase 4A)
+ * DirectWriteEngine - Real-Time Per-Assignment Database Writes
  * 
- * Real-time per-assignment database writes for AFL
- * Mirrors manual planning behavior (INSERT/UPDATE + trigger-sync invulling increments)
+ * Purpose:
+ * Replicate manual planning behavior: real-time INSERT/UPDATE with trigger-driven invulling
  * 
- * Architecture:
- * - Per-assignment direct write (not batch)
- * - SCENARIO A: INSERT new assignments (trigger auto-increments invulling)
- * - SCENARIO B: UPDATE existing assignments + manual invulling+1
- * - 100% atomicity: both succeed OR both fail
- * - Direct tracking via roster_period_staffing_dagdelen_id
+ * Problem solved:
+ * - OLD (write-engine): Batch UPDATE → trigger doesn't fire → invulling updates async & fail
+ * - NEW (DirectWriteEngine): Per-assignment INSERT/UPDATE → trigger fires → atomair & reliable
  * 
- * Performance: <100ms per assignment average
+ * Two Scenarios:
+ * A) NEW ASSIGNMENT: INSERT → trigger auto-increments invulling
+ * B) EXISTING ASSIGNMENT: UPDATE + manual invulling increment
  * 
- * [DRAAD407] NEW ENGINE - Real-time per-assignment writes
+ * Imported from: src/lib/afl/direct-write-engine.ts
+ * Used by: solve-engine.ts Phase 4A
  * 
- * @author DRAAD407 Implementation
- * @date 7 Jan 2026
+ * @see DRAAD407 - Full specification
  */
 
 import { createClient } from '@supabase/supabase-js';
-import { WorkbestandPlanning } from './types';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-);
+import type { AflAssignmentRecord, DirectWriteResult, BatchDirectWriteResult } from './types';
 
 /**
- * Single assignment record for direct write
- */
-export interface AflAssignmentRecord {
-  id: string; // Assignment ID
-  employee_id: string;
-  date: string; // ISO format
-  dagdeel: string; // O, M, A
-  service_id: string;
-  team?: string;
-  status: 0 | 1 | 2 | 3;
-  ort_run_id?: string;
-}
-
-/**
- * Result of single assignment write
- */
-export interface DirectWriteResult {
-  success: boolean;
-  assignment_id?: string;
-  invulling_updated?: boolean;
-  error?: string;
-}
-
-/**
- * Result of batch assignment writes
- */
-export interface BatchDirectWriteResult {
-  success: boolean;
-  written_count: number;
-  failed_count: number;
-  errors: string[];
-}
-
-/**
- * Direct Write Engine - Main Class
- * Handles per-assignment writes with trigger synchronization
+ * DirectWriteEngine - Real-time per-assignment writer
  */
 export class DirectWriteEngine {
+  private supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+  );
+
   private debug_enabled: boolean = true;
 
+  constructor() {
+    if (this.debug_enabled) {
+      console.log('[DRAAD407] DirectWriteEngine initialized');
+    }
+  }
+
   /**
-   * Write single assignment directly to database
+   * Main entry point: Write single assignment (INSERT or UPDATE)
    * 
-   * Logic:
+   * Flow:
    * 1. Validate variant exists
-   * 2. Check if assignment exists
-   * 3. IF NEW: insertNewAssignment() - INSERT triggers auto-increment
-   * 4. IF EXISTS: updateExistingAssignment() - UPDATE + manual invulling+1
+   * 2. Find existing assignment (if any)
+   * 3. If not exists: INSERT (scenario A)
+   * 4. If exists: UPDATE (scenario B)
    * 5. Return result
-   * 
-   * [DRAAD407] Main entry point for per-assignment writes
    */
   public async writeSingleAssignmentDirect(
     assignment: AflAssignmentRecord,
@@ -86,85 +54,89 @@ export class DirectWriteEngine {
     variantId: string
   ): Promise<DirectWriteResult> {
     try {
+      if (this.debug_enabled) {
+        console.log(`[DRAAD407] Starting write: ${assignment.employee_id} ${assignment.dagdeel} on ${assignment.date}`);
+      }
+
       // Step 1: Validate variant exists
-      const { data: variantData, error: variantError } = await supabase
+      const variantCheck = await this.supabase
         .from('roster_period_staffing_dagdelen')
         .select('id, invulling, aantal')
         .eq('id', variantId)
         .single();
 
-      if (variantError || !variantData) {
+      if (variantCheck.error) {
         return {
           success: false,
-          error: `[DRAAD407] Variant not found: ${variantId}`,
+          error: `Variant not found: ${variantId}`,
         };
       }
 
-      // Step 2: Check if assignment exists
+      const variant = variantCheck.data;
+
+      // Step 2: Find existing assignment
       const existing = await this.findExistingAssignment(
+        rosterId,
         assignment.employee_id,
-        new Date(assignment.date),
-        assignment.dagdeel,
-        rosterId
+        assignment.date,
+        assignment.dagdeel
       );
 
-      // Step 3 & 4: INSERT or UPDATE
+      // Step 3a: INSERT if new
       if (!existing) {
-        // SCENARIO A: New assignment - INSERT
+        if (this.debug_enabled) {
+          console.log(`  [DRAAD407] SCENARIO A: INSERT new assignment`);
+        }
         return await this.insertNewAssignment(
           assignment,
           rosterId,
-          variantId
-        );
-      } else {
-        // SCENARIO B: Existing assignment - UPDATE
-        return await this.updateExistingAssignment(
-          existing.id,
-          assignment,
           variantId,
-          variantData.invulling
+          variant.id
         );
       }
+
+      // Step 3b: UPDATE if exists
+      if (this.debug_enabled) {
+        console.log(`  [DRAAD407] SCENARIO B: UPDATE existing assignment`);
+      }
+      return await this.updateExistingAssignment(
+        existing.id,
+        assignment,
+        variantId,
+        variant.invulling
+      );
     } catch (error) {
-      const error_msg = error instanceof Error ? error.message : String(error);
-      console.error('[DRAAD407] writeSingleAssignmentDirect exception:', error_msg);
+      const err_msg = error instanceof Error ? error.message : String(error);
+      console.error(`[DRAAD407] Error in writeSingleAssignmentDirect: ${err_msg}`);
       return {
         success: false,
-        error: `[DRAAD407] Exception: ${error_msg}`,
+        error: err_msg,
       };
     }
   }
 
   /**
-   * SCENARIO A: Insert new assignment
+   * Scenario A: INSERT new assignment
    * 
    * Flow:
-   * 1. INSERT roster_assignments (status=1, all fields)
-   * 2. Include roster_period_staffing_dagdelen_id
-   * 3. Include ort_run_id for tracking
-   * 4. Source: 'autofill'
-   * 5. Wait 100ms for trigger execution
-   * 6. Return success (invulling auto-incremented by trigger)
+   * 1. INSERT roster_assignments (with variant_id)
+   * 2. Wait for trigger (100ms)
+   * 3. Return success
    * 
-   * [DRAAD407] Scenario A: New assignments trigger auto-increment
+   * Trigger behavior:
+   * - INSERT roster_assignments → roster_period_staffing_dagdelen trigger fires
+   * - Trigger increments invulling +1
+   * - Result: Atomic, invulling auto-updated
    */
   private async insertNewAssignment(
     assignment: AflAssignmentRecord,
     rosterId: string,
-    variantId: string
+    variantId: string,
+    variantDagdelenId: string
   ): Promise<DirectWriteResult> {
     try {
-      if (this.debug_enabled) {
-        console.log('[DRAAD407] SCENARIO A: Inserting new assignment', {
-          employee: assignment.employee_id,
-          date: assignment.date,
-          dagdeel: assignment.dagdeel,
-          service_id: assignment.service_id,
-        });
-      }
-
-      // INSERT new assignment
-      const { data: insertData, error: insertError } = await supabase
+      // Step 1: INSERT assignment
+      const { data, error } = await this.supabase
         .from('roster_assignments')
         .insert([
           {
@@ -173,63 +145,59 @@ export class DirectWriteEngine {
             date: assignment.date,
             dagdeel: assignment.dagdeel,
             service_id: assignment.service_id,
-            team: assignment.team || null,
+            team: assignment.team || '',
             status: 1, // Active
-            source: 'autofill',
-            roster_period_staffing_dagdelen_id: variantId,
+            roster_period_staffing_dagdelen_id: variantDagdelenId,
             ort_run_id: assignment.ort_run_id || null,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
+            source: 'autofill',
           },
         ])
         .select('id')
         .single();
 
-      if (insertError || !insertData) {
+      if (error) {
         return {
           success: false,
-          error: `[DRAAD407 SCENARIO A] Insert failed: ${insertError?.message || 'unknown error'}`,
+          error: `INSERT failed: ${error.message}`,
         };
       }
 
-      // Wait 100ms for trigger execution
+      const newAssignmentId = data.id;
+
+      // Step 2: Wait for trigger execution
       await this.delay(100);
 
       if (this.debug_enabled) {
-        console.log('[DRAAD407] SCENARIO A: Assignment inserted and trigger fired', {
-          assignment_id: insertData.id,
-          invulling_auto_incremented: true,
-        });
+        console.log(`    [DRAAD407] INSERT successful: ${newAssignmentId}`);
+        console.log(`    [DRAAD407] Trigger should auto-increment invulling`);
       }
 
+      // Step 3: Return success
       return {
         success: true,
-        assignment_id: insertData.id,
-        invulling_updated: true, // Auto-incremented by trigger
+        assignment_id: newAssignmentId,
+        invulling_updated: true, // Trigger handled it
       };
     } catch (error) {
-      const error_msg = error instanceof Error ? error.message : String(error);
-      console.error('[DRAAD407 SCENARIO A] Exception:', error_msg);
+      const err_msg = error instanceof Error ? error.message : String(error);
+      console.error(`[DRAAD407] INSERT error: ${err_msg}`);
       return {
         success: false,
-        error: `[DRAAD407 SCENARIO A] Exception: ${error_msg}`,
+        error: err_msg,
       };
     }
   }
 
   /**
-   * SCENARIO B: Update existing assignment
+   * Scenario B: UPDATE existing assignment
    * 
    * Flow:
-   * 1. UPDATE roster_assignments (service_id, status)
-   * 2. Check: success?
-   * 3. MANUAL UPDATE invulling: currentInvulling + 1
-   * 4. Check: success?
-   * 5. IF both success: return { success: true }
-   * 6. IF any fail: return { success: false, error: "..." }
+   * 1. UPDATE roster_assignments (service_id, variant_id, status)
+   * 2. Manual UPDATE invulling +1 in roster_period_staffing_dagdelen
+   * 3. If both succeed: return success
+   * 4. If any fail: return error
    * 
-   * [DRAAD407] Scenario B: Existing assignments need manual invulling+1
-   * Because UPDATE doesn't trigger the INSERT-only trigger
+   * Important: Trigger doesn't fire on UPDATE, so we must manually increment
    */
   private async updateExistingAssignment(
     assignmentId: string,
@@ -238,180 +206,168 @@ export class DirectWriteEngine {
     currentInvulling: number
   ): Promise<DirectWriteResult> {
     try {
-      if (this.debug_enabled) {
-        console.log('[DRAAD407] SCENARIO B: Updating existing assignment', {
-          assignment_id: assignmentId,
-          employee: assignment.employee_id,
-          date: assignment.date,
-          dagdeel: assignment.dagdeel,
-          new_service_id: assignment.service_id,
-          current_invulling: currentInvulling,
-        });
-      }
-
       // Step 1: UPDATE assignment
-      const { error: updateError } = await supabase
+      const updateResult = await this.supabase
         .from('roster_assignments')
         .update({
           service_id: assignment.service_id,
-          team: assignment.team || null,
-          status: 1, // Active
           roster_period_staffing_dagdelen_id: variantId,
-          updated_at: new Date().toISOString(),
+          status: 1, // Set to active
+          ort_run_id: assignment.ort_run_id || null,
         })
         .eq('id', assignmentId);
 
-      if (updateError) {
+      if (updateResult.error) {
         return {
           success: false,
-          error: `[DRAAD407 SCENARIO B] Assignment UPDATE failed: ${updateError.message}`,
+          error: `UPDATE assignment failed: ${updateResult.error.message}`,
         };
       }
 
-      // Step 2: MANUALLY UPDATE invulling counter
+      if (this.debug_enabled) {
+        console.log(`    [DRAAD407] UPDATE assignment successful`);
+      }
+
+      // Step 2: Manual UPDATE invulling
       const newInvulling = currentInvulling + 1;
-      const { error: invullingError } = await supabase
+      const invullingResult = await this.supabase
         .from('roster_period_staffing_dagdelen')
         .update({ invulling: newInvulling })
         .eq('id', variantId);
 
-      if (invullingError) {
-        // This is non-recoverable - invulling update failed after assignment succeeded
-        console.error(
-          '[DRAAD407 SCENARIO B] CRITICAL: Assignment succeeded but invulling failed',
-          {
-            assignment_id: assignmentId,
-            variant_id: variantId,
-            invulling_error: invullingError.message,
-          }
-        );
+      if (invullingResult.error) {
         return {
           success: false,
-          error: `[DRAAD407 SCENARIO B] Invulling UPDATE failed: ${invullingError.message}`,
+          error: `UPDATE invulling failed: ${invullingResult.error.message}. Assignment was updated but invulling increment failed!`,
         };
       }
 
       if (this.debug_enabled) {
-        console.log('[DRAAD407] SCENARIO B: Assignment and invulling updated', {
-          assignment_id: assignmentId,
-          invulling_new: newInvulling,
-        });
+        console.log(`    [DRAAD407] UPDATE invulling successful: ${currentInvulling} → ${newInvulling}`);
       }
 
+      // Step 3: Both succeeded
       return {
         success: true,
         assignment_id: assignmentId,
         invulling_updated: true,
       };
     } catch (error) {
-      const error_msg = error instanceof Error ? error.message : String(error);
-      console.error('[DRAAD407 SCENARIO B] Exception:', error_msg);
+      const err_msg = error instanceof Error ? error.message : String(error);
+      console.error(`[DRAAD407] UPDATE error: ${err_msg}`);
       return {
         success: false,
-        error: `[DRAAD407 SCENARIO B] Exception: ${error_msg}`,
+        error: err_msg,
       };
     }
   }
 
   /**
-   * Find existing assignment for date/dagdeel/employee
+   * Helper: Find existing assignment
    * 
-   * Returns existing assignment if found, null otherwise
+   * Query:
+   * SELECT * FROM roster_assignments
+   * WHERE roster_id = ?
+   * AND employee_id = ?
+   * AND date = ?
+   * AND dagdeel = ?
+   * LIMIT 1
    */
   private async findExistingAssignment(
+    rosterId: string,
     employeeId: string,
-    date: Date,
-    dagdeel: string,
-    rosterId: string
-  ): Promise<{ id: string } | null> {
-    try {
-      const dateStr = date.toISOString().split('T')[0];
-      const { data, error } = await supabase
-        .from('roster_assignments')
-        .select('id')
-        .eq('roster_id', rosterId)
-        .eq('employee_id', employeeId)
-        .eq('date', dateStr)
-        .eq('dagdeel', dagdeel)
-        .single();
+    date: string,
+    dagdeel: string
+  ): Promise<any | null> {
+    const { data, error } = await this.supabase
+      .from('roster_assignments')
+      .select('id, service_id, status, roster_period_staffing_dagdelen_id')
+      .eq('roster_id', rosterId)
+      .eq('employee_id', employeeId)
+      .eq('date', date)
+      .eq('dagdeel', dagdeel)
+      .limit(1)
+      .single();
 
-      if (error) {
-        // No existing assignment found (404 is expected)
-        if (error.code === 'PGRST116') {
-          return null; // Not found - this is OK
-        }
-        console.warn('[DRAAD407] Error finding existing assignment:', error.message);
+    if (error) {
+      // Not found is OK
+      if (error.code === 'PGRST116') {
         return null;
       }
-
-      return data ? { id: data.id } : null;
-    } catch (error) {
-      console.warn('[DRAAD407] Exception finding existing assignment:', error);
+      console.warn(`[DRAAD407] Error finding existing assignment: ${error.message}`);
       return null;
     }
+
+    return data;
   }
 
   /**
-   * Write batch of assignments directly
+   * Batch write wrapper: Write multiple assignments
    * 
-   * Iterates through assignments and writes each one
-   * Accumulates success/failure counts
-   * 
-   * [DRAAD407] Batch wrapper for multiple assignments
+   * Flow:
+   * 1. For each assignment:
+   *    a. Get variant ID from preloaded map
+   *    b. Write via writeSingleAssignmentDirect()
+   *    c. Track result
+   * 2. Return batch result
    */
   public async writeBatchAssignmentsDirect(
     rosterId: string,
     assignments: AflAssignmentRecord[],
     variantIdMap: Map<string, string>
   ): Promise<BatchDirectWriteResult> {
+    const results: DirectWriteResult[] = [];
     const errors: string[] = [];
-    let written_count = 0;
-    let failed_count = 0;
 
     if (this.debug_enabled) {
-      console.log('[DRAAD407] Starting batch write', {
-        total_assignments: assignments.length,
-        variant_ids_preloaded: variantIdMap.size,
-      });
+      console.log(`[DRAAD407] Starting batch write: ${assignments.length} assignments`);
     }
 
-    // Write each assignment
     for (const assignment of assignments) {
-      // Find variant ID for this assignment
-      const variantKey = `${assignment.date}_${assignment.dagdeel}_${assignment.service_id}_${assignment.team || 'default'}`;
-      const variantId = variantIdMap.get(variantKey);
+      try {
+        // Get variant ID from map
+        const key = this.buildVariantKey(
+          assignment.date,
+          assignment.dagdeel,
+          assignment.service_id,
+          assignment.team || 'Overig'
+        );
 
-      if (!variantId) {
-        failed_count++;
-        const error_msg = `[DRAAD407] No variant ID for ${variantKey}`;
-        errors.push(error_msg);
-        console.warn(error_msg);
-        continue;
-      }
+        const variantId = variantIdMap.get(key);
+        if (!variantId) {
+          errors.push(
+            `No variant found for ${key} (${assignment.employee_id} ${assignment.date})`
+          );
+          continue;
+        }
 
-      // Write single assignment
-      const result = await this.writeSingleAssignmentDirect(
-        assignment,
-        rosterId,
-        variantId
-      );
+        // Write single assignment
+        const result = await this.writeSingleAssignmentDirect(
+          assignment,
+          rosterId,
+          variantId
+        );
 
-      if (result.success) {
-        written_count++;
-      } else {
-        failed_count++;
-        const error_msg = result.error || 'Unknown error';
-        errors.push(error_msg);
+        results.push(result);
+
+        if (!result.success) {
+          errors.push(result.error || 'Unknown error');
+        }
+      } catch (error) {
+        const err_msg = error instanceof Error ? error.message : String(error);
+        errors.push(err_msg);
       }
     }
 
+    const written_count = results.filter((r) => r.success).length;
+    const failed_count = results.filter((r) => !r.success).length;
+
     if (this.debug_enabled) {
-      console.log('[DRAAD407] Batch write complete', {
-        written_count,
-        failed_count,
-        total: written_count + failed_count,
-        errors: errors.length > 0 ? errors.slice(0, 5) : [],
-      });
+      console.log(`[DRAAD407] Batch complete: ${written_count}/${assignments.length} written`);
+      if (errors.length > 0) {
+        console.log(`[DRAAD407] Errors: ${errors.length}`);
+        errors.slice(0, 5).forEach((err) => console.log(`  - ${err}`));
+      }
     }
 
     return {
@@ -423,77 +379,20 @@ export class DirectWriteEngine {
   }
 
   /**
-   * Preload variant IDs from database
-   * 
-   * Collects unique (date, dagdeel, service_id, team) combinations
-   * Single query to fetch all roster_period_staffing_dagdelen records
-   * Builds Map<key, id> for fast lookup during assignment writes
-   * 
-   * [DRAAD407] Optimization: 1 query instead of N queries
+   * Helper: Build variant key from assignment attributes
+   * Key = "date_dagdeel_service_id_team"
    */
-  public async preloadVariantIds(
-    rosterId: string,
-    assignments: AflAssignmentRecord[]
-  ): Promise<Map<string, string>> {
-    const variantIdMap = new Map<string, string>();
-
-    try {
-      if (this.debug_enabled) {
-        console.log('[DRAAD407] Preloading variant IDs', {
-          roster_id: rosterId,
-          assignment_count: assignments.length,
-        });
-      }
-
-      // Collect unique combinations
-      const uniqueCombos = new Set<string>();
-      for (const assignment of assignments) {
-        const key = `${assignment.date}_${assignment.dagdeel}_${assignment.service_id}_${assignment.team || 'default'}`;
-        uniqueCombos.add(key);
-      }
-
-      if (uniqueCombos.size === 0) {
-        return variantIdMap; // Empty
-      }
-
-      // Single query: fetch all variants for this roster
-      const { data, error } = await supabase
-        .from('roster_period_staffing_dagdelen')
-        .select('id, date, dagdeel, service_id, team')
-        .eq('roster_id', rosterId);
-
-      if (error) {
-        console.error('[DRAAD407] Variant preload query failed:', error.message);
-        return variantIdMap; // Return empty - will retry per-assignment
-      }
-
-      // Build map
-      if (data) {
-        for (const variant of data) {
-          const dateStr = variant.date instanceof Date
-            ? variant.date.toISOString().split('T')[0]
-            : variant.date;
-          const key = `${dateStr}_${variant.dagdeel}_${variant.service_id}_${variant.team || 'default'}`;
-          variantIdMap.set(key, variant.id);
-        }
-      }
-
-      if (this.debug_enabled) {
-        console.log('[DRAAD407] Variant preload complete', {
-          unique_combos_found: variantIdMap.size,
-          unique_combos_expected: uniqueCombos.size,
-        });
-      }
-
-      return variantIdMap;
-    } catch (error) {
-      console.error('[DRAAD407] Variant preload exception:', error);
-      return variantIdMap; // Return partial map
-    }
+  private buildVariantKey(
+    date: string,
+    dagdeel: string,
+    serviceId: string,
+    team: string
+  ): string {
+    return `${date}_${dagdeel}_${serviceId}_${team}`;
   }
 
   /**
-   * Helper: Delay for trigger execution
+   * Helper: Sleep utility for trigger execution wait
    */
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -506,7 +405,7 @@ export class DirectWriteEngine {
 let directWriteEngine: DirectWriteEngine | null = null;
 
 /**
- * Get or create singleton instance
+ * Get or create DirectWriteEngine singleton
  */
 export function getDirectWriteEngine(): DirectWriteEngine {
   if (!directWriteEngine) {
