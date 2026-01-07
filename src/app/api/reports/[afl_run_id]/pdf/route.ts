@@ -1,16 +1,25 @@
 /**
- * DRAAD 406: PDF RAPPORT EXPORT ENDPOINT
- * FIX: TypeScript strict mode - setFont() parameter type
+ * DRAAD 407: PDF RAPPORT EXPORT ENDPOINT - GEFIXTE VERSIE
+ * 
+ * ROOT CAUSE: Gebruikte non-existente veldnamen in report_data
+ * FIX: Aangepast naar werkelijke JSON structuur uit database
  * 
  * Endpoint: GET /api/reports/{afl_run_id}/pdf
  * 
- * FUNCTIONALITY:
- * 1. Validate afl_run_id (UUID format)
+ * FUNCTIONALITEIT:
+ * 1. Valideer afl_run_id (UUID format)
  * 2. Query Supabase: afl_execution_reports + roosters join
- * 3. Generate PDF with jsPDF
- * 4. Return PDF with proper headers
- * 5. Error handling: 400 (invalid), 404 (not found), 500 (server)
- * 6. Cache-busting via headers
+ * 3. Extract data uit JSONB report_data (correcte veldnamen!)
+ * 4. Genereer PDF met jsPDF + autotable
+ * 5. Return PDF met proper headers + cache-busting
+ * 
+ * DATA STRUCTUUR (uit paste.txt):
+ * - summary.totalPlanned: aantal geplande diensten
+ * - summary.totalRequired: totaal benodigde diensten
+ * - summary.coveragePercent: bezettingsgraad %
+ * - summary.totalOpen: open slots
+ * - audit.durationSeconds: uitvoeringsduur
+ * - audit.aflRunId: AFL run identificatie
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -18,46 +27,81 @@ import { createClient } from '@supabase/supabase-js';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-// Validate UUID format
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+/** Validate UUID format (RFC 4122) */
 const isValidUUID = (uuid: string): boolean => {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   return uuidRegex.test(uuid);
 };
 
-// Initialize Supabase client with service role key (for backend queries)
+/** Initialize Supabase client with service role (backend-only) */
 const getSupabaseClient = () => {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !key) {
+    console.error('[PDF API] ❌ Missing Supabase credentials');
+    console.error('[PDF API]    - NEXT_PUBLIC_SUPABASE_URL:', url ? '✅ Set' : '❌ Missing');
+    console.error('[PDF API]    - SUPABASE_SERVICE_ROLE_KEY:', key ? '✅ Set' : '❌ Missing');
     throw new Error('Missing Supabase credentials');
   }
 
   return createClient(url, key);
 };
 
+/** Safe data extraction with fallback */
+function safeGet(obj: any, path: string, fallback: any = 'N/A'): any {
+  try {
+    return path.split('.').reduce((acc, part) => acc?.[part], obj) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+// ============================================================================
+// MAIN API ROUTE HANDLER
+// ============================================================================
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { afl_run_id: string } }
 ) {
+  const startTime = Date.now();
+  
   try {
     const { afl_run_id } = params;
 
-    console.log(`[PDF API] Processing request for afl_run_id: ${afl_run_id}`);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('[PDF API] 🚀 START: PDF Generation Request');
+    console.log('[PDF API] afl_run_id:', afl_run_id);
+    console.log('[PDF API] Timestamp:', new Date().toISOString());
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-    // 1. Validate UUID format
+    // STEP 1: Validate UUID format
     if (!isValidUUID(afl_run_id)) {
-      console.error(`[PDF API] Invalid UUID format: ${afl_run_id}`);
+      console.error('[PDF API] ❌ VALIDATION FAILED: Invalid UUID format');
+      console.error('[PDF API]    Input:', afl_run_id);
       return NextResponse.json(
-        { error: 'Invalid afl_run_id format' },
+        { error: 'Invalid afl_run_id format', provided: afl_run_id },
         { status: 400 }
       );
     }
+    console.log('[PDF API] ✅ UUID validation passed');
 
-    // 2. Initialize Supabase client
+    // STEP 2: Initialize Supabase client
+    console.log('[PDF API] 🔄 Initializing Supabase client...');
     const supabase = getSupabaseClient();
+    console.log('[PDF API] ✅ Supabase client initialized');
 
-    // 3. Query database: afl_execution_reports + roosters join
+    // STEP 3: Query database with detailed logging
+    console.log('[PDF API] 🔄 Querying database...');
+    console.log('[PDF API]    Table: afl_execution_reports');
+    console.log('[PDF API]    Join: roosters (inner)');
+    console.log('[PDF API]    Filter: afl_run_id =', afl_run_id);
+
     const { data: reportData, error: reportError } = await supabase
       .from('afl_execution_reports')
       .select(
@@ -79,57 +123,109 @@ export async function GET(
       .eq('afl_run_id', afl_run_id)
       .single();
 
-    if (reportError || !reportData) {
-      console.error(`[PDF API] Report not found for afl_run_id: ${afl_run_id}`, reportError);
+    // Enhanced error logging
+    if (reportError) {
+      console.error('[PDF API] ❌ DATABASE ERROR:', reportError);
+      console.error('[PDF API]    Code:', reportError.code);
+      console.error('[PDF API]    Message:', reportError.message);
+      console.error('[PDF API]    Details:', reportError.details);
+      console.error('[PDF API]    Hint:', reportError.hint);
+      
       return NextResponse.json(
-        { error: 'Rapport niet gevonden' },
+        { 
+          error: 'Database query failed', 
+          details: reportError.message,
+          afl_run_id 
+        },
         { status: 404 }
       );
     }
 
-    console.log(`[PDF API] Report found, generating PDF...`);
+    if (!reportData) {
+      console.error('[PDF API] ❌ NO DATA: Report not found');
+      console.error('[PDF API]    afl_run_id:', afl_run_id);
+      console.error('[PDF API]    Possible causes:');
+      console.error('[PDF API]      - Record does not exist');
+      console.error('[PDF API]      - Foreign key join failed (roosters)');
+      console.error('[PDF API]      - RLS policy blocking read');
+      
+      return NextResponse.json(
+        { error: 'Rapport niet gevonden', afl_run_id },
+        { status: 404 }
+      );
+    }
 
-    // 4. Extract data
+    console.log('[PDF API] ✅ Report found in database');
+    console.log('[PDF API]    Report ID:', reportData.id);
+    console.log('[PDF API]    Roster ID:', reportData.roster_id);
+    console.log('[PDF API]    Created at:', reportData.created_at);
+
+    // STEP 4: Extract and validate data structure
     const roosterData = reportData.roosters as any;
     const report_data = reportData.report_data as any;
 
-    // 5. Generate PDF
+    console.log('[PDF API] 🔍 Analyzing report_data structure...');
+    console.log('[PDF API]    Keys present:', Object.keys(report_data || {}));
+    
+    // Log critical data availability
+    const hasSummary = report_data?.summary !== undefined;
+    const hasAudit = report_data?.audit !== undefined;
+    console.log('[PDF API]    - summary:', hasSummary ? '✅ Present' : '❌ Missing');
+    console.log('[PDF API]    - audit:', hasAudit ? '✅ Present' : '❌ Missing');
+
+    if (hasSummary) {
+      console.log('[PDF API]    Summary data:');
+      console.log('[PDF API]      - totalPlanned:', report_data.summary.totalPlanned);
+      console.log('[PDF API]      - totalRequired:', report_data.summary.totalRequired);
+      console.log('[PDF API]      - coveragePercent:', report_data.summary.coveragePercent);
+      console.log('[PDF API]      - totalOpen:', report_data.summary.totalOpen);
+    }
+
+    // STEP 5: Generate PDF with CORRECT field names
+    console.log('[PDF API] 🔄 Generating PDF document...');
+
     const doc = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
       format: 'a4'
     });
 
-    // Set margins
+    // Layout configuration
     const marginX = 15;
     const marginY = 15;
     let currentY = marginY;
 
-    // Add title
+    // TITLE
     doc.setFontSize(20);
-    doc.setFont('', 'bold');
-    doc.text('ROOSTER-BEWERKING RAPPORT', marginX, currentY);
+    doc.setFont('helvetica', 'bold');
+    doc.text('AFL ROOSTER-BEWERKING RAPPORT', marginX, currentY);
     currentY += 12;
 
-    // Add date
+    // Subtitle with date
     doc.setFontSize(10);
-    doc.setFont('', 'normal');
-    doc.text(`Gegenereerd: ${new Date().toLocaleDateString('nl-NL')}`, marginX, currentY);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Gegenereerd: ${new Date().toLocaleDateString('nl-NL', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })}`, marginX, currentY);
     currentY += 8;
 
-    // Add separator
+    // Separator line
     doc.setDrawColor(200, 200, 200);
     doc.line(marginX, currentY, 210 - marginX, currentY);
-    currentY += 5;
+    currentY += 8;
 
-    // Rooster Period Section
-    doc.setFontSize(12);
-    doc.setFont('', 'bold');
-    doc.text('Rooster Periode', marginX, currentY);
+    // SECTION 1: Rooster Periode
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('📅 Rooster Periode', marginX, currentY);
     currentY += 7;
 
     doc.setFontSize(10);
-    doc.setFont('', 'normal');
+    doc.setFont('helvetica', 'normal');
 
     const startDate = new Date(roosterData.start_date).toLocaleDateString('nl-NL');
     const endDate = new Date(roosterData.end_date).toLocaleDateString('nl-NL');
@@ -139,25 +235,30 @@ export async function GET(
     doc.text(`Tot: ${endDate}`, marginX, currentY);
     currentY += 5;
     doc.text(`Status: ${roosterData.status}`, marginX, currentY);
-    currentY += 8;
+    currentY += 10;
 
-    // Metrics Section
-    doc.setFontSize(12);
-    doc.setFont('', 'bold');
-    doc.text('Resultaten', marginX, currentY);
+    // SECTION 2: Samenvatting (using CORRECT field names)
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('📊 Samenvatting', marginX, currentY);
     currentY += 7;
 
-    doc.setFontSize(10);
-    doc.setFont('', 'normal');
+    // Extract data with fallbacks (CORRECT FIELD NAMES from paste.txt)
+    const totalPlanned = safeGet(report_data, 'summary.totalPlanned', 0);
+    const totalRequired = safeGet(report_data, 'summary.totalRequired', 0);
+    const coveragePercent = safeGet(report_data, 'summary.coveragePercent', 0);
+    const totalOpen = safeGet(report_data, 'summary.totalOpen', 0);
+    const durationSeconds = safeGet(report_data, 'audit.durationSeconds', 'N/A');
+    const aflRunIdShort = afl_run_id.substring(0, 8);
 
-    // Create metrics table
     const metricsData = [
       ['Metric', 'Waarde'],
-      ['Bezettingsgraad', `${report_data.bezettingsgraad}%`],
-      ['Diensten ingepland', `${report_data.diensten_ingepland}/${report_data.diensten_totaal}`],
-      ['Uitvoeringsduur', report_data.uitvoeringsduur || 'N/A'],
-      ['AFL Run ID', afl_run_id.substring(0, 8) + '...'],
-      ['Gegenereerd op', new Date(reportData.created_at).toLocaleString('nl-NL')]
+      ['Bezettingsgraad', `${coveragePercent}%`],
+      ['Diensten ingepland', `${totalPlanned}/${totalRequired}`],
+      ['Open slots', `${totalOpen}`],
+      ['Uitvoeringsduur', typeof durationSeconds === 'number' ? `${durationSeconds.toFixed(2)}s` : durationSeconds],
+      ['AFL Run ID', `${aflRunIdShort}...`],
+      ['Rapport aangemaakt', new Date(reportData.created_at).toLocaleString('nl-NL')]
     ];
 
     autoTable(doc, {
@@ -169,7 +270,6 @@ export async function GET(
       headStyles: {
         fillColor: [41, 128, 185],
         textColor: 255,
-        font: 'helvetica',
         fontStyle: 'bold',
         fontSize: 10
       },
@@ -178,7 +278,7 @@ export async function GET(
         fontSize: 9
       },
       columnStyles: {
-        0: { cellWidth: 80 },
+        0: { cellWidth: 80, fontStyle: 'bold' },
         1: { cellWidth: 'auto', halign: 'right' }
       },
       alternateRowStyles: {
@@ -186,13 +286,36 @@ export async function GET(
       }
     });
 
-    // 6. Generate PDF buffer
+    // Update currentY after table
+    currentY = (doc as any).lastAutoTable.finalY + 10;
+
+    // SECTION 3: Details (if space available)
+    if (currentY < 250) {
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('ℹ️ Details', marginX, currentY);
+      currentY += 7;
+
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Dit rapport is automatisch gegenereerd door het AFL-algoritme.`, marginX, currentY);
+      currentY += 5;
+      doc.text(`Voor meer details, bekijk het volledige rapport in de applicatie.`, marginX, currentY);
+    }
+
+    // STEP 6: Generate PDF buffer
+    console.log('[PDF API] ✅ PDF document generated');
     const pdfBuffer = Buffer.from(doc.output('arraybuffer'));
+    console.log('[PDF API]    PDF size:', pdfBuffer.length, 'bytes');
 
-    // 7. Create response with proper headers
-    const filename = `rapport-${afl_run_id.substring(0, 8)}-${new Date().getTime()}.pdf`;
+    // STEP 7: Create response with headers + cache-busting
+    const filename = `afl-rapport-${aflRunIdShort}-${Date.now()}.pdf`;
+    const executionTime = Date.now() - startTime;
 
-    console.log(`[PDF API] PDF generated successfully: ${filename}`);
+    console.log('[PDF API] ✅ SUCCESS: PDF ready for download');
+    console.log('[PDF API]    Filename:', filename);
+    console.log('[PDF API]    Execution time:', executionTime, 'ms');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     return new NextResponse(pdfBuffer, {
       status: 200,
@@ -200,27 +323,53 @@ export async function GET(
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="${filename}"`,
         'Content-Length': pdfBuffer.length.toString(),
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Cache-Control': 'no-cache, no-store, must-revalidate, proxy-revalidate',
         'Pragma': 'no-cache',
         'Expires': '0',
         'X-Generated-At': new Date().toISOString(),
-        'X-Cache-Bust': Date.now().toString()
+        'X-Cache-Bust': Date.now().toString(),
+        'X-Execution-Time-Ms': executionTime.toString(),
+        'X-Report-Id': reportData.id,
+        'X-AFL-Run-Id': afl_run_id
       }
     });
   } catch (error) {
-    console.error('[PDF API] Fatal error:', error);
+    const executionTime = Date.now() - startTime;
+    
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.error('[PDF API] ❌ FATAL ERROR');
+    console.error('[PDF API] Type:', error instanceof Error ? error.name : typeof error);
+    console.error('[PDF API] Message:', error instanceof Error ? error.message : String(error));
+    console.error('[PDF API] Stack:', error instanceof Error ? error.stack : 'N/A');
+    console.error('[PDF API] Execution time:', executionTime, 'ms');
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     return NextResponse.json(
-      { error: 'PDF generatie mislukt', details: error instanceof Error ? error.message : String(error) },
+      { 
+        error: 'PDF generatie mislukt', 
+        details: error instanceof Error ? error.message : String(error),
+        timestamp: new Date().toISOString()
+      },
       { status: 500 }
     );
   }
 }
 
-// Health check endpoint
+/**
+ * Health check endpoint
+ * Allows testing if route is accessible
+ */
 export async function HEAD(
   request: NextRequest,
   { params }: { params: { afl_run_id: string } }
 ) {
-  return NextResponse.json({ status: 'ok' });
+  console.log('[PDF API] HEAD request received for:', params.afl_run_id);
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'X-Route-Status': 'OK',
+      'X-API-Version': '1.0.0',
+      'X-Timestamp': new Date().toISOString()
+    }
+  });
 }
