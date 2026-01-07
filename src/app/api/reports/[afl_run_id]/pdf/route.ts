@@ -1,25 +1,25 @@
 /**
- * DRAAD 407: PDF RAPPORT EXPORT ENDPOINT - GEFIXTE VERSIE
+ * DRAAD 408: PDF RAPPORT FIELD NAME FIX - LOWERCASE SCHEMA MATCH
  * 
- * ROOT CAUSE: Gebruikte non-existente veldnamen in report_data
- * FIX: Aangepast naar werkelijke JSON structuur uit database
+ * ROOT CAUSE: Database uses lowercase field names, API expected camelCase
+ * FIX: Updated all field access to match actual database schema
  * 
  * Endpoint: GET /api/reports/{afl_run_id}/pdf
  * 
  * FUNCTIONALITEIT:
  * 1. Valideer afl_run_id (UUID format)
  * 2. Query Supabase: afl_execution_reports + roosters join
- * 3. Extract data uit JSONB report_data (correcte veldnamen!)
+ * 3. Extract data uit JSONB report_data (CORRECT LOWERCASE veldnamen!)
  * 4. Genereer PDF met jsPDF + autotable
  * 5. Return PDF met proper headers + cache-busting
  * 
- * DATA STRUCTUUR (uit paste.txt):
- * - summary.totalPlanned: aantal geplande diensten
- * - summary.totalRequired: totaal benodigde diensten
- * - summary.coveragePercent: bezettingsgraad %
- * - summary.totalOpen: open slots
- * - audit.durationSeconds: uitvoeringsduur
- * - audit.aflRunId: AFL run identificatie
+ * DATA STRUCTUUR (VERIFIED from database):
+ * - summary.totalplanned: aantal geplande diensten (LOWERCASE!)
+ * - summary.totalrequired: totaal benodigde diensten (LOWERCASE!)
+ * - summary.coveragepercent: bezettingsgraad % (LOWERCASE!)
+ * - summary.totalopen: open slots (LOWERCASE!)
+ * - audit.durationseconds: uitvoeringsduur (LOWERCASE!)
+ * - audit.aflrunid: AFL run identificatie (LOWERCASE!)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -174,14 +174,14 @@ export async function GET(
     console.log('[PDF API]    - audit:', hasAudit ? '✅ Present' : '❌ Missing');
 
     if (hasSummary) {
-      console.log('[PDF API]    Summary data:');
-      console.log('[PDF API]      - totalPlanned:', report_data.summary.totalPlanned);
-      console.log('[PDF API]      - totalRequired:', report_data.summary.totalRequired);
-      console.log('[PDF API]      - coveragePercent:', report_data.summary.coveragePercent);
-      console.log('[PDF API]      - totalOpen:', report_data.summary.totalOpen);
+      console.log('[PDF API]    Summary data (LOWERCASE schema):');
+      console.log('[PDF API]      - totalplanned:', report_data.summary.totalplanned);
+      console.log('[PDF API]      - totalrequired:', report_data.summary.totalrequired);
+      console.log('[PDF API]      - coveragepercent:', report_data.summary.coveragepercent);
+      console.log('[PDF API]      - totalopen:', report_data.summary.totalopen);
     }
 
-    // STEP 5: Generate PDF with CORRECT field names
+    // STEP 5: Generate PDF with CORRECT LOWERCASE field names
     console.log('[PDF API] 🔄 Generating PDF document...');
 
     const doc = new jsPDF({
@@ -237,19 +237,25 @@ export async function GET(
     doc.text(`Status: ${roosterData.status}`, marginX, currentY);
     currentY += 10;
 
-    // SECTION 2: Samenvatting (using CORRECT field names)
+    // SECTION 2: Samenvatting (using CORRECT LOWERCASE field names)
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
     doc.text('📊 Samenvatting', marginX, currentY);
     currentY += 7;
 
-    // Extract data with fallbacks (CORRECT FIELD NAMES from paste.txt)
-    const totalPlanned = safeGet(report_data, 'summary.totalPlanned', 0);
-    const totalRequired = safeGet(report_data, 'summary.totalRequired', 0);
-    const coveragePercent = safeGet(report_data, 'summary.coveragePercent', 0);
-    const totalOpen = safeGet(report_data, 'summary.totalOpen', 0);
-    const durationSeconds = safeGet(report_data, 'audit.durationSeconds', 'N/A');
+    // ✅ DRAAD408 FIX: Use LOWERCASE field names matching database schema
+    const totalPlanned = safeGet(report_data, 'summary.totalplanned', 0);
+    const totalRequired = safeGet(report_data, 'summary.totalrequired', 0);
+    const coveragePercent = safeGet(report_data, 'summary.coveragepercent', 0);
+    const totalOpen = safeGet(report_data, 'summary.totalopen', 0);
+    const durationSeconds = safeGet(report_data, 'audit.durationseconds', 'N/A');
     const aflRunIdShort = afl_run_id.substring(0, 8);
+
+    console.log('[PDF API] 📊 Extracted values (FIXED):');
+    console.log('[PDF API]    - totalPlanned:', totalPlanned);
+    console.log('[PDF API]    - totalRequired:', totalRequired);
+    console.log('[PDF API]    - coveragePercent:', coveragePercent);
+    console.log('[PDF API]    - totalOpen:', totalOpen);
 
     const metricsData = [
       ['Metric', 'Waarde'],
