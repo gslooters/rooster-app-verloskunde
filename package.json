@@ -1,6 +1,6 @@
 {
   "name": "rooster-app-final",
-  "version": "0.1.9-cache-bust-v9",
+  "version": "0.1.9-cache-bust-v10",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -41,26 +41,31 @@
     "npm": ">=10.0.0"
   },
   "_deploy_metadata": {
-    "timestamp": "2026-01-07T10:19:00Z",
-    "draad": "STAPPEN_5_6_7_CACHE_DEPLOY",
-    "version": "0.1.9-cache-bust-v9",
+    "timestamp": "2026-01-07T20:33:00Z",
+    "draad": "DRAAD407_HOTFIX_TYPESCRIPT_FIX",
+    "version": "0.1.9-cache-bust-v10",
     "cache_bust": true,
-    "cache_bust_id": "1736244000000",
-    "date_now": 1736244000000,
-    "railway_trigger": "FORCE_DEPLOYMENT_v9_RANDOM_7C4B",
+    "cache_bust_id": "1736268780000",
+    "date_now": 1736268780000,
+    "railway_trigger": "FORCE_DEPLOYMENT_v10_DRAAD407_HOTFIX_A2F9",
     "deployment_strategy": "cache-bust-with-date-now-plus-random",
     "fixes": [
-      "1. Date.now() cache-bust ID: 1736244000000",
-      "2. Railway random trigger: FORCE_DEPLOYMENT_v9_RANDOM_7C4B",
-      "3. Version bump: 0.1.9-cache-bust-v9",
-      "4. Timestamp: 2026-01-07T10:19:00Z",
-      "5. Complete browser cache invalidation",
-      "6. Automated Railway deployment trigger"
+      "[DRAAD407-HOTFIX] TypeScript instanceof error fix in direct-write-engine.ts",
+      "Added safe date conversion with proper type narrowing",
+      "Prevents instanceof check on union types (string | Date)",
+      "Cache-bust ID: 1736268780000",
+      "Railway random trigger: FORCE_DEPLOYMENT_v10_DRAAD407_HOTFIX_A2F9",
+      "Version bump: 0.1.9-cache-bust-v10",
+      "Timestamp: 2026-01-07T20:33:00Z",
+      "Complete browser cache invalidation",
+      "Automated Railway deployment trigger"
     ],
-    "status": "DEPLOYING",
-    "deployment_attempt": 9,
-    "reason": "Stappen 5-7: Cache-bust + Push + Deploy verificatie",
-    "random_trigger": "7C4B",
-    "verification_required": true
+    "status": "READY_FOR_DEPLOYMENT",
+    "deployment_attempt": 10,
+    "reason": "TypeScript compilation error fix - convertDateToString() helper added",
+    "random_trigger": "A2F9",
+    "verification_required": true,
+    "previous_error": "Type error: The left-hand side of an 'instanceof' expression must be of type 'any', an object type or a type parameter.",
+    "fix_applied": "Safe type narrowing using typeof checks and duck typing"
   }
 }
