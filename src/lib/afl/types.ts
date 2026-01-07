@@ -108,6 +108,47 @@ export interface EmployeeCandidate {
 }
 
 /**
+ * ✅ [DRAAD407] DirectWrite Types - Real-time per-assignment database writes
+ */
+
+/**
+ * AflAssignmentRecord
+ * Structure for single assignment to be written
+ */
+export interface AflAssignmentRecord {
+  id: string;                    // Will be generated on INSERT
+  employee_id: string;
+  date: string;                  // ISO format YYYY-MM-DD
+  dagdeel: string;               // O, M, or A
+  service_id: string;            // UUID
+  team?: string;                 // Team code (optional)
+  status: 0 | 1 | 2 | 3;        // 0=inactive, 1=active, 2=blocked, 3=unavailable
+  ort_run_id?: string;           // Tracking ID for AFL run
+}
+
+/**
+ * DirectWriteResult
+ * Result of single assignment write (INSERT or UPDATE)
+ */
+export interface DirectWriteResult {
+  success: boolean;
+  assignment_id?: string;        // ID of written assignment
+  invulling_updated?: boolean;   // Whether invulling was incremented
+  error?: string;                // Error message if failed
+}
+
+/**
+ * BatchDirectWriteResult
+ * Result of batch assignment writes
+ */
+export interface BatchDirectWriteResult {
+  success: boolean;              // All written successfully?
+  written_count: number;         // Number of successful writes
+  failed_count: number;          // Number of failed writes
+  errors: string[];              // Error messages
+}
+
+/**
  * AFL Data Loader Result
  * All workbenches loaded in FASE 1
  */
