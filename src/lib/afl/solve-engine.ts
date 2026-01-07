@@ -20,6 +20,11 @@
  * - PATCH 5: ✅ TypeScript memory.property fix (use process.memoryUsage())
  * - PATCH 6: DRAAD405E - DDO→DDA conditional koppeling
  * - ✅ PATCH 7: DRAAD405F - DDA dubbel-inplannen fix (chained-only tracking)
+ * 
+ * ✅ DRAAD407 PHASE 4: 
+ * - ✅ PATCH 8: Deterministic service resolution via findServiceByCode()
+ * - ✅ PATCH 9: Comprehensive logging for baseline verification
+ * - ✅ PATCH 10: Enforce validation caching for performance
  */
 
 import {
@@ -60,6 +65,7 @@ interface PerformanceMetrics {
  * ✅ v2.1: Fixed TypeScript memory property error
  * ✅ v2.2: DRAAD405E - Fixed DDO→DDA conditional koppeling
  * ✅ v2.3: DRAAD405F - Fixed DDA dubbel-inplannen via chained-only tracking
+ * ✅ v2.4: DRAAD407 Phase 4 - Deterministic service resolution + comprehensive logging
  */
 export class SolveEngine {
   private workbestand_opdracht: WorkbestandOpdracht[];
@@ -101,6 +107,9 @@ export class SolveEngine {
   // ✅ PATCH 7: Track chained services to prevent double-assignment
   private chained_services_assigned: Map<string, number> = new Map();
 
+  // ✅ PATCH 8: Service code index for deterministic lookups
+  private service_code_index: Map<string, WorkbestandServicesMetadata> = new Map();
+
   constructor(
     opdracht: WorkbestandOpdracht[],
     planning: WorkbestandPlanning[],
@@ -117,6 +126,32 @@ export class SolveEngine {
     this.rooster_end_date = rooster_end_date;
     this.cache_busting_timestamp = Date.now(); // ✅ Set cache-buster at init
     this.preloadEmployeesByTeam();
+    this.buildServiceCodeIndex(); // ✅ PATCH 8: Build service index
+  }
+
+  /**
+   * ✅ PATCH 8: Build service code index for O(1) lookup determinism
+   * Ensures same service code always maps to same service ID
+   */
+  private buildServiceCodeIndex(): void {
+    for (const service of this.workbestand_services_metadata) {
+      this.service_code_index.set(service.code, service);
+    }
+    
+    if (this.debug_enabled) {
+      console.log('✅ PATCH 8: Service Code Index built:', {
+        services_indexed: this.service_code_index.size,
+        codes: Array.from(this.service_code_index.keys()),
+      });
+    }
+  }
+
+  /**
+   * ✅ PATCH 8: Deterministic service lookup by code
+   * Always returns same service ID for same code
+   */
+  private findServiceByCode(code: string): WorkbestandServicesMetadata | undefined {
+    return this.service_code_index.get(code);
   }
 
   /**
@@ -145,7 +180,7 @@ export class SolveEngine {
     this.performance_metrics.preload_duration_ms = performance.now() - startTime;
 
     if (this.debug_enabled) {
-      console.log(`✅ SOLVE v2.3: Preloaded employees by team:`, {
+      console.log(`✅ SOLVE v2.4: Preloaded employees by team:`, {
         teams: Array.from(this.employees_by_team.keys()),
         total_employees: unique_employees.size,
         duration_ms: this.performance_metrics.preload_duration_ms.toFixed(2),
@@ -210,14 +245,22 @@ export class SolveEngine {
 
     // REGEL 2: DIA vereist DIO eerder in dezelfde dag
     if (service_code === 'DIA') {
-      const dio_service_id = this.getDIOServiceId();
+      const dio_service = this.findServiceByCode('DIO'); // ✅ PATCH 8: Deterministic lookup
+      if (!dio_service) {
+        const result = {
+          valid: false,
+          reason: `DIO service not found in metadata`,
+        };
+        this.validation_result_cache.set(cache_key, false);
+        return result;
+      }
 
       const dio_assigned = this.workbestand_planning.some(
         (p) =>
           p.employee_id === employee_id &&
           p.date.getTime() === dateTime &&
           p.dagdeel === 'O' &&
-          p.service_id === dio_service_id &&
+          p.service_id === dio_service.id &&
           p.status === 1 // Must be assigned
       );
 
@@ -233,14 +276,22 @@ export class SolveEngine {
 
     // REGEL 3: DDA vereist DDO eerder in dezelfde dag
     if (service_code === 'DDA') {
-      const ddo_service_id = this.getDDOServiceId();
+      const ddo_service = this.findServiceByCode('DDO'); // ✅ PATCH 8: Deterministic lookup
+      if (!ddo_service) {
+        const result = {
+          valid: false,
+          reason: `DDO service not found in metadata`,
+        };
+        this.validation_result_cache.set(cache_key, false);
+        return result;
+      }
 
       const ddo_assigned = this.workbestand_planning.some(
         (p) =>
           p.employee_id === employee_id &&
           p.date.getTime() === dateTime &&
           p.dagdeel === 'O' &&
-          p.service_id === ddo_service_id &&
+          p.service_id === ddo_service.id &&
           p.status === 1 // Must be assigned
       );
 
@@ -260,40 +311,20 @@ export class SolveEngine {
   }
 
   /**
-   * ✅ PATCH 1B + PATCH 4: Helper - Get DIO service ID
-   * Enhanced with caching (avoid repeated lookups)
+   * ✅ PATCH 1B + PATCH 4 + PATCH 8: Helper - Get DIO service ID
+   * Enhanced with caching + deterministic lookup
    */
   private getDIOServiceId(): string {
-    const now = Date.now();
-    
-    // ✅ Cache for 60 seconds (handles Railway redeploys)
-    if (
-      this.dio_service_id_cache &&
-      now - this.dio_service_id_cache_timestamp < 60000
-    ) {
-      return this.dio_service_id_cache;
-    }
-
-    const dio_service = this.workbestand_services_metadata.find(
-      (s) => s.code === 'DIO'
-    );
-    
-    const result = dio_service?.id || '';
-    this.dio_service_id_cache = result;
-    this.dio_service_id_cache_timestamp = now;
-    
-    return result;
+    const dio_service = this.findServiceByCode('DIO'); // ✅ PATCH 8
+    return dio_service?.id || '';
   }
 
   /**
-   * ✅ PATCH 7: Helper - Get DDO service ID (for DDA chain validation)
-   * Enhanced with caching (avoid repeated lookups)
+   * ✅ PATCH 7 + PATCH 8: Helper - Get DDO service ID (for DDA chain validation)
+   * Deterministic lookup with service index
    */
   private getDDOServiceId(): string {
-    const ddo_service = this.workbestand_services_metadata.find(
-      (s) => s.code === 'DDO'
-    );
-    
+    const ddo_service = this.findServiceByCode('DDO'); // ✅ PATCH 8
     return ddo_service?.id || '';
   }
 
@@ -357,6 +388,8 @@ export class SolveEngine {
    * ✅ PATCH 4: With performance metrics + cache-busting trigger
    * ✅ PATCH 5: Fixed memory tracking
    * ✅ PATCH 7: With chained service tracking
+   * ✅ PATCH 8: With deterministic service resolution
+   * ✅ PATCH 9: With comprehensive logging
    * Iterate through tasks and assign services
    */
   solve(): {
@@ -378,8 +411,9 @@ export class SolveEngine {
     this.chained_services_assigned.clear(); // ✅ PATCH 7: Clear chained tracking
 
     if (this.debug_enabled) {
-      console.log(`🚀 SOLVE v2.3: Starting main loop with ${this.workbestand_opdracht.length} tasks`, {
+      console.log(`🚀 SOLVE v2.4: Starting main loop with ${this.workbestand_opdracht.length} tasks`, {
         cache_busting_timestamp: this.cache_busting_timestamp,
+        service_index_size: this.service_code_index.size,
         railway_trigger: `railway-${this.cache_busting_timestamp}-${Date.now()}`, // ✅ Railway deployment trigger with extra Date.now()
       });
     }
@@ -391,6 +425,11 @@ export class SolveEngine {
         // ✅ Task fully assigned - skip
         this.task_processed_count++;
         continue;
+      }
+
+      // ✅ PATCH 9: Log task initiation
+      if (this.debug_enabled) {
+        console.log(`📋 Task: ${task.service_code} on ${task.date.toISOString().split('T')[0]} ${task.dagdeel} Team=${task.team} Need=${task.aantal_nog}`);
       }
 
       // Inner loop: assign one at a time until aantal_nog = 0
@@ -406,7 +445,7 @@ export class SolveEngine {
           this.task_open_count++;
           if (this.debug_enabled) {
             console.log(`⚠️  SOLVE: No candidates for task:`, {
-              date: task.date,
+              date: task.date.toISOString().split('T')[0],
               dagdeel: task.dagdeel,
               team: task.team,
               service_code: task.service_code,
@@ -432,6 +471,11 @@ export class SolveEngine {
         slot.source = 'autofill';
         slot.is_modified = true;
         this.modified_slots.push(slot);
+
+        // ✅ PATCH 9: Log assignment
+        if (this.debug_enabled) {
+          console.log(`  ✅ Assigned ${task.service_code} to ${best.employee_id} (Capacity left: ${best.capacity_remaining - 1})`);
+        }
 
         // Step 5: Update capacity
         this.decrementCapacity(best.employee_id, task.service_id);
@@ -482,13 +526,13 @@ export class SolveEngine {
           count: value.count,
         };
       }
-      console.log(`✅ SOLVE v2.3: Team Filter Statistics:`, stats_for_log);
-      console.log(`✅ SOLVE v2.3: Performance Metrics:`, this.performance_metrics);
-      console.log(`✅ SOLVE v2.3: Chained Services Assigned:`, Object.fromEntries(this.chained_services_assigned));
+      console.log(`✅ SOLVE v2.4: Team Filter Statistics:`, stats_for_log);
+      console.log(`✅ SOLVE v2.4: Performance Metrics:`, this.performance_metrics);
+      console.log(`✅ SOLVE v2.4: Chained Services Assigned:`, Object.fromEntries(this.chained_services_assigned));
     }
 
     if (this.debug_enabled) {
-      console.log(`✅ SOLVE v2.3: Complete`, {
+      console.log(`✅ SOLVE v2.4: Complete`, {
         duration_ms: solve_duration_ms.toFixed(0),
         assigned: assigned_count,
         open: open_count,
@@ -536,6 +580,7 @@ export class SolveEngine {
    * 
    * ✅ PATCH 2: Enhanced with DIO/DIA chain validation + quota check
    * ✅ PATCH 4: With performance instrumentation
+   * ✅ PATCH 8: With deterministic service resolution
    * 
    * Criteria:
    * - In correct team (or fallback)
@@ -848,11 +893,12 @@ export class SolveEngine {
   }
 
   /**
-   * ✅ PATCH 3 + PATCH 6 + PATCH 7 (DRAAD405E-F): Prepare for DIO/DDO chaining (Phase 3 prep)
-   * Enhanced with comprehensive logging
+   * ✅ PATCH 3 + PATCH 6 + PATCH 7 + PATCH 8: Prepare for DIO/DDO chaining (Phase 3 prep)
+   * Enhanced with comprehensive logging + deterministic service resolution
    * 
    * 🔴 PATCH 6 (DRAAD405E): FIXED DDO→DDA conditional koppeling
    * 🔴 PATCH 7 (DRAAD405F): FIXED DDA dubbel-inplannen by decrementing chained task
+   * ✅ PATCH 8: Deterministic service lookup via findServiceByCode()
    * 
    * DIO logic:
    * - Ochtend: Assign DIO
@@ -923,7 +969,7 @@ export class SolveEngine {
     }
 
     // Step 2: Assign chained service to Avond (DIA for DIO, DDA for DDO)
-    // ✅ DRAAD405E FIX: Determine chained service based on service_code
+    // ✅ DRAAD405E FIX + PATCH 8: Deterministic lookup
     let chained_service_code: string;
     if (service_code === 'DIO') {
       chained_service_code = 'DIA';  // DIO → DIA
@@ -947,10 +993,8 @@ export class SolveEngine {
     );
 
     if (avond_slot) {
-      // ✅ Use conditional lookup instead of hardcoded 'DIA'
-      const chained_service = this.workbestand_services_metadata.find(
-        (s) => s.code === chained_service_code  // ✅ Dynamic!
-      );
+      // ✅ PATCH 8: Deterministic service lookup
+      const chained_service = this.findServiceByCode(chained_service_code);
 
       if (chained_service) {
         avond_slot.service_id = chained_service.id;
@@ -1102,10 +1146,11 @@ export class SolveEngine {
 
 /**
  * Helper: Create SolveEngine and run solve
- * ✅ v2.3: With PATCH 7 chained service tracking
+ * ✅ v2.4: With PATCH 8 deterministic service resolution + PATCH 9 comprehensive logging
  * ✅ Returns performance metrics + cache-busting timestamp
  * ✅ DRAAD405E: DDO→DDA conditional koppeling fixed
  * ✅ DRAAD405F: DDA dubbel-inplannen fixed
+ * ✅ DRAAD407 Phase 4: Service index + deterministic resolution + comprehensive logging
  */
 export async function runSolveEngine(
   workbestand_opdracht: WorkbestandOpdracht[],
