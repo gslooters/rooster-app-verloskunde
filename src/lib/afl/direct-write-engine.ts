@@ -22,6 +22,7 @@
  * ✅ Add: LIVE getVariantId() helper
  * ✅ Fix: Proper INSERT (trigger auto) vs UPDATE (manual invulling) logic
  * ✅ Enhance: Dutch error messages, capacity validation, detailed logging
+ * ✅ FIX: Safe date conversion mit type narrowing (DRAAD407-HOTFIX)
  * 
  * Imported from: src/lib/afl/direct-write-engine.ts
  * Used by: solve-engine.ts Phase 4A (direct from writeBatchAssignmentsDirect call)
@@ -31,6 +32,26 @@
 
 import { createClient } from '@supabase/supabase-js';
 import type { AflAssignmentRecord, DirectWriteResult, BatchDirectWriteResult } from './types';
+
+/**
+ * ✅ DRAAD407-HOTFIX: Safe date conversion with proper type narrowing
+ * Prevents TypeScript error on instanceof check with union types
+ */
+function convertDateToString(date: string | Date | unknown): string {
+  // If already a string, return as-is
+  if (typeof date === 'string') {
+    return date;
+  }
+  
+  // If it's a Date object, convert to ISO string
+  if (date && typeof date === 'object' && 'toISOString' in date) {
+    const dateObj = date as Date;
+    return dateObj.toISOString().split('T')[0];
+  }
+  
+  // Fallback: convert to string
+  return String(date);
+}
 
 /**
  * DirectWriteEngine - Real-time per-assignment writer (v2.0 DRAAD407)
@@ -82,10 +103,8 @@ export class DirectWriteEngine {
         return { success: false, error };
       }
 
-      // Convert date if needed (Date object → string)
-      const dateStr = assignment.date instanceof Date
-        ? assignment.date.toISOString().split('T')[0]
-        : String(assignment.date);
+      // ✅ DRAAD407-HOTFIX: Safe date conversion with type narrowing
+      const dateStr = convertDateToString(assignment.date);
 
       const team = assignment.team || 'Overig';
 
