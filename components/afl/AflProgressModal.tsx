@@ -1,19 +1,24 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Loader2, CheckCircle2, XCircle, X, AlertCircle, Clock, FileText, FileSpreadsheet } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, X, AlertCircle, Clock, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { usePDFDownload } from '@/src/components/RoosterBewerking/PDFDownloadHandler';
+import { AflReportModal } from './AflReportModal';
 
 /**
- * AFL Progress Modal Component - DRAAD406: PDF Export Activation + Hook Fix
+ * AFL Progress Modal Component - DRAAD406F3: Optie B Implementation
  * 
- * DRAAD406 FIX (Huidige draad):
- * 1. ✅ FIXED: React Error #321 - Hook verplaatst naar hoogste niveau
- * 2. ✅ MOVED: usePDFDownload hook aanroep (was in event handler → nu op component level)
- * 3. ✅ REFACTORED: pdfHookError synchroniseert met exportError state
- * 4. ✅ VERIFIED: React Rules of Hooks gerespecteerd
- * 5. ✅ TESTED: Cache-bust headers werkend voor Railway
+ * DRAAD406F3 CHANGES (Huidige draad):
+ * 1. ✅ REMOVED: usePDFDownload hook import
+ * 2. ✅ REMOVED: PDF/Excel export buttons sectie
+ * 3. ✅ REMOVED: handleExportPDF en handleExportExcel handlers
+ * 4. ✅ REMOVED: Export states (isExportingPDF, isExportingExcel, exportError)
+ * 5. ✅ REMOVED: useEffect for pdfHookError synchronization
+ * 6. ✅ ADDED: isReportModalOpen state
+ * 7. ✅ ADDED: handleOpenReport() handler
+ * 8. ✅ ADDED: handleCloseReport() handler
+ * 9. ✅ ADDED: "Rapport bekijken" knop in SUCCESS state
+ * 10. ✅ ADDED: AflReportModal component import en usage
  * 
  * DRAAD406 CHANGES (vorige implementatie):
  * 1. ✅ ADDED: import { usePDFDownload } hook
@@ -44,8 +49,8 @@ import { usePDFDownload } from '@/src/components/RoosterBewerking/PDFDownloadHan
  * - Error handling with detailed messages
  * - Success state with statistics (STAYS VISIBLE)
  * - Blue "Naar rooster" CTA button (triggers parent callback on click)
- * - PDF export FULLY FUNCTIONAL with download (FIXED - Hook now at correct level)
- * - Excel export still disabled (pending backend)
+ * - NEW: "Rapport bekijken" knop opent aparte AflReportModal
+ * - AflReportModal toont volledig rapport (PDF-vriendelijk)
  * - Loading indicators and error feedback
  * - Prevents accidental closure during processing
  * - Cache-busting headers (Date.now() + random)
@@ -85,8 +90,6 @@ const PHASES = [
   { id: 5, name: 'Rapport', description: 'Rapporten genereren' }
 ];
 
-// ✅ DRAAD404: INCREASED from 15000ms to 60000ms (60 seconds)
-// API route now has maxDuration = 60, so client should wait max 60s
 const AFL_TIMEOUT_MS = 60000; // 60 seconden timeout
 const PHASE_TIMEOUT_MS = 5000; // Max 5 sec per phase
 
@@ -105,28 +108,8 @@ export function AflProgressModal({
   const [attemptCount, setAttemptCount] = useState<number>(0);
   const [isNavigating, setIsNavigating] = useState(false);
   
-  // DRAAD406: Export states - PDF now active, Excel still disabled
-  const [isExportingPDF, setIsExportingPDF] = useState(false);
-  const [isExportingExcel, setIsExportingExcel] = useState(false);
-  const [exportError, setExportError] = useState<string | null>(null);
-
-  // ✅ DRAAD406 FIX: Hook op HOOGSTE NIVEAU van component
-  // Hook wordt aangroepen op component render, NIET in event handler
-  // Dit voldoet aan React Rules of Hooks
-  const {
-    downloadPDF,
-    isLoading: isPDFHookLoading,
-    error: pdfHookError
-  } = usePDFDownload(result?.afl_run_id || '');
-
-  // ✅ DRAAD406: Synchroniseer hook error naar component state
-  // useEffect zorgt ervoor dat pdfHookError automatisch in exportError terecht komt
-  useEffect(() => {
-    if (pdfHookError) {
-      setExportError(pdfHookError);
-      console.warn('[Modal] PDF hook error detected:', pdfHookError);
-    }
-  }, [pdfHookError]);
+  // DRAAD406F3: Nieuw: Report modal state
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
   // Functie om AFL pipeline uit te voeren
   const executeAflPipeline = async () => {
@@ -146,7 +129,6 @@ export function AflProgressModal({
     let aborted = false;
 
     try {
-      // ✅ DRAAD404: Timeout detection - 60 seconds
       const timeoutHandle = setTimeout(() => {
         console.error('❌ [Modal] AFL execution TIMEOUT after 60 seconds');
         aborted = true;
@@ -155,7 +137,6 @@ export function AflProgressModal({
         setExecutionTime(Date.now() - startTime);
       }, AFL_TIMEOUT_MS);
 
-      // DRAAD337: Simulate phase progression with detailed messages
       const phaseMessages = [
         'Rooster gegevens laden uit database...',
         'Optimalisatie-algoritme starten...',
@@ -164,7 +145,7 @@ export function AflProgressModal({
         'Rapport genereren en opslaan...'
       ];
 
-      const phaseTimings = [1000, 1500, 1200, 800, 1000]; // ms per fase (UI feedback)
+      const phaseTimings = [1000, 1500, 1200, 800, 1000];
 
       for (let i = 0; i < PHASES.length && !aborted; i++) {
         setCurrentPhase(i);
@@ -178,7 +159,6 @@ export function AflProgressModal({
         return;
       }
 
-      // DRAAD337: Call actual API with cache-busting headers
       console.log(`🤖 [Modal] Calling AFL API for roster: ${rosterId}`);
       setStatusMessage('AFL-API wordt aangeroepen...');
 
@@ -215,7 +195,6 @@ export function AflProgressModal({
         throw new Error(errorMsg);
       }
 
-      // Success! Set state and STAY OPEN for user to read report
       clearTimeout(timeoutHandle);
       const elapsedTime = Date.now() - startTime;
       setExecutionTime(elapsedTime);
@@ -236,7 +215,6 @@ export function AflProgressModal({
     }
   };
 
-  // DRAAD337: Auto-start when modal opens
   useEffect(() => {
     if (isOpen && rosterId && state === 'idle') {
       console.log('[Modal] Modal opened, starting AFL execution...');
@@ -244,78 +222,52 @@ export function AflProgressModal({
     }
   }, [isOpen, rosterId]);
 
-  /**
-   * DRAAD337 FIX4: Handle "Naar rooster" button click
-   * Only triggers parent callback when user explicitly clicks button
-   */
   const handleNavigateToRoster = () => {
     if (state !== 'success' || !result) return;
     
     console.log('[Modal] User clicked "Naar rooster" button');
     setIsNavigating(true);
     
-    // Call parent callback to navigate
     if (onSuccess) {
       onSuccess(result);
     }
   };
 
-  /**
-   * DRAAD406 FIX: PDF export handler - OPTIE A IMPLEMENTATIE
-   * Hook (usePDFDownload) zit nu op hoogste niveau van component
-   * Event handler roept alleen de downloadPDF() functie aan
-   * Dit voldoet aan React Rules of Hooks
-   */
-  const handleExportPDF = async () => {
-    if (!result?.afl_run_id) {
-      setExportError('AFL Run ID niet beschikbaar voor PDF export');
-      console.error('❌ [Modal] AFL Run ID missing:', result);
-      return;
-    }
-
-    console.log(`📥 [Modal] Starting PDF download for afl_run_id: ${result.afl_run_id}`);
-    setExportError(null);
-    setIsExportingPDF(true);
-
-    try {
-      // ✅ FIXED: downloadPDF is nu beschikbaar omdat hook op hoogste niveau is
-      // Event handler roept alleen de functie aan, geen hook-aanroep hier
-      await downloadPDF();
-      console.log('✅ [Modal] PDF download completed successfully');
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'PDF download mislukt';
-      console.error('❌ [Modal] PDF download failed:', err);
-      setExportError(errorMsg);
-    } finally {
-      setIsExportingPDF(false);
-    }
+  // DRAAD406F3: Nieuw: Open rapport modal
+  const handleOpenReport = () => {
+    if (state !== 'success' || !result) return;
+    console.log('[Modal] User clicked "Rapport bekijken" button');
+    setIsReportModalOpen(true);
   };
 
-  /**
-   * DRAAD406: Excel export still disabled
-   * Placeholder for future implementation
-   */
-  const handleExportExcel = () => {
-    console.log('⚠️ [Modal] Excel export temporarily disabled');
-    setExportError('Excel export wordt later geactiveerd');
+  // DRAAD406F3: Nieuw: Sluit rapport modal
+  const handleCloseReport = () => {
+    console.log('[Modal] User clicked "Terug" in rapport modal');
+    setIsReportModalOpen(false);
   };
 
-  // Modal niet weergeven als gesloten
   if (!isOpen) {
     return null;
   }
 
-  // DRAAD346: Close button only visible on ERROR/TIMEOUT, not on SUCCESS
   const canClose = (state === 'error' || state === 'timeout') && !isNavigating;
 
   return (
     <>
-      {/* DRAAD337: Overlay - darker during processing */}
+      {/* DRAAD406F3: Rapport Modal overlay */}
+      {isReportModalOpen && result && (
+        <AflReportModal
+          isOpen={isReportModalOpen}
+          reportData={result}
+          onClose={handleCloseReport}
+        />
+      )}
+
+      {/* Progress Modal */}
       <div className={`fixed inset-0 z-40 transition-opacity ${
         state === 'loading' ? 'bg-black/60' : 'bg-black/50'
       }`} />
 
-      {/* DRAAD337: Modal Container */}
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div className="relative w-full max-w-2xl bg-white rounded-lg shadow-2xl">
           {/* Header */}
@@ -332,7 +284,6 @@ export function AflProgressModal({
                 {state === 'idle' && '⏷️ Gereed'}
               </p>
             </div>
-            {/* DRAAD346: Close button only on ERROR/TIMEOUT */}
             {canClose && (
               <button
                 onClick={onClose}
@@ -348,10 +299,9 @@ export function AflProgressModal({
 
           {/* Content */}
           <div className="p-6">
-            {/* DRAAD337: LOADING STATE - Enhanced with timeout info */}
+            {/* LOADING STATE */}
             {state === 'loading' && (
               <div className="space-y-4">
-                {/* Status Message */}
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
                   <Loader2 size={18} className="text-blue-600 animate-spin flex-shrink-0 mt-0.5" />
                   <div>
@@ -360,7 +310,6 @@ export function AflProgressModal({
                   </div>
                 </div>
 
-                {/* Phase Progress List */}
                 <div className="space-y-3">
                   {PHASES.map((phase, index) => {
                     const isDone = index < currentPhase;
@@ -399,7 +348,6 @@ export function AflProgressModal({
                   })}
                 </div>
 
-                {/* Progress Bar */}
                 <div className="mt-6">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-semibold text-gray-700">VOORTGANG</span>
@@ -422,7 +370,7 @@ export function AflProgressModal({
               </div>
             )}
 
-            {/* DRAAD406: SUCCESS STATE - PDF Export ACTIVATED */}
+            {/* SUCCESS STATE */}
             {state === 'success' && result && (
               <div className="space-y-4">
                 <div className="flex items-center justify-center">
@@ -438,7 +386,7 @@ export function AflProgressModal({
                   </p>
                 </div>
 
-                {/* DRAAD337 FIX4: Expanded Statistics Section */}
+                {/* Statistics */}
                 <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg p-4 space-y-3 border border-green-200">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="bg-white rounded p-3 border border-green-100">
@@ -472,62 +420,31 @@ export function AflProgressModal({
 
                 {/* Success Message */}
                 <div className="bg-green-100 border border-green-300 rounded-lg p-3 text-sm text-green-800 font-medium">
-                  ✓ Alle diensten zijn succesvol verwerkt door de AFL-pijplijn. 
-                  Klik "Naar rooster" hieronder om de resultaten te bekijken.
+                  ✓ Alle diensten zijn succesvol verwerkt door de AFL-pijplijn. Klik hieronder om details te bekijken.
                 </div>
 
-                {/* DRAAD406: Export buttons - PDF ACTIVATED, Excel disabled */}
-                <div className="bg-gray-50 border border-gray-300 rounded-lg p-4">
+                {/* DRAAD406F3: Nieuw - Rapport bekijken knop */}
+                <div className="bg-indigo-50 border border-indigo-300 rounded-lg p-4">
                   <p className="text-sm font-semibold text-gray-600 mb-3 flex items-center gap-2">
-                    <FileText size={16} className="text-gray-500" />
-                    Export opties
+                    <FileText size={16} className="text-indigo-600" />
+                    Rapport opties
                   </p>
-                  <div className="flex gap-3 flex-wrap">
-                    <button
-                      onClick={handleExportPDF}
-                      disabled={isExportingPDF || isPDFHookLoading}
-                      className={`flex-1 min-w-[140px] px-4 py-2 rounded-lg font-medium flex items-center justify-center gap-2 transition-all ${
-                        isExportingPDF || isPDFHookLoading
-                          ? 'bg-blue-400 cursor-wait text-white'
-                          : 'bg-blue-600 hover:bg-blue-700 text-white'
-                      }`}
-                      title="Download PDF rapport"
-                    >
-                      {isExportingPDF || isPDFHookLoading ? (
-                        <>
-                          <Loader2 size={16} className="animate-spin" />
-                          <span className="text-xs">Bezig...</span>
-                        </>
-                      ) : (
-                        <>
-                          <FileText size={16} />
-                          <span className="text-xs">📥 PDF rapport</span>
-                        </>
-                      )}
-                    </button>
-                    <button
-                      onClick={handleExportExcel}
-                      disabled={true}
-                      className="flex-1 min-w-[140px] px-4 py-2 bg-gray-300 cursor-not-allowed text-gray-500 rounded-lg font-medium flex items-center justify-center gap-2"
-                      title="Excel export - wordt later geactiveerd"
-                    >
-                      <FileSpreadsheet size={16} />
-                      <span className="text-xs">Excel (uit)</span>
-                    </button>
-                  </div>
-                  {exportError && (
-                    <div className="mt-3 bg-yellow-50 border border-yellow-200 rounded p-2">
-                      <p className="text-xs text-yellow-800 font-medium">⚠️ {exportError}</p>
-                    </div>
-                  )}
-                  <p className="text-xs text-gray-600 mt-2">
-                    ✅ PDF export is actief | Excel export wordt later geactiveerd
+                  <button
+                    onClick={handleOpenReport}
+                    className="w-full px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold transition-colors shadow-md flex items-center justify-center gap-2"
+                    title="Open volledig rapport in apart venster"
+                  >
+                    <FileText size={18} />
+                    🔍 Rapport bekijken
+                  </button>
+                  <p className="text-xs text-gray-600 mt-2 text-center">
+                    Bekijk het complete AFL rapport met alle details en waarschuwingen
                   </p>
                 </div>
               </div>
             )}
 
-            {/* DRAAD337: ERROR STATE */}
+            {/* ERROR STATE */}
             {state === 'error' && (
               <div className="space-y-4">
                 <div className="flex items-center justify-center">
@@ -543,7 +460,6 @@ export function AflProgressModal({
                   </p>
                 </div>
 
-                {/* DRAAD337: Error Message with details */}
                 {error && (
                   <div className="bg-red-50 border border-red-300 rounded-lg p-3 space-y-2">
                     <div className="flex items-start gap-2">
@@ -564,7 +480,7 @@ export function AflProgressModal({
               </div>
             )}
 
-            {/* DRAAD337: TIMEOUT STATE */}
+            {/* TIMEOUT STATE */}
             {state === 'timeout' && (
               <div className="space-y-4">
                 <div className="flex items-center justify-center">
@@ -598,7 +514,7 @@ export function AflProgressModal({
             )}
           </div>
 
-          {/* Footer - DRAAD346: No close button on SUCCESS */}
+          {/* Footer */}
           <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 rounded-b-lg">
             {state === 'loading' && (
               <div className="space-y-2">
@@ -626,7 +542,6 @@ export function AflProgressModal({
                     '→ Naar rooster'
                   )}
                 </button>
-                {/* DRAAD346: No "Annuleren" button - users MUST proceed to Bewerking */}
               </div>
             )}
             {(state === 'error' || state === 'timeout') && (
