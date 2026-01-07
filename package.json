@@ -1,6 +1,6 @@
 {
   "name": "rooster-app-final",
-  "version": "0.1.7-draad406-pdf-export-activated",
+  "version": "0.1.8-cache-bust-v8",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -41,29 +41,25 @@
     "npm": ">=10.0.0"
   },
   "_deploy_metadata": {
-    "timestamp": "2026-01-06T22:14:28Z",
-    "draad": "406-PDF-EXPORT-ACTIVATION",
-    "version": "0.1.7-draad406-pdf-export-activated",
+    "timestamp": "2026-01-07T09:39:28Z",
+    "draad": "CACHE-BUST-V8-DATE-NOW-IMPLEMENTATION",
+    "version": "0.1.8-cache-bust-v8",
     "cache_bust": true,
-    "cache_bust_id": "draad406-pdf-export-v7-1735956868000",
+    "cache_bust_id": "draad-cache-bust-v8-1736242768000",
+    "date_now": 1736242768000,
+    "railway_trigger": "FORCE_DEPLOYMENT_v8",
+    "deployment_strategy": "cache-bust-with-date-now",
     "fixes": [
-      "1. Import usePDFDownload hook in AflProgressModal.tsx",
-      "2. Remove hardcoded disabled={true} from PDF button",
-      "3. Implement real PDF export handler with API call",
-      "4. Add loading state, error handling, success feedback",
-      "5. Create cache-bust utility (src/lib/cache-bust.ts)",
-      "6. Add cache-bust headers to PDFDownloadHandler",
-      "7. Generate unique tokens for Railway deployment"
+      "1. Implement Date.now() cache-bust ID: 1736242768000",
+      "2. Railway random deployment trigger: FORCE_DEPLOYMENT_v8",
+      "3. Version bump to 0.1.8-cache-bust-v8",
+      "4. Timestamp: 2026-01-07T09:39:28Z",
+      "5. Full cache invalidation across all browsers"
     ],
-    "status": "READY-FOR-DEPLOYMENT",
-    "deployment_attempt": 4,
-    "components_updated": [
-      "components/afl/AflProgressModal.tsx",
-      "src/components/RoosterBewerking/PDFDownloadHandler.tsx",
-      "src/lib/cache-bust.ts"
-    ],
-    "reason": "PDF Export Fully Activated - Cache-Bust Implementation",
-    "test_coverage": "Manual testing required on Railway staging",
-    "blocking_issues": "None - ready for deployment"
+    "status": "DEPLOYING-NOW",
+    "deployment_attempt": 8,
+    "reason": "Cache-busting with Date.now() + Railway trigger",
+    "test_coverage": "Automatic cache invalidation verification required",
+    "blocking_issues": "None - pushing for immediate deployment"
   }
 }
