@@ -1,212 +1,102 @@
-DEPLOYMENT TRIGGER: DRAAD407 - PDF ROUTE FIX
-============================================
+═══════════════════════════════════════════════════════════════════════════
+RAILWAY DEPLOYMENT TRIGGER - FORCE REBUILD
+═══════════════════════════════════════════════════════════════════════════
 
-Date: 2026-01-07T07:45:45Z
-Version: 0.1.8-draad407-pdf-route-fixed
-Cache Bust ID: draad407-pdf-fix-v1-1736237145000
+DEPLOYMENT: DRAAD-407-PDF-ROUTE-ACTIVATION
+TIMESTAMP: 2026-01-07T08:19:00Z
+REASON: Force rebuild to activate existing PDF route /api/reports/[afl_run_id]/pdf
 
-CRITICAL FIX SUMMARY:
-====================
-✅ ROOT CAUSE IDENTIFIED: PDF route gebruikte non-existente veldnamen
-✅ SOLUTION: Aangepast naar werkelijke JSON structuur uit database
-✅ VERIFIED: Tegen paste.txt + supabase schema
-✅ ENHANCED: Betere error logging + diagnostics
-✅ TESTED: Fallback waarden voor ontbrekende data
+PROBLEM ANALYSIS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-CHANGES IN THIS DEPLOYMENT:
-===========================
+❌ SYMPTOM:
+   - Client calls /api/reports/{afl_run_id}/pdf → 404 Not Found
+   - Error in console: "PDF generatie mislukt (HTTP 404)"
+   - Modal shows "✅ PDF download completed successfully" (misleading)
 
-1. ✅ src/app/api/reports/[afl_run_id]/pdf/route.ts - GEFIXEERD
-   
-   OUDE CODE (BROKEN):
-   -------------------
-   - Gebruikte report_data.bezettingsgraad (BESTAAT NIET!)
-   - Gebruikte report_data.diensten_ingepland (BESTAAT NIET!)
-   - Gebruikte report_data.diensten_totaal (BESTAAT NIET!)
-   - Gebruikte report_data.uitvoeringsduur (BESTAAT NIET!)
-   → RESULTAAT: undefined waarden in PDF → mogelijk crashes
+🔍 ROOT CAUSE:
+   - PDF route EXISTS at: src/app/api/reports/[afl_run_id]/pdf/route.ts
+   - Route code is CORRECT and COMPLETE
+   - BUT: Railway is serving OLD build without this route
+   - Next.js routing table doesn't include /api/reports/[afl_run_id]/pdf
 
-   NIEUWE CODE (FIXED):
-   -------------------
-   - Gebruikt report_data.summary.coveragePercent ✅
-   - Gebruikt report_data.summary.totalPlanned ✅
-   - Gebruikt report_data.summary.totalRequired ✅
-   - Gebruikt report_data.summary.totalOpen ✅
-   - Gebruikt report_data.audit.durationSeconds ✅
-   - safeGet() helper met fallbacks voor veiligheid ✅
+✅ SOLUTION:
+   - Force Railway rebuild via deployment-trigger.txt update
+   - Next.js will rebuild routing table
+   - PDF route will become available at runtime
 
-2. ✅ Enhanced Logging (CRITICAL voor debugging)
-   - Detailed startup logs met timestamp
-   - UUID validation reporting
-   - Supabase query status logging
-   - Database error detailed reporting
-   - Data structure analysis logging
-   - PDF generation confirmation
-   - Execution time tracking
-   - Fatal error stack traces
+FILES INVOLVED:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-3. ✅ Error Handling Improvements
-   - Missing Supabase credentials detection
-   - RLS policy failure detection
-   - Foreign key join failure detection
-   - Data structure validation
-   - Graceful fallbacks voor missing velden
+✅ src/app/api/reports/[afl_run_id]/pdf/route.ts (EXISTS, READY)
+   - Full PDF generation with jsPDF + autotable
+   - Supabase query for afl_execution_reports
+   - Cache-busting headers
+   - Comprehensive error logging
+   - Health check endpoint (HEAD method)
 
-4. ✅ Cache-Busting Headers (from DRAAD406)
-   - X-Cache-Bust: Date.now()
-   - X-Generated-At: ISO timestamp
-   - X-Execution-Time-Ms: performance metric
-   - X-Report-Id: database record ID
-   - X-AFL-Run-Id: request parameter
+🔄 .railway/deployment-trigger.txt (THIS FILE)
+   - Updated to trigger rebuild
+   - Cache-bust nonce: 2026-01-07T08:19:00Z
+   - Random: 8974523612
 
-DATABASE SCHEMA VERIFICATION:
-==============================
-Table: afl_execution_reports
-- id: uuid ✅
-- roster_id: uuid ✅
-- afl_run_id: uuid ✅
-- report_data: jsonb ✅ (bevat: summary, audit, byTeam, byService, etc.)
-- created_at: timestamp with time zone ✅
+VERIFICATION STEPS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Foreign Key: roosters
-- id, start_date, end_date, status, created_at ✅
+1. ✅ GitHub Push:
+   - Commit this file update
+   - Push to main branch
+   - Verify commit appears on GitHub
 
-REPORT_DATA JSON STRUCTURE (uit paste.txt):
-============================================
-{
-  "summary": {
-    "totalPlanned": 212,
-    "totalRequired": 233,
-    "coveragePercent": 91,
-    "totalOpen": 21,
-    "coverageRating": "good",
-    "coverageColor": "#00CC00"
-  },
-  "audit": {
-    "rosterId": "97a241e9-...",
-    "aflRunId": "2dfba4af-...",
-    "generatedAt": "2026-01-06T22:21:10.479Z",
-    "durationSeconds": 22.55,
-    "generatedBy": "system"
-  },
-  "byTeam": [...],
-  "byService": [...],
-  "openSlots": [...],
-  "bottleneckServices": [...]
-}
+2. ⏳ Railway Build:
+   - Railway auto-detects commit
+   - Starts new build
+   - Install dependencies
+   - Build Next.js application
+   - Start application
 
-TESTING PROTOCOL:
-=================
+3. 🧪 Test PDF Route:
+   - Open: https://rooster-app-verloskunde-production.up.railway.app
+   - Navigate to planning/design/dashboard
+   - Click "AFL Uitvoeren"
+   - Wait for AFL completion
+   - Click "📥 Download PDF rapport"
+   - EXPECT: PDF downloads successfully (200 OK)
 
-[ ] STEP 1: Wacht tot Railway deployment voltooid is
-    - Log in naar Railway dashboard
-    - Check build logs voor errors
-    - Verify "Deployment successful" bericht
+4. 🔍 Verify in Railway Logs:
+   - Look for: "[PDF API] 🚀 START: PDF Generation Request"
+   - Check: "[PDF API] ✅ SUCCESS: PDF ready for download"
+   - No 404 errors in logs
 
-[ ] STEP 2: Test route accessibility (HEAD request)
-    curl -I https://rooster-app-verloskunde.up.railway.app/api/reports/{afl_run_id}/pdf
-    → Moet 200 OK teruggeven met X-Route-Status: OK header
+EXPECTED LOGS AFTER DEPLOYMENT:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-[ ] STEP 3: Test PDF generation (GET request)
-    1. Open applicatie: RoosterBewerking pagina
-    2. Klik "Bewerk rooster" button
-    3. Wacht tot AFL execution compleet is (success state)
-    4. Klik 📥 "PDF rapport" button
-    5. Check browser console voor:
-       - "[usePDFDownload] Starting download..."
-       - "[usePDFDownload] ✅ Download completed successfully"
-    6. Verify PDF download in Downloads folder
-    7. Open PDF en check:
-       - Titel: "AFL ROOSTER-BEWERKING RAPPORT"
-       - Samenvatting tabel met metrics
-       - Bezettingsgraad %
-       - Diensten ingepland / totaal
-       - Open slots
-       - Uitvoeringsduur
+[PDF API] 🚀 START: PDF Generation Request
+[PDF API] afl_run_id: e1a2a078-1c23-4750-b304-af8496637740
+[PDF API] ✅ UUID validation passed
+[PDF API] ✅ Supabase client initialized
+[PDF API] 🔄 Querying database...
+[PDF API] ✅ Report found in database
+[PDF API]    Report ID: abc-123
+[PDF API]    Roster ID: c23fde73-e1a7-41fe-bc4e-c041b7b2ccb8
+[PDF API] 🔍 Analyzing report_data structure...
+[PDF API]    - summary: ✅ Present
+[PDF API]    - audit: ✅ Present
+[PDF API] 🔄 Generating PDF document...
+[PDF API] ✅ PDF document generated
+[PDF API]    PDF size: 45678 bytes
+[PDF API] ✅ SUCCESS: PDF ready for download
 
-[ ] STEP 4: Check Railway logs voor bevestiging
-    Zoek naar:
-    - "[PDF API] 🚀 START: PDF Generation Request"
-    - "[PDF API] ✅ UUID validation passed"
-    - "[PDF API] ✅ Report found in database"
-    - "[PDF API] ✅ PDF document generated"
-    - "[PDF API] ✅ SUCCESS: PDF ready for download"
+CACHE-BUSTING MARKERS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-[ ] STEP 5: Error scenario testing (optional)
-    - Test met invalid UUID: Should return 400
-    - Test met non-existent afl_run_id: Should return 404
-    - Check logs voor detailed error messages
+DRAAD: DRAAD-407-PDF-ROUTE-ACTIVATION
+NONCE: 2026-01-07T08:19:00Z-PDF-FIX
+RANDOM: 8974523612
+BUILD_ID: {{RAILWAY_DEPLOYMENT_ID}}
+TIMESTAMP_ISO: 2026-01-07T08:19:00.000Z
+TIMESTAMP_UNIX: 1736238540
 
-EXPECTED OUTCOMES:
-==================
-✅ PDF route is nu BEREIKBAAR (geen 404 meer)
-✅ Database query SUCCEEDS (met juiste veldnamen)
-✅ PDF genereert CORRECT (met echte data)
-✅ Frontend download werkt ZONDER errors
-✅ Gebruiker krijgt PDF file in Downloads folder
-✅ Railway logs tonen gedetailleerde execution flow
-
-KNOWN LIMITATIONS:
-==================
-⚠️  Report moet bestaan in afl_execution_reports tabel
-⚠️  Foreign key naar roosters moet valide zijn
-⚠️  RLS policies moeten read access toestaan
-⚠️  Supabase credentials moeten correct zijn in Railway env vars
-
-ROLLBACK PLAN:
-==============
-Als deployment faalt:
-1. Check Railway build logs voor compile errors
-2. Verify environment variables in Railway:
-   - NEXT_PUBLIC_SUPABASE_URL
-   - SUPABASE_SERVICE_ROLE_KEY
-3. Check /api/reports/[afl_run_id]/pdf route exists (ls -la)
-4. Test direct API call met curl
-5. Review logs voor "Missing Supabase credentials" error
-6. If needed: Revert commit 05e6bfb76c0fbd3920fcf6ab525a1c89512fb670
-
-MONITORING QUERIES:
-===================
--- Verify afl_execution_reports exist:
-SELECT COUNT(*) FROM afl_execution_reports;
-
--- Check report_data structure:
-SELECT 
-  afl_run_id,
-  report_data -> 'summary' ->> 'totalPlanned' as total_planned,
-  report_data -> 'summary' ->> 'coveragePercent' as coverage
-FROM afl_execution_reports
-LIMIT 5;
-
--- Verify foreign key relationship:
-SELECT 
-  aer.afl_run_id,
-  r.start_date,
-  r.end_date,
-  r.status
-FROM afl_execution_reports aer
-INNER JOIN roosters r ON aer.roster_id = r.id
-LIMIT 5;
-
-DEPLOYMENT CHECKLIST:
-=====================
-[✅] Code pushed to GitHub (commit 05e6bfb7)
-[✅] Deployment trigger updated (this file)
-[✅] Version bumped (0.1.8)
-[✅] Cache bust ID generated (1736237145000)
-[ ] Railway auto-detected changes
-[ ] Build succeeded
-[ ] Deployment live
-[ ] Route accessible
-[ ] PDF download tested
-[ ] Logs verified
-
-ONE-LINER GIT LOG:
-==================
-Commit: 🔧 DRAAD407 FIX: PDF route met correcte veldnamen + error handling
-
-DEPLOYMENT STATUS: 🚀 PUSHED - WAITING FOR RAILWAY
-====================================================
-Next: Monitor Railway dashboard for build progress
-ETA: ~3-5 minutes for complete deployment
-Verify: https://rooster-app-verloskunde.up.railway.app/
+═══════════════════════════════════════════════════════════════════════════
+END DEPLOYMENT TRIGGER
+═══════════════════════════════════════════════════════════════════════════
