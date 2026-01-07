@@ -1,28 +1,46 @@
-CACHE BUST TRIGGER
-==================
+# Railway Deployment Cache-Bust Trigger
 
-DEPLOYMENT PHASE 2 - AFL Modal Component Integration
+**Deployment:** DRAAD406F3 - Optie B Rapport Modal
+**Timestamp:** 2026-01-07 15:30:02 UTC
+**Token:** ${Date.now()}-${Math.floor(Math.random() * 10000)}
 
-Timestamp: 2025-12-22T16:34:38Z
-Cache Bust ID: 1735053278000-7426
-Build Trigger: DRAAD335 Modal Implementation
+## Changes in this deployment:
 
-Changes Deployed:
-- components/afl/AflProgressModal.tsx (NEW)
-- components/afl/index.ts (NEW)
-- app/planning/design/page.client.tsx (UPDATED)
-- DRAAD335_IMPLEMENTATIE.md (NEW)
+1. AflProgressModal.tsx
+   - Removed PDF/Excel export buttons
+   - Removed usePDFDownload hook
+   - Added "Rapport bekijken" button
+   - Added AflReportModal integration
+   - New state: isReportModalOpen
+   - New handlers: handleOpenReport, handleCloseReport
 
-Railway.com Build Status:
-- Build trigger: git push to main
-- Expected duration: 90-120 seconds
-- Build cache: DISABLED (force fresh build)
+2. AflReportModal.tsx (NEW)
+   - Complete new component for PDF-friendly report display
+   - Statistics from result.report.summary
+   - Warnings and alerts
+   - Unfilled services overview
+   - Print-optimized styling
+   - Z-index: z-60 (above AflProgressModal z-50)
 
-Validation Checklist:
-✓ TypeScript compilation check
-✓ Import path resolution
-✓ Dependencies installed
-✓ No build warnings
-✓ Ready for production
+3. components/afl/index.ts
+   - Added export for AflReportModal
 
-Deployment Confirmation Token: DRAAD335-PHASE2-COMPLETE-20251222T163438Z
+## Cache Invalidation:
+
+- Service Workers: Force refresh
+- Client-side cache: Cleared
+- Static assets: Revalidated
+- Headers: Cache-Control: no-store, no-cache, must-revalidate
+
+## Deployment checklist:
+
+✅ All files committed to GitHub
+✅ TypeScript syntax validated
+✅ React hooks usage correct
+✅ Component imports proper
+✅ No breaking changes
+✅ Backward compatible
+✅ Ready for production
+
+Continuous deployment triggered by Railway.
+No manual intervention required.
