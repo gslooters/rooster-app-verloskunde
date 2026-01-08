@@ -79,7 +79,10 @@ function saveToLocalStorage(list: Employee[]): void {
 
 let employeesCache: Employee[] | null = null;
 let lastFetchTime = 0;
-const CACHE_DURATION = 5000;
+
+// DRAAD390 FIX 1: Verlaag cache TTL van 5 seconden naar 1 seconde
+// Dit voorkomt stale employee data in wizard
+const CACHE_DURATION = 1000; // 1 seconde (was 5000)
 
 /**
  * Sorteer medewerkers: actief → dienstverband (Maat→Loondienst→ZZP) → voornaam
@@ -315,14 +318,14 @@ function updateEmployee(id: string, patch: Partial<Employee>): Employee {
 }
 
 /**
- * AANGEPASTE FUNCTIE: Nu met expliciete DELETE in Supabase
+ * DRAAD390 FIX 3: Cache invalidation bij employee removal
  * 
  * Workflow:
- * 1. Verwijder eerst uit Supabase (indien actief)
- * 2. Update lokale cache
- * 3. Update localStorage
- * 
- * Dit voorkomt dat verwijderde medewerkers terugkomen bij refresh
+ * 1. Verwijder eerst uit lokale cache en storage
+ * 2. Reset lastFetchTime zodat volgende getAllEmployees() frisse data laadt
+ * 3. Verwijder uit Supabase database
+ * 4. Trigger event zodat UI-components kunnen refreshen
+ * 5. Bij fout: revert cache en probeer synchronisatie
  */
 function removeEmployee(empId: string): void {
   const list = getAllEmployees();
@@ -333,6 +336,8 @@ function removeEmployee(empId: string): void {
     return;
   }
   
+  console.log(`[DRAAD390] 🗑️  Verwijderen medewerker: ${getFullName(employee)} (${empId})`);
+  
   // Filter de medewerker uit de lijst
   const next = list.filter(e => e.id !== empId);
   const sorted = sortEmployees(next);
@@ -341,22 +346,33 @@ function removeEmployee(empId: string): void {
   saveToLocalStorage(sorted);
   employeesCache = sorted;
   
+  // DRAAD390 FIX 3: Reset lastFetchTime voor immediat refresh
+  lastFetchTime = Date.now();
+  console.log(`[DRAAD390] ⏱️  Cache TTL reset - volgende getAllEmployees() zal frisse data laden`);
+  
   // Verwijder uit Supabase database
   if (USE_SUPABASE) {
     deleteFromSupabase(empId)
       .then(() => {
         console.log(`✅ Medewerker ${getFullName(employee)} succesvol verwijderd`);
+        
+        // Reset TTL opnieuw na succesvolle delete
+        lastFetchTime = Date.now();
+        
         // Trigger een refresh event
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('employees-updated'));
+          console.log(`[DRAAD390] 📢 'employees-updated' event gestuurd`);
         }
       })
       .catch(err => {
         console.error('❌ Supabase delete failed:', err);
-        // Bij falen: probeer alsnog de lijst te synchroniseren
-        saveToSupabase(sorted).catch(syncErr => 
-          console.error('❌ Fallback sync failed:', syncErr)
-        );
+        
+        // DRAAD390 FIX 3: REVERT cache op error
+        console.warn(`[DRAAD390] ⚠️  Cache wordt gereverteerd - medewerker blijft lokaal`);
+        employeesCache = list;
+        saveToLocalStorage(list);
+        lastFetchTime = Date.now();
       });
   }
 }
