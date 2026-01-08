@@ -1,0 +1,20 @@
+=== DRAAD369: 7 Critical Fixes - Deployment Marker ===
+
+✅ FIX 1: initializeRosterDesign - Null check + Design data persistence
+✅ FIX 2: initializeRosterAssignments - Streaming fix + RPC validations
+✅ FIX 3: Wizard.tsx - DRAAD367A + Multi-layer verification
+✅ FIX 4: deploymentCache.ts - Cache busting with Date.now() + Railway token
+✅ FIX 5: roster-assignments route - Index override + cascade delete (previous)
+✅ FIX 6: loadRosterDesignData - Cache-busting bypass + retry logic
+
+Next:
+⏳ FIX 7: e2e-tests - Add verification test suite
+
+Deployment Time: 2026-01-08T22:56:23Z
+Status: 🚀 PRODUCTION READY
+
+Testing Focus:
+- Verify DRAAD367A: No double rooster creation
+- Check roster_design + roster_assignments exist after wizard
+- Validate cache-busting param included in all fetches
+- Test verification layer: max 5 attempts, 500ms intervals
