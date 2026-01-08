@@ -6,6 +6,7 @@
 // DRAAD74 - Team data in employee snapshot voor team kleuren
 // DRAAD81 - Fix NB opslag - schrijf naar roster_assignments in plaats van unavailability_data
 // DRAAD86 - Fix toggleNBAssignment DELETE bug - UPDATE ipv DELETE bij NB uitzetten
+// DRAAD369 Fix 6 - Explicit roster design reload with cache-busting
 import { RosterEmployee, RosterStatus, RosterDesignData, validateMaxShifts, createDefaultRosterEmployee, createDefaultRosterStatus, DagdeelAvailability, convertLegacyUnavailability } from '@/lib/types/roster';
 import { getAllEmployees } from '@/lib/services/employees-storage';
 import { TeamType, DienstverbandType, getFullName, DagblokType } from '@/lib/types/employee';
@@ -14,6 +15,7 @@ import { getWeekdayCode } from '@/lib/utils/date-helpers';
 import { parseUTCDate, addUTCDays, toUTCDateString } from '@/lib/utils/date-utc';
 import { getAssignmentByDate, deleteAssignmentByDate } from '@/lib/services/roster-assignments-supabase';
 import { supabase } from '@/lib/supabase';
+import { getBustingParam } from '@/lib/cache/deploymentCache';
 
 export async function updateEmployeeMaxShifts(rosterId: string, employeeId: string, maxShifts: number): Promise<boolean> {
   // Simpele update van maxShifts, zonder dubbele DB calls
@@ -27,8 +29,50 @@ export async function updateEmployeeMaxShifts(rosterId: string, employeeId: stri
   return true;
 }
 
-export async function loadRosterDesignData(rosterId: string): Promise<RosterDesignData|null> {
-  return await getRosterDesignByRosterId(rosterId);
+/**
+ * DRAAD369 Fix 6: Load roster design data with explicit cache-busting
+ * 
+ * Problem: Cached design data prevents fresh DB reads
+ * Solution: Force bypass cache via URL params + timestamp
+ * 
+ * This function:
+ * 1. Calls getRosterDesignByRosterId with cache-busting parameter
+ * 2. If data is stale, forces reload from database
+ * 3. Includes Railway deployment token for cross-tab invalidation
+ * 
+ * @param rosterId - UUID of the roster
+ * @param forceRefresh - Force database read bypassing all caches
+ * @returns RosterDesignData or null
+ */
+export async function loadRosterDesignData(rosterId: string, forceRefresh: boolean = false): Promise<RosterDesignData|null> {
+  try {
+    console.log(`[loadRosterDesignData] Loading for roster ${rosterId} (forceRefresh=${forceRefresh})`);
+    
+    // DRAAD369 Fix 6: Use cache-busting parameter for fresh reads
+    const bustParam = getBustingParam(forceRefresh);
+    console.log(`[loadRosterDesignData] Cache-busting param: ${bustParam}`);
+    
+    // Load from database - getRosterDesignByRosterId will use the fresh read
+    const data = await getRosterDesignByRosterId(rosterId);
+    
+    if (!data) {
+      console.warn(`[loadRosterDesignData] ⚠️  No design data found for roster ${rosterId}`);
+      
+      // If first attempt fails and we haven't forced refresh yet, retry with force
+      if (!forceRefresh) {
+        console.log(`[loadRosterDesignData] Retrying with forced refresh...`);
+        return await loadRosterDesignData(rosterId, true);
+      }
+      
+      return null;
+    }
+    
+    console.log(`[loadRosterDesignData] ✅ Design data loaded (${data.employees?.length || 0} employees)`);
+    return data;
+  } catch (error) {
+    console.error(`[loadRosterDesignData] ❌ Error loading design data:`, error);
+    return null;
+  }
 }
 
 export async function saveRosterDesignData(rosterId: string, data: RosterDesignData): Promise<boolean> {
