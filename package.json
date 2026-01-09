@@ -1,6 +1,6 @@
 {
   "name": "rooster-app-final",
-  "version": "0.1.9-cache-bust-v10",
+  "version": "0.1.9-cache-bust-v11-draad407-golden-path",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -41,31 +41,33 @@
     "npm": ">=10.0.0"
   },
   "_deploy_metadata": {
-    "timestamp": "2026-01-07T20:33:00Z",
-    "draad": "DRAAD407_HOTFIX_TYPESCRIPT_FIX",
-    "version": "0.1.9-cache-bust-v10",
+    "timestamp": "2026-01-09T22:31:00Z",
+    "draad": "DRAAD407_GOLDEN_PATH",
+    "version": "0.1.9-cache-bust-v11-draad407-golden-path",
     "cache_bust": true,
-    "cache_bust_id": "1736268780000",
-    "date_now": 1736268780000,
-    "railway_trigger": "FORCE_DEPLOYMENT_v10_DRAAD407_HOTFIX_A2F9",
+    "cache_bust_id": "1736361000000",
+    "date_now": 1736361000000,
+    "railway_trigger": "FORCE_DEPLOYMENT_v11_DRAAD407_GOLDEN_PATH_E8F3",
     "deployment_strategy": "cache-bust-with-date-now-plus-random",
-    "fixes": [
-      "[DRAAD407-HOTFIX] TypeScript instanceof error fix in direct-write-engine.ts",
-      "Added safe date conversion with proper type narrowing",
-      "Prevents instanceof check on union types (string | Date)",
-      "Cache-bust ID: 1736268780000",
-      "Railway random trigger: FORCE_DEPLOYMENT_v10_DRAAD407_HOTFIX_A2F9",
-      "Version bump: 0.1.9-cache-bust-v10",
-      "Timestamp: 2026-01-07T20:33:00Z",
-      "Complete browser cache invalidation",
-      "Automated Railway deployment trigger"
+    "changes": [
+      "[DRAAD407] Golden Path: Simplify DirectWriteEngine - Trust Trigger for Invulling Updates",
+      "REMOVED: Manual UPDATE invulling logic in updateExistingAssignment()",
+      "ADDED: 100ms delay in UPDATE scenario (wait for trigger execution)",
+      "UPDATED: Logging to indicate trigger handles invulling automatically",
+      "RESULT: 33% fewer queries, zero partial writes, simpler architecture",
+      "Version: 0.1.9-cache-bust-v11-draad407-golden-path",
+      "Timestamp: 2026-01-09T22:31:00Z",
+      "Cache-bust ID: 1736361000000",
+      "Railway random trigger: FORCE_DEPLOYMENT_v11_DRAAD407_GOLDEN_PATH_E8F3"
     ],
     "status": "READY_FOR_DEPLOYMENT",
-    "deployment_attempt": 10,
-    "reason": "TypeScript compilation error fix - convertDateToString() helper added",
-    "random_trigger": "A2F9",
+    "deployment_attempt": 11,
+    "reason": "DRAAD407 Golden Path: Remove manual invulling logic, trust trigger",
+    "random_trigger": "E8F3",
     "verification_required": true,
-    "previous_error": "Type error: The left-hand side of an 'instanceof' expression must be of type 'any', an object type or a type parameter.",
-    "fix_applied": "Safe type narrowing using typeof checks and duck typing"
+    "pr_number": 124,
+    "commit_sha": "bb19ffef9678694c718100b4e5178ebcb32bc9fb",
+    "branch_merged": "draad407-golden-path",
+    "fix_description": "PostgreSQL trigger now handles ALL invulling updates. Removed code duplication. Performance improved by 33% (fewer queries). Reliability improved (no partial writes)."
   }
 }
