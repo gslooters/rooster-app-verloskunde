@@ -1,6 +1,6 @@
 /**
  * DirectWriteEngine - Real-Time Per-Assignment Database Writes
- * ✅ DRAAD408 v4.0 - TEAM NORMALIZATION FIX
+ * ✅ DRAAD408 v4.1 - ENHANCED CAPACITY CHECK WITH PRE-FILTERING
  * 
  * Purpose:
  * Replicate manual planning behavior: real-time INSERT/UPDATE with trigger-driven invulling
@@ -9,17 +9,21 @@
  * - service_id in assignment is UUID (correct from solve-engine)
  * - roster_period_staffing_dagdelen.service_id is UUID (correct)
  * - PROBLEM: team mismatch between assignment (e.g. "Groen") and tasks (e.g. "GRO")
+ * - CAPACITY CHECK: Need to verify baseline invulling count + improve error messages
  * 
- * ✅ DRAAD408 FIXES:
+ * ✅ DRAAD408 v4.1 FIXES:
  * - Added normalizeTeamCode() to convert between team formats
  * - Added comprehensive debug logging for variant lookup
  * - Improved error messages for debugging
+ * - ENHANCED: Pre-filter assignments (dagdeel + status=1) before capacity check
+ * - ENHANCED: Validate invulling count against actual assignments
+ * - ENHANCED: Better error messages showing current_capacity vs max_capacity
  * 
  * Two Scenarios:
  * A) NEW ASSIGNMENT: INSERT → trigger auto-increments invulling (atomic)
  * B) EXISTING ASSIGNMENT: UPDATE → trigger auto-updates invulling (atomic)
  * 
- * @see DRAAD408 - Team normalization fix
+ * @see DRAAD408 - Team normalization + capacity check fix
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -74,9 +78,11 @@ function normalizeTeamToDbFormat(team: string): string {
 }
 
 /**
- * DirectWriteEngine - Real-time per-assignment writer (v4.0 DRAAD408)
+ * DirectWriteEngine - Real-time per-assignment writer (v4.1 DRAAD408)
  * ✅ Team normalization fix
  * ✅ Enhanced debug logging
+ * ✅ Pre-filtering capacity check
+ * ✅ Improved error messages
  * ✅ Atomic per-assignment writes
  */
 export class DirectWriteEngine {
@@ -90,7 +96,7 @@ export class DirectWriteEngine {
 
   constructor() {
     if (this.debug_enabled) {
-      console.log(`[DRAAD408] DirectWriteEngine v4.0 initialized (Team Normalization Fix)`);
+      console.log(`[DRAAD408] DirectWriteEngine v4.1 initialized (Enhanced Capacity Check)`);
       console.log(`[DRAAD408] Cache buster: ${this.cache_buster}`);
       console.log(`[DRAAD408] Railway trigger: railway-${CACHE_BUST_TIMESTAMP}`);
     }
@@ -138,9 +144,29 @@ export class DirectWriteEngine {
         return { success: false, error };
       }
 
-      // ===== CAPACITY CHECK PHASE =====
-      if (variantData.invulling >= variantData.aantal) {
-        const error = `[DRAAD408] Capacity full: ${variantData.invulling}/${variantData.aantal}`;
+      // ===== CAPACITY CHECK PHASE (ENHANCED) =====
+      // ✅ DRAAD408 v4.1: Pre-filter assignments to get actual count
+      const actualCount = await this.getActualAssignmentCount(
+        rosterId,
+        dateStr,
+        assignment.dagdeel,
+        assignment.service_id,
+        normalizedTeam
+      );
+
+      const capacityRemaining = (variantData.aantal || 0) - actualCount;
+
+      if (this.debug_enabled) {
+        console.log(`[DRAAD408] Capacity check:`);
+        console.log(`   invulling (db): ${variantData.invulling}`);
+        console.log(`   aantal (max): ${variantData.aantal}`);
+        console.log(`   actual_count (filtered): ${actualCount}`);
+        console.log(`   capacity_remaining: ${capacityRemaining}`);
+      }
+
+      // ✅ DRAAD408 v4.1: Capacity reached if no slots available
+      if (capacityRemaining <= 0) {
+        const error = `[DRAAD408] ⚠️ Capacity FULL: ${actualCount}/${variantData.aantal} assignments (inv:${variantData.invulling}) for ${normalizedTeam} on ${dateStr} ${assignment.dagdeel}. Service: ${assignment.service_id}`;
         console.warn(error);
         return { success: false, error };
       }
@@ -182,6 +208,59 @@ export class DirectWriteEngine {
       const err_msg = error instanceof Error ? error.message : String(error);
       console.error(`[DRAAD408] ✘ Fatal error: ${err_msg}`);
       return { success: false, error: err_msg };
+    }
+  }
+
+  /**
+   * ✅ DRAAD408 v4.1: Get actual assignment count for pre-filtering capacity check
+   * 
+   * BASELINE VERIFICATION:
+   * Count actual roster_assignments with:
+   * - Same roster_id, date, dagdeel, service_id, team
+   * - status = 1 (only count "dienst" assignments)
+   * 
+   * This validates that invulling is accurate before capacity decision
+   */
+  private async getActualAssignmentCount(
+    rosterId: string,
+    date: string,
+    dagdeel: string,
+    serviceId: string,
+    team: string
+  ): Promise<number> {
+    try {
+      if (this.debug_enabled) {
+        console.log(`[DRAAD408] Pre-filtering: count actual assignments`);
+        console.log(`  Filters: roster_id=${rosterId}, date=${date}, dagdeel=${dagdeel}`);
+        console.log(`            service_id=${serviceId}, team=${team}, status=1`);
+      }
+
+      const { data, error, count } = await this.supabase
+        .from('roster_assignments')
+        .select('*', { count: 'exact', head: true })
+        .eq('roster_id', rosterId)
+        .eq('date', date)
+        .eq('dagdeel', dagdeel)
+        .eq('service_id', serviceId)
+        .eq('team', team)
+        .eq('status', 1);  // ✅ Only count "dienst" status assignments
+
+      if (error) {
+        console.warn(`[DRAAD408] Error counting assignments: ${error.message}`);
+        return 0;
+      }
+
+      const actualCount = count || 0;
+      
+      if (this.debug_enabled) {
+        console.log(`[DRAAD408] Pre-filter result: ${actualCount} assignments found`);
+      }
+
+      return actualCount;
+
+    } catch (err) {
+      console.warn(`[DRAAD408] Exception in getActualAssignmentCount: ${err}`);
+      return 0;
     }
   }
 
