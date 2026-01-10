@@ -1,0 +1,15 @@
+DRAAD408 CACHE BUST TRIGGER
+Deployed: 2026-01-10T16:58:18Z
+Version: 4.1 (Enhanced Capacity Check with Pre-filtering)
+
+Changes:
+- Added getActualAssignmentCount() for baseline verification
+- Enhanced capacity check with pre-filtering (status=1)
+- Improved error messages with detailed capacity breakdown
+- Better debug logging for troubleshooting
+
+Railway Trigger ID: railway-1736502660000-draad408-final
+Cache Buster: 1736502660000-1736502778923-draad408
+
+Commit: de019c9bf558042ca85a95c2e7be76c2be2c8c8b
+Author: Govard Slooters
