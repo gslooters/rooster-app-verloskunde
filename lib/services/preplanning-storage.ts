@@ -23,8 +23,9 @@
  * DRAAD401-FASE2: ✅ FIX - updateAssignmentStatus() slaagt variantId op in database
  * DRAAD402-HOTFIX: ✅ FIX - Add service_id to returned ServiceTypeWithTimes objects
  * DRAAD404: ✅ IMPLEMENTATIE - New getServicesForEmployeeWithAllVariants() for admin mode
+ * DRAAD370-FIX: ✅ KRITIEKE FIX - Correct database query in getServicesForEmployeeWithAllVariants()
  * 
- * Cache: ${Date.now()}
+ * Cache: 2026-01-11T15:23:00Z
  */
 
 import { supabase } from '@/lib/supabase';
@@ -354,23 +355,30 @@ export async function getServicesForEmployee(
 
 /**
  * DRAAD404: NIEUWE FUNCTIE - Haal ALLE team-varianten op voor admin modus
+ * DRAAD370-FIX: ✅ KRITIEKE FIX - Correct database query
  * 
  * Retourneert ALLE mogelijke service×team combinaties voor admin modus.
  * Gebruik voor admin toggle om alle 27 entries (9 diensten × 3 teams) te tonen.
  * 
  * LOGIC:
  * 1. Haal basis services van medewerker op (via employee_services)
- * 2. Voor ELKE service: Query roster_period_staffing_dagdelen op datum/dagdeel
- * 3. Collect ALLE team-varianten (GRO, ORA, TOT) per service
- * 4. Voeg aparte entry toe per variant (team_variant + variant_id uniek)
- * 5. Result: 9 diensten × 3 teams = 27 entries met duidelijke team labels
+ * 2. Voor ELKE service: Query roster_period_staffing op datum/dagdeel
+ * 3. SELECT dagdelen array en HANDMATIG expand voor target dagdeel
+ * 4. Collect ALLE team-varianten (GRO, ORA, TOT) per service
+ * 5. Voeg aparte entry toe per variant (team_variant + variant_id uniek)
+ * 6. Result: 9 diensten × 3 teams = 27 entries met duidelijke team labels
+ * 
+ * DRAAD370-FIX:
+ * - Query 'roster_period_staffing' (parent) ipv 'roster_period_staffing_dagdelen'
+ * - Reden: dagdelen-variant table heeft geen directe service_id link
+ * - roster_period_staffing: service_id → dagdelen array
+ * - HANDMATIG: expand dagdelen voor target dagdeel + teams
  * 
  * Edge cases:
  * - Service ZONDER team-varianten → Fallback: service zonder team label
  * - Geen staffing records → Log warning, continue
  * - No services for employee → Return empty array
  * 
- * DRAAD404-IMPLEMENTATIE: Nieuwe functie voor admin modus met alle varianten
  * @param employeeId - TEXT ID van de medewerker
  * @param rosterId - UUID van het rooster
  * @param targetDate - Datum (YYYY-MM-DD) voor staffing lookup
@@ -403,14 +411,14 @@ export async function getServicesForEmployeeWithAllVariants(
     const servicesWithVariants: ServiceTypeWithTimes[] = [];
     
     for (const service of baseServices) {
-      // Query: Haal ALLE staffing records voor deze service op target datum/dagdeel
+      // ✅ DRAAD370-FIX: Query 'roster_period_staffing' (parent table)
+      // Reden: roster_period_staffing_dagdelen heeft geen directe service_id link
       const { data: staffingData, error } = await supabase
-        .from('roster_period_staffing_dagdelen')
-        .select('id, team, dagdeel, status')
+        .from('roster_period_staffing')
+        .select('id, dagdelen')  // ✅ Select id (parent) + dagdelen array
         .eq('roster_id', rosterId)
         .eq('service_id', service.service_id)  // ✅ Use service_id for lookup
-        .eq('date', targetDate)
-        .eq('dagdeel', targetDagdeel);
+        .eq('date', targetDate);
       
       if (error) {
         console.warn(
@@ -430,15 +438,34 @@ export async function getServicesForEmployeeWithAllVariants(
         continue;
       }
       
-      // Voor ELKE team-variant: voeg aparte entry toe
-      // Dit zorgt dat service DIO met 3 teams = 3 entries
-      for (const variant of staffingData) {
-        servicesWithVariants.push({
-          ...service,                    // ✅ Behoud alle velden van baseService
-          id: variant.id,                // ⭐ Override: variant ID (roster_period_staffing_dagdelen.id)
-          team_variant: variant.team,    // ⭐ Add: 'GRO'|'ORA'|'TOT'
-          variant_id: variant.id         // ⭐ Add: UUID van staffing record
-        });
+      // Stap 3: HANDMATIG expand dagdelen array voor target dagdeel
+      for (const staffingRecord of staffingData) {
+        // staffingRecord.dagdelen is array van { id, dagdeel, team, status, aantal }
+        const dagdelenArray = staffingRecord.dagdelen as any[];
+        
+        if (!dagdelenArray || dagdelenArray.length === 0) {
+          console.warn(
+            `[getServicesForEmployeeWithAllVariants] No dagdelen in staffing record for ` +
+            `${service.code} on ${targetDate}`
+          );
+          // Fallback service
+          servicesWithVariants.push(service);
+          continue;
+        }
+        
+        // Filter op target dagdeel en voeg aparte entry toe per variant
+        const targetDagdeelRecords = dagdelenArray.filter(
+          (d: any) => d.dagdeel === targetDagdeel
+        );
+        
+        for (const dagdeelRecord of targetDagdeelRecords) {
+          servicesWithVariants.push({
+            ...service,                      // ✅ Behoud alle velden van baseService
+            id: dagdeelRecord.id,            // ⭐ Override: variant ID (dagdelen.id)
+            team_variant: dagdeelRecord.team, // ⭐ Add: 'GRO'|'ORA'|'TOT'
+            variant_id: dagdeelRecord.id     // ⭐ Add: UUID van dagdeel record
+          });
+        }
       }
     }
     
