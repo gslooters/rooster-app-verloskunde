@@ -6,6 +6,7 @@
  * DRAAD402-HOTFIX: Type error fix - correct service_id reference
  * DRAAD402-OPERATIVE: KRITIEKE FIX - onChange parameter correction
  * DRAAD404: ✅ IMPLEMENTATIE - Gebruik getServicesForEmployeeWithAllVariants() in admin mode
+ * DRAAD370-FIX: ✅ Behoud selectedVariantId bij delete (status 0/2/3) - KRITIEKE FIX
  * 
  * Modal pop-up voor toewijzen/wijzigen van diensten aan cellen
  * Ondersteunt alle 4 statussen:
@@ -43,6 +44,11 @@
  * - Geeft 27 entries terug (9 diensten × 3 teams) ipv 9 ✅
  * - Team labels duidelijk zichtbaar [Groen], [Oranje], [Praktijk] ✅
  * 
+ * DRAAD370-FIX (11 JAN 2026) - KRITIEKE FIX:
+ * - handleStatusSelect() - NIET meer setSelectedVariantId(null) ❌
+ * - Reden: variantId vereist voor database trigger bij delete
+ * - Impact: Delete werkt nu (invulling decrement) ✅
+ * 
  * HERSTEL:
  * - rosterId nu ook doorgegeven aan getServicesForEmployee() (admin toggle)
  * - Zorgt voor service blocking rules in beide modes
@@ -56,7 +62,7 @@
  * - Visuele markering van huidige status
  * - Read-only mode voor status='final'
  * 
- * Cache: 2026-01-04T12:48:00Z  // ⭐ DRAAD404: Updated timestamp
+ * Cache: 2026-01-11T15:23:00Z  // ⭐ DRAAD370: Updated timestamp
  */
 
 'use client';
@@ -182,12 +188,15 @@ export default function DienstSelectieModal({
     setSelectedStatus(1); // Dienst = status 1
   }
 
-  // Handler voor status selectie (0, 2, 3)
+  // Handler voor status selectie (0, 2, 3) - ⭐ DRAAD370-FIX: NIET MEER RESETTEN!
   function handleStatusSelect(status: CellStatus) {
     if (status === 0 || status === 2 || status === 3) {
       setSelectedStatus(status);
       setSelectedServiceId(null); // Deze statussen hebben geen service_id
-      setSelectedVariantId(null);  // ⭐ FIX #1: Reset variantId voor non-status-1
+      // ⭐ DRAAD370-FIX: NIET meer setSelectedVariantId(null) doen!
+      // Waarom: variantId is VEREIST voor database trigger om invulling te decrementeren
+      // Bij delete (status 0) → trigger moet weten welke variant uit invulling af te trekken
+      // selectedVariantId BEHOUDEN = trigger kan activate
     }
   }
 
@@ -222,8 +231,8 @@ export default function DienstSelectieModal({
       onSave(selectedServiceId, 1, variantId);  // ✅ HAS variantId
     } else if (selectedStatus === 0) {
       // ✅ Status 0: Delete (Leeg)
-      // Pass selectedVariantId so trigger can decrement invulling
-      onSave(null, 0, selectedVariantId);  // ⭐ FIX #4: Add variantId for DB trigger
+      // ⭐ DRAAD370: Pass selectedVariantId so trigger can decrement invulling
+      onSave(null, 0, selectedVariantId);  // ⭐ FIX #4 + DRAAD370: variantId for DB trigger
     } else if (selectedStatus === 2) {
       // ✅ Status 2: Blocked (Blokkade)
       onSave(null, 2, selectedVariantId);  // ⭐ FIX #4: Add variantId
