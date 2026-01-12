@@ -3,9 +3,14 @@
  * 
  * Writes all modified planning slots from Fase 2+3 back to PostgreSQL via Supabase.
  * 
+ * UPDATED [DRAAD413]: 
+ * - KRITIEKE FIX: variant_id wordt nu WEL geschreven naar roster_period_staffing_dagdelen_id
+ * - Toegevoegd: getVariantId() helper voor database lookup
+ * - buildUpdatePayloads() is nu async voor variant_id resolving
+ * - Parallel batch processing voor performance
+ * 
  * UPDATED [DRAAD407]: 
  * - Removed updateInvullingCounters() method (now in DirectWriteEngine)
- * - Removed getVariantId() helper (now in DirectWriteEngine)
  * - WriteEngine now handles ONLY roster_assignments updates
  * - All real-time per-assignment writes now go through DirectWriteEngine
  * - This module retained ONLY for updateRosterStatus() in finalize phase
@@ -21,6 +26,9 @@
  * [DRAAD369] UPDATE: Now includes roster_period_staffing_dagdelen_id lookup
  * [DRAAD403B] FOUT 2 & 3 FIXES: Variant ID lookup + invulling update
  * [DRAAD407] REFACTOR: Moved per-assignment writes to DirectWriteEngine
+ * [DRAAD413] KRITIEKE FIX: variant_id null → echte waarde uit database
+ * 
+ * Cache-bust: ${Date.now()}
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -46,7 +54,7 @@ interface AssignmentUpdatePayload {
   blocked_by_service_id?: string | null;
   constraint_reason?: Record<string, unknown> | null;
   previous_service_id?: string | null;
-  roster_period_staffing_dagdelen_id?: string | null; // [DRAAD369] NEW!
+  roster_period_staffing_dagdelen_id?: string | null; // [DRAAD413] NOW FILLED!
 }
 
 /**
@@ -64,18 +72,63 @@ export interface WriteEngineResult {
 }
 
 /**
+ * [DRAAD413] Helper: Lookup variant ID from database
+ * 
+ * Matches roster_period_staffing_dagdelen record by:
+ * - roster_id
+ * - date
+ * - dagdeel
+ * - service_id
+ * - team
+ * 
+ * Returns UUID of matching record, or null if not found
+ */
+async function getVariantId(
+  rosterId: string,
+  date: string,
+  dagdeel: string,
+  serviceId: string,
+  team: string
+): Promise<string | null> {
+  try {
+    const { data, error } = await supabase
+      .from('roster_period_staffing_dagdelen')
+      .select('id')
+      .eq('roster_id', rosterId)
+      .eq('date', date)
+      .eq('dagdeel', dagdeel)
+      .eq('service_id', serviceId)
+      .eq('team', team)
+      .single();
+
+    if (error) {
+      console.warn('[DRAAD413] Variant ID lookup failed:', {
+        rosterId,
+        date,
+        dagdeel,
+        serviceId,
+        team,
+        error: error.message,
+      });
+      return null;
+    }
+
+    return data?.id || null;
+  } catch (err) {
+    console.warn('[DRAAD413] Variant ID lookup exception:', err);
+    return null;
+  }
+}
+
+/**
  * Main Database Writer Class
  * [DRAAD407] REFACTORED: Now handles only rooster_assignments batch updates
- * Real-time per-assignment writes now in DirectWriteEngine
+ * [DRAAD413] FIXED: Now includes variant_id lookup and writing
  */
 export class WriteEngine {
   /**
-   * Legacy method: Write all modified planning slots
-   * [DRAAD407] NOW DEPRECATED in favor of DirectWriteEngine
-   * Kept for backward compatibility only
-   * 
-   * NOTE: This method is NO LONGER USED by solve-engine.ts
-   * All writes now go through DirectWriteEngine.writeBatchAssignmentsDirect()
+   * Write all modified planning slots
+   * [DRAAD413] UPDATED: Now properly resolves variant_id before writing
    */
   async writeModifiedSlots(
     rosterId: string,
@@ -103,8 +156,8 @@ export class WriteEngine {
         };
       }
 
-      // Step 2: Build update payloads
-      const update_payloads = this.buildUpdatePayloads(
+      // Step 2: Build update payloads (NOW WITH VARIANT_ID LOOKUP!)
+      const update_payloads = await this.buildUpdatePayloads(
         modified_slots,
         afl_run_id,
         rosterId
@@ -121,6 +174,8 @@ export class WriteEngine {
       const rooster_updated = await this.updateRosterStatus(rosterId, afl_run_id);
 
       const database_write_ms = performance.now() - startTime;
+
+      console.log(`[DRAAD413] AFL write complete: ${updated_count} assignments updated with variant_id`);
 
       return {
         success: true,
@@ -151,43 +206,79 @@ export class WriteEngine {
 
   /**
    * Build update payloads for batch write
-   * [DRAAD407] Simplified - no longer includes variant ID resolution
-   * (That's now handled by DirectWriteEngine on a per-assignment basis)
+   * [DRAAD413] KRITIEKE FIX: Nu async + variant_id wordt opgehaald uit database
    */
-  private buildUpdatePayloads(
+  private async buildUpdatePayloads(
     modified_slots: WorkbestandPlanning[],
     afl_run_id: string,
     rosterId: string
-  ): AssignmentUpdatePayload[] {
+  ): Promise<AssignmentUpdatePayload[]> {
     const payloads: AssignmentUpdatePayload[] = [];
 
-    for (const slot of modified_slots) {
-      // Extract required fields
-      const dateStr = slot.date instanceof Date 
-        ? slot.date.toISOString().split('T')[0]
-        : slot.date;
+    console.log(`[DRAAD413] Building payloads for ${modified_slots.length} modified slots...`);
 
-      const payload: AssignmentUpdatePayload = {
-        id: slot.id,
-        status: slot.status,
-        service_id: slot.service_id || null,
-        source: 'autofill',
-        blocked_by_date: slot.blocked_by_date
-          ? (slot.blocked_by_date instanceof Date
-              ? slot.blocked_by_date.toISOString().split('T')[0]
-              : slot.blocked_by_date)
-          : null,
-        blocked_by_dagdeel: slot.blocked_by_dagdeel || null,
-        blocked_by_service_id: slot.blocked_by_service_id || null,
-        constraint_reason: slot.constraint_reason || null,
-        previous_service_id: slot.previous_service_id || null,
-        roster_period_staffing_dagdelen_id: null, // [DRAAD407] Now handled by DirectWriteEngine
-      };
+    // [DRAAD413] Process slots in batches for variant_id lookup
+    const batch_size = 50;
+    for (let i = 0; i < modified_slots.length; i += batch_size) {
+      const batch = modified_slots.slice(i, i + batch_size);
+      
+      // Parallel variant_id lookups for this batch
+      const batch_promises = batch.map(async (slot) => {
+        // Extract required fields
+        const dateStr = slot.date instanceof Date 
+          ? slot.date.toISOString().split('T')[0]
+          : slot.date;
 
-      payloads.push(payload);
+        // [DRAAD413] Lookup variant_id if service is assigned
+        let variant_id: string | null = null;
+        if (slot.service_id && slot.team && slot.status === 1) {
+          variant_id = await getVariantId(
+            rosterId,
+            dateStr,
+            slot.dagdeel,
+            slot.service_id,
+            slot.team
+          );
+
+          if (!variant_id) {
+            console.warn('[DRAAD413] No variant_id found for assignment:', {
+              slot_id: slot.id,
+              date: dateStr,
+              dagdeel: slot.dagdeel,
+              service_id: slot.service_id,
+              team: slot.team,
+            });
+          }
+        }
+
+        const payload: AssignmentUpdatePayload = {
+          id: slot.id,
+          status: slot.status,
+          service_id: slot.service_id || null,
+          source: 'autofill',
+          blocked_by_date: slot.blocked_by_date
+            ? (slot.blocked_by_date instanceof Date
+                ? slot.blocked_by_date.toISOString().split('T')[0]
+                : slot.blocked_by_date)
+            : null,
+          blocked_by_dagdeel: slot.blocked_by_dagdeel || null,
+          blocked_by_service_id: slot.blocked_by_service_id || null,
+          constraint_reason: slot.constraint_reason || null,
+          previous_service_id: slot.previous_service_id || null,
+          roster_period_staffing_dagdelen_id: variant_id, // [DRAAD413] ✅ NOW WITH REAL VALUE!
+        };
+
+        return payload;
+      });
+
+      // Wait for batch to complete
+      const batch_payloads = await Promise.all(batch_promises);
+      payloads.push(...batch_payloads);
     }
 
-    console.log(`[WriteEngine] Built ${payloads.length} update payloads`);
+    const with_variant_id = payloads.filter(p => p.roster_period_staffing_dagdelen_id !== null).length;
+    console.log(`[DRAAD413] Built ${payloads.length} payloads, ${with_variant_id} with variant_id`);
+
     return payloads;
   }
 
@@ -239,6 +330,7 @@ export class WriteEngine {
 
   /**
    * Update a single roster_assignments record
+   * [DRAAD413] Now includes roster_period_staffing_dagdelen_id in update
    */
   private async updateSingleAssignment(
     payload: AssignmentUpdatePayload,
@@ -255,7 +347,7 @@ export class WriteEngine {
         blocked_by_service_id: payload.blocked_by_service_id,
         constraint_reason: payload.constraint_reason,
         previous_service_id: payload.previous_service_id,
-        roster_period_staffing_dagdelen_id: payload.roster_period_staffing_dagdelen_id,
+        roster_period_staffing_dagdelen_id: payload.roster_period_staffing_dagdelen_id, // [DRAAD413] ✅
         ort_run_id: afl_run_id,
         updated_at: new Date().toISOString(),
       })
@@ -313,13 +405,11 @@ export function getWriteEngine(): WriteEngine {
 
 /**
  * Export the main write function for direct use
- * [DRAAD407] DEPRECATED: Use DirectWriteEngine instead
  */
 export async function writeAflResultToDatabase(
   rosterId: string,
   workbestand_planning: WorkbestandPlanning[]
 ): Promise<WriteEngineResult> {
-  console.warn('[DRAAD407] writeAflResultToDatabase is deprecated. Use DirectWriteEngine instead.');
   const engine = getWriteEngine();
   return engine.writeModifiedSlots(rosterId, workbestand_planning);
 }
