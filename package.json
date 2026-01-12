@@ -1,6 +1,6 @@
 {
   "name": "rooster-app-final",
-  "version": "0.1.9-cache-bust-v10",
+  "version": "0.1.10-draad413-variant-fix",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -41,31 +41,39 @@
     "npm": ">=10.0.0"
   },
   "_deploy_metadata": {
-    "timestamp": "2026-01-07T20:33:00Z",
-    "draad": "DRAAD407_HOTFIX_TYPESCRIPT_FIX",
-    "version": "0.1.9-cache-bust-v10",
+    "timestamp": "2026-01-12T10:38:00Z",
+    "draad": "DRAAD413_VARIANT_ID_FIX",
+    "version": "0.1.10-draad413-variant-fix",
     "cache_bust": true,
-    "cache_bust_id": "1736268780000",
-    "date_now": 1736268780000,
-    "railway_trigger": "FORCE_DEPLOYMENT_v10_DRAAD407_HOTFIX_A2F9",
+    "cache_bust_id": "1736678280000",
+    "date_now": 1736678280000,
+    "railway_trigger": "FORCE_DEPLOYMENT_v11_DRAAD413_B7K3",
     "deployment_strategy": "cache-bust-with-date-now-plus-random",
     "fixes": [
-      "[DRAAD407-HOTFIX] TypeScript instanceof error fix in direct-write-engine.ts",
-      "Added safe date conversion with proper type narrowing",
-      "Prevents instanceof check on union types (string | Date)",
-      "Cache-bust ID: 1736268780000",
-      "Railway random trigger: FORCE_DEPLOYMENT_v10_DRAAD407_HOTFIX_A2F9",
-      "Version bump: 0.1.9-cache-bust-v10",
-      "Timestamp: 2026-01-07T20:33:00Z",
+      "[DRAAD413] KRITIEKE FIX: AFL schrijft nu variant_id naar roster_period_staffing_dagdelen_id",
+      "Toegevoegd: getVariantId() helper functie voor database lookup",
+      "buildUpdatePayloads() is nu async voor parallel variant_id resolving",
+      "Batch processing: 50 slots per batch voor optimale performance",
+      "Database trigger update invulling automatisch na variant_id schrijven",
+      "VERWACHTE RESULTAAT: 208 AFL assignments krijgen variant_id (was: 0)",
+      "VERWACHTE RESULTAAT: invulling stijgt naar 212 (4 pre + 208 AFL)",
+      "Cache-bust ID: 1736678280000",
+      "Railway random trigger: FORCE_DEPLOYMENT_v11_DRAAD413_B7K3",
+      "Version bump: 0.1.10-draad413-variant-fix",
+      "Timestamp: 2026-01-12T10:38:00Z",
       "Complete browser cache invalidation",
       "Automated Railway deployment trigger"
     ],
     "status": "READY_FOR_DEPLOYMENT",
-    "deployment_attempt": 10,
-    "reason": "TypeScript compilation error fix - convertDateToString() helper added",
-    "random_trigger": "A2F9",
+    "deployment_attempt": 11,
+    "reason": "AFL variant_id NULL probleem oplossing - database invulling nu correct",
+    "random_trigger": "B7K3",
     "verification_required": true,
-    "previous_error": "Type error: The left-hand side of an 'instanceof' expression must be of type 'any', an object type or a type parameter.",
-    "fix_applied": "Safe type narrowing using typeof checks and duck typing"
+    "previous_error": "roster_period_staffing_dagdelen_id bleef NULL voor AFL assignments, invulling werd niet geüpdatet",
+    "fix_applied": "Variant ID lookup toegevoegd aan buildUpdatePayloads() - parallel batch processing",
+    "test_queries": [
+      "SELECT COUNT(*) FROM roster_assignments WHERE status=1 AND source='autofill' AND roster_period_staffing_dagdelen_id IS NOT NULL;",
+      "SELECT SUM(invulling) FROM roster_period_staffing_dagdelen WHERE roster_id='0f11b51e-8519-452f-9b9a-fffe57d99438';"
+    ]
   }
 }
