@@ -4,7 +4,8 @@
  * 
  * OPDRACHT: AFL Rapport Uitbreiding - Ontbrekende Diensten Detail
  * Datum: 13 januari 2026
- * Cache-Bust: 2026-01-13T15:38:00Z
+ * Cache-Bust: 2026-01-13T15:38:50Z
+ * Build Fix: TypeScript error resolved
  * 
  * FUNCTIONALITEIT:
  * ✅ Query ontbrekende diensten uit roster_period_staffing_dagdelen
