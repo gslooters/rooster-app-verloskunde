@@ -3,11 +3,17 @@
  * 
  * Writes all modified planning slots from Fase 2+3 back to PostgreSQL via Supabase.
  * 
- * UPDATED [DRAAD413]: 
- * - KRITIEKE FIX: variant_id wordt nu WEL geschreven naar roster_period_staffing_dagdelen_id
- * - Toegevoegd: getVariantId() helper voor database lookup
- * - buildUpdatePayloads() is nu async voor variant_id resolving
- * - Parallel batch processing voor performance
+ * UPDATED [DRAAD414]: 
+ * - KRITIEKE FIX: Verwijderd variant_id lookup - laat database trigger het werk doen
+ * - roster_period_staffing_dagdelen_id wordt ALTIJD op null gezet
+ * - Database trigger update invulling op basis van date/dagdeel/service_id (GEEN team)
+ * - buildUpdatePayloads() is niet langer async (geen database lookups meer)
+ * - Veel simpeler en robuuster design
+ * 
+ * PREVIOUS [DRAAD413] FOUT: 
+ * - getVariantId() faalde door strict team matching
+ * - System services hebben multiple team variants → .single() crashte
+ * - Team mismatch gaf NULL variant_id → trigger vuurt niet
  * 
  * UPDATED [DRAAD407]: 
  * - Removed updateInvullingCounters() method (now in DirectWriteEngine)
@@ -20,13 +26,12 @@
  * - Batch operations for performance
  * - Full run tracking via ort_run_id / afl_run_id
  * - Comprehensive error handling
+ * - Database trigger handles invulling updates automatically
  * 
- * Performance target: 500-700ms
+ * Performance target: 300-500ms (improved from 500-700ms)
  * 
- * [DRAAD369] UPDATE: Now includes roster_period_staffing_dagdelen_id lookup
- * [DRAAD403B] FOUT 2 & 3 FIXES: Variant ID lookup + invulling update
+ * [DRAAD414] FIX: Simplified trigger-based invulling management
  * [DRAAD407] REFACTOR: Moved per-assignment writes to DirectWriteEngine
- * [DRAAD413] KRITIEKE FIX: variant_id null → echte waarde uit database
  * 
  * Cache-bust: ${Date.now()}
  */
@@ -54,7 +59,7 @@ interface AssignmentUpdatePayload {
   blocked_by_service_id?: string | null;
   constraint_reason?: Record<string, unknown> | null;
   previous_service_id?: string | null;
-  roster_period_staffing_dagdelen_id?: string | null; // [DRAAD413] NOW FILLED!
+  roster_period_staffing_dagdelen_id?: string | null; // [DRAAD414] ALWAYS NULL - trigger handles invulling
 }
 
 /**
@@ -72,63 +77,14 @@ export interface WriteEngineResult {
 }
 
 /**
- * [DRAAD413] Helper: Lookup variant ID from database
- * 
- * Matches roster_period_staffing_dagdelen record by:
- * - roster_id
- * - date
- * - dagdeel
- * - service_id
- * - team
- * 
- * Returns UUID of matching record, or null if not found
- */
-async function getVariantId(
-  rosterId: string,
-  date: string,
-  dagdeel: string,
-  serviceId: string,
-  team: string
-): Promise<string | null> {
-  try {
-    const { data, error } = await supabase
-      .from('roster_period_staffing_dagdelen')
-      .select('id')
-      .eq('roster_id', rosterId)
-      .eq('date', date)
-      .eq('dagdeel', dagdeel)
-      .eq('service_id', serviceId)
-      .eq('team', team)
-      .single();
-
-    if (error) {
-      console.warn('[DRAAD413] Variant ID lookup failed:', {
-        rosterId,
-        date,
-        dagdeel,
-        serviceId,
-        team,
-        error: error.message,
-      });
-      return null;
-    }
-
-    return data?.id || null;
-  } catch (err) {
-    console.warn('[DRAAD413] Variant ID lookup exception:', err);
-    return null;
-  }
-}
-
-/**
  * Main Database Writer Class
+ * [DRAAD414] SIMPLIFIED: No variant_id lookup - trigger-based invulling management
  * [DRAAD407] REFACTORED: Now handles only rooster_assignments batch updates
- * [DRAAD413] FIXED: Now includes variant_id lookup and writing
  */
 export class WriteEngine {
   /**
    * Write all modified planning slots
-   * [DRAAD413] UPDATED: Now properly resolves variant_id before writing
+   * [DRAAD414] SIMPLIFIED: Direct write without variant_id lookup
    */
   async writeModifiedSlots(
     rosterId: string,
@@ -156,8 +112,12 @@ export class WriteEngine {
         };
       }
 
-      // Step 2: Build update payloads (NOW WITH VARIANT_ID LOOKUP!)
-      const update_payloads = await this.buildUpdatePayloads(
+      console.log('[DRAAD414] AFL write starting - new trigger-based invulling pattern');
+      console.log(`[DRAAD414] ${modified_slots.length} assignments will be updated`);
+      console.log('[DRAAD414] Database trigger will automatically increment invulling counters');
+
+      // Step 2: Build update payloads (NOW SYNC - no database lookups!)
+      const update_payloads = this.buildUpdatePayloads(
         modified_slots,
         afl_run_id,
         rosterId
@@ -175,7 +135,8 @@ export class WriteEngine {
 
       const database_write_ms = performance.now() - startTime;
 
-      console.log(`[DRAAD413] AFL write complete: ${updated_count} assignments updated with variant_id`);
+      console.log(`[DRAAD414] AFL write complete: ${updated_count} assignments updated`);
+      console.log('[DRAAD414] Database trigger has updated invulling counters automatically');
 
       return {
         success: true,
@@ -206,78 +167,47 @@ export class WriteEngine {
 
   /**
    * Build update payloads for batch write
-   * [DRAAD413] KRITIEKE FIX: Nu async + variant_id wordt opgehaald uit database
+   * [DRAAD414] SIMPLIFIED: No async, no variant_id lookup - always set to null
+   * Database trigger will handle invulling updates based on date/dagdeel/service_id
    */
-  private async buildUpdatePayloads(
+  private buildUpdatePayloads(
     modified_slots: WorkbestandPlanning[],
     afl_run_id: string,
     rosterId: string
-  ): Promise<AssignmentUpdatePayload[]> {
+  ): AssignmentUpdatePayload[] {
     const payloads: AssignmentUpdatePayload[] = [];
 
-    console.log(`[DRAAD413] Building payloads for ${modified_slots.length} modified slots...`);
+    console.log(`[DRAAD414] Building payloads for ${modified_slots.length} modified slots...`);
 
-    // [DRAAD413] Process slots in batches for variant_id lookup
-    const batch_size = 50;
-    for (let i = 0; i < modified_slots.length; i += batch_size) {
-      const batch = modified_slots.slice(i, i + batch_size);
-      
-      // Parallel variant_id lookups for this batch
-      const batch_promises = batch.map(async (slot) => {
-        // Extract required fields
-        const dateStr = slot.date instanceof Date 
-          ? slot.date.toISOString().split('T')[0]
-          : slot.date;
+    for (const slot of modified_slots) {
+      // Extract date string
+      const dateStr = slot.date instanceof Date 
+        ? slot.date.toISOString().split('T')[0]
+        : slot.date;
 
-        // [DRAAD413] Lookup variant_id if service is assigned
-        let variant_id: string | null = null;
-        if (slot.service_id && slot.team && slot.status === 1) {
-          variant_id = await getVariantId(
-            rosterId,
-            dateStr,
-            slot.dagdeel,
-            slot.service_id,
-            slot.team
-          );
+      // [DRAAD414] SIMPLIFIED: Always set variant_id to null
+      // Database trigger will handle invulling updates based on date/dagdeel/service_id
+      const payload: AssignmentUpdatePayload = {
+        id: slot.id,
+        status: slot.status,
+        service_id: slot.service_id || null,
+        source: 'autofill',
+        blocked_by_date: slot.blocked_by_date
+          ? (slot.blocked_by_date instanceof Date
+              ? slot.blocked_by_date.toISOString().split('T')[0]
+              : slot.blocked_by_date)
+          : null,
+        blocked_by_dagdeel: slot.blocked_by_dagdeel || null,
+        blocked_by_service_id: slot.blocked_by_service_id || null,
+        constraint_reason: slot.constraint_reason || null,
+        previous_service_id: slot.previous_service_id || null,
+        roster_period_staffing_dagdelen_id: null, // [DRAAD414] ✅ ALWAYS NULL - trigger handles it
+      };
 
-          if (!variant_id) {
-            console.warn('[DRAAD413] No variant_id found for assignment:', {
-              slot_id: slot.id,
-              date: dateStr,
-              dagdeel: slot.dagdeel,
-              service_id: slot.service_id,
-              team: slot.team,
-            });
-          }
-        }
-
-        const payload: AssignmentUpdatePayload = {
-          id: slot.id,
-          status: slot.status,
-          service_id: slot.service_id || null,
-          source: 'autofill',
-          blocked_by_date: slot.blocked_by_date
-            ? (slot.blocked_by_date instanceof Date
-                ? slot.blocked_by_date.toISOString().split('T')[0]
-                : slot.blocked_by_date)
-            : null,
-          blocked_by_dagdeel: slot.blocked_by_dagdeel || null,
-          blocked_by_service_id: slot.blocked_by_service_id || null,
-          constraint_reason: slot.constraint_reason || null,
-          previous_service_id: slot.previous_service_id || null,
-          roster_period_staffing_dagdelen_id: variant_id, // [DRAAD413] ✅ NOW WITH REAL VALUE!
-        };
-
-        return payload;
-      });
-
-      // Wait for batch to complete
-      const batch_payloads = await Promise.all(batch_promises);
-      payloads.push(...batch_payloads);
+      payloads.push(payload);
     }
 
-    const with_variant_id = payloads.filter(p => p.roster_period_staffing_dagdelen_id !== null).length;
-    console.log(`[DRAAD413] Built ${payloads.length} payloads, ${with_variant_id} with variant_id`);
+    console.log(`[DRAAD414] Built ${payloads.length} payloads (all with variant_id=null for trigger-based updates)`);
 
     return payloads;
   }
@@ -330,7 +260,7 @@ export class WriteEngine {
 
   /**
    * Update a single roster_assignments record
-   * [DRAAD413] Now includes roster_period_staffing_dagdelen_id in update
+   * [DRAAD414] roster_period_staffing_dagdelen_id is always null - trigger handles invulling
    */
   private async updateSingleAssignment(
     payload: AssignmentUpdatePayload,
@@ -347,7 +277,7 @@ export class WriteEngine {
         blocked_by_service_id: payload.blocked_by_service_id,
         constraint_reason: payload.constraint_reason,
         previous_service_id: payload.previous_service_id,
-        roster_period_staffing_dagdelen_id: payload.roster_period_staffing_dagdelen_id, // [DRAAD413] ✅
+        roster_period_staffing_dagdelen_id: payload.roster_period_staffing_dagdelen_id, // [DRAAD414] ✅ NULL
         ort_run_id: afl_run_id,
         updated_at: new Date().toISOString(),
       })
