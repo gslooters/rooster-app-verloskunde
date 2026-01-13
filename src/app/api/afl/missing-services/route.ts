@@ -4,7 +4,7 @@
  * 
  * OPDRACHT: AFL Rapport Uitbreiding - Ontbrekende Diensten Detail
  * Datum: 13 januari 2026
- * Cache-Bust: 2026-01-13T15:34:30Z
+ * Cache-Bust: 2026-01-13T15:38:00Z
  * 
  * FUNCTIONALITEIT:
  * ✅ Query ontbrekende diensten uit roster_period_staffing_dagdelen
@@ -75,6 +75,88 @@ function getDagdeelDisplay(dagdeel: string): string {
 }
 
 /**
+ * Query missing services from database
+ * Tries RPC first, falls back to direct SQL query
+ */
+async function queryMissingServices(rosterId: string) {
+  console.log(`[MISSING-SERVICES] 🔍 Starting query for roster: ${rosterId.substring(0, 12)}...`);
+  
+  try {
+    // Try RPC call first
+    console.log('[MISSING-SERVICES] 📋 Attempting RPC call...');
+    const { data: rpcData, error: rpcError } = await supabase.rpc(
+      'get_missing_services',
+      { p_roster_id: rosterId }
+    );
+
+    if (rpcError) {
+      console.warn(`[MISSING-SERVICES] ⚠️ RPC error: ${rpcError.message}`);
+      throw new Error(`RPC failed: ${rpcError.message}`);
+    }
+
+    if (rpcData) {
+      console.log(`[MISSING-SERVICES] ✅ RPC successful - got ${rpcData.length} records`);
+      return rpcData;
+    }
+  } catch (rpcErr) {
+    console.log(`[MISSING-SERVICES] 📊 RPC not available, using fallback direct query`);
+  }
+
+  // Fallback: Direct SQL query if RPC doesn't exist
+  try {
+    console.log('[MISSING-SERVICES] 🔍 Executing direct database query...');
+    
+    const { data, error } = await supabase
+      .from('roster_period_staffing_dagdelen')
+      .select(`
+        date,
+        dagdeel,
+        team,
+        aantal,
+        invulling,
+        service_id,
+        service_types!inner (code, naam)
+      `)
+      .eq('roster_id', rosterId)
+      .not('service_id', 'is', null);
+
+    if (error) {
+      console.error(`[MISSING-SERVICES] ❌ Direct query error: ${error.message}`);
+      throw error;
+    }
+
+    if (!data) {
+      console.warn('[MISSING-SERVICES] ⚠️ No data returned from direct query');
+      return [];
+    }
+
+    console.log(`[MISSING-SERVICES] ✅ Direct query successful - got ${data.length} records`);
+
+    // Calculate missing and filter
+    const filtered = (data || []).map((row: any) => {
+      const benodigd = row.aantal || 0;
+      const ingepland = row.invulling || 0;
+      const ontbrekend_aantal = benodigd - ingepland;
+      
+      return {
+        date: row.date,
+        dagdeel: row.dagdeel,
+        team: row.team,
+        dienst_code: row.service_types?.code || 'ONBEKEND',
+        ontbrekend_aantal
+      };
+    }).filter((r: any) => r.ontbrekend_aantal > 0);
+
+    console.log(`[MISSING-SERVICES] 📊 Filtered to ${filtered.length} rows with ontbrekend > 0`);
+    return filtered;
+  } catch (directErr) {
+    const errorMsg = directErr instanceof Error ? directErr.message : String(directErr);
+    console.error(`[MISSING-SERVICES] ❌ Direct query failed: ${errorMsg}`);
+    throw new Error(`Database query failed: ${errorMsg}`);
+  }
+}
+
+/**
  * POST handler for missing services query
  */
 export async function POST(request: NextRequest) {
@@ -98,61 +180,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`[MISSING-SERVICES] 🔍 Querying roster: ${rosterId.substring(0, 12)}...`);
+    console.log(`[MISSING-SERVICES] 📥 Received roster_id: ${rosterId.substring(0, 12)}...`);
 
-    // Execute SQL query to get missing services
-    // Query validated: see OPDRACHTAFLRapportUitbreiding.txt
-    const { data: rawData, error: queryError } = await supabase.rpc(
-      'get_missing_services',
-      { p_roster_id: rosterId }
-    ).catch(async () => {
-      // Fallback: Direct SQL query if RPC doesn't exist
-      console.log('[MISSING-SERVICES] 📊 Using direct SQL query (RPC not found)');
-      
-      const { data, error } = await supabase
-        .from('roster_period_staffing_dagdelen')
-        .select(`
-          date,
-          dagdeel,
-          team,
-          aantal,
-          invulling,
-          service_id,
-          service_types!inner (code, naam)
-        `)
-        .eq('roster_id', rosterId)
-        .not('service_id', 'is', null);
-
-      if (error) throw error;
-
-      // Calculate missing and filter
-      const filtered = (data || []).map((row: any) => {
-        const benodigd = row.aantal || 0;
-        const ingepland = row.invulling || 0;
-        const ontbrekend_aantal = benodigd - ingepland;
-        
-        return {
-          date: row.date,
-          dagdeel: row.dagdeel,
-          team: row.team,
-          dienst_code: row.service_types?.code || 'ONBEKEND',
-          ontbrekend_aantal
-        };
-      }).filter((r: any) => r.ontbrekend_aantal > 0);
-
-      return { data: filtered, error: null };
-    });
-
-    if (queryError) {
-      console.error(`[MISSING-SERVICES] ❌ Query error: ${queryError.message}`);
-      return NextResponse.json(
-        { success: false, error: `Query failed: ${queryError.message}` },
-        { status: 500 }
-      );
-    }
-
-    const missingServices = rawData || [];
-    console.log(`[MISSING-SERVICES] ✅ Found ${missingServices.length} missing services`);
+    // Execute query with fallback
+    const missingServices = await queryMissingServices(rosterId);
 
     // Sort by date, dagdeel, team, dienst_code
     missingServices.sort((a: any, b: any) => {
@@ -167,6 +198,8 @@ export async function POST(request: NextRequest) {
       
       return (a.dienst_code || '').localeCompare(b.dienst_code || '');
     });
+
+    console.log(`[MISSING-SERVICES] ✅ Data sorted - ${missingServices.length} records total`);
 
     // Group by date
     const groupedByDate: { [key: string]: any } = {};
