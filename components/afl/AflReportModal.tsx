@@ -1,12 +1,23 @@
 'use client';
 
-import React from 'react';
-import { X, AlertCircle, CheckCircle2, TrendingDown } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, AlertCircle, CheckCircle2, TrendingDown, Printer } from 'lucide-react';
 
 /**
  * AFL Report Modal Component - DRAAD406F3: Optie B Implementation
+ * UPDATED: 13 januari 2026 - AFL Rapport Uitbreiding
  * 
- * DRAAD406F3 NIEUW COMPONENT:
+ * NIEUWE FEATURES:
+ * ✅ Detailoverzicht ontbrekende diensten per dag
+ * ✅ Groupering per datum met dagdeel/team/dienstcode
+ * ✅ PDF export functionaliteit via window.print()
+ * ✅ Print-friendly styling met vaste kopregel
+ * ✅ Nederlandse datum formatting
+ * ✅ Kleurcodering dagdelen (M=geel, O=oranje, N=blauw)
+ * ✅ Loading states en error handling
+ * ✅ Cache-busting met Date.now()
+ * 
+ * DRAAD406F3 BESTAANDE FEATURES:
  * 1. ✅ CREATED: AflReportModal.tsx - Volledig nieuw component
  * 2. ✅ IMPLEMENTED: PDF-vriendelijke rapport weergave
  * 3. ✅ ADDED: Statistieken uit result.report.summary
@@ -30,25 +41,21 @@ import { X, AlertCircle, CheckCircle2, TrendingDown } from 'lucide-react';
  * DATA BRON (Vraag 1):
  * - Gebruikt result.report object uit ExecutionResult
  * - Bevat: summary { coverage_percent, total_planned, total_required }
+ * - Fetcht missing services detail via /api/afl/missing-services
  * 
  * RAPPORT DETAIL LEVEL (Vraag 2):
  * - Bezettingsgraad percentage
  * - Diensten ingepland vs required
  * - Waarschuwingen voor onderbezetting
- * - Overzicht nog niet ingevulde diensten (berekend op basis van data)
+ * - **NIEUW**: Detailoverzicht ontbrekende diensten per dag
+ * - **NIEUW**: PDF export functionaliteit
  * 
  * STYLING (Vraag 3):
  * - PDF-vriendelijk (geen javascript animaties, printbare kleuren)
  * - Print-optimized layout
  * - Kleurcodering: Groen (OK), Oranje (Waarschuwing), Rood (Kritiek)
- * 
- * FIX DETAILS:
- * Problem: z-55 en z-60 zijn GEEN geldige Tailwind CSS klassen
- * Tailwind standaard z-index waarden:
- *   - z-0, z-10, z-20, z-30, z-40, z-50, z-auto
- *   - z-55, z-60, etc. bestaan NIET
- * Solution: Gebruik arbitrary values: z-[9998] en z-[9999]
- * Result: AflReportModal appear BOVEN AflProgressModal (z-50)
+ * - **NIEUW**: Print header met rooster info
+ * - **NIEUW**: Page break control voor groepering
  */
 
 interface AflReportModalProps {
@@ -57,7 +64,81 @@ interface AflReportModalProps {
   onClose: () => void;
 }
 
+interface MissingService {
+  date: string;
+  dagdeel: string;
+  dagdeel_display: string;
+  team: string;
+  dienst_code: string;
+  ontbrekend_aantal: number;
+}
+
+interface DayGroup {
+  date: string;
+  date_formatted: string;
+  total_missing: number;
+  services: MissingService[];
+}
+
+interface MissingServicesData {
+  success: boolean;
+  roster_id: string;
+  total_missing: number;
+  missing_services: any[];
+  grouped_by_date: { [key: string]: DayGroup };
+}
+
 export function AflReportModal({ isOpen, reportData, onClose }: AflReportModalProps) {
+  const [missingServices, setMissingServices] = useState<MissingServicesData | null>(null);
+  const [loadingMissing, setLoadingMissing] = useState(true);
+  const [errorMissing, setErrorMissing] = useState<string | null>(null);
+
+  // Fetch missing services when modal opens
+  useEffect(() => {
+    if (isOpen && reportData?.rosterId) {
+      fetchMissingServices(reportData.rosterId);
+    }
+  }, [isOpen, reportData?.rosterId]);
+
+  async function fetchMissingServices(rosterId: string) {
+    setLoadingMissing(true);
+    setErrorMissing(null);
+    
+    try {
+      console.log('[AFL-REPORT] Fetching missing services for roster:', rosterId);
+      
+      const response = await fetch(`/api/afl/missing-services?cb=${Date.now()}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roster_id: rosterId }),
+        cache: 'no-store'
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to fetch missing services');
+      }
+
+      console.log('[AFL-REPORT] Missing services loaded:', data.total_missing);
+      setMissingServices(data);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('[AFL-REPORT] Error fetching missing services:', errorMessage);
+      setErrorMissing(errorMessage);
+    } finally {
+      setLoadingMissing(false);
+    }
+  }
+
+  function handlePrint() {
+    window.print();
+  }
+
   if (!isOpen) {
     return null;
   }
@@ -101,18 +182,49 @@ export function AflReportModal({ isOpen, reportData, onClose }: AflReportModalPr
     });
   }
 
+  // Dagdeel kleuren
+  const getDagdeelColor = (dagdeel: string) => {
+    if (dagdeel === 'M') return 'bg-yellow-100 text-yellow-800 border-yellow-300';
+    if (dagdeel === 'O') return 'bg-orange-100 text-orange-800 border-orange-300';
+    if (dagdeel === 'N') return 'bg-indigo-100 text-indigo-800 border-indigo-300';
+    return 'bg-gray-100 text-gray-800 border-gray-300';
+  };
+
+  const getDagdeelEmoji = (dagdeel: string) => {
+    if (dagdeel === 'M') return '🌅';
+    if (dagdeel === 'O') return '🌆';
+    if (dagdeel === 'N') return '🌙';
+    return '⏰';
+  };
+
   return (
     <>
+      {/* Print Header - Only visible when printing */}
+      <div className="print-header hidden print:block">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">📋 AFL Roostering Rapport</h1>
+            <p className="text-sm text-gray-700 mt-1">
+              Roosterperiode: {reportData?.period_start || 'N/A'} - {reportData?.period_end || 'N/A'}
+            </p>
+          </div>
+          <div className="text-right text-sm text-gray-700">
+            <p className="font-semibold">Run ID: {reportData?.afl_run_id?.substring(0, 12) || 'N/A'}...</p>
+            <p>Gegenereerd: {new Date().toLocaleString('nl-NL')}</p>
+          </div>
+        </div>
+      </div>
+
       {/* Overlay - FIX: z-[9998] in plaats van ongeldig z-55 */}
-      <div className="fixed inset-0 z-[9998] bg-black/30" />
+      <div className="fixed inset-0 z-[9998] bg-black/30 no-print" />
 
       {/* Report Modal - FIX: z-[9999] in plaats van ongeldig z-60 */}
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-        <div className="relative w-full max-w-4xl bg-white rounded-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 print:p-0 print:block print:relative">
+        <div className="relative w-full max-w-4xl bg-white rounded-lg shadow-2xl max-h-[90vh] overflow-y-auto print:max-h-none print:overflow-visible print:shadow-none print:rounded-none">
           {/* Header - Print-friendly */}
-          <div className="sticky top-0 bg-white border-b-2 border-gray-300 px-8 py-6 flex items-center justify-between bg-gradient-to-r from-slate-50 to-gray-50">
+          <div className="sticky top-0 bg-white border-b-2 border-gray-300 px-8 py-6 flex items-center justify-between bg-gradient-to-r from-slate-50 to-gray-50 no-print">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">📄 AFL Rapport</h1>
+              <h1 className="text-2xl font-bold text-gray-900">📋 AFL Rapport</h1>
               <p className="text-sm text-gray-600 mt-1">
                 {reportData?.afl_run_id ? `Run ID: ${reportData.afl_run_id.substring(0, 8)}...` : 'Rapport Details'}
               </p>
@@ -126,7 +238,7 @@ export function AflReportModal({ isOpen, reportData, onClose }: AflReportModalPr
           </div>
 
           {/* Content - PDF-vriendelijk */}
-          <div className="px-8 py-6 space-y-8">
+          <div className="px-8 py-6 space-y-8 print:pt-32">
             {/* Status Summary Card */}
             <div className={`${statusColor.bg} border-2 ${statusColor.border} rounded-lg p-6`}>
               <div className="flex items-start justify-between">
@@ -173,7 +285,7 @@ export function AflReportModal({ isOpen, reportData, onClose }: AflReportModalPr
 
             {/* Warnings Section */}
             {warnings.length > 0 && (
-              <div className="space-y-3">
+              <div className="space-y-3 page-break-avoid">
                 <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                   <AlertCircle size={20} className="text-orange-600" />
                   Waarschuwingen & Opmerkingen
@@ -210,11 +322,73 @@ export function AflReportModal({ isOpen, reportData, onClose }: AflReportModalPr
               </div>
             )}
 
-            {/* Overzicht Nog In Te Vullen Diensten */}
-            <div className="space-y-3">
+            {/* NIEUW: Detailoverzicht Ontbrekende Diensten */}
+            <div className="space-y-3 page-break-avoid">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                📋 Detailoverzicht Ontbrekende Diensten
+              </h3>
+              
+              {loadingMissing ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto no-print"></div>
+                  <p className="text-gray-600 mt-4">Laden...</p>
+                </div>
+              ) : errorMissing ? (
+                <div className="bg-red-50 border-2 border-red-200 rounded-lg p-6 text-center">
+                  <AlertCircle size={32} className="mx-auto text-red-600 mb-2" />
+                  <p className="text-lg font-semibold text-red-800">Fout bij laden</p>
+                  <p className="text-sm text-red-700 mt-2">{errorMissing}</p>
+                </div>
+              ) : missingServices?.total_missing === 0 ? (
+                <div className="bg-green-50 border-2 border-green-200 rounded-lg p-6 text-center">
+                  <CheckCircle2 size={32} className="mx-auto text-green-600 mb-2" />
+                  <p className="text-lg font-semibold text-green-800">
+                    Alle diensten zijn ingevuld!
+                  </p>
+                  <p className="text-sm text-green-700 mt-2">
+                    Geen nog in te vullen diensten - het rooster is compleet.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {Object.entries(missingServices?.grouped_by_date || {}).map(([date, dayData]) => (
+                    <div key={date} className="day-group bg-white border-2 border-gray-300 rounded-lg p-4 page-break-avoid">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-bold text-gray-900">
+                          📅 {dayData.date_formatted}
+                        </h4>
+                        <span className="text-sm bg-blue-100 text-blue-800 px-3 py-1 rounded-full font-semibold">
+                          {dayData.total_missing} {dayData.total_missing === 1 ? 'dienst' : 'diensten'}
+                        </span>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        {dayData.services.map((service: MissingService, idx: number) => (
+                          <div key={idx} className="flex items-center gap-3 pl-4 py-2 border-l-4 border-blue-400 bg-gray-50 rounded-r">
+                            <span className={`px-3 py-1 rounded text-sm font-semibold border-2 ${getDagdeelColor(service.dagdeel)}`}>
+                              {getDagdeelEmoji(service.dagdeel)} {service.dagdeel_display}
+                            </span>
+                            <span className="text-gray-700">Team <strong>{service.team}</strong></span>
+                            <span className="px-2 py-1 bg-gray-200 rounded text-xs font-mono font-bold border border-gray-400">
+                              {service.dienst_code}
+                            </span>
+                            <span className="text-red-600 font-semibold ml-auto">
+                              {service.ontbrekend_aantal} nodig
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Overzicht Nog In Te Vullen Diensten (Samenvatting) */}
+            <div className="space-y-3 page-break-avoid">
               <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                 <TrendingDown size={20} className="text-blue-600" />
-                Nog In Te Vullen Diensten
+                Samenvatting Nog In Te Vullen
               </h3>
               
               {totalUnfilled === 0 ? (
@@ -268,7 +442,7 @@ export function AflReportModal({ isOpen, reportData, onClose }: AflReportModalPr
 
             {/* Aanbevelingen */}
             {totalUnfilled > 0 && (
-              <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-6 space-y-3">
+              <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-6 space-y-3 page-break-avoid">
                 <h3 className="text-lg font-semibold text-blue-900 flex items-center gap-2">
                   💡 Aanbevelingen
                 </h3>
@@ -291,19 +465,100 @@ export function AflReportModal({ isOpen, reportData, onClose }: AflReportModalPr
           </div>
 
           {/* Footer - Sticky */}
-          <div className="sticky bottom-0 border-t-2 border-gray-300 bg-gray-50 px-8 py-4 flex justify-between items-center">
+          <div className="sticky bottom-0 border-t-2 border-gray-300 bg-gray-50 px-8 py-4 flex justify-between items-center no-print">
             <p className="text-xs text-gray-600">
-              📋 Dit rapport is PDF-vriendelijk en kan afgedrukt of opgeslagen worden
+              📋 Dit rapport kan geëxporteerd worden naar PDF
             </p>
-            <button
-              onClick={onClose}
-              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors shadow-md"
-            >
-              ← Terug
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={handlePrint}
+                className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors shadow-md flex items-center gap-2"
+              >
+                <Printer size={18} />
+                Afdrukken / PDF
+              </button>
+              <button
+                onClick={onClose}
+                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors shadow-md"
+              >
+                ← Terug
+              </button>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Print Styles */}
+      <style jsx global>{`
+        @media print {
+          /* Verberg niet-print elementen */
+          .no-print {
+            display: none !important;
+          }
+          
+          /* Toon print-only elementen */
+          .print\\:block {
+            display: block !important;
+          }
+          
+          /* Print header styling */
+          .print-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: white;
+            border-bottom: 2px solid #333;
+            padding: 15mm;
+            z-index: 10000;
+          }
+          
+          /* Body aanpassingen */
+          body {
+            background: white !important;
+            margin: 0;
+            padding: 0;
+          }
+          
+          /* Modal aanpassingen voor print */
+          .fixed.inset-0.z-\\[9999\\] {
+            position: relative !important;
+            z-index: auto !important;
+            padding: 0 !important;
+            display: block !important;
+          }
+          
+          /* Voorkom page breaks binnen groepen */
+          .day-group,
+          .page-break-avoid {
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+          
+          /* Pagina marges */
+          @page {
+            margin: 20mm 15mm;
+            size: A4 portrait;
+          }
+          
+          /* Eerste sectie ruimte voor header */
+          .print\\:pt-32 {
+            padding-top: 32mm !important;
+          }
+          
+          /* Verberg animaties */
+          .animate-spin {
+            display: none !important;
+          }
+          
+          /* Zorg dat kleuren behouden blijven */
+          * {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+            color-adjust: exact;
+          }
+        }
+      `}</style>
     </>
   );
 }
