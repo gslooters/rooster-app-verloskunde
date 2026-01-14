@@ -6,14 +6,16 @@
  * Datum: 13 januari 2026
  * 
  * ============================================================
- * DRAAD415 FIX - 14 januari 2026 22:09 CET
- * Cache-Bust: 1768422195
- * Railway Trigger: FORCE-REBUILD-MISSING-SERVICES-FIX-V2
- * Issue: Route in verkeerde directory (src/app vs app)
- * Fix: Verplaatst naar app/api/afl/missing-services/
+ * DRAAD415 FIX V3 - 14 januari 2026 22:47 CET
+ * Cache-Bust: 1768423620
+ * Railway Trigger: FORCE-REBUILD-MISSING-SERVICES-FIX-V3
+ * Issue: Build-time Supabase credential validation causes HTTP 500
+ * Fix: Moved credential check to runtime only (lazy initialization)
+ * Implementation: Route-level guard + dynamic=force-dynamic
  * ============================================================
  * 
  * FUNCTIONALITEIT:
+ * ✅ Build-safe: Credentials validated at runtime only, not at build
  * ✅ Query ontbrekende diensten uit roster_period_staffing_dagdelen
  * ✅ Join met service_types voor dienstcodes
  * ✅ Groupeer per datum met subtotalen
@@ -38,38 +40,50 @@ export const runtime = 'nodejs';
 export const revalidate = 0;
 
 import { NextResponse, NextRequest } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 
-// DRAAD415 FIX V2: Unique build markers for Railway deployment verification
-const DRAAD415_BUILD_ID = 'DRAAD415-FIX-V2-1768422195';
-const DRAAD415_DEPLOY_TIMESTAMP = '2026-01-14T22:09:00Z';
-const DRAAD415_MARKER = `DRAAD415-MISSING-SERVICES-${Date.now()}`;
+// DRAAD415 FIX V3: Lazy Supabase initialization
+let supabaseClient: any = null;
+let initError: string | null = null;
 
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+function getSupabaseClient() {
+  if (supabaseClient) return supabaseClient;
+  if (initError) throw new Error(initError);
 
-if (!supabaseUrl || !supabaseKey) {
-  console.error('❌ [MISSING-SERVICES] Missing Supabase credentials');
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error('Supabase credentials not configured in Railway environment');
+    }
+
+    const { createClient } = require('@supabase/supabase-js');
+    supabaseClient = createClient(supabaseUrl, supabaseKey);
+    
+    console.log('[MISSING-SERVICES] ✅ Supabase client initialized at runtime');
+    return supabaseClient;
+  } catch (error) {
+    initError = error instanceof Error ? error.message : String(error);
+    console.error('[MISSING-SERVICES] ❌ Supabase initialization failed:', initError);
+    throw error;
+  }
 }
 
-const supabase = createClient(supabaseUrl, supabaseKey);
+// DRAAD415 FIX V3: Enhanced startup logging for deployment verification
+const DRAAD415_BUILD_ID = 'DRAAD415-FIX-V3-1768423620';
+const DRAAD415_DEPLOY_TIMESTAMP = '2026-01-14T22:47:00Z';
 
-// DRAAD415 FIX V2: Enhanced startup logging for deployment verification
 console.log('\n' + '='.repeat(80));
-console.log('🚀 [DRAAD415-FIX-V2] MISSING SERVICES API ROUTE LOADED');
-console.log('📍 [DRAAD415-FIX-V2] Route path: /api/afl/missing-services');
-console.log('📂 [DRAAD415-FIX-V2] File location: app/api/afl/missing-services/route.ts');
-console.log('⏰ [DRAAD415-FIX-V2] Load timestamp:', new Date().toISOString());
-console.log('🔖 [DRAAD415-FIX-V2] Build ID:', DRAAD415_BUILD_ID);
-console.log('📅 [DRAAD415-FIX-V2] Deploy timestamp:', DRAAD415_DEPLOY_TIMESTAMP);
-console.log('🎯 [DRAAD415-FIX-V2] Runtime marker:', DRAAD415_MARKER);
-console.log('🏗️  [DRAAD415-FIX-V2] Runtime: nodejs');
-console.log('🔄 [DRAAD415-FIX-V2] Dynamic: force-dynamic');
-console.log('✅ [DRAAD415-FIX-V2] Route now in correct directory!');
+console.log('🚀 [DRAAD415-FIX-V3] MISSING SERVICES API ROUTE LOADED');
+console.log('📍 [DRAAD415-FIX-V3] Route path: /api/afl/missing-services');
+console.log('📂 [DRAAD415-FIX-V3] File location: app/api/afl/missing-services/route.ts');
+console.log('⏰ [DRAAD415-FIX-V3] Load timestamp:', new Date().toISOString());
+console.log('🔖 [DRAAD415-FIX-V3] Build ID:', DRAAD415_BUILD_ID);
+console.log('📅 [DRAAD415-FIX-V3] Deploy timestamp:', DRAAD415_DEPLOY_TIMESTAMP);
+console.log('🏗️  [DRAAD415-FIX-V3] Runtime: nodejs + force-dynamic');
+console.log('🔄 [DRAAD415-FIX-V3] Supabase: Lazy initialization (build-safe)');
+console.log('✅ [DRAAD415-FIX-V3] Route ready for runtime requests!');
 console.log('='.repeat(80) + '\n');
-
-console.log('[MISSING-SERVICES] ✅ Missing services route loaded at:', new Date().toISOString());
 
 /**
  * Helper: Format date to Dutch format (e.g., "Dinsdag 26 november 2025")
@@ -105,6 +119,8 @@ function getDagdeelDisplay(dagdeel: string): string {
  * Tries RPC first, falls back to direct SQL query
  */
 async function queryMissingServices(rosterId: string) {
+  const supabase = getSupabaseClient();
+  
   console.log(`[MISSING-SERVICES] 🔍 Starting query for roster: ${rosterId.substring(0, 12)}...`);
   
   try {
@@ -192,8 +208,8 @@ export async function POST(request: NextRequest) {
   console.log(`[MISSING-SERVICES] 📋 Missing services request started`);
   console.log(`[MISSING-SERVICES] 🔄 Cache ID: ${cacheId}`);
   console.log(`[MISSING-SERVICES] 🕐 Timestamp: ${new Date().toISOString()}`);
-  console.log(`[DRAAD415-FIX-V2] 🔖 Build ID: ${DRAAD415_BUILD_ID}`);
-  console.log(`[DRAAD415-FIX-V2] 🎯 Route is active and responding!`);
+  console.log(`[DRAAD415-FIX-V3] 🔖 Build ID: ${DRAAD415_BUILD_ID}`);
+  console.log(`[DRAAD415-FIX-V3] 🎯 Route is active and responding!`);
 
   try {
     // Parse request body
@@ -264,7 +280,7 @@ export async function POST(request: NextRequest) {
     console.log(`[MISSING-SERVICES] 📊 Total missing: ${totalMissing}`);
     console.log(`${'='.repeat(80)}\n`);
 
-    // Return response with DRAAD415-FIX-V2 marker
+    // Return response with DRAAD415-FIX-V3 marker
     return NextResponse.json(
       {
         success: true,
@@ -273,7 +289,7 @@ export async function POST(request: NextRequest) {
         missing_services: missingServices,
         grouped_by_date: groupedByDate,
         _build_info: {
-          draad415_fix_v2: true,
+          draad415_fix_v3: true,
           build_id: DRAAD415_BUILD_ID,
           deploy_timestamp: DRAAD415_DEPLOY_TIMESTAMP
         }
@@ -299,7 +315,7 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         error: `Internal server error: ${errorMessage}`,
-        _build_info: { draad415_fix_v2: true, build_id: DRAAD415_BUILD_ID }
+        _build_info: { draad415_fix_v3: true, build_id: DRAAD415_BUILD_ID }
       },
       { status: 500 }
     );
@@ -310,12 +326,12 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   const rosterId = request.nextUrl.searchParams.get('roster_id');
   
-  // DRAAD415-FIX-V2: Health check endpoint
+  // DRAAD415-FIX-V3: Health check endpoint (no Supabase needed)
   if (!rosterId) {
     return NextResponse.json(
       { 
         success: true, 
-        message: 'Missing services endpoint is active - DRAAD415-FIX-V2',
+        message: 'Missing services endpoint is active - DRAAD415-FIX-V3',
         build_id: DRAAD415_BUILD_ID,
         deploy_timestamp: DRAAD415_DEPLOY_TIMESTAMP,
         file_location: 'app/api/afl/missing-services/route.ts',
