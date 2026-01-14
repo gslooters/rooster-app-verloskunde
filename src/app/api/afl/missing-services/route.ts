@@ -4,8 +4,9 @@
  * 
  * OPDRACHT: AFL Rapport Uitbreiding - Ontbrekende Diensten Detail
  * Datum: 13 januari 2026
- * Cache-Bust: 2026-01-13T15:38:50Z
+ * Cache-Bust: 2026-01-14T16:13:00Z
  * Build Fix: TypeScript error resolved
+ * Deployment: DRAAD415 - Force rebuild with verification
  * 
  * FUNCTIONALITEIT:
  * ✅ Query ontbrekende diensten uit roster_period_staffing_dagdelen
@@ -34,6 +35,9 @@ export const revalidate = 0;
 import { NextResponse, NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+// DRAAD415: Runtime verification marker
+const DRAAD415_MARKER = `DRAAD415-MISSING-SERVICES-${Date.now()}`;
+
 // Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -43,6 +47,16 @@ if (!supabaseUrl || !supabaseKey) {
 }
 
 const supabase = createClient(supabaseUrl, supabaseKey);
+
+// DRAAD415: Enhanced startup logging
+console.log('\n' + '='.repeat(80));
+console.log('🚀 [DRAAD415] MISSING SERVICES API ROUTE LOADED');
+console.log('📍 [DRAAD415] Route path: /api/afl/missing-services');
+console.log('⏰ [DRAAD415] Load timestamp:', new Date().toISOString());
+console.log('🔖 [DRAAD415] Marker:', DRAAD415_MARKER);
+console.log('🏗️  [DRAAD415] Runtime: nodejs');
+console.log('🔄 [DRAAD415] Dynamic: force-dynamic');
+console.log('='.repeat(80) + '\n');
 
 console.log('[MISSING-SERVICES] ✅ Missing services route loaded at:', new Date().toISOString());
 
@@ -167,6 +181,7 @@ export async function POST(request: NextRequest) {
   console.log(`[MISSING-SERVICES] 📋 Missing services request started`);
   console.log(`[MISSING-SERVICES] 🔄 Cache ID: ${cacheId}`);
   console.log(`[MISSING-SERVICES] 🕐 Timestamp: ${new Date().toISOString()}`);
+  console.log(`[DRAAD415] 🔖 Route is active and responding`);
 
   try {
     // Parse request body
