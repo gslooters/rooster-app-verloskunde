@@ -5,8 +5,8 @@ import { X, AlertCircle, CheckCircle2, TrendingDown, Printer } from 'lucide-reac
 
 /**
  * AFL Report Modal Component - DRAAD406F3: Optie B Implementation
- * UPDATED: 13 januari 2026 - AFL Rapport Uitbreiding
- * 
+ * UPDATED: 14 januari 2026 - DRAAD415 HTTP 404 FIX
+ *
  * NIEUWE FEATURES:
  * ✅ Detailoverzicht ontbrekende diensten per dag
  * ✅ Groupering per datum met dagdeel/team/dienstcode
@@ -15,8 +15,13 @@ import { X, AlertCircle, CheckCircle2, TrendingDown, Printer } from 'lucide-reac
  * ✅ Nederlandse datum formatting
  * ✅ Kleurcodering dagdelen (M=geel, O=oranje, N=blauw)
  * ✅ Loading states en error handling
- * ✅ Cache-busting met Date.now()
- * 
+ * ✅ Cache-busting met Date.now() + Railway trigger header
+ *
+ * DRAAD415 FIX:
+ * - Verwijderd: query-parameter ?cb=Date.now() uit POST URL
+ * - Toegevoegd: X-Cache-Bust header + Railway trigger header
+ * - Voorkomt HTTP 404 op /api/afl/missing-services
+ *
  * DRAAD406F3 BESTAANDE FEATURES:
  * 1. ✅ CREATED: AflReportModal.tsx - Volledig nieuw component
  * 2. ✅ IMPLEMENTED: PDF-vriendelijke rapport weergave
@@ -30,32 +35,6 @@ import { X, AlertCircle, CheckCircle2, TrendingDown, Printer } from 'lucide-reac
  *    - Changed z-55 → z-[9998] (arbitrary value)
  *    - Changed z-60 → z-[9999] (arbitrary value)
  *    - Zorg dat AflReportModal BOVEN AflProgressModal verschijnt
- * 
- * DESIGN FILOSOFIE:
- * - Modal ziet er uit als printable document (PDF-vriendelijk)
- * - Hoge z-index (z-[9999]) om boven AflProgressModal (z-50) te zitten
- * - Overzichtelijk layout met secties
- * - Kleurcodering voor status indicators
- * - "Terug" knop brengt gebruiker terug naar AflProgressModal
- * 
- * DATA BRON (Vraag 1):
- * - Gebruikt result.report object uit ExecutionResult
- * - Bevat: summary { coverage_percent, total_planned, total_required }
- * - Fetcht missing services detail via /api/afl/missing-services
- * 
- * RAPPORT DETAIL LEVEL (Vraag 2):
- * - Bezettingsgraad percentage
- * - Diensten ingepland vs required
- * - Waarschuwingen voor onderbezetting
- * - **NIEUW**: Detailoverzicht ontbrekende diensten per dag
- * - **NIEUW**: PDF export functionaliteit
- * 
- * STYLING (Vraag 3):
- * - PDF-vriendelijk (geen javascript animaties, printbare kleuren)
- * - Print-optimized layout
- * - Kleurcodering: Groen (OK), Oranje (Waarschuwing), Rood (Kritiek)
- * - **NIEUW**: Print header met rooster info
- * - **NIEUW**: Page break control voor groepering
  */
 
 interface AflReportModalProps {
@@ -100,18 +79,34 @@ export function AflReportModal({ isOpen, reportData, onClose }: AflReportModalPr
     }
   }, [isOpen, reportData?.rosterId]);
 
-  async function fetchMissingServices(rosterId: string) {
+  async function fetchMissingServices(rosterId: string | null | undefined) {
+    if (!rosterId) {
+      console.warn('[AFL-REPORT] Missing rosterId, skipping missing-services fetch');
+      setErrorMissing('Rooster ID ontbreekt, detailoverzicht kan niet geladen worden.');
+      setLoadingMissing(false);
+      return;
+    }
+
     setLoadingMissing(true);
     setErrorMissing(null);
-    
+
     try {
-      console.log('[AFL-REPORT] Fetching missing services for roster:', rosterId);
-      
-      const response = await fetch(`/api/afl/missing-services?cb=${Date.now()}`, {
+      const cacheBust = Date.now().toString();
+      console.log('[AFL-REPORT] Fetching missing services for roster:', rosterId, 'cb:', cacheBust);
+
+      const response = await fetch('/api/afl/missing-services', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          // Cache-busting headers
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
+          'X-Cache-Bust': cacheBust,
+          // Railway random trigger om eventuele edge caching te omzeilen
+          'X-Railway-Trigger': `railway-${cacheBust}-${Math.random().toString(36).slice(2, 8)}`,
+        },
         body: JSON.stringify({ roster_id: rosterId }),
-        cache: 'no-store'
+        cache: 'no-store',
       });
 
       if (!response.ok) {
@@ -119,13 +114,17 @@ export function AflReportModal({ isOpen, reportData, onClose }: AflReportModalPr
       }
 
       const data = await response.json();
-      
+
+      if (!data || typeof data !== 'object') {
+        throw new Error('Invalid response structure from missing-services API');
+      }
+
       if (!data.success) {
         throw new Error(data.error || 'Failed to fetch missing services');
       }
 
       console.log('[AFL-REPORT] Missing services loaded:', data.total_missing);
-      setMissingServices(data);
+      setMissingServices(data as MissingServicesData);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('[AFL-REPORT] Error fetching missing services:', errorMessage);
@@ -151,34 +150,55 @@ export function AflReportModal({ isOpen, reportData, onClose }: AflReportModalPr
 
   // Status bepalen op basis van bezettingsgraad
   const getStatusColor = (coverage: number) => {
-    if (coverage >= 90) return { bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-800', badge: 'bg-green-100 text-green-800' };
-    if (coverage >= 75) return { bg: 'bg-yellow-50', border: 'border-yellow-200', text: 'text-yellow-800', badge: 'bg-yellow-100 text-yellow-800' };
-    return { bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-800', badge: 'bg-red-100 text-red-800' };
+    if (coverage >= 90) {
+      return {
+        bg: 'bg-green-50',
+        border: 'border-green-200',
+        text: 'text-green-800',
+        badge: 'bg-green-100 text-green-800',
+      };
+    }
+    if (coverage >= 75) {
+      return {
+        bg: 'bg-yellow-50',
+        border: 'border-yellow-200',
+        text: 'text-yellow-800',
+        badge: 'bg-yellow-100 text-yellow-800',
+      };
+    }
+    return {
+      bg: 'bg-red-50',
+      border: 'border-red-200',
+      text: 'text-red-800',
+      badge: 'bg-red-100 text-red-800',
+    };
   };
 
   const statusColor = getStatusColor(coveragePercent);
 
   // Waarschuwingen bepalen
-  const warnings = [];
-  if (totalUnfilled > 0) {
+  const warnings: { type: string; severity: 'high' | 'medium'; message: string }[] = [];
+  if (totalUnfilled > 0 && totalRequired > 0) {
     warnings.push({
       type: 'unfilled',
       severity: totalUnfilled > 10 ? 'high' : 'medium',
-      message: `${totalUnfilled} diensten zijn nog niet ingevuld (${(totalUnfilled / totalRequired * 100).toFixed(1)}%)`
+      message: `${totalUnfilled} diensten zijn nog niet ingevuld (${(
+        (totalUnfilled / totalRequired) * 100
+      ).toFixed(1)}%)`,
     });
   }
   if (coveragePercent < 75) {
     warnings.push({
       type: 'lowCoverage',
       severity: 'high',
-      message: `Bezettingsgraad lager dan target (${coveragePercent.toFixed(1)}% vs target 90%)`
+      message: `Bezettingsgraad lager dan target (${coveragePercent.toFixed(1)}% vs target 90%)`,
     });
   }
   if (coveragePercent < 90) {
     warnings.push({
       type: 'partialCoverage',
       severity: 'medium',
-      message: `Nog niet optimaal bezet - werk aan verhoging naar 90%+`
+      message: 'Nog niet optimaal bezet - werk aan verhoging naar 90%+',
     });
   }
 
@@ -203,13 +223,18 @@ export function AflReportModal({ isOpen, reportData, onClose }: AflReportModalPr
       <div className="print-header hidden print:block">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">📋 AFL Roostering Rapport</h1>
+            <h1 className="text-2xl font-bold text-gray-900">
+              📋 AFL Roostering Rapport
+            </h1>
             <p className="text-sm text-gray-700 mt-1">
-              Roosterperiode: {reportData?.period_start || 'N/A'} - {reportData?.period_end || 'N/A'}
+              Roosterperiode: {reportData?.period_start || 'N/A'} -{' '}
+              {reportData?.period_end || 'N/A'}
             </p>
           </div>
           <div className="text-right text-sm text-gray-700">
-            <p className="font-semibold">Run ID: {reportData?.afl_run_id?.substring(0, 12) || 'N/A'}...</p>
+            <p className="font-semibold">
+              Run ID: {reportData?.afl_run_id?.substring(0, 12) || 'N/A'}...
+            </p>
             <p>Gegenereerd: {new Date().toLocaleString('nl-NL')}</p>
           </div>
         </div>
@@ -226,10 +251,13 @@ export function AflReportModal({ isOpen, reportData, onClose }: AflReportModalPr
             <div>
               <h1 className="text-2xl font-bold text-gray-900">📋 AFL Rapport</h1>
               <p className="text-sm text-gray-600 mt-1">
-                {reportData?.afl_run_id ? `Run ID: ${reportData.afl_run_id.substring(0, 8)}...` : 'Rapport Details'}
+                {reportData?.afl_run_id
+                  ? `Run ID: ${reportData.afl_run_id.substring(0, 8)}...`
+                  : 'Rapport Details'}
               </p>
             </div>
             <button
+              type="button"
               onClick={onClose}
               className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded"
             >
@@ -244,36 +272,46 @@ export function AflReportModal({ isOpen, reportData, onClose }: AflReportModalPr
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <h2 className={`text-xl font-bold ${statusColor.text} mb-4`}>
-                    {coveragePercent >= 90 ? '✅ Optimaal bezet' : 
-                     coveragePercent >= 75 ? '⚠️ Deels ingevuld' : 
-                     '❌ Onvoldoende bezet'}
+                    {coveragePercent >= 90
+                      ? '✅ Optimaal bezet'
+                      : coveragePercent >= 75
+                      ? '⚠️ Deels ingevuld'
+                      : '❌ Onvoldoende bezet'}
                   </h2>
-                  
+
                   {/* Main Statistics Grid */}
                   <div className="grid grid-cols-3 gap-4 mb-4">
                     <div className="bg-white rounded-lg p-4 border border-gray-200">
-                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">Bezettingsgraad</p>
+                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">
+                        Bezettingsgraad
+                      </p>
                       <p className={`text-3xl font-bold ${statusColor.text}`}>
                         {coveragePercent.toFixed(1)}%
                       </p>
                       <p className="text-xs text-gray-600 mt-1">van benodigd</p>
                     </div>
-                    
+
                     <div className="bg-white rounded-lg p-4 border border-gray-200">
-                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">Diensten Ingepland</p>
-                      <p className="text-3xl font-bold text-blue-700">
-                        {totalPlanned}
+                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">
+                        Diensten Ingepland
                       </p>
+                      <p className="text-3xl font-bold text-blue-700">{totalPlanned}</p>
                       <p className="text-xs text-gray-600 mt-1">van {totalRequired}</p>
                     </div>
-                    
+
                     <div className="bg-white rounded-lg p-4 border border-gray-200">
-                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">Nog In Te Vullen</p>
-                      <p className={`text-3xl font-bold ${
-                        totalUnfilled === 0 ? 'text-green-700' :
-                        totalUnfilled <= 10 ? 'text-yellow-700' :
-                        'text-red-700'
-                      }`}>
+                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">
+                        Nog In Te Vullen
+                      </p>
+                      <p
+                        className={`text-3xl font-bold ${
+                          totalUnfilled === 0
+                            ? 'text-green-700'
+                            : totalUnfilled <= 10
+                            ? 'text-yellow-700'
+                            : 'text-red-700'
+                        }`}
+                      >
                         {totalUnfilled}
                       </p>
                       <p className="text-xs text-gray-600 mt-1">diensten</p>
@@ -288,31 +326,35 @@ export function AflReportModal({ isOpen, reportData, onClose }: AflReportModalPr
               <div className="space-y-3 page-break-avoid">
                 <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                   <AlertCircle size={20} className="text-orange-600" />
-                  Waarschuwingen & Opmerkingen
+                  Waarschuwingen &amp; Opmerkingen
                 </h3>
                 <div className="space-y-2">
-                  {warnings.map((warning, index) => (
+                  {warnings.map((warning) => (
                     <div
-                      key={index}
+                      key={warning.type}
                       className={`rounded-lg p-4 border-2 flex items-start gap-3 ${
                         warning.severity === 'high'
                           ? 'bg-red-50 border-red-200'
                           : 'bg-yellow-50 border-yellow-200'
                       }`}
                     >
-                      <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center mt-0.5 ${
-                        warning.severity === 'high'
-                          ? 'bg-red-200 text-red-800'
-                          : 'bg-yellow-200 text-yellow-800'
-                      }`}>
+                      <div
+                        className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center mt-0.5 ${
+                          warning.severity === 'high'
+                            ? 'bg-red-200 text-red-800'
+                            : 'bg-yellow-200 text-yellow-800'
+                        }`}
+                      >
                         {warning.severity === 'high' ? '!' : '⚠'}
                       </div>
                       <div>
-                        <p className={`font-medium ${
-                          warning.severity === 'high'
-                            ? 'text-red-800'
-                            : 'text-yellow-800'
-                        }`}>
+                        <p
+                          className={`font-medium ${
+                            warning.severity === 'high'
+                              ? 'text-red-800'
+                              : 'text-yellow-800'
+                          }`}
+                        >
                           {warning.message}
                         </p>
                       </div>
@@ -327,10 +369,10 @@ export function AflReportModal({ isOpen, reportData, onClose }: AflReportModalPr
               <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                 📋 Detailoverzicht Ontbrekende Diensten
               </h3>
-              
+
               {loadingMissing ? (
                 <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto no-print"></div>
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto no-print" />
                   <p className="text-gray-600 mt-4">Laden...</p>
                 </div>
               ) : errorMissing ? (
@@ -351,35 +393,51 @@ export function AflReportModal({ isOpen, reportData, onClose }: AflReportModalPr
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {Object.entries(missingServices?.grouped_by_date || {}).map(([date, dayData]) => (
-                    <div key={date} className="day-group bg-white border-2 border-gray-300 rounded-lg p-4 page-break-avoid">
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="font-bold text-gray-900">
-                          📅 {dayData.date_formatted}
-                        </h4>
-                        <span className="text-sm bg-blue-100 text-blue-800 px-3 py-1 rounded-full font-semibold">
-                          {dayData.total_missing} {dayData.total_missing === 1 ? 'dienst' : 'diensten'}
-                        </span>
+                  {Object.entries(missingServices?.grouped_by_date || {}).map(
+                    ([date, dayData]) => (
+                      <div
+                        key={date}
+                        className="day-group bg-white border-2 border-gray-300 rounded-lg p-4 page-break-avoid"
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="font-bold text-gray-900">
+                            📅 {dayData.date_formatted}
+                          </h4>
+                          <span className="text-sm bg-blue-100 text-blue-800 px-3 py-1 rounded-full font-semibold">
+                            {dayData.total_missing}{' '}
+                            {dayData.total_missing === 1 ? 'dienst' : 'diensten'}
+                          </span>
+                        </div>
+
+                        <div className="space-y-2">
+                          {dayData.services.map((service: MissingService, idx: number) => (
+                            <div
+                              key={`${date}-${service.dienst_code}-${idx}`}
+                              className="flex items-center gap-3 pl-4 py-2 border-l-4 border-blue-400 bg-gray-50 rounded-r"
+                            >
+                              <span
+                                className={`px-3 py-1 rounded text-sm font-semibold border-2 ${getDagdeelColor(
+                                  service.dagdeel,
+                                )}`}
+                              >
+                                {getDagdeelEmoji(service.dagdeel)}{' '}
+                                {service.dagdeel_display}
+                              </span>
+                              <span className="text-gray-700">
+                                Team <strong>{service.team}</strong>
+                              </span>
+                              <span className="px-2 py-1 bg-gray-200 rounded text-xs font-mono font-bold border border-gray-400">
+                                {service.dienst_code}
+                              </span>
+                              <span className="text-red-600 font-semibold ml-auto">
+                                {service.ontbrekend_aantal} nodig
+                              </span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                      
-                      <div className="space-y-2">
-                        {dayData.services.map((service: MissingService, idx: number) => (
-                          <div key={idx} className="flex items-center gap-3 pl-4 py-2 border-l-4 border-blue-400 bg-gray-50 rounded-r">
-                            <span className={`px-3 py-1 rounded text-sm font-semibold border-2 ${getDagdeelColor(service.dagdeel)}`}>
-                              {getDagdeelEmoji(service.dagdeel)} {service.dagdeel_display}
-                            </span>
-                            <span className="text-gray-700">Team <strong>{service.team}</strong></span>
-                            <span className="px-2 py-1 bg-gray-200 rounded text-xs font-mono font-bold border border-gray-400">
-                              {service.dienst_code}
-                            </span>
-                            <span className="text-red-600 font-semibold ml-auto">
-                              {service.ontbrekend_aantal} nodig
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                    ),
+                  )}
                 </div>
               )}
             </div>
@@ -390,7 +448,7 @@ export function AflReportModal({ isOpen, reportData, onClose }: AflReportModalPr
                 <TrendingDown size={20} className="text-blue-600" />
                 Samenvatting Nog In Te Vullen
               </h3>
-              
+
               {totalUnfilled === 0 ? (
                 <div className="bg-green-50 border-2 border-green-200 rounded-lg p-6 text-center">
                   <p className="text-lg font-semibold text-green-800 flex items-center justify-center gap-2">
@@ -404,34 +462,52 @@ export function AflReportModal({ isOpen, reportData, onClose }: AflReportModalPr
               ) : (
                 <div className="bg-gray-50 border-2 border-gray-300 rounded-lg p-6 space-y-3">
                   <p className="text-sm font-medium text-gray-900 mb-4">
-                    Er zijn <span className="font-bold text-lg">{totalUnfilled}</span> diensten nog in te vullen:
+                    Er zijn{' '}
+                    <span className="font-bold text-lg">{totalUnfilled}</span>{' '}
+                    diensten nog in te vullen:
                   </p>
-                  
+
                   {/* Breakdown per status */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="bg-white rounded p-4 border border-gray-200">
-                      <p className="text-xs font-semibold text-gray-600 uppercase mb-2">Totaal Benodigd</p>
-                      <p className="text-2xl font-bold text-gray-900">{totalRequired}</p>
+                      <p className="text-xs font-semibold text-gray-600 uppercase mb-2">
+                        Totaal Benodigd
+                      </p>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {totalRequired}
+                      </p>
                     </div>
                     <div className="bg-white rounded p-4 border border-gray-200">
-                      <p className="text-xs font-semibold text-gray-600 uppercase mb-2">Al Ingepland</p>
-                      <p className="text-2xl font-bold text-green-700">{totalPlanned}</p>
+                      <p className="text-xs font-semibold text-gray-600 uppercase mb-2">
+                        Al Ingepland
+                      </p>
+                      <p className="text-2xl font-bold text-green-700">
+                        {totalPlanned}
+                      </p>
                     </div>
                   </div>
-                  
+
                   {/* Progress indicator */}
                   <div className="mt-4">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-medium text-gray-700">VOORTGANG INVULLING</span>
+                      <span className="text-xs font-medium text-gray-700">
+                        VOORTGANG INVULLING
+                      </span>
                       <span className="text-xs font-bold text-gray-900">
-                        {((totalPlanned / totalRequired) * 100).toFixed(1)}%
+                        {totalRequired > 0
+                          ? ((totalPlanned / totalRequired) * 100).toFixed(1)
+                          : '0.0'}
+                        %
                       </span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden border border-gray-300">
                       <div
                         className="bg-gradient-to-r from-green-500 to-green-600 h-3 rounded-full transition-all"
                         style={{
-                          width: `${(totalPlanned / totalRequired) * 100}%`
+                          width:
+                            totalRequired > 0
+                              ? `${(totalPlanned / totalRequired) * 100}%`
+                              : '0%',
                         }}
                       />
                     </div>
@@ -447,20 +523,42 @@ export function AflReportModal({ isOpen, reportData, onClose }: AflReportModalPr
                   💡 Aanbevelingen
                 </h3>
                 <ul className="space-y-2 text-sm text-blue-900 list-disc list-inside">
-                  <li>Controleer de {totalUnfilled} nog in te vullen diensten in het rooster</li>
+                  <li>
+                    Controleer de {totalUnfilled} nog in te vullen diensten in het
+                    rooster
+                  </li>
                   <li>Vul medewerkers in voor de beschikbare slots</li>
                   <li>Zorg dat alle DIO/DDO-regels worden nageleefd</li>
-                  <li>Voer de AFL-pijplijn opnieuw uit nadat diensten zijn ingevuld</li>
-                  <li>Stijg naar minimaal 90% bezettingsgraad voor optimale planning</li>
+                  <li>
+                    Voer de AFL-pijplijn opnieuw uit nadat diensten zijn ingevuld
+                  </li>
+                  <li>
+                    Stijg naar minimaal 90% bezettingsgraad voor optimale planning
+                  </li>
                 </ul>
               </div>
             )}
 
             {/* Meta Info */}
             <div className="border-t-2 border-gray-300 pt-6 text-xs text-gray-600 space-y-1">
-              <p>🔹 <span className="font-mono">AFL Run ID:</span> <span className="font-mono text-gray-900">{reportData?.afl_run_id || 'N/A'}</span></p>
-              <p>🔹 <span className="font-mono">Rooster ID:</span> <span className="font-mono text-gray-900">{reportData?.rosterId || 'N/A'}</span></p>
-              <p>🔹 <span>Gegenereerd op:</span> <span className="font-mono text-gray-900">{new Date().toLocaleString('nl-NL')}</span></p>
+              <p>
+                🔹 <span className="font-mono">AFL Run ID:</span>{' '}
+                <span className="font-mono text-gray-900">
+                  {reportData?.afl_run_id || 'N/A'}
+                </span>
+              </p>
+              <p>
+                🔹 <span className="font-mono">Rooster ID:</span>{' '}
+                <span className="font-mono text-gray-900">
+                  {reportData?.rosterId || 'N/A'}
+                </span>
+              </p>
+              <p>
+                🔹 <span>Gegenereerd op:</span>{' '}
+                <span className="font-mono text-gray-900">
+                  {new Date().toLocaleString('nl-NL')}
+                </span>
+              </p>
             </div>
           </div>
 
@@ -471,6 +569,7 @@ export function AflReportModal({ isOpen, reportData, onClose }: AflReportModalPr
             </p>
             <div className="flex gap-3">
               <button
+                type="button"
                 onClick={handlePrint}
                 className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors shadow-md flex items-center gap-2"
               >
@@ -478,6 +577,7 @@ export function AflReportModal({ isOpen, reportData, onClose }: AflReportModalPr
                 Afdrukken / PDF
               </button>
               <button
+                type="button"
                 onClick={onClose}
                 className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors shadow-md"
               >
@@ -495,12 +595,12 @@ export function AflReportModal({ isOpen, reportData, onClose }: AflReportModalPr
           .no-print {
             display: none !important;
           }
-          
+
           /* Toon print-only elementen */
           .print\\:block {
             display: block !important;
           }
-          
+
           /* Print header styling */
           .print-header {
             position: fixed;
@@ -512,14 +612,14 @@ export function AflReportModal({ isOpen, reportData, onClose }: AflReportModalPr
             padding: 15mm;
             z-index: 10000;
           }
-          
+
           /* Body aanpassingen */
           body {
             background: white !important;
             margin: 0;
             padding: 0;
           }
-          
+
           /* Modal aanpassingen voor print */
           .fixed.inset-0.z-\\[9999\\] {
             position: relative !important;
@@ -527,30 +627,30 @@ export function AflReportModal({ isOpen, reportData, onClose }: AflReportModalPr
             padding: 0 !important;
             display: block !important;
           }
-          
+
           /* Voorkom page breaks binnen groepen */
           .day-group,
           .page-break-avoid {
             page-break-inside: avoid;
             break-inside: avoid;
           }
-          
+
           /* Pagina marges */
           @page {
             margin: 20mm 15mm;
             size: A4 portrait;
           }
-          
+
           /* Eerste sectie ruimte voor header */
           .print\\:pt-32 {
             padding-top: 32mm !important;
           }
-          
+
           /* Verberg animaties */
           .animate-spin {
             display: none !important;
           }
-          
+
           /* Zorg dat kleuren behouden blijven */
           * {
             -webkit-print-color-adjust: exact;
