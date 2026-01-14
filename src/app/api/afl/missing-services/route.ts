@@ -4,9 +4,14 @@
  * 
  * OPDRACHT: AFL Rapport Uitbreiding - Ontbrekende Diensten Detail
  * Datum: 13 januari 2026
- * Cache-Bust: 2026-01-14T16:13:00Z
- * Build Fix: TypeScript error resolved
- * Deployment: DRAAD415 - Force rebuild with verification
+ * 
+ * ============================================================
+ * DRAAD415 FIX - 14 januari 2026 21:12 CET
+ * Cache-Bust: 1768421920
+ * Railway Trigger: FORCE-REBUILD-MISSING-SERVICES
+ * Issue: Route niet in production build - HTTP 404
+ * Fix: Cache-bust update om volledige rebuild te triggeren
+ * ============================================================
  * 
  * FUNCTIONALITEIT:
  * ✅ Query ontbrekende diensten uit roster_period_staffing_dagdelen
@@ -35,7 +40,9 @@ export const revalidate = 0;
 import { NextResponse, NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// DRAAD415: Runtime verification marker
+// DRAAD415 FIX: Unique build markers for Railway deployment verification
+const DRAAD415_BUILD_ID = 'DRAAD415-FIX-1768421920';
+const DRAAD415_DEPLOY_TIMESTAMP = '2026-01-14T21:12:00Z';
 const DRAAD415_MARKER = `DRAAD415-MISSING-SERVICES-${Date.now()}`;
 
 // Initialize Supabase client
@@ -48,14 +55,17 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// DRAAD415: Enhanced startup logging
+// DRAAD415 FIX: Enhanced startup logging for deployment verification
 console.log('\n' + '='.repeat(80));
-console.log('🚀 [DRAAD415] MISSING SERVICES API ROUTE LOADED');
-console.log('📍 [DRAAD415] Route path: /api/afl/missing-services');
-console.log('⏰ [DRAAD415] Load timestamp:', new Date().toISOString());
-console.log('🔖 [DRAAD415] Marker:', DRAAD415_MARKER);
-console.log('🏗️  [DRAAD415] Runtime: nodejs');
-console.log('🔄 [DRAAD415] Dynamic: force-dynamic');
+console.log('🚀 [DRAAD415-FIX] MISSING SERVICES API ROUTE LOADED');
+console.log('📍 [DRAAD415-FIX] Route path: /api/afl/missing-services');
+console.log('⏰ [DRAAD415-FIX] Load timestamp:', new Date().toISOString());
+console.log('🔖 [DRAAD415-FIX] Build ID:', DRAAD415_BUILD_ID);
+console.log('📅 [DRAAD415-FIX] Deploy timestamp:', DRAAD415_DEPLOY_TIMESTAMP);
+console.log('🎯 [DRAAD415-FIX] Runtime marker:', DRAAD415_MARKER);
+console.log('🏗️  [DRAAD415-FIX] Runtime: nodejs');
+console.log('🔄 [DRAAD415-FIX] Dynamic: force-dynamic');
+console.log('✅ [DRAAD415-FIX] This route should now be accessible!');
 console.log('='.repeat(80) + '\n');
 
 console.log('[MISSING-SERVICES] ✅ Missing services route loaded at:', new Date().toISOString());
@@ -181,7 +191,8 @@ export async function POST(request: NextRequest) {
   console.log(`[MISSING-SERVICES] 📋 Missing services request started`);
   console.log(`[MISSING-SERVICES] 🔄 Cache ID: ${cacheId}`);
   console.log(`[MISSING-SERVICES] 🕐 Timestamp: ${new Date().toISOString()}`);
-  console.log(`[DRAAD415] 🔖 Route is active and responding`);
+  console.log(`[DRAAD415-FIX] 🔖 Build ID: ${DRAAD415_BUILD_ID}`);
+  console.log(`[DRAAD415-FIX] 🎯 Route is active and responding!`);
 
   try {
     // Parse request body
@@ -252,21 +263,27 @@ export async function POST(request: NextRequest) {
     console.log(`[MISSING-SERVICES] 📊 Total missing: ${totalMissing}`);
     console.log(`${'='.repeat(80)}\n`);
 
-    // Return response
+    // Return response with DRAAD415-FIX marker
     return NextResponse.json(
       {
         success: true,
         roster_id: rosterId,
         total_missing: totalMissing,
         missing_services: missingServices,
-        grouped_by_date: groupedByDate
+        grouped_by_date: groupedByDate,
+        _build_info: {
+          draad415_fix: true,
+          build_id: DRAAD415_BUILD_ID,
+          deploy_timestamp: DRAAD415_DEPLOY_TIMESTAMP
+        }
       },
       {
         status: 200,
         headers: {
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           'Pragma': 'no-cache',
-          'Expires': '0'
+          'Expires': '0',
+          'X-DRAAD415-Build': DRAAD415_BUILD_ID
         }
       }
     );
@@ -280,7 +297,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: `Internal server error: ${errorMessage}`
+        error: `Internal server error: ${errorMessage}`,
+        _build_info: { draad415_fix: true, build_id: DRAAD415_BUILD_ID }
       },
       { status: 500 }
     );
@@ -291,10 +309,17 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   const rosterId = request.nextUrl.searchParams.get('roster_id');
   
+  // DRAAD415-FIX: Health check endpoint
   if (!rosterId) {
     return NextResponse.json(
-      { success: false, error: 'roster_id query parameter required' },
-      { status: 400 }
+      { 
+        success: true, 
+        message: 'Missing services endpoint is active',
+        build_id: DRAAD415_BUILD_ID,
+        deploy_timestamp: DRAAD415_DEPLOY_TIMESTAMP,
+        usage: 'POST with { roster_id: "uuid" } or GET with ?roster_id=uuid'
+      },
+      { status: 200 }
     );
   }
 
