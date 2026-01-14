@@ -1,0 +1,45 @@
+# DRAAD415 - Railway Deployment Trigger
+# ===========================================
+# 
+# Deployment Timestamp: 2026-01-14T16:14:12Z
+# Parent Commit: c1917f593c9944e8fe2c5155714d2ff31fc2ea63
+# Issue: Missing services route returns 404
+# Fix: Force rebuild with runtime verification
+# 
+# CHANGES:
+# --------
+# 1. ✅ Enhanced route.ts with DRAAD415 marker
+# 2. ✅ Added startup logging for Railway verification
+# 3. ✅ Cache-bust timestamp: 2026-01-14T16:13:00Z
+# 4. ✅ Runtime: nodejs + force-dynamic
+# 
+# EXPECTED RAILWAY LOG OUTPUT:
+# ----------------------------
+# 🚀 [DRAAD415] MISSING SERVICES API ROUTE LOADED
+# 📍 [DRAAD415] Route path: /api/afl/missing-services
+# ⏰ [DRAAD415] Load timestamp: 2026-01-14T16:14:...
+# 🔖 [DRAAD415] Marker: DRAAD415-MISSING-SERVICES-...
+# 🏗️  [DRAAD415] Runtime: nodejs
+# 🔄 [DRAAD415] Dynamic: force-dynamic
+# 
+# VERIFICATION:
+# -------------
+# 1. Check Railway logs for DRAAD415 markers on startup
+# 2. Test endpoint: POST /api/afl/missing-services
+# 3. Expected: Status 200 with missing services data
+# 4. Frontend: Should show detail section in AFL report
+# 
+# DEPLOYMENT RANDOM: 1737018852
+# BUILD ID: draad415-$(date +%Y%m%d-%H%M%S)
+# 
+# ============================================
+
+DEPLOYMENT_TRIGGER="DRAAD415-FORCE-REBUILD"
+TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+RANDOM_ID="$RANDOM"
+BUILD_MARKER="draad415-missing-services-fix"
+
+echo "🚀 Deployment triggered at: $TIMESTAMP"
+echo "🔖 Random ID: $RANDOM_ID"
+echo "📦 Build marker: $BUILD_MARKER"
+echo "✅ Ready for Railway rebuild"
