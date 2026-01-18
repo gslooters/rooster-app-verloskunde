@@ -6,21 +6,24 @@
  * Datum: 13 januari 2026
  * 
  * ============================================================
- * DRAAD415 FIX V3 - 14 januari 2026 22:47 CET
- * Cache-Bust: 1768423620
- * Railway Trigger: FORCE-REBUILD-MISSING-SERVICES-FIX-V3
- * Issue: Build-time Supabase credential validation causes HTTP 500
- * Fix: Moved credential check to runtime only (lazy initialization)
- * Implementation: Route-level guard + dynamic=force-dynamic
+ * DRAAD418 FIX - 18 januari 2026 21:30 CET
+ * Cache-Bust: 1737283800
+ * Railway Trigger: FORCE-REBUILD-MISSING-SERVICES-DRAAD418
+ * Issue: AFL Query had foutieve filter criteria + verkeerde mappings
+ * Fix: Correcte SQL filter (invulling=0 AND aantal=1) + Dutch mappings
+ * Implementation: Direct Supabase query met correcte joins en filters
  * ============================================================
  * 
  * FUNCTIONALITEIT:
  * ✅ Build-safe: Credentials validated at runtime only, not at build
  * ✅ Query ontbrekende diensten uit roster_period_staffing_dagdelen
- * ✅ Join met service_types voor dienstcodes
+ * ✅ Filter: invulling=0 (niet ingepland) EN aantal=1 (benodigd)
+ * ✅ Join met service_types voor dienstcodes en namen
+ * ✅ Nederlandse mappings: O=Ochtend, M=Middag, A=Avond
+ * ✅ Team mappings: GRO=Groen, ORA=Oranje, TOT=Praktijk
  * ✅ Groupeer per datum met subtotalen
- * ✅ Nederlandse datum formatting
- * ✅ Return gestructureerde JSON response
+ * ✅ Correcte sortering: datum → dagdeel (O→M→A) → team
+ * ✅ Return gestructureerde JSON response met alle details
  * 
  * INPUT:
  *   { "roster_id": "uuid" }
@@ -41,7 +44,7 @@ export const revalidate = 0;
 
 import { NextResponse, NextRequest } from 'next/server';
 
-// DRAAD415 FIX V3: Lazy Supabase initialization
+// DRAAD418: Lazy Supabase initialization
 let supabaseClient: any = null;
 let initError: string | null = null;
 
@@ -69,20 +72,23 @@ function getSupabaseClient() {
   }
 }
 
-// DRAAD415 FIX V3: Enhanced startup logging for deployment verification
-const DRAAD415_BUILD_ID = 'DRAAD415-FIX-V3-1768423620';
-const DRAAD415_DEPLOY_TIMESTAMP = '2026-01-14T22:47:00Z';
+// DRAAD418: Enhanced startup logging for deployment verification
+const DRAAD418_BUILD_ID = 'DRAAD418-AFL-SQL-FIX-1737283800';
+const DRAAD418_DEPLOY_TIMESTAMP = '2026-01-18T21:30:00Z';
 
 console.log('\n' + '='.repeat(80));
-console.log('🚀 [DRAAD415-FIX-V3] MISSING SERVICES API ROUTE LOADED');
-console.log('📍 [DRAAD415-FIX-V3] Route path: /api/afl/missing-services');
-console.log('📂 [DRAAD415-FIX-V3] File location: app/api/afl/missing-services/route.ts');
-console.log('⏰ [DRAAD415-FIX-V3] Load timestamp:', new Date().toISOString());
-console.log('🔖 [DRAAD415-FIX-V3] Build ID:', DRAAD415_BUILD_ID);
-console.log('📅 [DRAAD415-FIX-V3] Deploy timestamp:', DRAAD415_DEPLOY_TIMESTAMP);
-console.log('🏗️  [DRAAD415-FIX-V3] Runtime: nodejs + force-dynamic');
-console.log('🔄 [DRAAD415-FIX-V3] Supabase: Lazy initialization (build-safe)');
-console.log('✅ [DRAAD415-FIX-V3] Route ready for runtime requests!');
+console.log('🚀 [DRAAD418] MISSING SERVICES API ROUTE LOADED');
+console.log('📍 [DRAAD418] Route path: /api/afl/missing-services');
+console.log('📂 [DRAAD418] File location: app/api/afl/missing-services/route.ts');
+console.log('⏰ [DRAAD418] Load timestamp:', new Date().toISOString());
+console.log('🔖 [DRAAD418] Build ID:', DRAAD418_BUILD_ID);
+console.log('📅 [DRAAD418] Deploy timestamp:', DRAAD418_DEPLOY_TIMESTAMP);
+console.log('🏗️  [DRAAD418] Runtime: nodejs + force-dynamic');
+console.log('🔄 [DRAAD418] Supabase: Lazy initialization (build-safe)');
+console.log('✅ [DRAAD418] SQL Filter: invulling=0 AND aantal=1 ✅');
+console.log('✅ [DRAAD418] Dagdeel mapping: O=Ochtend, M=Middag, A=Avond ✅');
+console.log('✅ [DRAAD418] Team mapping: GRO=Groen, ORA=Oranje, TOT=Praktijk ✅');
+console.log('✅ [DRAAD418] Route ready for runtime requests!');
 console.log('='.repeat(80) + '\n');
 
 /**
@@ -103,20 +109,32 @@ function formatDutchDate(dateStr: string): string {
 }
 
 /**
- * Helper: Get dagdeel display name
+ * Helper: Get dagdeel display name (CORRECT MAPPING)
  */
 function getDagdeelDisplay(dagdeel: string): string {
   const mapping: { [key: string]: string } = {
-    'M': 'Ochtend',
-    'O': 'Avond',
-    'N': 'Nacht'
+    'O': 'Ochtend',    // ✅ CORRECT: O = Ochtend
+    'M': 'Middag',     // ✅ CORRECT: M = Middag
+    'A': 'Avond'       // ✅ CORRECT: A = Avond
   };
   return mapping[dagdeel] || dagdeel;
 }
 
 /**
+ * Helper: Get team display name
+ */
+function getTeamDisplay(team: string): string {
+  const mapping: { [key: string]: string } = {
+    'GRO': 'Groen',     // ✅ Team Groen
+    'ORA': 'Oranje',    // ✅ Team Oranje
+    'TOT': 'Praktijk'   // ✅ Praktijk (totaal)
+  };
+  return mapping[team] || team;
+}
+
+/**
  * Query missing services from database
- * Tries RPC first, falls back to direct SQL query
+ * DRAAD418: Correcte SQL filter: invulling=0 AND aantal=1
  */
 async function queryMissingServices(rosterId: string) {
   const supabase = getSupabaseClient();
@@ -145,6 +163,7 @@ async function queryMissingServices(rosterId: string) {
   }
 
   // Fallback: Direct SQL query if RPC doesn't exist
+  // DRAAD418 FIX: Correcte filter criteria
   try {
     console.log('[MISSING-SERVICES] 🔍 Executing direct database query...');
     
@@ -157,9 +176,12 @@ async function queryMissingServices(rosterId: string) {
         aantal,
         invulling,
         service_id,
+        status,
         service_types!inner (code, naam)
       `)
       .eq('roster_id', rosterId)
+      .eq('invulling', 0)          // ✅ DRAAD418: Niet ingepland
+      .eq('aantal', 1)             // ✅ DRAAD418: Benodigd aantal = 1
       .not('service_id', 'is', null);
 
     if (error) {
@@ -183,9 +205,15 @@ async function queryMissingServices(rosterId: string) {
       return {
         date: row.date,
         dagdeel: row.dagdeel,
+        dagdeel_display: getDagdeelDisplay(row.dagdeel),
         team: row.team,
+        team_display: getTeamDisplay(row.team),
         dienst_code: row.service_types?.code || 'ONBEKEND',
-        ontbrekend_aantal
+        dienst_naam: row.service_types?.naam || 'Onbekend',
+        benodigd,
+        ingepland,
+        ontbrekend_aantal,
+        status: row.status || 'MAG'
       };
     }).filter((r: any) => r.ontbrekend_aantal > 0);
 
@@ -208,8 +236,8 @@ export async function POST(request: NextRequest) {
   console.log(`[MISSING-SERVICES] 📋 Missing services request started`);
   console.log(`[MISSING-SERVICES] 🔄 Cache ID: ${cacheId}`);
   console.log(`[MISSING-SERVICES] 🕐 Timestamp: ${new Date().toISOString()}`);
-  console.log(`[DRAAD415-FIX-V3] 🔖 Build ID: ${DRAAD415_BUILD_ID}`);
-  console.log(`[DRAAD415-FIX-V3] 🎯 Route is active and responding!`);
+  console.log(`[DRAAD418] 🔖 Build ID: ${DRAAD418_BUILD_ID}`);
+  console.log(`[DRAAD418] 🎯 Route is active and responding!`);
 
   try {
     // Parse request body
@@ -229,11 +257,12 @@ export async function POST(request: NextRequest) {
     // Execute query with fallback
     const missingServices = await queryMissingServices(rosterId);
 
-    // Sort by date, dagdeel, team, dienst_code
+    // Sort by date, dagdeel (O→M→A), team, dienst_code
     missingServices.sort((a: any, b: any) => {
       if (a.date !== b.date) return a.date.localeCompare(b.date);
       
-      const dagdeelOrder: { [key: string]: number } = { 'M': 1, 'O': 2, 'N': 3 };
+      // ✅ DRAAD418: Correcte dagdeel sortering: O (Ochtend) → M (Middag) → A (Avond)
+      const dagdeelOrder: { [key: string]: number } = { 'O': 1, 'M': 2, 'A': 3 };
       const aDagdeel = dagdeelOrder[a.dagdeel] || 99;
       const bDagdeel = dagdeelOrder[b.dagdeel] || 99;
       if (aDagdeel !== bDagdeel) return aDagdeel - bDagdeel;
@@ -263,10 +292,15 @@ export async function POST(request: NextRequest) {
       groupedByDate[dateKey].total_missing += service.ontbrekend_aantal;
       groupedByDate[dateKey].services.push({
         dagdeel: service.dagdeel,
-        dagdeel_display: getDagdeelDisplay(service.dagdeel),
+        dagdeel_display: service.dagdeel_display,
         team: service.team,
+        team_display: service.team_display,
         dienst_code: service.dienst_code,
-        ontbrekend_aantal: service.ontbrekend_aantal
+        dienst_naam: service.dienst_naam,
+        benodigd: service.benodigd,
+        ingepland: service.ingepland,
+        ontbrekend_aantal: service.ontbrekend_aantal,
+        status: service.status
       });
     });
 
@@ -280,7 +314,7 @@ export async function POST(request: NextRequest) {
     console.log(`[MISSING-SERVICES] 📊 Total missing: ${totalMissing}`);
     console.log(`${'='.repeat(80)}\n`);
 
-    // Return response with DRAAD415-FIX-V3 marker
+    // Return response with DRAAD418 marker
     return NextResponse.json(
       {
         success: true,
@@ -289,9 +323,12 @@ export async function POST(request: NextRequest) {
         missing_services: missingServices,
         grouped_by_date: groupedByDate,
         _build_info: {
-          draad415_fix_v3: true,
-          build_id: DRAAD415_BUILD_ID,
-          deploy_timestamp: DRAAD415_DEPLOY_TIMESTAMP
+          draad418_fix: true,
+          build_id: DRAAD418_BUILD_ID,
+          deploy_timestamp: DRAAD418_DEPLOY_TIMESTAMP,
+          sql_filter: 'invulling=0 AND aantal=1',
+          dagdeel_mapping: { O: 'Ochtend', M: 'Middag', A: 'Avond' },
+          team_mapping: { GRO: 'Groen', ORA: 'Oranje', TOT: 'Praktijk' }
         }
       },
       {
@@ -300,7 +337,7 @@ export async function POST(request: NextRequest) {
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           'Pragma': 'no-cache',
           'Expires': '0',
-          'X-DRAAD415-Build': DRAAD415_BUILD_ID
+          'X-DRAAD418-Build': DRAAD418_BUILD_ID
         }
       }
     );
@@ -315,7 +352,7 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         error: `Internal server error: ${errorMessage}`,
-        _build_info: { draad415_fix_v3: true, build_id: DRAAD415_BUILD_ID }
+        _build_info: { draad418_fix: true, build_id: DRAAD418_BUILD_ID }
       },
       { status: 500 }
     );
@@ -326,15 +363,18 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   const rosterId = request.nextUrl.searchParams.get('roster_id');
   
-  // DRAAD415-FIX-V3: Health check endpoint (no Supabase needed)
+  // DRAAD418: Health check endpoint (no Supabase needed)
   if (!rosterId) {
     return NextResponse.json(
       { 
         success: true, 
-        message: 'Missing services endpoint is active - DRAAD415-FIX-V3',
-        build_id: DRAAD415_BUILD_ID,
-        deploy_timestamp: DRAAD415_DEPLOY_TIMESTAMP,
+        message: 'Missing services endpoint is active - DRAAD418',
+        build_id: DRAAD418_BUILD_ID,
+        deploy_timestamp: DRAAD418_DEPLOY_TIMESTAMP,
         file_location: 'app/api/afl/missing-services/route.ts',
+        sql_filter: 'invulling=0 AND aantal=1',
+        dagdeel_mapping: { O: 'Ochtend', M: 'Middag', A: 'Avond' },
+        team_mapping: { GRO: 'Groen', ORA: 'Oranje', TOT: 'Praktijk' },
         usage: 'POST with { roster_id: "uuid" } or GET with ?roster_id=uuid'
       },
       { status: 200 }
