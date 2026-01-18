@@ -15,6 +15,7 @@
  * ✅ Tekstgebaseerde PDF (kleiner filesize, niet html2canvas)
  * ✅ Cache-busting met Date.now() + Railway random trigger
  * ✅ FORCE DYNAMIC - Prevent Next.js optimizer
+ * ✅ TypeScript tuple type fix voor spread operators
  */
 
 // 🔥 FORCE DYNAMIC - Prevent Next.js optimizer from skipping this route
@@ -37,7 +38,7 @@ if (!supabaseUrl || !supabaseKey) {
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Log route initialization
-console.log('[PDF-ROUTE] ✅ PDF Export route loaded (DRAAD419-jsPDF) at:', new Date().toISOString());
+console.log('[PDF-ROUTE] ✅ PDF Export route loaded (DRAAD419-jsPDF-FIXED) at:', new Date().toISOString());
 console.log('[PDF-ROUTE] ✅ POST/GET handlers registered');
 
 /**
@@ -210,7 +211,8 @@ async function generatePdfWithJsPDF(data: any): Promise<Buffer> {
       pdf.text(coverageStr, colX2[4], yPosition);
 
       let statusText = 'OK';
-      let statusColor = [0, 170, 0]; // Groen
+      // ✅ FIX: Gebruik tuple type [number, number, number] in plaats van number[]
+      let statusColor: [number, number, number] = [0, 170, 0]; // Groen
       if (st.overstaffing) {
         statusText = 'Over';
         statusColor = [255, 165, 0]; // Oranje
@@ -418,7 +420,7 @@ export async function POST(request: NextRequest) {
   const requestId = request.headers.get('X-Request-ID') || `unknown-${cacheId}`;
 
   console.log(`\n${'='.repeat(80)}`);
-  console.log(`[PDF-ROUTE] 📄 PDF export request started (DRAAD419 - jsPDF)`);
+  console.log(`[PDF-ROUTE] 📄 PDF export request started (DRAAD419-FIXED - jsPDF)`);
   console.log(`[PDF-ROUTE] 🆔 Request ID: ${requestId}`);
   console.log(`[PDF-ROUTE] 🔄 Cache ID: ${cacheId}`);
   console.log(`[PDF-ROUTE] ⏰ Timestamp: ${new Date().toISOString()}`);
