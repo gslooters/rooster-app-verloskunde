@@ -43,34 +43,11 @@ export const runtime = 'nodejs';
 export const revalidate = 0;
 
 import { NextResponse, NextRequest } from 'next/server';
-
-// DRAAD418: Lazy Supabase initialization
-let supabaseClient: any = null;
-let initError: string | null = null;
-
-function getSupabaseClient() {
-  if (supabaseClient) return supabaseClient;
-  if (initError) throw new Error(initError);
-
-  try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!supabaseUrl || !supabaseKey) {
-      throw new Error('Supabase credentials not configured in Railway environment');
-    }
-
-    const { createClient } = require('@supabase/supabase-js');
-    supabaseClient = createClient(supabaseUrl, supabaseKey);
-    
-    console.log('[MISSING-SERVICES] ✅ Supabase client initialized at runtime');
-    return supabaseClient;
-  } catch (error) {
-    initError = error instanceof Error ? error.message : String(error);
-    console.error('[MISSING-SERVICES] ❌ Supabase initialization failed:', initError);
-    throw error;
-  }
-}
+import {
+  queryMissingServices,
+  groupMissingServicesByDate,
+  type MissingService
+} from '@/lib/afl-missing-services-utils';
 
 // DRAAD418: Enhanced startup logging for deployment verification
 const DRAAD418_BUILD_ID = 'DRAAD418-AFL-SQL-FIX-1737283800';
@@ -90,141 +67,6 @@ console.log('✅ [DRAAD418] Dagdeel mapping: O=Ochtend, M=Middag, A=Avond ✅');
 console.log('✅ [DRAAD418] Team mapping: GRO=Groen, ORA=Oranje, TOT=Praktijk ✅');
 console.log('✅ [DRAAD418] Route ready for runtime requests!');
 console.log('='.repeat(80) + '\n');
-
-/**
- * Helper: Format date to Dutch format (e.g., "Dinsdag 26 november 2025")
- */
-function formatDutchDate(dateStr: string): string {
-  const date = new Date(dateStr + 'T00:00:00');
-  const options: Intl.DateTimeFormatOptions = {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric'
-  };
-  
-  const formatted = date.toLocaleDateString('nl-NL', options);
-  // Capitalize first letter
-  return formatted.charAt(0).toUpperCase() + formatted.slice(1);
-}
-
-/**
- * Helper: Get dagdeel display name (CORRECT MAPPING)
- */
-function getDagdeelDisplay(dagdeel: string): string {
-  const mapping: { [key: string]: string } = {
-    'O': 'Ochtend',    // ✅ CORRECT: O = Ochtend
-    'M': 'Middag',     // ✅ CORRECT: M = Middag
-    'A': 'Avond'       // ✅ CORRECT: A = Avond
-  };
-  return mapping[dagdeel] || dagdeel;
-}
-
-/**
- * Helper: Get team display name
- */
-function getTeamDisplay(team: string): string {
-  const mapping: { [key: string]: string } = {
-    'GRO': 'Groen',     // ✅ Team Groen
-    'ORA': 'Oranje',    // ✅ Team Oranje
-    'TOT': 'Praktijk'   // ✅ Praktijk (totaal)
-  };
-  return mapping[team] || team;
-}
-
-/**
- * Query missing services from database
- * DRAAD418: Correcte SQL filter: invulling=0 AND aantal=1
- */
-async function queryMissingServices(rosterId: string) {
-  const supabase = getSupabaseClient();
-  
-  console.log(`[MISSING-SERVICES] 🔍 Starting query for roster: ${rosterId.substring(0, 12)}...`);
-  
-  try {
-    // Try RPC call first
-    console.log('[MISSING-SERVICES] 📋 Attempting RPC call...');
-    const { data: rpcData, error: rpcError } = await supabase.rpc(
-      'get_missing_services',
-      { p_roster_id: rosterId }
-    );
-
-    if (rpcError) {
-      console.warn(`[MISSING-SERVICES] ⚠️ RPC error: ${rpcError.message}`);
-      throw new Error(`RPC failed: ${rpcError.message}`);
-    }
-
-    if (rpcData) {
-      console.log(`[MISSING-SERVICES] ✅ RPC successful - got ${rpcData.length} records`);
-      return rpcData;
-    }
-  } catch (rpcErr) {
-    console.log(`[MISSING-SERVICES] 📊 RPC not available, using fallback direct query`);
-  }
-
-  // Fallback: Direct SQL query if RPC doesn't exist
-  // DRAAD418 FIX: Correcte filter criteria
-  try {
-    console.log('[MISSING-SERVICES] 🔍 Executing direct database query...');
-    
-    const { data, error } = await supabase
-      .from('roster_period_staffing_dagdelen')
-      .select(`
-        date,
-        dagdeel,
-        team,
-        aantal,
-        invulling,
-        service_id,
-        status,
-        service_types!inner (code, naam)
-      `)
-      .eq('roster_id', rosterId)
-      .eq('invulling', 0)          // ✅ DRAAD418: Niet ingepland
-      .eq('aantal', 1)             // ✅ DRAAD418: Benodigd aantal = 1
-      .not('service_id', 'is', null);
-
-    if (error) {
-      console.error(`[MISSING-SERVICES] ❌ Direct query error: ${error.message}`);
-      throw error;
-    }
-
-    if (!data) {
-      console.warn('[MISSING-SERVICES] ⚠️ No data returned from direct query');
-      return [];
-    }
-
-    console.log(`[MISSING-SERVICES] ✅ Direct query successful - got ${data.length} records`);
-
-    // Calculate missing and filter
-    const filtered = (data || []).map((row: any) => {
-      const benodigd = row.aantal || 0;
-      const ingepland = row.invulling || 0;
-      const ontbrekend_aantal = benodigd - ingepland;
-      
-      return {
-        date: row.date,
-        dagdeel: row.dagdeel,
-        dagdeel_display: getDagdeelDisplay(row.dagdeel),
-        team: row.team,
-        team_display: getTeamDisplay(row.team),
-        dienst_code: row.service_types?.code || 'ONBEKEND',
-        dienst_naam: row.service_types?.naam || 'Onbekend',
-        benodigd,
-        ingepland,
-        ontbrekend_aantal,
-        status: row.status || 'MAG'
-      };
-    }).filter((r: any) => r.ontbrekend_aantal > 0);
-
-    console.log(`[MISSING-SERVICES] 📊 Filtered to ${filtered.length} rows with ontbrekend > 0`);
-    return filtered;
-  } catch (directErr) {
-    const errorMsg = directErr instanceof Error ? directErr.message : String(directErr);
-    console.error(`[MISSING-SERVICES] ❌ Direct query failed: ${errorMsg}`);
-    throw new Error(`Database query failed: ${errorMsg}`);
-  }
-}
 
 /**
  * POST handler for missing services query
@@ -254,14 +96,13 @@ export async function POST(request: NextRequest) {
 
     console.log(`[MISSING-SERVICES] 📥 Received roster_id: ${rosterId.substring(0, 12)}...`);
 
-    // Execute query with fallback
-    const missingServices = await queryMissingServices(rosterId);
+    // Execute shared query
+    const missingServices = await queryMissingServices((global as any).supabaseClient || null, rosterId);
 
     // Sort by date, dagdeel (O→M→A), team, dienst_code
-    missingServices.sort((a: any, b: any) => {
+    missingServices.sort((a: MissingService, b: MissingService) => {
       if (a.date !== b.date) return a.date.localeCompare(b.date);
       
-      // ✅ DRAAD418: Correcte dagdeel sortering: O (Ochtend) → M (Middag) → A (Avond)
       const dagdeelOrder: { [key: string]: number } = { 'O': 1, 'M': 2, 'A': 3 };
       const aDagdeel = dagdeelOrder[a.dagdeel] || 99;
       const bDagdeel = dagdeelOrder[b.dagdeel] || 99;
@@ -275,38 +116,11 @@ export async function POST(request: NextRequest) {
     console.log(`[MISSING-SERVICES] ✅ Data sorted - ${missingServices.length} records total`);
 
     // Group by date
-    const groupedByDate: { [key: string]: any } = {};
-    
-    missingServices.forEach((service: any) => {
-      const dateKey = service.date;
-      
-      if (!groupedByDate[dateKey]) {
-        groupedByDate[dateKey] = {
-          date: dateKey,
-          date_formatted: formatDutchDate(dateKey),
-          total_missing: 0,
-          services: []
-        };
-      }
-      
-      groupedByDate[dateKey].total_missing += service.ontbrekend_aantal;
-      groupedByDate[dateKey].services.push({
-        dagdeel: service.dagdeel,
-        dagdeel_display: service.dagdeel_display,
-        team: service.team,
-        team_display: service.team_display,
-        dienst_code: service.dienst_code,
-        dienst_naam: service.dienst_naam,
-        benodigd: service.benodigd,
-        ingepland: service.ingepland,
-        ontbrekend_aantal: service.ontbrekend_aantal,
-        status: service.status
-      });
-    });
+    const groupedByDate = groupMissingServicesByDate(missingServices);
 
     // Calculate total missing
     const totalMissing = missingServices.reduce(
-      (sum: number, s: any) => sum + (s.ontbrekend_aantal || 0),
+      (sum: number, s: MissingService) => sum + (s.ontbrekend_aantal || 0),
       0
     );
 
@@ -381,7 +195,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Create a mock request with body for POST handler
+  // For now, simply redirect to POST handler using same logic
   const mockRequest = new NextRequest(request.url, {
     method: 'POST',
     headers: request.headers,
