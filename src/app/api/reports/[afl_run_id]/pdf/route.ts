@@ -1,8 +1,7 @@
 /**
- * DRAAD 408: PDF RAPPORT FIELD NAME FIX - LOWERCASE SCHEMA MATCH
+ * DRAAD 419: PDF RAPPORT EXTENDED - MISSING SERVICES DETAIL
  * 
- * ROOT CAUSE: Database uses lowercase field names, API expected camelCase
- * FIX: Updated all field access to match actual database schema
+ * IMPROVEMENT: Expanded from basic summary to include detail table of missing services
  * 
  * Endpoint: GET /api/reports/{afl_run_id}/pdf
  * 
@@ -10,8 +9,10 @@
  * 1. Valideer afl_run_id (UUID format)
  * 2. Query Supabase: afl_execution_reports + roosters join
  * 3. Extract data uit JSONB report_data (CORRECT LOWERCASE veldnamen!)
- * 4. Genereer PDF met jsPDF + autotable
- * 5. Return PDF met proper headers + cache-busting
+ * 4. ✨ NEW: Query missing services via shared utils
+ * 5. ✨ NEW: Generate detail table with missing services per date
+ * 6. Genereer volledige PDF met jsPDF + autotable
+ * 7. Return PDF met proper headers + cache-busting
  * 
  * DATA STRUCTUUR (VERIFIED from database):
  * - summary.totalplanned: aantal geplande diensten (LOWERCASE!)
@@ -26,6 +27,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import {
+  queryMissingServices,
+  groupMissingServicesByDate,
+  generateMissingServicesPdfTable,
+  type MissingService
+} from '@/lib/afl-missing-services-utils';
 
 // ============================================================================
 // UTILITY FUNCTIONS
@@ -78,6 +85,7 @@ export async function GET(
     console.log('[PDF API] 🚀 START: PDF Generation Request');
     console.log('[PDF API] afl_run_id:', afl_run_id);
     console.log('[PDF API] Timestamp:', new Date().toISOString());
+    console.log('[PDF API] 🆕 DRAAD419: Including missing services detail table');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     // STEP 1: Validate UUID format
@@ -179,6 +187,18 @@ export async function GET(
       console.log('[PDF API]      - totalrequired:', report_data.summary.totalrequired);
       console.log('[PDF API]      - coveragepercent:', report_data.summary.coveragepercent);
       console.log('[PDF API]      - totalopen:', report_data.summary.totalopen);
+    }
+
+    // 🆕 STEP 4.5: Query missing services
+    console.log('[PDF API] 🆕 [DRAAD419] Querying missing services...');
+    let missingServices: MissingService[] = [];
+    try {
+      missingServices = await queryMissingServices(supabase, reportData.roster_id);
+      console.log('[PDF API] 🆕 [DRAAD419] ✅ Found', missingServices.length, 'missing services');
+    } catch (msError) {
+      console.warn('[PDF API] 🆕 [DRAAD419] ⚠️ Missing services query failed:', msError instanceof Error ? msError.message : String(msError));
+      console.warn('[PDF API] 🆕 [DRAAD419] Continuing without detail table...');
+      missingServices = [];
     }
 
     // STEP 5: Generate PDF with CORRECT LOWERCASE field names
@@ -295,8 +315,60 @@ export async function GET(
     // Update currentY after table
     currentY = (doc as any).lastAutoTable.finalY + 10;
 
-    // SECTION 3: Details (if space available)
+    // 🆕 SECTION 2.5: Missing Services Detail Table (DRAAD419)
     if (currentY < 250) {
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('📋 Detailoverzicht Ontbrekende Diensten', marginX, currentY);
+      currentY += 7;
+
+      if (missingServices.length === 0) {
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.text('✅ Geen ontbrekende diensten - rooster is compleet!', marginX, currentY);
+        currentY += 5;
+      } else {
+        // Generate table data
+        const grouped = groupMissingServicesByDate(missingServices);
+        const tableData = generateMissingServicesPdfTable(grouped);
+
+        autoTable(doc, {
+          startY: currentY,
+          head: tableData.head,
+          body: tableData.body,
+          margin: { left: marginX, right: marginX },
+          theme: 'grid',
+          headStyles: {
+            fillColor: [44, 62, 80],
+            textColor: 255,
+            fontStyle: 'bold',
+            fontSize: 9
+          },
+          bodyStyles: {
+            textColor: 50,
+            fontSize: 8
+          },
+          columnStyles: {
+            0: { cellWidth: 60, fontStyle: 'bold' },
+            1: { cellWidth: 30 },
+            2: { cellWidth: 30 },
+            3: { cellWidth: 25, halign: 'center' },
+            4: { cellWidth: 20, halign: 'right', fontStyle: 'bold' }
+          },
+          alternateRowStyles: {
+            fillColor: [245, 248, 251]
+          },
+          didDrawPage: (data) => {
+            // Footer on each page
+          }
+        });
+
+        currentY = (doc as any).lastAutoTable.finalY + 10;
+      }
+    }
+
+    // SECTION 3: Details (if space available)
+    if (currentY < 270) {
       doc.setFontSize(14);
       doc.setFont('helvetica', 'bold');
       doc.text('ℹ️ Details', marginX, currentY);
@@ -320,6 +392,7 @@ export async function GET(
 
     console.log('[PDF API] ✅ SUCCESS: PDF ready for download');
     console.log('[PDF API]    Filename:', filename);
+    console.log('[PDF API]    Missing services included:', missingServices.length);
     console.log('[PDF API]    Execution time:', executionTime, 'ms');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
@@ -336,7 +409,9 @@ export async function GET(
         'X-Cache-Bust': Date.now().toString(),
         'X-Execution-Time-Ms': executionTime.toString(),
         'X-Report-Id': reportData.id,
-        'X-AFL-Run-Id': afl_run_id
+        'X-AFL-Run-Id': afl_run_id,
+        'X-DRAAD419': 'true',
+        'X-Missing-Services': String(missingServices.length)
       }
     });
   } catch (error) {
@@ -374,7 +449,8 @@ export async function HEAD(
     status: 200,
     headers: {
       'X-Route-Status': 'OK',
-      'X-API-Version': '1.0.0',
+      'X-API-Version': '2.0.0',
+      'X-DRAAD419': 'Extended with missing services',
       'X-Timestamp': new Date().toISOString()
     }
   });
