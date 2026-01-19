@@ -1,8 +1,9 @@
 /**
- * DRAAD419-PDF-ROUTE: ECHTE PDF EXPORT MET jsPDF
+ * DRAAD420-PDF-ROUTE: ECHTE PDF EXPORT MET jsPDF + UINT8ARRAY FIX
  * Endpoint: POST /api/afl/export/pdf
  * 
  * KRITIEKE FIXES TOEGEPAST:
+ * ✅ Buffer → Uint8Array (Web API compatible met NextResponse)
  * ✅ Echte PDF-blob via jsPDF (niet HTML + PDF header)
  * ✅ Volledige rapport_data gebruiken (by_service, by_service_team, bottleneck_services, open_slots)
  * ✅ Service Breakdown tabel met dienstdetails
@@ -16,6 +17,7 @@
  * ✅ Cache-busting met Date.now() + Railway random trigger
  * ✅ FORCE DYNAMIC - Prevent Next.js optimizer
  * ✅ TypeScript tuple type fix voor spread operators
+ * ✅ DRAAD420: NextResponse Buffer type fix (Uint8Array)
  */
 
 // 🔥 FORCE DYNAMIC - Prevent Next.js optimizer from skipping this route
@@ -25,7 +27,7 @@ export const revalidate = 0;
 
 import { NextResponse, NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
 
 // Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -38,14 +40,14 @@ if (!supabaseUrl || !supabaseKey) {
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Log route initialization
-console.log('[PDF-ROUTE] ✅ PDF Export route loaded (DRAAD419-jsPDF-FIXED) at:', new Date().toISOString());
+console.log('[PDF-ROUTE] ✅ PDF Export route loaded (DRAAD420-Uint8Array-FIXED) at:', new Date().toISOString());
 console.log('[PDF-ROUTE] ✅ POST/GET handlers registered');
 
 /**
  * Generate ECHTE PDF via jsPDF
- * Returns Buffer (echte PDF-blob, niet HTML)
+ * Returns Uint8Array (echte PDF-blob, Web API compatible, NOT Node.js Buffer)
  */
-async function generatePdfWithJsPDF(data: any): Promise<Buffer> {
+async function generatePdfWithJsPDF(data: any): Promise<Uint8Array> {
   console.log('[PDF-ROUTE] 📄 Generating PDF with jsPDF...');
   
   const pdf = new jsPDF({
@@ -405,10 +407,11 @@ async function generatePdfWithJsPDF(data: any): Promise<Buffer> {
   console.log('[PDF-ROUTE] ✅ PDF generated successfully!');
   console.log(`[PDF-ROUTE] 📄 Total pages: ${totalPages}`);
 
-  // Return as Buffer
-  const pdfBuffer = Buffer.from(pdf.output('arraybuffer'));
-  console.log(`[PDF-ROUTE] 📦 PDF size: ${pdfBuffer.length} bytes`);
-  return pdfBuffer;
+  // ✅ DRAAD420 FIX: Return as Uint8Array (Web API compatible), NOT Node.js Buffer
+  const pdfArrayBuffer = pdf.output('arraybuffer') as ArrayBuffer;
+  const pdfUint8Array = new Uint8Array(pdfArrayBuffer);
+  console.log(`[PDF-ROUTE] 📦 PDF size: ${pdfUint8Array.length} bytes`);
+  return pdfUint8Array;
 }
 
 /**
@@ -420,7 +423,7 @@ export async function POST(request: NextRequest) {
   const requestId = request.headers.get('X-Request-ID') || `unknown-${cacheId}`;
 
   console.log(`\n${'='.repeat(80)}`);
-  console.log(`[PDF-ROUTE] 📄 PDF export request started (DRAAD419-FIXED - jsPDF)`);
+  console.log(`[PDF-ROUTE] 📄 PDF export request started (DRAAD420-Uint8Array)`);
   console.log(`[PDF-ROUTE] 🆔 Request ID: ${requestId}`);
   console.log(`[PDF-ROUTE] 🔄 Cache ID: ${cacheId}`);
   console.log(`[PDF-ROUTE] ⏰ Timestamp: ${new Date().toISOString()}`);
@@ -470,36 +473,36 @@ export async function POST(request: NextRequest) {
     console.log(`[PDF-ROUTE] ✅ Report found. Generating PDF with jsPDF...`);
 
     // ✅ NIEUW: Gebruik jsPDF in plaats van HTML
-    const pdfBuffer = await generatePdfWithJsPDF({
+    const pdfUint8Array = await generatePdfWithJsPDF({
       afl_run_id: aflReport.afl_run_id,
       roster_id: aflReport.roster_id,
       report_data: aflReport.report_data || {},
       created_at: aflReport.created_at
     });
 
-    if (!pdfBuffer || pdfBuffer.length === 0) {
-      console.error('[PDF-ROUTE] ❌ PDF buffer is empty');
+    if (!pdfUint8Array || pdfUint8Array.length === 0) {
+      console.error('[PDF-ROUTE] ❌ PDF Uint8Array is empty');
       return NextResponse.json(
         { error: 'PDF generation resulted in empty buffer' },
         { status: 500 }
       );
     }
 
-    const filename = `afl-rapport-${afl_run_id.substring(0, 8)}-${Date.now()}.pdf`;
+    const filename = `afl-rapport-${aflReport.afl_run_id.substring(0, 8)}-${Date.now()}.pdf`;
 
     console.log(`[PDF-ROUTE] ✅ PDF generated successfully!`);
     console.log(`[PDF-ROUTE] 📦 Filename: ${filename}`);
-    console.log(`[PDF-ROUTE] 📊 PDF size: ${pdfBuffer.length} bytes`);
-    console.log(`[PDF-ROUTE] ✅ RETURNING ECHTE PDF BLOB - Status 200`);
+    console.log(`[PDF-ROUTE] 📊 PDF size: ${pdfUint8Array.length} bytes`);
+    console.log(`[PDF-ROUTE] ✅ RETURNING ECHTE PDF BLOB (Uint8Array) - Status 200`);
     console.log(`${'='.repeat(80)}\n`);
 
-    // ✅ NIEUW: Return echte PDF blob
-    return new NextResponse(pdfBuffer, {
+    // ✅ DRAAD420 FIX: Return echte PDF blob als Uint8Array (NextResponse compatible)
+    return new NextResponse(pdfUint8Array, {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="${filename}"`,
-        'Content-Length': pdfBuffer.length.toString(),
+        'Content-Length': pdfUint8Array.length.toString(),
         'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
         'Pragma': 'no-cache',
         'Expires': '0'
