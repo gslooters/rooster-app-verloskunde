@@ -1,48 +1,71 @@
 /**
- * DRAAD419: AFL Rapport PDF met Ontbrekende Diensten Detail
+ * DRAAD422: PDF Route Fix - Next.js Route Segment Config
  * 
- * UITBREIDING VAN DRAAD408: PDF RAPPORT FIELD NAME FIX
- *
- * ROOT CAUSE (DRAAD408): Database uses lowercase field names, API expected camelCase
- * SOLUTION (DRAAD408): Updated all field access to match actual database schema
+ * ROOT CAUSE (DRAAD422): Route excluded from Next.js build due to missing dynamic config
+ * - Next.js 14.2.35 standalone build requires explicit 'export const dynamic' for [param] routes
+ * - Without this, dynamic routes are pre-rendered at build time (impossible) → excluded from build
+ * - Result: HTTP 404 at runtime even though code exists
  * 
- * NEW FEATURE (DRAAD419):
- * - Integrate missing services detail from queryMissingServices
- * - Display ontbrekende diensten per dag in professional table
- * - Use shared utilities from lib/afl-missing-services-utils.ts
- * - Generate unified PDF with samenvatting + detail overzicht
- *
- * Endpoint: GET /api/reports/{afl_run_id}/pdf
+ * SOLUTION (DRAAD422): Add Route Segment Config BEFORE any function exports
  * 
- * FUNCTIONALITEIT:
+ * HISTORICAL CONTEXT:
+ * - DRAAD419: AFL Rapport PDF met Ontbrekende Diensten Detail
+ * - DRAAD408: PDF Rapport Field Name Fix (lowercase database fields)
+ * 
+ * FULL FEATURE SET:
  * 1. Valideer afl_run_id (UUID format)
  * 2. Query Supabase: afl_execution_reports + roosters join
  * 3. Extract data uit JSONB report_data (CORRECT LOWERCASE veldnamen!)
- * 4. [NIEUW] Query missing services from roster_period_staffing_dagdelen
- * 5. [NIEUW] Group services by date
- * 6. [NIEUW] Generate table data for PDF
+ * 4. Query missing services from roster_period_staffing_dagdelen
+ * 5. Group services by date
+ * 6. Generate table data for PDF
  * 7. Genereer PDF met jsPDF + autotable (samenvatting + detail)
  * 8. Return PDF met proper headers + cache-busting
  * 
- * DATA STRUCTUUR (VERIFIED from database):
- * - summary.totalplanned: aantal geplande diensten (LOWERCASE!)
- * - summary.totalrequired: totaal benodigde diensten (LOWERCASE!)
- * - summary.coveragepercent: bezettingsgraad % (LOWERCASE!)
- * - summary.totalopen: open slots (LOWERCASE!)
- * - audit.durationseconds: uitvoeringsduur (LOWERCASE!)
+ * Endpoint: GET /api/reports/{afl_run_id}/pdf
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-// DRAAD419: Import shared utilities
 import {
   queryMissingServices,
   groupMissingServicesByDate,
   generateMissingServicesPdfTable,
   type MissingService
 } from '@/lib/afl-missing-services-utils';
+
+// ============================================================================
+// NEXT.JS ROUTE SEGMENT CONFIGURATION
+// ============================================================================
+/**
+ * CRITICAL: These exports MUST be present for dynamic [afl_run_id] routes
+ * Without these, Next.js standalone build will EXCLUDE this route completely
+ * 
+ * @see https://nextjs.org/docs/app/api-reference/file-conventions/route-segment-config
+ */
+
+/**
+ * Force dynamic rendering - required for [afl_run_id] parameter
+ * Without this, Next.js tries to pre-render at build time → route excluded from build
+ */
+export const dynamic = 'force-dynamic';
+
+/**
+ * Use full Node.js runtime - required for:
+ * - jsPDF library (canvas operations)
+ * - Buffer operations for PDF binary data
+ * - Supabase server-side operations
+ */
+export const runtime = 'nodejs';
+
+/**
+ * Maximum execution time: 60 seconds
+ * PDF generation with database queries can take 10-30 seconds
+ * Matches API maxDuration config in next.config.js
+ */
+export const maxDuration = 60;
 
 // ============================================================================
 // UTILITY FUNCTIONS
@@ -92,10 +115,11 @@ export async function GET(
     const { afl_run_id } = params;
 
     console.log('━'.repeat(80));
-    console.log('[PDF API] 🚀 START: PDF Generation Request (DRAAD419)');
+    console.log('[PDF API] 🚀 START: PDF Generation Request (DRAAD422)');
     console.log('[PDF API] afl_run_id:', afl_run_id);
     console.log('[PDF API] Timestamp:', new Date().toISOString());
     console.log('[PDF API] 📋 Features: Samenvatting + Ontbrekende Diensten Detail');
+    console.log('[PDF API] ✅ Route Segment Config: dynamic=force-dynamic, runtime=nodejs');
     console.log('━'.repeat(80));
 
     // STEP 1: Validate UUID format
@@ -395,7 +419,7 @@ export async function GET(
         'X-Report-Id': reportData.id,
         'X-AFL-Run-Id': afl_run_id,
         'X-Missing-Services': missingServices.length.toString(),
-        'X-Draad': 'DRAAD419'
+        'X-Draad': 'DRAAD422'
       }
     });
   } catch (error) {
@@ -431,9 +455,10 @@ export async function HEAD(
     status: 200,
     headers: {
       'X-Route-Status': 'OK',
-      'X-API-Version': '2.0.0-DRAAD419',
+      'X-API-Version': '3.0.0-DRAAD422',
       'X-Timestamp': new Date().toISOString(),
-      'X-Features': 'Samenvatting + Ontbrekende Diensten Detail'
+      'X-Features': 'Samenvatting + Ontbrekende Diensten Detail',
+      'X-Route-Config': 'dynamic=force-dynamic, runtime=nodejs, maxDuration=60'
     }
   });
 }
