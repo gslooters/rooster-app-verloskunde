@@ -1,17 +1,28 @@
 /**
- * DRAAD 408: PDF RAPPORT FIELD NAME FIX - LOWERCASE SCHEMA MATCH
+ * DRAAD419: AFL Rapport PDF met Ontbrekende Diensten Detail
  * 
- * ROOT CAUSE: Database uses lowercase field names, API expected camelCase
- * FIX: Updated all field access to match actual database schema
+ * UITBREIDING VAN DRAAD408: PDF RAPPORT FIELD NAME FIX
+ *
+ * ROOT CAUSE (DRAAD408): Database uses lowercase field names, API expected camelCase
+ * SOLUTION (DRAAD408): Updated all field access to match actual database schema
  * 
+ * NEW FEATURE (DRAAD419):
+ * - Integrate missing services detail from queryMissingServices
+ * - Display ontbrekende diensten per dag in professional table
+ * - Use shared utilities from lib/afl-missing-services-utils.ts
+ * - Generate unified PDF with samenvatting + detail overzicht
+ *
  * Endpoint: GET /api/reports/{afl_run_id}/pdf
  * 
  * FUNCTIONALITEIT:
  * 1. Valideer afl_run_id (UUID format)
  * 2. Query Supabase: afl_execution_reports + roosters join
  * 3. Extract data uit JSONB report_data (CORRECT LOWERCASE veldnamen!)
- * 4. Genereer PDF met jsPDF + autotable
- * 5. Return PDF met proper headers + cache-busting
+ * 4. [NIEUW] Query missing services from roster_period_staffing_dagdelen
+ * 5. [NIEUW] Group services by date
+ * 6. [NIEUW] Generate table data for PDF
+ * 7. Genereer PDF met jsPDF + autotable (samenvatting + detail)
+ * 8. Return PDF met proper headers + cache-busting
  * 
  * DATA STRUCTUUR (VERIFIED from database):
  * - summary.totalplanned: aantal geplande diensten (LOWERCASE!)
@@ -19,13 +30,19 @@
  * - summary.coveragepercent: bezettingsgraad % (LOWERCASE!)
  * - summary.totalopen: open slots (LOWERCASE!)
  * - audit.durationseconds: uitvoeringsduur (LOWERCASE!)
- * - audit.aflrunid: AFL run identificatie (LOWERCASE!)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+// DRAAD419: Import shared utilities
+import {
+  queryMissingServices,
+  groupMissingServicesByDate,
+  generateMissingServicesPdfTable,
+  type MissingService
+} from '@/lib/afl-missing-services-utils';
 
 // ============================================================================
 // UTILITY FUNCTIONS
@@ -74,11 +91,12 @@ export async function GET(
   try {
     const { afl_run_id } = params;
 
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('[PDF API] 🚀 START: PDF Generation Request');
+    console.log('━'.repeat(80));
+    console.log('[PDF API] 🚀 START: PDF Generation Request (DRAAD419)');
     console.log('[PDF API] afl_run_id:', afl_run_id);
     console.log('[PDF API] Timestamp:', new Date().toISOString());
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('[PDF API] 📋 Features: Samenvatting + Ontbrekende Diensten Detail');
+    console.log('━'.repeat(80));
 
     // STEP 1: Validate UUID format
     if (!isValidUUID(afl_run_id)) {
@@ -97,7 +115,7 @@ export async function GET(
     console.log('[PDF API] ✅ Supabase client initialized');
 
     // STEP 3: Query database with detailed logging
-    console.log('[PDF API] 🔄 Querying database...');
+    console.log('[PDF API] 🔄 Querying database for report data...');
     console.log('[PDF API]    Table: afl_execution_reports');
     console.log('[PDF API]    Join: roosters (inner)');
     console.log('[PDF API]    Filter: afl_run_id =', afl_run_id);
@@ -128,8 +146,6 @@ export async function GET(
       console.error('[PDF API] ❌ DATABASE ERROR:', reportError);
       console.error('[PDF API]    Code:', reportError.code);
       console.error('[PDF API]    Message:', reportError.message);
-      console.error('[PDF API]    Details:', reportError.details);
-      console.error('[PDF API]    Hint:', reportError.hint);
       
       return NextResponse.json(
         { 
@@ -143,11 +159,6 @@ export async function GET(
 
     if (!reportData) {
       console.error('[PDF API] ❌ NO DATA: Report not found');
-      console.error('[PDF API]    afl_run_id:', afl_run_id);
-      console.error('[PDF API]    Possible causes:');
-      console.error('[PDF API]      - Record does not exist');
-      console.error('[PDF API]      - Foreign key join failed (roosters)');
-      console.error('[PDF API]      - RLS policy blocking read');
       
       return NextResponse.json(
         { error: 'Rapport niet gevonden', afl_run_id },
@@ -158,30 +169,37 @@ export async function GET(
     console.log('[PDF API] ✅ Report found in database');
     console.log('[PDF API]    Report ID:', reportData.id);
     console.log('[PDF API]    Roster ID:', reportData.roster_id);
-    console.log('[PDF API]    Created at:', reportData.created_at);
 
-    // STEP 4: Extract and validate data structure
+    // STEP 4: Extract data structures
     const roosterData = reportData.roosters as any;
     const report_data = reportData.report_data as any;
 
     console.log('[PDF API] 🔍 Analyzing report_data structure...');
-    console.log('[PDF API]    Keys present:', Object.keys(report_data || {}));
-    
-    // Log critical data availability
     const hasSummary = report_data?.summary !== undefined;
-    const hasAudit = report_data?.audit !== undefined;
     console.log('[PDF API]    - summary:', hasSummary ? '✅ Present' : '❌ Missing');
-    console.log('[PDF API]    - audit:', hasAudit ? '✅ Present' : '❌ Missing');
 
-    if (hasSummary) {
-      console.log('[PDF API]    Summary data (LOWERCASE schema):');
-      console.log('[PDF API]      - totalplanned:', report_data.summary.totalplanned);
-      console.log('[PDF API]      - totalrequired:', report_data.summary.totalrequired);
-      console.log('[PDF API]      - coveragepercent:', report_data.summary.coveragepercent);
-      console.log('[PDF API]      - totalopen:', report_data.summary.totalopen);
+    // STEP 5: [DRAAD419] Query missing services
+    console.log('[PDF API] 🔄 [DRAAD419] Querying missing services...');
+    let missingServices: MissingService[] = [];
+    let groupedMissing: any = {};
+    let missingTableData: any = { head: [], body: [] };
+
+    try {
+      missingServices = await queryMissingServices(supabase, reportData.roster_id);
+      console.log(`[PDF API] ✅ Found ${missingServices.length} missing services`);
+      
+      if (missingServices.length > 0) {
+        groupedMissing = groupMissingServicesByDate(missingServices);
+        missingTableData = generateMissingServicesPdfTable(groupedMissing);
+        console.log(`[PDF API] ✅ Generated table data with ${Object.keys(groupedMissing).length} dates`);
+      }
+    } catch (missingErr) {
+      const errMsg = missingErr instanceof Error ? missingErr.message : String(missingErr);
+      console.warn(`[PDF API] ⚠️ Warning: Could not load missing services: ${errMsg}`);
+      // Continue anyway - missing services is enhancement, not blocker
     }
 
-    // STEP 5: Generate PDF with CORRECT LOWERCASE field names
+    // STEP 6: Generate PDF
     console.log('[PDF API] 🔄 Generating PDF document...');
 
     const doc = new jsPDF({
@@ -190,7 +208,6 @@ export async function GET(
       format: 'a4'
     });
 
-    // Layout configuration
     const marginX = 15;
     const marginY = 15;
     let currentY = marginY;
@@ -237,25 +254,18 @@ export async function GET(
     doc.text(`Status: ${roosterData.status}`, marginX, currentY);
     currentY += 10;
 
-    // SECTION 2: Samenvatting (using CORRECT LOWERCASE field names)
+    // SECTION 2: Samenvatting
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
     doc.text('📊 Samenvatting', marginX, currentY);
     currentY += 7;
 
-    // ✅ DRAAD408 FIX: Use LOWERCASE field names matching database schema
     const totalPlanned = safeGet(report_data, 'summary.totalplanned', 0);
     const totalRequired = safeGet(report_data, 'summary.totalrequired', 0);
     const coveragePercent = safeGet(report_data, 'summary.coveragepercent', 0);
     const totalOpen = safeGet(report_data, 'summary.totalopen', 0);
     const durationSeconds = safeGet(report_data, 'audit.durationseconds', 'N/A');
     const aflRunIdShort = afl_run_id.substring(0, 8);
-
-    console.log('[PDF API] 📊 Extracted values (FIXED):');
-    console.log('[PDF API]    - totalPlanned:', totalPlanned);
-    console.log('[PDF API]    - totalRequired:', totalRequired);
-    console.log('[PDF API]    - coveragePercent:', coveragePercent);
-    console.log('[PDF API]    - totalOpen:', totalOpen);
 
     const metricsData = [
       ['Metric', 'Waarde'],
@@ -292,10 +302,56 @@ export async function GET(
       }
     });
 
-    // Update currentY after table
     currentY = (doc as any).lastAutoTable.finalY + 10;
 
-    // SECTION 3: Details (if space available)
+    // SECTION 3: [DRAAD419] Detailoverzicht Ontbrekende Diensten
+    console.log('[PDF API] 🔄 Adding missing services section...');
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('📋 Detailoverzicht Ontbrekende Diensten', marginX, currentY);
+    currentY += 7;
+
+    if (missingServices.length === 0) {
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.text('✅ Geen ontbrekende diensten - rooster is compleet!', marginX, currentY);
+      currentY += 8;
+    } else {
+      // Generate and add table
+      if (missingTableData.head.length > 0 && missingTableData.body.length > 0) {
+        autoTable(doc, {
+          startY: currentY,
+          head: missingTableData.head,
+          body: missingTableData.body,
+          margin: { left: marginX, right: marginX },
+          theme: 'grid',
+          headStyles: {
+            fillColor: [220, 53, 69],  // Red for missing services
+            textColor: 255,
+            fontStyle: 'bold',
+            fontSize: 9
+          },
+          bodyStyles: {
+            textColor: 50,
+            fontSize: 8
+          },
+          columnStyles: {
+            0: { cellWidth: 40 },  // Date
+            1: { cellWidth: 30 },  // Dagdeel
+            2: { cellWidth: 35 },  // Team
+            3: { cellWidth: 25 },  // Code
+            4: { cellWidth: 20, halign: 'center' }  // Count
+          },
+          alternateRowStyles: {
+            fillColor: [255, 250, 250]
+          }
+        });
+
+        currentY = (doc as any).lastAutoTable.finalY + 10;
+      }
+    }
+
+    // SECTION 4: Details
     if (currentY < 250) {
       doc.setFontSize(14);
       doc.setFont('helvetica', 'bold');
@@ -304,24 +360,25 @@ export async function GET(
 
       doc.setFontSize(9);
       doc.setFont('helvetica', 'normal');
-      doc.text(`Dit rapport is automatisch gegenereerd door het AFL-algoritme.`, marginX, currentY);
+      doc.text('Dit rapport is automatisch gegenereerd door het AFL-algoritme.', marginX, currentY);
       currentY += 5;
-      doc.text(`Voor meer details, bekijk het volledige rapport in de applicatie.`, marginX, currentY);
+      doc.text('Voor meer details, bekijk het volledige rapport in de applicatie.', marginX, currentY);
     }
 
-    // STEP 6: Generate PDF buffer
+    // STEP 7: Generate PDF buffer
     console.log('[PDF API] ✅ PDF document generated');
     const pdfBuffer = Buffer.from(doc.output('arraybuffer'));
     console.log('[PDF API]    PDF size:', pdfBuffer.length, 'bytes');
 
-    // STEP 7: Create response with headers + cache-busting
+    // STEP 8: Create response with cache-busting
     const filename = `afl-rapport-${aflRunIdShort}-${Date.now()}.pdf`;
     const executionTime = Date.now() - startTime;
 
     console.log('[PDF API] ✅ SUCCESS: PDF ready for download');
     console.log('[PDF API]    Filename:', filename);
+    console.log('[PDF API]    Missing Services Count:', missingServices.length);
     console.log('[PDF API]    Execution time:', executionTime, 'ms');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('━'.repeat(80));
 
     return new NextResponse(pdfBuffer, {
       status: 200,
@@ -336,19 +393,20 @@ export async function GET(
         'X-Cache-Bust': Date.now().toString(),
         'X-Execution-Time-Ms': executionTime.toString(),
         'X-Report-Id': reportData.id,
-        'X-AFL-Run-Id': afl_run_id
+        'X-AFL-Run-Id': afl_run_id,
+        'X-Missing-Services': missingServices.length.toString(),
+        'X-Draad': 'DRAAD419'
       }
     });
   } catch (error) {
     const executionTime = Date.now() - startTime;
     
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.error('━'.repeat(80));
     console.error('[PDF API] ❌ FATAL ERROR');
     console.error('[PDF API] Type:', error instanceof Error ? error.name : typeof error);
     console.error('[PDF API] Message:', error instanceof Error ? error.message : String(error));
-    console.error('[PDF API] Stack:', error instanceof Error ? error.stack : 'N/A');
     console.error('[PDF API] Execution time:', executionTime, 'ms');
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.error('━'.repeat(80));
 
     return NextResponse.json(
       { 
@@ -363,7 +421,6 @@ export async function GET(
 
 /**
  * Health check endpoint
- * Allows testing if route is accessible
  */
 export async function HEAD(
   request: NextRequest,
@@ -374,8 +431,9 @@ export async function HEAD(
     status: 200,
     headers: {
       'X-Route-Status': 'OK',
-      'X-API-Version': '1.0.0',
-      'X-Timestamp': new Date().toISOString()
+      'X-API-Version': '2.0.0-DRAAD419',
+      'X-Timestamp': new Date().toISOString(),
+      'X-Features': 'Samenvatting + Ontbrekende Diensten Detail'
     }
   });
 }
