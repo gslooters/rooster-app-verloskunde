@@ -2,101 +2,115 @@
 RAILWAY DEPLOYMENT TRIGGER - FORCE REBUILD
 ═══════════════════════════════════════════════════════════════════════════
 
-DEPLOYMENT: DRAAD-407-PDF-ROUTE-ACTIVATION
-TIMESTAMP: 2026-01-07T08:19:00Z
-REASON: Force rebuild to activate existing PDF route /api/reports/[afl_run_id]/pdf
+DEPLOYMENT: DRAAD-421-PDF-ROUTE-404-FIX
+TIMESTAMP: 2026-01-20T20:06:30Z
+REASON: Force rebuild - PDF route returns 404 despite existing in codebase
 
 PROBLEM ANALYSIS:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ❌ SYMPTOM:
-   - Client calls /api/reports/{afl_run_id}/pdf → 404 Not Found
-   - Error in console: "PDF generatie mislukt (HTTP 404)"
-   - Modal shows "✅ PDF download completed successfully" (misleading)
+   - Client calls /api/reports/{afl_run_id}/pdf → HTTP 404
+   - Error: "Download van PDF is mislukt: HTTP 404"
+   - AFL Run ID: eb6851da-9555-47c5-940e-749974f6c72d
+   - Timestamp error: 2026-01-20 20:59:02
 
 🔍 ROOT CAUSE:
-   - PDF route EXISTS at: src/app/api/reports/[afl_run_id]/pdf/route.ts
-   - Route code is CORRECT and COMPLETE
-   - BUT: Railway is serving OLD build without this route
-   - Next.js routing table doesn't include /api/reports/[afl_run_id]/pdf
+   - PDF route EXISTS: src/app/api/reports/[afl_run_id]/pdf/route.ts ✅
+   - Code is CORRECT (DRAAD419 + DRAAD420) ✅
+   - Route DEPLOYED in GitHub commit 099e473 ✅
+   - BUT: Railway production returns 404 ❌
+   - CONCLUSION: Build/deployment mismatch
 
 ✅ SOLUTION:
-   - Force Railway rebuild via deployment-trigger.txt update
-   - Next.js will rebuild routing table
-   - PDF route will become available at runtime
+   - Force complete Railway rebuild
+   - Clear Next.js cache
+   - Rebuild routing table
+   - Activate PDF endpoint
 
 FILES INVOLVED:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-✅ src/app/api/reports/[afl_run_id]/pdf/route.ts (EXISTS, READY)
-   - Full PDF generation with jsPDF + autotable
-   - Supabase query for afl_execution_reports
+✅ src/app/api/reports/[afl_run_id]/pdf/route.ts
+   - DRAAD419: Missing services detail integration
+   - DRAAD420: Backend PDF download fix
+   - jsPDF + autotable implementation
+   - Supabase integration
    - Cache-busting headers
-   - Comprehensive error logging
-   - Health check endpoint (HEAD method)
 
 🔄 .railway/deployment-trigger.txt (THIS FILE)
-   - Updated to trigger rebuild
-   - Cache-bust nonce: 2026-01-07T08:19:00Z
-   - Random: 8974523612
+   - Updated: 2026-01-20T20:06:30Z
+   - Cache-bust nonce: 1737405990847
+   - Random: 8473652109
+   - Trigger: IMMEDIATE
 
 VERIFICATION STEPS:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 1. ✅ GitHub Push:
-   - Commit this file update
-   - Push to main branch
-   - Verify commit appears on GitHub
+   - Commit: DRAAD421
+   - Push to main
+   - Verify on GitHub
 
-2. ⏳ Railway Build:
-   - Railway auto-detects commit
-   - Starts new build
-   - Install dependencies
-   - Build Next.js application
-   - Start application
+2. ⏳ Railway Deployment:
+   - Auto-detect commit
+   - Start build
+   - Install deps
+   - Build Next.js
+   - Deploy
 
-3. 🧪 Test PDF Route:
-   - Open: https://rooster-app-verloskunde-production.up.railway.app
-   - Navigate to planning/design/dashboard
-   - Click "AFL Uitvoeren"
-   - Wait for AFL completion
-   - Click "📥 Download PDF rapport"
-   - EXPECT: PDF downloads successfully (200 OK)
+3. 🧪 Test Sequence:
+   a. Open: https://rooster-app-verloskunde-production.up.railway.app
+   b. Login
+   c. Navigate to planning/design/dashboard
+   d. Create AFL run or use existing
+   e. Click "📥 Download PDF rapport"
+   f. EXPECT: HTTP 200 + PDF download
+   g. EXPECT: Filename: afl-rapport-{id}-{timestamp}.pdf
 
-4. 🔍 Verify in Railway Logs:
-   - Look for: "[PDF API] 🚀 START: PDF Generation Request"
-   - Check: "[PDF API] ✅ SUCCESS: PDF ready for download"
-   - No 404 errors in logs
+4. 🔍 Railway Logs Check:
+   - Search for: "[PDF API] 🚀 START"
+   - Verify: "[PDF API] ✅ SUCCESS"
+   - No 404 errors
 
-EXPECTED LOGS AFTER DEPLOYMENT:
+EXPECTED LOGS AFTER FIX:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-[PDF API] 🚀 START: PDF Generation Request
-[PDF API] afl_run_id: e1a2a078-1c23-4750-b304-af8496637740
+[PDF API] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[PDF API] 🚀 START: PDF Generation Request (DRAAD419)
+[PDF API] afl_run_id: eb6851da-9555-47c5-940e-749974f6c72d
+[PDF API] Timestamp: 2026-01-20T20:10:00.000Z
+[PDF API] 📋 Features: Samenvatting + Ontbrekende Diensten Detail
+[PDF API] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 [PDF API] ✅ UUID validation passed
+[PDF API] 🔄 Initializing Supabase client...
 [PDF API] ✅ Supabase client initialized
-[PDF API] 🔄 Querying database...
+[PDF API] 🔄 Querying database for report data...
 [PDF API] ✅ Report found in database
-[PDF API]    Report ID: abc-123
-[PDF API]    Roster ID: c23fde73-e1a7-41fe-bc4e-c041b7b2ccb8
-[PDF API] 🔍 Analyzing report_data structure...
-[PDF API]    - summary: ✅ Present
-[PDF API]    - audit: ✅ Present
+[PDF API]    Report ID: {...}
+[PDF API]    Roster ID: 5435ef00-8ffe-48b2-9493-efdbfd941073
+[PDF API] 🔄 [DRAAD419] Querying missing services...
+[PDF API] ✅ Found {n} missing services
 [PDF API] 🔄 Generating PDF document...
 [PDF API] ✅ PDF document generated
-[PDF API]    PDF size: 45678 bytes
+[PDF API]    PDF size: {bytes} bytes
 [PDF API] ✅ SUCCESS: PDF ready for download
+[PDF API]    Filename: afl-rapport-eb6851da-1737405990.pdf
+[PDF API]    Missing Services Count: {n}
+[PDF API]    Execution time: {ms} ms
+[PDF API] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 CACHE-BUSTING MARKERS:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-DRAAD: DRAAD-407-PDF-ROUTE-ACTIVATION
-NONCE: 2026-01-07T08:19:00Z-PDF-FIX
-RANDOM: 8974523612
-BUILD_ID: {{RAILWAY_DEPLOYMENT_ID}}
-TIMESTAMP_ISO: 2026-01-07T08:19:00.000Z
-TIMESTAMP_UNIX: 1736238540
+DRAAD: DRAAD-421-PDF-ROUTE-404-FIX
+NONCE: 2026-01-20T20:06:30Z-FORCE-DEPLOY
+RANDOM: 8473652109
+TIMESTAMP_UNIX: 1737405990847
+BUILD_TRIGGER: IMMEDIATE
+COMMIT_SHA: {{RAILWAY_COMMIT_SHA}}
+DEPLOYMENT_ID: {{RAILWAY_DEPLOYMENT_ID}}
 
 ═══════════════════════════════════════════════════════════════════════════
-END DEPLOYMENT TRIGGER
+END DEPLOYMENT TRIGGER - READY FOR RAILWAY PICKUP
 ═══════════════════════════════════════════════════════════════════════════
