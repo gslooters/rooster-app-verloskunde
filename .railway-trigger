@@ -1,26 +1,41 @@
-{
-  "build_trigger": true,
-  "timestamp": "2026-01-06T09:11:27Z",
-  "build_id": "railway-1736148687000",
-  "cache_busting_enabled": true,
-  "draad_status": "DRAAD405 Phase 2 Complete",
-  "solve_engine_version": "2.0",
-  "features": {
-    "dio_dia_validation": true,
-    "quota_enforcement": true,
-    "chain_automation": true,
-    "performance_instrumentation": true,
-    "cache_busting": true
-  },
-  "performance_targets": {
-    "solve_engine_ms": "< 3000ms",
-    "cache_hit_rate_percent": "> 85%",
-    "memory_peak_mb": "< 50MB"
-  },
-  "deployment_info": {
-    "environment": "production",
-    "service": "rooster-api",
-    "auto_deploy": "enabled",
-    "rollback_available": true
-  }
-}
+# Railway Deployment Trigger - DRAAD422
+
+## Deployment Info
+- **DRAAD:** 422
+- **Timestamp:** 2026-01-20T20:36:00Z
+- **Cache Bust:** 1737407760000
+- **Trigger Reason:** PDF Route 404 Fix - Route Segment Config Activation
+
+## Changes in this deployment
+1. Added Next.js Route Segment Config to PDF route
+2. export const dynamic = 'force-dynamic'
+3. export const runtime = 'nodejs'
+4. export const maxDuration = 60
+
+## Expected Build Output
+```
+Route (app)                                                 Size     First Load JS
+...
+├ ƒ /api/reports/[afl_run_id]/pdf                           0 B                0 B  ← THIS SHOULD APPEAR NOW
+```
+
+## Verification Steps
+1. ✅ Check build log for route presence
+2. ✅ Test GET endpoint with valid UUID
+3. ✅ Test GET endpoint with invalid UUID (expect 400)
+4. ✅ Test HEAD endpoint for health check
+5. ✅ Verify response headers contain X-Route-Config
+
+## Root Cause (Fixed)
+- Next.js 14.2.35 standalone build excludes dynamic [param] routes without explicit 'dynamic' export
+- Route existed in code but was excluded from build → HTTP 404 at runtime
+- Solution: Add Route Segment Config before function exports
+
+## Deployment Target
+- Platform: Railway.app
+- Service: rooster-app-verloskunde-production
+- Environment: Production
+- Build: Next.js 14.2.35 standalone mode
+
+---
+Generated: 2026-01-20T20:36:00Z
