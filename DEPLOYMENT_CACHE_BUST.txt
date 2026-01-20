@@ -1,91 +1,11 @@
-# Railway Deployment Cache-Bust Trigger
+DRAAD420 - Download PDF Backend Fix
+Timestamp: 2026-01-20T20:50:00Z
+Cache-bust: 1737406200000
+Random: railway-draad420-pdf-fix
 
-**Deployment:** DRAAD406F3 - Z-index Bug Fix
-**Fix Type:** Critical UI Bug Fix
-**Timestamp:** 2026-01-07 15:41:53 UTC
-**Token:** ${Date.now()}-${Math.floor(Math.random() * 10000)}
-
-## Problem Fixed:
-
-**AflReportModal was hidden behind AflProgressModal**
-
-Root Cause: Invalid Tailwind CSS z-index classes
-- z-55 ❌ INVALID (does not exist in Tailwind)
-- z-60 ❌ INVALID (does not exist in Tailwind)
-
-Tailwind CSS z-index standard values:
-- ✅ z-0, z-10, z-20, z-30, z-40, z-50, z-auto
-- ❌ z-55, z-60 do NOT exist
-
-## Solution Applied:
-
-**AflReportModal.tsx changes:**
-
-1. Line 96 (Overlay):
-   - OLD: `className="fixed inset-0 z-55 bg-black/30"`
-   - NEW: `className="fixed inset-0 z-[9998] bg-black/30"`
-   - Uses arbitrary value: z-[9998]
-
-2. Line 99 (Modal):
-   - OLD: `className="fixed inset-0 z-60 flex items-center justify-center p-4"`
-   - NEW: `className="fixed inset-0 z-[9999] flex items-center justify-center p-4"`
-   - Uses arbitrary value: z-[9999]
-
-## Result:
-
-✅ AflReportModal now appears ABOVE AflProgressModal
-✅ Z-index stack correct:
-   - z-[9999]: AflReportModal content (TOP)
-   - z-[9998]: AflReportModal overlay
-   - z-50: AflProgressModal content
-   - z-40: AflProgressModal overlay
-
-## Quality Checks:
-
-✅ Syntax validation passed
-✅ React hooks correct
-✅ No TypeScript errors
-✅ No undefined variables
-✅ Tailwind arbitrary values valid
-✅ Component props correct
-✅ No performance impact
-
-## Cache Invalidation:
-
-- Service Workers: Force refresh
-- Client-side cache: Cleared
-- Static assets: Revalidated
-- Headers: Cache-Control: no-store, no-cache, must-revalidate
-- Browser cache: Busted
-
-## Deployment Verification:
-
-✅ Git commit created
-✅ GitHub push successful
-✅ Railway auto-deployment triggered
-✅ Service workers updated
-✅ No breaking changes
-✅ Backward compatible
-
-## Testing Checklist:
-
-[ ] Modal opens when "Rapport bekijken" button clicked
-[ ] AflReportModal appears ABOVE AflProgressModal (visible)
-[ ] Close button works
-[ ] Overlay is visible
-[ ] Content is readable
-[ ] Print functionality works
-[ ] No console errors
-[ ] Responsive on mobile/tablet/desktop
-
-## Next Steps:
-
-1. ✅ Code deployed to Railway
-2. [ ] Verify in production
-3. [ ] Test on different browsers
-4. [ ] Test on different devices
-5. [ ] Monitor error logs
-
-Continuous deployment triggered by Railway.
-No manual intervention required.
-Fix is production-ready.
+Changes:
+- AflReportModal.tsx: window.print() -> handleDownloadBackendPdf()
+- Knop: "Afdrukken / PDF" -> "Download PDF"
+- API: /api/reports/[afl_run_id]/pdf (GET)
+- Cache-busting: ?cb=Date.now() + headers
+- Bestandsnaam: afl-rapport-<prefix>-<timestamp>.pdf

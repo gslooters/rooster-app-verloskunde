@@ -1,40 +1,29 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, AlertCircle, CheckCircle2, TrendingDown, Printer } from 'lucide-react';
+import { X, AlertCircle, CheckCircle2, TrendingDown, Download } from 'lucide-react';
 
 /**
- * AFL Report Modal Component - DRAAD406F3: Optie B Implementation
- * UPDATED: 14 januari 2026 - DRAAD415 HTTP 404 FIX
+ * AFL Report Modal Component - DRAAD420: Download PDF Fix
+ * UPDATED: 20 januari 2026 - DRAAD420 Backend PDF Download
  *
- * NIEUWE FEATURES:
- * ✅ Detailoverzicht ontbrekende diensten per dag
- * ✅ Groupering per datum met dagdeel/team/dienstcode
- * ✅ PDF export functionaliteit via window.print()
- * ✅ Print-friendly styling met vaste kopregel
- * ✅ Nederlandse datum formatting
- * ✅ Kleurcodering dagdelen (M=geel, O=oranje, N=blauw)
- * ✅ Loading states en error handling
- * ✅ Cache-busting met Date.now() + Railway trigger header
+ * DRAAD420 CHANGES:
+ * ✅ Verwijderd: window.print() / handlePrint()
+ * ✅ Nieuw: handleDownloadBackendPdf() - haalt PDF op van backend
+ * ✅ Knop: "Afdrukken / PDF" → "Download PDF"
+ * ✅ API: /api/reports/[afl_run_id]/pdf (GET)
+ * ✅ Cache-busting: ?cb=Date.now() + headers
+ * ✅ Bestandsnaam: afl-rapport-<prefix>-<timestamp>.pdf
+ * ✅ Foutafhandeling: duidelijke meldingen
+ * ✅ Icon: Download i.p.v. Printer
  *
- * DRAAD415 FIX:
- * - Verwijderd: query-parameter ?cb=Date.now() uit POST URL
- * - Toegevoegd: X-Cache-Bust header + Railway trigger header
- * - Voorkomt HTTP 404 op /api/afl/missing-services
- *
- * DRAAD406F3 BESTAANDE FEATURES:
- * 1. ✅ CREATED: AflReportModal.tsx - Volledig nieuw component
- * 2. ✅ IMPLEMENTED: PDF-vriendelijke rapport weergave
- * 3. ✅ ADDED: Statistieken uit result.report.summary
- * 4. ✅ ADDED: Overzicht nog niet ingevulde diensten
- * 5. ✅ ADDED: Print-vriendelijk styling met kleurcodering
- * 6. ✅ ADDED: Terug knop (enige knop in deze modal)
- * 7. ✅ ADDED: Warnings/alerts voor onderbezetting
- * 8. ✅ TESTED: Syntax errors gecontroleerd
- * 9. ✅ FIXED: Z-index bug - z-55 en z-60 zijn ongeldig in Tailwind CSS
- *    - Changed z-55 → z-[9998] (arbitrary value)
- *    - Changed z-60 → z-[9999] (arbitrary value)
- *    - Zorg dat AflReportModal BOVEN AflProgressModal verschijnt
+ * BESTAANDE FEATURES:
+ * - Detailoverzicht ontbrekende diensten per dag
+ * - Groupering per datum met dagdeel/team/dienstcode
+ * - Print-friendly styling met vaste kopregel
+ * - Nederlandse datum formatting
+ * - Kleurcodering dagdelen (M=geel, O=oranje, N=blauw)
+ * - Loading states en error handling
  */
 
 interface AflReportModalProps {
@@ -71,6 +60,7 @@ export function AflReportModal({ isOpen, reportData, onClose }: AflReportModalPr
   const [missingServices, setMissingServices] = useState<MissingServicesData | null>(null);
   const [loadingMissing, setLoadingMissing] = useState(true);
   const [errorMissing, setErrorMissing] = useState<string | null>(null);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   // Fetch missing services when modal opens
   useEffect(() => {
@@ -134,8 +124,75 @@ export function AflReportModal({ isOpen, reportData, onClose }: AflReportModalPr
     }
   }
 
-  function handlePrint() {
-    window.print();
+  /**
+   * DRAAD420: Download backend-generated PDF
+   * Haalt de complete PDF op via /api/reports/[afl_run_id]/pdf
+   * inclusief detailoverzicht ontbrekende diensten
+   */
+  async function handleDownloadBackendPdf() {
+    if (!reportData?.afl_run_id) {
+      alert('AFL Run ID ontbreekt, PDF kan niet worden gedownload.');
+      console.error('[AFL-REPORT] PDF download failed: afl_run_id is missing');
+      return;
+    }
+
+    setDownloadingPdf(true);
+
+    try {
+      const cacheBust = Date.now();
+      const url = `/api/reports/${reportData.afl_run_id}/pdf?cb=${cacheBust}`;
+      
+      console.log('[AFL-REPORT] Downloading PDF from:', url);
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
+          'X-Cache-Bust': cacheBust.toString(),
+          'X-Railway-Trigger': `railway-${cacheBust}-${Math.random().toString(36).slice(2, 8)}`,
+        },
+        cache: 'no-store',
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const blob = await response.blob();
+      
+      // Verificatie dat we een PDF hebben ontvangen
+      if (!blob.type.includes('pdf') && blob.size < 100) {
+        throw new Error('Ongeldig PDF-bestand ontvangen van server');
+      }
+
+      const downloadUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+
+      // Bestandsnaam: afl-rapport-<prefix>-<timestamp>.pdf
+      const prefix = reportData.afl_run_id.substring(0, 8);
+      const timestamp = new Date()
+        .toISOString()
+        .replace(/[-:T]/g, '')
+        .slice(0, 14);
+      link.download = `afl-rapport-${prefix}-${timestamp}.pdf`;
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(downloadUrl);
+
+      console.log('[AFL-REPORT] PDF download completed:', link.download);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('[AFL-REPORT] PDF download failed:', errorMessage);
+      alert(
+        `Download van PDF is mislukt: ${errorMessage}\n\nProbeer het opnieuw of neem contact op met de beheerder.`
+      );
+    } finally {
+      setDownloadingPdf(false);
+    }
   }
 
   if (!isOpen) {
@@ -562,19 +619,29 @@ export function AflReportModal({ isOpen, reportData, onClose }: AflReportModalPr
             </div>
           </div>
 
-          {/* Footer - Sticky */}
+          {/* Footer - Sticky - DRAAD420: Download PDF knop */}
           <div className="sticky bottom-0 border-t-2 border-gray-300 bg-gray-50 px-8 py-4 flex justify-between items-center no-print">
             <p className="text-xs text-gray-600">
-              📋 Dit rapport kan geëxporteerd worden naar PDF
+              📋 Download het complete rapport inclusief detailoverzicht
             </p>
             <div className="flex gap-3">
               <button
                 type="button"
-                onClick={handlePrint}
-                className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors shadow-md flex items-center gap-2"
+                onClick={handleDownloadBackendPdf}
+                disabled={downloadingPdf}
+                className="inline-flex items-center gap-2 rounded-md bg-green-600 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-green-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                <Printer size={18} />
-                Afdrukken / PDF
+                {downloadingPdf ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                    Downloaden...
+                  </>
+                ) : (
+                  <>
+                    <Download size={18} />
+                    Download PDF
+                  </>
+                )}
               </button>
               <button
                 type="button"
