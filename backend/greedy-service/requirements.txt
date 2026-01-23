@@ -10,7 +10,7 @@ python-dotenv==1.0.0
 
 # Utilities
 python-dateutil==2.8.2
-requests==2.31.0
+requests==2.32.4
 
 # Logging
 python-json-logger==2.0.7
