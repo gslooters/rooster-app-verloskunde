@@ -7,7 +7,7 @@
 # FastAPI & Web
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
-python-multipart==0.0.18
+python-multipart==0.0.22
 
 # Data handling - Python 3.13 compatible
 pydantic==2.8.0
