@@ -1,6 +1,0 @@
-DRAAD173 FASE 1: Fresh OR-Tools Solver Rebuild
-Status: DEPLOYMENT FIX APPLIED
-Timestamp: 1734079611000
-Random: 8946
-Fix: solver_selector.py NameError (Solver_STRATEGY_ENV typo) corrected
-Expected: Docker build succeeds, service starts without import errors
